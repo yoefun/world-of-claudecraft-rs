@@ -21,8 +21,6 @@ pub fn handle_interact(
     player_id: EntityId,
     target_id: EntityId,
     action: InteractAction,
-    player_xp: &mut u32,
-    copper: &mut u32,
     events: &mut Vec<SimEvent>,
 ) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
@@ -52,7 +50,7 @@ pub fn handle_interact(
             return;
         }
         InteractAction::LootCorpse { target_id: corpse } => {
-            loot_corpse(entities, player_id, *corpse, copper, events);
+            loot_corpse(entities, player_id, *corpse, events);
             return;
         }
         _ => {}
@@ -82,13 +80,13 @@ pub fn handle_interact(
             if entities[ti].kind != EntityKind::Npc {
                 return;
             }
-            let _ = turn_in_quest(&mut entities[pi], &quest_id, player_xp, copper, events);
+            let _ = turn_in_quest(&mut entities[pi], &quest_id, events);
         }
         InteractAction::Buy { item_id, count } => {
-            buy(entities, pi, ti, &item_id, count, copper, events);
+            buy(entities, pi, ti, &item_id, count, events);
         }
         InteractAction::Sell { bag_slot, count } => {
-            sell(entities, pi, ti, bag_slot, count, copper, events);
+            sell(entities, pi, ti, bag_slot, count, events);
         }
         _ => {}
     }
@@ -136,7 +134,6 @@ fn buy(
     ti: usize,
     item_id: &str,
     count: u32,
-    copper: &mut u32,
     events: &mut Vec<SimEvent>,
 ) {
     if entities[ti].kind != EntityKind::Npc || count == 0 {
@@ -153,7 +150,7 @@ fn buy(
         return;
     };
     let price = idef.vendor_buy.saturating_mul(count);
-    if *copper < price {
+    if entities[pi].copper < price {
         events.push(SimEvent::Toast {
             message: "Not enough copper.".into(),
         });
@@ -165,7 +162,7 @@ fn buy(
         });
         return;
     }
-    *copper -= price;
+    entities[pi].copper -= price;
     crate::quests::on_inventory_changed(&mut entities[pi], events);
 }
 
@@ -175,7 +172,6 @@ fn sell(
     ti: usize,
     bag_slot: u8,
     count: u32,
-    copper: &mut u32,
     events: &mut Vec<SimEvent>,
 ) {
     if entities[ti].kind != EntityKind::Npc || count == 0 {
@@ -201,7 +197,9 @@ fn sell(
     }
     // Prefer removing from the chosen slot when possible — take_item already removed.
     let _ = ndef;
-    *copper = copper.saturating_add(idef.vendor_sell.saturating_mul(take));
+    entities[pi].copper = entities[pi]
+        .copper
+        .saturating_add(idef.vendor_sell.saturating_mul(take));
     crate::quests::on_inventory_changed(&mut entities[pi], events);
 }
 
@@ -271,7 +269,6 @@ fn loot_corpse(
     entities: &mut [Entity],
     player_id: EntityId,
     corpse_id: EntityId,
-    copper: &mut u32,
     events: &mut Vec<SimEvent>,
 ) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
@@ -287,7 +284,7 @@ fn loot_corpse(
         return;
     }
     // Framework: corpse loot already spawned as ground loot on death.
-    let _ = (copper, events);
+    let _ = events;
 }
 
 pub fn vendor_snapshot(

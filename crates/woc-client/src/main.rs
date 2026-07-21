@@ -682,7 +682,7 @@ fn handle_interact_keys(
         .find(|e| e.id == nid)
         .and_then(|e| e.template_id.as_deref())
         == Some("trader_wilkes")
-        && host.sim.copper >= 12
+        && host.sim.copper() >= 12
     {
         host.sim.interact(
             nid,

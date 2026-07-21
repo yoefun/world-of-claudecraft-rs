@@ -182,13 +182,7 @@ pub fn recompute_ready(player: &mut Entity, _events: &mut Vec<SimEvent>) {
     }
 }
 
-pub fn turn_in_quest(
-    player: &mut Entity,
-    quest_id: &str,
-    player_xp: &mut u32,
-    copper: &mut u32,
-    events: &mut Vec<SimEvent>,
-) -> bool {
+pub fn turn_in_quest(player: &mut Entity, quest_id: &str, events: &mut Vec<SimEvent>) -> bool {
     let Some(idx) = player
         .quest_log
         .iter()
@@ -210,8 +204,8 @@ pub fn turn_in_quest(
     }
 
     player.quest_log[idx].state = QuestState::Completed;
-    *copper = copper.saturating_add(def.reward.copper);
-    crate::combat::grant_xp(player, player_xp, def.reward.xp, events);
+    player.copper = player.copper.saturating_add(def.reward.copper);
+    crate::combat::grant_xp(player, def.reward.xp, events);
     if let Some(item_id) = def.reward.item_id {
         let _ = grant_item(player, item_id, 1, events);
     }
