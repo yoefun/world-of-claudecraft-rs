@@ -448,6 +448,7 @@ impl Sim {
             quest_log,
             open_vendor,
             ability_name,
+            ..Default::default()
         }
     }
 }
