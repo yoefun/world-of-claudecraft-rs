@@ -24,9 +24,11 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | NPC talk + dialog events | done | |
 | Vendor buy/sell | done | Trader Wilkes |
 | Eastbrook multi-camp spawn | done | wolves + boars |
-| Client UI windows | partial | bags/quest toggles — Wave 0 |
+| Client UI windows | partial | modules split (0B); bags/quest toggles; chrome Wave 0B.2 later |
 | `woc-server` WebSocket sim host | done | sticky realm; multi-player spawn/despawn — Wave 0A |
 | Multi-player Entity economy | done | xp/copper on Entity; intent map — Wave 0A |
+| Content stubs (talents/zone2/…) | done | empty tables + graveyard — Wave 0B |
+| Protocol death/aura/party fields | done | additive defaults; PROTOCOL_REV stays 2 — Wave 0B |
 | Client online mode | planned | Wave 1 |
 | Heightfield terrain | partial | not byte-identical |
 | Player motion | partial | Wave 1 colliders |
