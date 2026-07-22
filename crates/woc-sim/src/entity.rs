@@ -70,6 +70,10 @@ pub struct Entity {
     pub xp: u32,
     /// Player copper currency (mobs/NPCs unused).
     pub copper: u32,
+    /// Death corpse X (player only; set on death, cleared on spirit release).
+    pub corpse_x: Option<f32>,
+    /// Death corpse Z (player only; set on death, cleared on spirit release).
+    pub corpse_z: Option<f32>,
 }
 
 impl Entity {
@@ -121,6 +125,8 @@ impl Entity {
             open_vendor_npc: None,
             xp: 0,
             copper: 0,
+            corpse_x: None,
+            corpse_z: None,
         }
     }
 }

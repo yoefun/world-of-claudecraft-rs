@@ -4,6 +4,8 @@
 
 pub mod combat;
 pub mod context;
+pub mod corpse;
+pub mod death;
 pub mod entity;
 pub mod host;
 pub mod interaction;
@@ -13,6 +15,7 @@ pub mod player_motion;
 pub mod quests;
 pub mod rng;
 pub mod sim;
+pub mod spirit;
 pub mod stats;
 pub mod types;
 pub mod world;

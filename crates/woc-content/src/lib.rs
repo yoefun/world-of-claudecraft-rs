@@ -16,7 +16,7 @@ pub mod zone2;
 pub use abilities::{ability, AbilityDef, ABILITIES};
 pub use classes::{class_def, ClassDef, PlayerClass, ResourceType, CLASSES};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
-pub use graveyards::{graveyard, GraveyardDef, GRAVEYARDS};
+pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{item, ItemDef, ItemKind, ITEMS};
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
@@ -115,6 +115,14 @@ mod tests {
         assert!(
             GRAVEYARDS.iter().any(|g| g.zone_id == "eastbrook"),
             "expected an Eastbrook graveyard entry"
+        );
+        assert!(
+            graveyard("eastbrook_graveyard").is_some(),
+            "eastbrook_graveyard id must resolve"
+        );
+        assert!(
+            graveyard_for_zone("eastbrook").is_some(),
+            "graveyard_for_zone(eastbrook) must resolve"
         );
         for g in GRAVEYARDS {
             assert!(
