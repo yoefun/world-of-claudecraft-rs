@@ -12,6 +12,18 @@ pub enum ItemKind {
     Quest,
 }
 
+/// Which equipment slot an item occupies when equipped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemEquipSlot {
+    MainHand,
+    OffHand,
+    Head,
+    Chest,
+    Legs,
+    Feet,
+}
+
 #[derive(Debug, Clone)]
 pub struct ItemDef {
     pub id: &'static str,
@@ -22,141 +34,178 @@ pub struct ItemDef {
     pub vendor_sell: u32,
     /// Flat attack power contribution when equipped as a weapon.
     pub attack_power: f32,
-    /// Flat armor when equipped as chest.
+    /// Flat armor when equipped in an armor slot.
     pub armor: f32,
+    /// Equipment slot for weapons/armor; `None` for non-equippable.
+    pub equip_slot: Option<ItemEquipSlot>,
+    /// Minimum player level required to equip (default 1).
+    pub level_req: u32,
+    /// HP restored when used as a consumable (0 if not a heal).
+    pub heal_hp: f32,
+}
+
+const fn weapon(
+    id: &'static str,
+    name: &'static str,
+    vendor_sell: u32,
+    attack_power: f32,
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind: ItemKind::Weapon,
+        stack_size: 1,
+        vendor_buy: 0,
+        vendor_sell,
+        attack_power,
+        armor: 0.0,
+        equip_slot: Some(ItemEquipSlot::MainHand),
+        level_req: 1,
+        heal_hp: 0.0,
+    }
+}
+
+const fn armor(
+    id: &'static str,
+    name: &'static str,
+    slot: ItemEquipSlot,
+    vendor_sell: u32,
+    armor: f32,
+    level_req: u32,
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind: ItemKind::Armor,
+        stack_size: 1,
+        vendor_buy: 0,
+        vendor_sell,
+        attack_power: 0.0,
+        armor,
+        equip_slot: Some(slot),
+        level_req,
+        heal_hp: 0.0,
+    }
+}
+
+const fn consumable(
+    id: &'static str,
+    name: &'static str,
+    vendor_buy: u32,
+    vendor_sell: u32,
+    heal_hp: f32,
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind: ItemKind::Consumable,
+        stack_size: 20,
+        vendor_buy,
+        vendor_sell,
+        attack_power: 0.0,
+        armor: 0.0,
+        equip_slot: None,
+        level_req: 1,
+        heal_hp,
+    }
+}
+
+const fn misc(
+    id: &'static str,
+    name: &'static str,
+    kind: ItemKind,
+    vendor_sell: u32,
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind,
+        stack_size: 20,
+        vendor_buy: 0,
+        vendor_sell,
+        attack_power: 0.0,
+        armor: 0.0,
+        equip_slot: None,
+        level_req: 1,
+        heal_hp: 0.0,
+    }
 }
 
 pub static ITEMS: &[ItemDef] = &[
-    ItemDef {
-        id: "worn_sword",
-        name: "Worn Sword",
-        kind: ItemKind::Weapon,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 5,
-        attack_power: 8.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "worn_mace",
-        name: "Worn Mace",
-        kind: ItemKind::Weapon,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 5,
-        attack_power: 7.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "worn_bow",
-        name: "Worn Bow",
-        kind: ItemKind::Weapon,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 5,
-        attack_power: 7.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "worn_dagger",
-        name: "Worn Dagger",
-        kind: ItemKind::Weapon,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 5,
-        attack_power: 6.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "worn_staff",
-        name: "Worn Staff",
-        kind: ItemKind::Weapon,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 5,
-        attack_power: 5.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "recruit_tunic",
-        name: "Recruit's Tunic",
-        kind: ItemKind::Armor,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 4,
-        attack_power: 0.0,
-        armor: 12.0,
-    },
-    ItemDef {
-        id: "recruit_robe",
-        name: "Recruit's Robe",
-        kind: ItemKind::Armor,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 4,
-        attack_power: 0.0,
-        armor: 6.0,
-    },
-    ItemDef {
-        id: "baked_bread",
-        name: "Baked Bread",
-        kind: ItemKind::Consumable,
-        stack_size: 20,
-        vendor_buy: 5,
-        vendor_sell: 1,
-        attack_power: 0.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "spring_water",
-        name: "Spring Water",
-        kind: ItemKind::Consumable,
-        stack_size: 20,
-        vendor_buy: 5,
-        vendor_sell: 1,
-        attack_power: 0.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "travelers_ration",
-        name: "Traveler's Ration",
-        kind: ItemKind::Consumable,
-        stack_size: 20,
-        vendor_buy: 12,
-        vendor_sell: 3,
-        attack_power: 0.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "wolf_fang",
-        name: "Wolf Fang",
-        kind: ItemKind::Junk,
-        stack_size: 20,
-        vendor_buy: 0,
-        vendor_sell: 2,
-        attack_power: 0.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "boar_tusk",
-        name: "Boar Tusk",
-        kind: ItemKind::Quest,
-        stack_size: 20,
-        vendor_buy: 0,
-        vendor_sell: 1,
-        attack_power: 0.0,
-        armor: 0.0,
-    },
-    ItemDef {
-        id: "eastbrook_greaves",
-        name: "Eastbrook Greaves",
-        kind: ItemKind::Armor,
-        stack_size: 1,
-        vendor_buy: 0,
-        vendor_sell: 8,
-        attack_power: 0.0,
-        armor: 18.0,
-    },
+    weapon("worn_sword", "Worn Sword", 5, 8.0),
+    weapon("worn_mace", "Worn Mace", 5, 7.0),
+    weapon("worn_bow", "Worn Bow", 5, 7.0),
+    weapon("worn_dagger", "Worn Dagger", 5, 6.0),
+    weapon("worn_staff", "Worn Staff", 5, 5.0),
+    armor(
+        "recruit_tunic",
+        "Recruit's Tunic",
+        ItemEquipSlot::Chest,
+        4,
+        12.0,
+        1,
+    ),
+    armor(
+        "recruit_robe",
+        "Recruit's Robe",
+        ItemEquipSlot::Chest,
+        4,
+        6.0,
+        1,
+    ),
+    armor(
+        "recruit_cap",
+        "Recruit's Cap",
+        ItemEquipSlot::Head,
+        3,
+        4.0,
+        1,
+    ),
+    armor(
+        "recruit_pants",
+        "Recruit's Pants",
+        ItemEquipSlot::Legs,
+        3,
+        5.0,
+        1,
+    ),
+    armor(
+        "recruit_boots",
+        "Recruit's Boots",
+        ItemEquipSlot::Feet,
+        3,
+        3.0,
+        1,
+    ),
+    armor(
+        "wooden_buckler",
+        "Wooden Buckler",
+        ItemEquipSlot::OffHand,
+        4,
+        8.0,
+        1,
+    ),
+    armor(
+        "veteran_helm",
+        "Veteran's Helm",
+        ItemEquipSlot::Head,
+        12,
+        20.0,
+        5,
+    ),
+    consumable("baked_bread", "Baked Bread", 5, 1, 40.0),
+    consumable("spring_water", "Spring Water", 5, 1, 0.0),
+    consumable("travelers_ration", "Traveler's Ration", 12, 3, 80.0),
+    misc("wolf_fang", "Wolf Fang", ItemKind::Junk, 2),
+    misc("boar_tusk", "Boar Tusk", ItemKind::Quest, 1),
+    armor(
+        "eastbrook_greaves",
+        "Eastbrook Greaves",
+        ItemEquipSlot::Legs,
+        8,
+        18.0,
+        1,
+    ),
 ];
 
 pub fn item(id: &str) -> Option<&'static ItemDef> {

@@ -33,7 +33,10 @@ pub enum AbilitySlot {
 pub enum EquipSlot {
     MainHand,
     OffHand,
+    Head,
     Chest,
+    Legs,
+    Feet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +49,8 @@ pub enum InteractAction {
     Sell { bag_slot: u8, count: u32 },
     Equip { bag_slot: u8 },
     Unequip { equip_slot: EquipSlot },
+    /// Use a bag item (consumable heal, etc.). Additive Wave 0.3.
+    UseItem { bag_slot: u8 },
     LootCorpse { target_id: EntityId },
     CloseVendor,
 }
@@ -97,7 +102,13 @@ pub struct InvSlotSnapshot {
 pub struct EquipmentSnapshot {
     pub main_hand: Option<String>,
     pub off_hand: Option<String>,
+    #[serde(default)]
+    pub head: Option<String>,
     pub chest: Option<String>,
+    #[serde(default)]
+    pub legs: Option<String>,
+    #[serde(default)]
+    pub feet: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -370,6 +381,7 @@ mod tests {
             InteractAction::Unequip {
                 equip_slot: EquipSlot::MainHand,
             },
+            InteractAction::UseItem { bag_slot: 2 },
             InteractAction::LootCorpse { target_id: 3 },
             InteractAction::CloseVendor,
         ];

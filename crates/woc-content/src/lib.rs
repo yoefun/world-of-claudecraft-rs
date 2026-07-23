@@ -17,7 +17,7 @@ pub use abilities::{ability, AbilityDef, ABILITIES};
 pub use classes::{class_def, ClassDef, PlayerClass, ResourceType, CLASSES};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
 pub use graveyards::{graveyard, GraveyardDef, GRAVEYARDS};
-pub use items::{item, ItemDef, ItemKind, ITEMS};
+pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
 pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
