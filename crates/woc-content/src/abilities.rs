@@ -8,6 +8,8 @@ pub struct AbilityDef {
     pub cost: f32,
     pub cooldown: f32,
     pub range: f32,
+    /// Seconds to finish a cast before the hit resolves. `0` = instant.
+    pub cast_time: f32,
 }
 
 pub static ABILITIES: &[AbilityDef] = &[
@@ -18,6 +20,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 15.0,
         cooldown: 3.0,
         range: 3.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "crusader_strike",
@@ -26,6 +29,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 20.0,
         cooldown: 3.0,
         range: 3.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "arcane_shot",
@@ -34,6 +38,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 25.0,
         cooldown: 2.5,
         range: 18.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "sinister_strike",
@@ -42,6 +47,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 30.0,
         cooldown: 1.5,
         range: 3.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "smite",
@@ -50,6 +56,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 25.0,
         cooldown: 2.0,
         range: 18.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "lightning_bolt",
@@ -58,6 +65,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 30.0,
         cooldown: 2.5,
         range: 18.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "fireball",
@@ -66,6 +74,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 35.0,
         cooldown: 2.5,
         range: 20.0,
+        cast_time: 1.5,
     },
     AbilityDef {
         id: "shadow_bolt",
@@ -74,6 +83,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 30.0,
         cooldown: 2.5,
         range: 18.0,
+        cast_time: 0.0,
     },
     AbilityDef {
         id: "wrath",
@@ -82,6 +92,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         cost: 25.0,
         cooldown: 2.0,
         range: 18.0,
+        cast_time: 0.0,
     },
 ];
 
