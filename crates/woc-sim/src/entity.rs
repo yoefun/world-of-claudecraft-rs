@@ -105,6 +105,10 @@ pub struct Entity {
     pub gcd: f32,
     /// Threat table keyed by attacker id (mobs; players unused).
     pub threat: HashMap<EntityId, f32>,
+    /// Death corpse X (player only; set on death, cleared on spirit release).
+    pub corpse_x: Option<f32>,
+    /// Death corpse Z (player only; set on death, cleared on spirit release).
+    pub corpse_z: Option<f32>,
 }
 
 impl Entity {
@@ -160,6 +164,8 @@ impl Entity {
             cast: None,
             gcd: 0.0,
             threat: HashMap::new(),
+            corpse_x: None,
+            corpse_z: None,
         }
     }
 }
