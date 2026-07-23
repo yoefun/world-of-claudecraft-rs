@@ -2,15 +2,20 @@
 
 use bevy::prelude::*;
 use std::collections::HashSet;
-use woc_protocol::{EntityId, EntityKind, PlayerIntent, SimEvent, DT};
+use woc_protocol::{
+    EntityId, EntityKind, EntitySnapshot, PlayerIntent, SimEvent, TickSnapshot, WsClientMsg,
+    WsServerMsg, DT,
+};
 use woc_sim::{terrain_height, Sim, WORLD_HALF, WORLD_SEED};
 use woc_version::footer;
 
 use crate::char_create::{CharName, SelectedClass};
 use crate::hud::{
-    HudBagText, HudHpText, HudQuestText, HudRoot, HudTargetText, HudToastText, HudXpText,
+    HudBagText, HudHpText, HudNetText, HudQuestText, HudRoot, HudTargetText, HudToastText,
+    HudXpText,
 };
-use crate::{AppState, OfflineHost};
+use crate::online;
+use crate::{AppState, GameHost, NetStatus, PlayMode};
 
 #[derive(Component)]
 pub(crate) struct SimVisual {
@@ -51,16 +56,52 @@ fn setup_world(
     mut materials: ResMut<Assets<StandardMaterial>>,
     name: Res<CharName>,
     class: Res<SelectedClass>,
+    play_mode: Res<PlayMode>,
 ) {
-    let sim = Sim::new_eastbrook(name.0.trim(), class.0);
-    let host = OfflineHost {
-        sim,
-        accumulator: 0.0,
-        pending_intent: PlayerIntent::default(),
-        recent_toasts: Vec::new(),
-        look_yaw: 0.0,
-        look_pitch: -0.35,
-        cursor_grabbed: false,
+    let host = match *play_mode {
+        PlayMode::Offline => {
+            let sim = Sim::new_eastbrook(name.0.trim(), class.0);
+            let snapshot = sim.snapshot();
+            GameHost {
+                play_mode: PlayMode::Offline,
+                sim: Some(sim),
+                snapshot,
+                accumulator: 0.0,
+                pending_intent: PlayerIntent::default(),
+                recent_toasts: Vec::new(),
+                look_yaw: 0.0,
+                look_pitch: -0.35,
+                cursor_grabbed: false,
+                net_status: NetStatus::Idle,
+                to_net: None,
+                from_net: None,
+                local_auto_attack: false,
+            }
+        }
+        PlayMode::Online => {
+            let (to_net, from_net, _handle) = online::spawn_online_session(
+                name.0.trim().to_string(),
+                class.0.as_str().to_string(),
+            );
+            GameHost {
+                play_mode: PlayMode::Online,
+                sim: None,
+                snapshot: TickSnapshot::default(),
+                accumulator: 0.0,
+                pending_intent: PlayerIntent::default(),
+                recent_toasts: vec![(
+                    format!("Connecting to {}…", online::ONLINE_WS_URL),
+                    4.0,
+                )],
+                look_yaw: 0.0,
+                look_pitch: -0.35,
+                cursor_grabbed: false,
+                net_status: NetStatus::Connecting,
+                to_net: Some(to_net),
+                from_net: Some(std::sync::Mutex::new(from_net)),
+                local_auto_attack: false,
+            }
+        }
     };
 
     let terrain_mat = materials.add(StandardMaterial {
@@ -90,7 +131,12 @@ fn setup_world(
         x += step;
     }
 
-    spawn_all_visuals(&mut commands, &mut meshes, &mut materials, &host.sim);
+    spawn_visuals_from_entities(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &host.snapshot.entities,
+    );
     commands.insert_resource(host);
 
     commands
@@ -116,6 +162,12 @@ fn setup_world(
                 BackgroundColor(Color::srgba(0.02, 0.04, 0.06, 0.45)),
             ))
             .with_children(|top| {
+                top.spawn((
+                    HudNetText,
+                    Text::new(""),
+                    TextFont::from_font_size(14.0),
+                    TextColor(Color::srgb(0.7, 0.85, 0.95)),
+                ));
                 top.spawn((
                     HudHpText,
                     Text::new("HP --"),
@@ -178,13 +230,13 @@ fn setup_world(
         });
 }
 
-fn spawn_all_visuals(
+fn spawn_visuals_from_entities(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    sim: &Sim,
+    entities: &[EntitySnapshot],
 ) {
-    for e in &sim.entities {
+    for e in entities {
         if !e.alive && e.kind != EntityKind::Mob && e.kind != EntityKind::Npc {
             continue;
         }
@@ -237,35 +289,17 @@ fn cleanup_world(
     for e in &visuals {
         commands.entity(e).despawn();
     }
-    commands.remove_resource::<OfflineHost>();
+    commands.remove_resource::<GameHost>();
 }
 
-pub(crate) fn sim_fixed_step(
-    time: Res<Time>,
-    mut host: ResMut<OfflineHost>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    visuals: Query<&SimVisual>,
-) {
-    host.accumulator += time.delta_secs();
-    let step = DT;
-    let mut events_all = Vec::new();
-    while host.accumulator >= step {
-        host.accumulator -= step;
-        let intent = host.pending_intent;
-        let (_snap, events) = host.sim.tick(intent);
-        events_all.extend(events);
-        host.pending_intent.ability = None;
-    }
-
-    for ev in events_all {
+fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
+    for ev in events {
         match ev {
             SimEvent::LevelUp { level, .. } => {
                 host.recent_toasts
                     .push((format!("Level up! You are now {level}."), 3.0));
             }
-            SimEvent::Toast { message } => host.recent_toasts.push((message, 3.0)),
+            SimEvent::Toast { message } => host.recent_toasts.push((message.clone(), 3.0)),
             SimEvent::Kill { victim_name, .. } => {
                 host.recent_toasts
                     .push((format!("Slain: {victim_name}"), 2.5));
@@ -286,17 +320,98 @@ pub(crate) fn sim_fixed_step(
                     .push((format!("Quest complete: {quest_id}"), 3.0));
             }
             SimEvent::QuestProgress { text, .. } => {
-                host.recent_toasts.push((text, 2.0));
+                host.recent_toasts.push((text.clone(), 2.0));
             }
             SimEvent::NpcDialog { text, .. } => {
-                host.recent_toasts.push((text, 3.0));
+                host.recent_toasts.push((text.clone(), 3.0));
             }
             _ => {}
         }
     }
+}
+
+fn apply_online_messages(host: &mut GameHost) {
+    let mut pending = Vec::new();
+    if let Some(rx_mutex) = host.from_net.as_ref() {
+        if let Ok(rx) = rx_mutex.lock() {
+            while let Ok(msg) = rx.try_recv() {
+                pending.push(msg);
+            }
+        }
+    }
+    for msg in pending {
+        match msg {
+            WsServerMsg::Welcome {
+                player_id,
+                protocol_rev,
+            } => {
+                host.net_status = NetStatus::Connected { player_id };
+                host.snapshot.player_id = player_id;
+                host.recent_toasts.push((
+                    format!("Welcome · player #{player_id} · proto {protocol_rev}"),
+                    3.0,
+                ));
+            }
+            WsServerMsg::Snapshot(snap) => {
+                host.snapshot = *snap;
+                if matches!(host.net_status, NetStatus::Connecting) {
+                    host.net_status = NetStatus::Connected {
+                        player_id: host.snapshot.player_id,
+                    };
+                }
+            }
+            WsServerMsg::Events { events } => {
+                push_events_toasts(host, &events);
+            }
+            WsServerMsg::Error { message } => {
+                host.net_status = NetStatus::Error(message.clone());
+                host.recent_toasts.push((message, 5.0));
+            }
+        }
+    }
+}
+
+pub(crate) fn sim_fixed_step(
+    time: Res<Time>,
+    mut host: ResMut<GameHost>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    visuals: Query<&SimVisual>,
+) {
+    if host.is_online() {
+        apply_online_messages(&mut host);
+        host.accumulator += time.delta_secs();
+        let step = DT;
+        while host.accumulator >= step {
+            host.accumulator -= step;
+            if let Some(tx) = &host.to_net {
+                let intent = host.pending_intent;
+                let _ = tx.send(WsClientMsg::Intent(intent));
+            }
+            host.pending_intent.ability = None;
+        }
+    } else {
+        host.accumulator += time.delta_secs();
+        let step = DT;
+        let mut events_all = Vec::new();
+        while host.accumulator >= step {
+            host.accumulator -= step;
+            let intent = host.pending_intent;
+            if let Some(sim) = host.sim.as_mut() {
+                let (_snap, events) = sim.tick(intent);
+                events_all.extend(events);
+            }
+            host.pending_intent.ability = None;
+        }
+        push_events_toasts(&mut host, &events_all);
+        if let Some(sim) = host.sim.as_ref() {
+            host.snapshot = sim.snapshot();
+        }
+    }
 
     let known: HashSet<EntityId> = visuals.iter().map(|v| v.id).collect();
-    for e in &host.sim.entities {
+    for e in &host.snapshot.entities {
         if e.alive && !known.contains(&e.id) {
             spawn_one_visual(
                 &mut commands,
@@ -311,7 +426,7 @@ pub(crate) fn sim_fixed_step(
 }
 
 pub(crate) fn sync_visuals(
-    host: Res<OfflineHost>,
+    host: Res<GameHost>,
     mut visuals: Query<(
         &SimVisual,
         &mut Transform,
@@ -320,9 +435,9 @@ pub(crate) fn sync_visuals(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut cam: Query<&mut Transform, (With<FollowCam>, Without<SimVisual>)>,
 ) {
-    let player = host.sim.player().map(|p| (p.x, p.y, p.z));
+    let player = host.player_snap().map(|p| (p.x, p.y, p.z));
     for (vis, mut tf, mat_h) in &mut visuals {
-        if let Some(e) = host.sim.entities.iter().find(|e| e.id == vis.id) {
+        if let Some(e) = host.snapshot.entities.iter().find(|e| e.id == vis.id) {
             let y_off = match e.kind {
                 EntityKind::Player => 0.9,
                 EntityKind::Npc => 0.9,
@@ -345,6 +460,9 @@ pub(crate) fn sync_visuals(
                     };
                 }
             }
+        } else {
+            // Entity left the snapshot (despawned remote player, etc.).
+            tf.scale = Vec3::ZERO;
         }
     }
 
