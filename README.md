@@ -34,7 +34,7 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 ## Quick start
 
 ```bash
-# Play offline framework slice
+# Play offline framework slice (title: press 1 / Offline)
 cargo run -p woc-client
 
 # Run sim / unit tests (no GPU)
@@ -46,13 +46,31 @@ cargo run -p woc-server
 # WS: ws://127.0.0.1:8787/ws/game
 ```
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1** ability, **E** interact, **B** bags, **L** quests, **Esc** release cursor. Character create: **←/→** change class.
+### Online play (two clients)
+
+```bash
+# Terminal A — authoritative realm
+cargo run -p woc-server
+
+# Terminal B — Bevy client
+cargo run -p woc-client
+# Title: press 2 (or ←/→) to select Online, Enter → create character → Enter world
+
+# Terminal C — optional second client (same Online path) for co-presence
+cargo run -p woc-client
+```
+
+Default endpoint: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
+Online IO uses a dedicated OS thread + sync `tungstenite` bridged via `std::sync::mpsc` so Bevy’s update loop stays sync.
+
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1** ability, **E** interact, **B** bags, **L** quests, **Esc** release cursor. Title: **1/2** Offline|Online. Character create: **←/→** change class.
 
 ## Architecture
 
 One sim, multiple hosts:
 
-- Offline Bevy host runs `woc-sim` in-process at 20 Hz
+- Offline Bevy host runs `woc-sim` in-process at 20 Hz (`GameHost`)
+- Online Bevy host sends `Hello` / `Intent` / `Interact` and applies `Snapshot` / `Events`
 - Online `woc-server` embeds the same sim over WebSocket
 - Client never decides combat outcomes — only sends intents/actions and renders snapshots
 

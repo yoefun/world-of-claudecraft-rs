@@ -1,13 +1,17 @@
-//! Bevy offline host for the framework slice.
+//! Bevy host for the framework slice (offline sim embed + online WS).
 
 mod char_create;
 mod hud;
 mod input;
+mod online;
 mod title;
 mod world_setup;
 
 use bevy::prelude::*;
-use woc_protocol::PlayerIntent;
+use std::sync::Mutex;
+use woc_protocol::{
+    EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg,
+};
 use woc_sim::Sim;
 use woc_version::footer;
 
@@ -22,6 +26,7 @@ fn main() {
             ..default()
         }))
         .init_state::<AppState>()
+        .init_resource::<PlayMode>()
         .insert_resource(ClearColor(Color::srgb(0.45, 0.62, 0.78)))
         .insert_resource(AmbientLight {
             color: Color::srgb(0.92, 0.94, 0.88),
@@ -60,18 +65,74 @@ pub(crate) enum AppState {
     InWorld,
 }
 
+/// Title / session mode: local sim vs WebSocket server.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum PlayMode {
+    #[default]
+    Offline,
+    Online,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum NetStatus {
+    Idle,
+    Connecting,
+    Connected { player_id: EntityId },
+    Error(String),
+}
+
 #[derive(Component)]
 pub(crate) struct UiRoot;
 
+/// Shared in-world host: offline embeds `Sim`; online applies WS snapshots.
 #[derive(Resource)]
-pub(crate) struct OfflineHost {
-    pub(crate) sim: Sim,
+pub(crate) struct GameHost {
+    pub(crate) play_mode: PlayMode,
+    /// Local sim when [`PlayMode::Offline`].
+    pub(crate) sim: Option<Sim>,
+    /// Authoritative view used by HUD / visuals (both modes).
+    pub(crate) snapshot: TickSnapshot,
     pub(crate) accumulator: f32,
     pub(crate) pending_intent: PlayerIntent,
     pub(crate) recent_toasts: Vec<(String, f32)>,
     pub(crate) look_yaw: f32,
     pub(crate) look_pitch: f32,
     pub(crate) cursor_grabbed: bool,
+    pub(crate) net_status: NetStatus,
+    /// Online: Bevy → WS thread.
+    pub(crate) to_net: Option<std::sync::mpsc::Sender<WsClientMsg>>,
+    /// Online: WS thread → Bevy (`Mutex` so `GameHost: Sync` for Bevy resources).
+    pub(crate) from_net: Option<Mutex<std::sync::mpsc::Receiver<woc_protocol::WsServerMsg>>>,
+    /// Sticky attack for intent building when the snapshot has no auto_attack flag.
+    pub(crate) local_auto_attack: bool,
+}
+
+impl GameHost {
+    pub(crate) fn is_online(&self) -> bool {
+        matches!(self.play_mode, PlayMode::Online)
+    }
+
+    pub(crate) fn player_snap(&self) -> Option<&EntitySnapshot> {
+        self.snapshot
+            .entities
+            .iter()
+            .find(|e| e.id == self.snapshot.player_id)
+    }
+
+    pub(crate) fn interact(&mut self, target_id: EntityId, action: InteractAction) {
+        match self.play_mode {
+            PlayMode::Offline => {
+                if let Some(sim) = self.sim.as_mut() {
+                    sim.interact(target_id, action);
+                }
+            }
+            PlayMode::Online => {
+                if let Some(tx) = &self.to_net {
+                    let _ = tx.send(WsClientMsg::Interact { target_id, action });
+                }
+            }
+        }
+    }
 }
 
 pub(crate) fn cleanup_ui(mut commands: Commands, q: Query<Entity, With<UiRoot>>) {
