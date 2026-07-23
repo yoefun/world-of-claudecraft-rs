@@ -1,12 +1,27 @@
-//! Combat: auto-attack, primary ability, damage, death, XP, loot.
+//! Combat: auto-attack, primary ability, GCD, casts, auras, damage, death, XP, loot.
 
-use crate::entity::{create_loot, Entity};
+use crate::entity::{AuraInstance, CastState, Entity};
 use crate::rng::Rng;
 use crate::types::{
     player_hp, xp_to_next, MELEE_RANGE, MOB_SWING_SEC, PLAYER_SWING_SEC, RANGED_FALLBACK,
 };
 use woc_content::{ability, class_def, mob, ResourceType};
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, SimEvent, DT};
+
+/// Global cooldown after starting an ability (seconds).
+pub const GCD_SEC: f32 = 1.5;
+
+/// Default DoT applied by melee primary hits (Rend).
+const REND_ID: &str = "rend";
+const REND_DURATION: f32 = 9.0;
+const REND_TICK_INTERVAL: f32 = 3.0;
+const REND_TICK_DAMAGE: f32 = 4.0;
+
+/// DoT applied when Fireball lands (Ignite).
+const IGNITE_ID: &str = "ignite";
+const IGNITE_DURATION: f32 = 8.0;
+const IGNITE_TICK_INTERVAL: f32 = 2.0;
+const IGNITE_TICK_DAMAGE: f32 = 6.0;
 
 pub fn dist2d(a: &Entity, b: &Entity) -> f32 {
     let dx = a.x - b.x;
@@ -30,6 +45,46 @@ fn spend_resource(player: &mut Entity, amount: f32) -> bool {
     true
 }
 
+pub fn add_threat(mob: &mut Entity, source: EntityId, amount: f32) {
+    if amount <= 0.0 || mob.kind != EntityKind::Mob {
+        return;
+    }
+    *mob.threat.entry(source).or_insert(0.0) += amount;
+}
+
+/// Prefer current living target; else highest threat in range; else `None`.
+pub fn prefer_mob_target(
+    mob: &Entity,
+    entities: &[Entity],
+    max_range: f32,
+) -> Option<EntityId> {
+    if let Some(tid) = mob.target {
+        if entities
+            .iter()
+            .any(|e| e.id == tid && e.alive && e.kind == EntityKind::Player)
+        {
+            return Some(tid);
+        }
+    }
+    let mut best: Option<(EntityId, f32)> = None;
+    for (&id, &threat) in &mob.threat {
+        let Some(e) = entities.iter().find(|e| e.id == id) else {
+            continue;
+        };
+        if !e.alive || e.kind != EntityKind::Player {
+            continue;
+        }
+        let d = dist2d(mob, e);
+        if d > max_range {
+            continue;
+        }
+        if best.map(|(_, t)| threat > t).unwrap_or(true) {
+            best = Some((id, threat));
+        }
+    }
+    best.map(|(id, _)| id)
+}
+
 pub fn deal_damage(
     entities: &mut [Entity],
     source: EntityId,
@@ -46,6 +101,9 @@ pub fn deal_damage(
     }
     let mitigated = (amount - entities[ti].armor * 0.05).max(1.0);
     entities[ti].hp = (entities[ti].hp - mitigated).max(0.0);
+    if entities[ti].kind == EntityKind::Mob {
+        add_threat(&mut entities[ti], source, mitigated);
+    }
     events.push(SimEvent::Damage {
         source,
         target,
@@ -60,6 +118,104 @@ pub fn deal_damage(
             victim: target,
             victim_name,
         });
+    }
+}
+
+pub fn apply_aura(target: &mut Entity, aura: AuraInstance, events: &mut Vec<SimEvent>) {
+    let id = aura.id.clone();
+    let remaining = aura.remaining;
+    let stacks = aura.stacks;
+    if let Some(existing) = target.auras.iter_mut().find(|a| a.id == aura.id) {
+        existing.remaining = existing.remaining.max(aura.remaining);
+        existing.stacks = existing.stacks.max(aura.stacks);
+        existing.tick_damage = aura.tick_damage;
+        existing.tick_interval = aura.tick_interval;
+        existing.source = aura.source;
+    } else {
+        target.auras.push(aura);
+    }
+    events.push(SimEvent::AuraApplied {
+        player: target.id,
+        id,
+        remaining,
+        stacks,
+    });
+}
+
+fn apply_primary_dot(entities: &mut [Entity], source: EntityId, target: EntityId, ability_id: &str, events: &mut Vec<SimEvent>) {
+    let Some(ti) = entities.iter().position(|e| e.id == target) else {
+        return;
+    };
+    if !entities[ti].alive {
+        return;
+    }
+    let aura = if ability_id == "fireball" {
+        AuraInstance {
+            id: IGNITE_ID.into(),
+            remaining: IGNITE_DURATION,
+            stacks: 1,
+            tick_timer: IGNITE_TICK_INTERVAL,
+            tick_interval: IGNITE_TICK_INTERVAL,
+            tick_damage: IGNITE_TICK_DAMAGE,
+            source,
+        }
+    } else if ability_id == "heroic_strike" || ability_id == "crusader_strike" || ability_id == "sinister_strike"
+    {
+        AuraInstance {
+            id: REND_ID.into(),
+            remaining: REND_DURATION,
+            stacks: 1,
+            tick_timer: REND_TICK_INTERVAL,
+            tick_interval: REND_TICK_INTERVAL,
+            tick_damage: REND_TICK_DAMAGE,
+            source,
+        }
+    } else {
+        return;
+    };
+    apply_aura(&mut entities[ti], aura, events);
+}
+
+/// Tick all entity auras: DoT damage + expiry. Call once per sim tick.
+pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
+    // Collect DoT applications first to avoid borrow issues across entities.
+    let mut pending_ticks: Vec<(EntityId, EntityId, f32, String)> = Vec::new();
+    let ids: Vec<EntityId> = entities.iter().map(|e| e.id).collect();
+
+    for id in ids {
+        let Some(ei) = entities.iter().position(|e| e.id == id) else {
+            continue;
+        };
+        if !entities[ei].alive && entities[ei].kind != EntityKind::Mob {
+            entities[ei].auras.clear();
+            continue;
+        }
+        let mut expired = Vec::new();
+        for (ai, aura) in entities[ei].auras.iter_mut().enumerate() {
+            aura.remaining -= DT;
+            if aura.tick_damage > 0.0 && aura.tick_interval > 0.0 {
+                aura.tick_timer -= DT;
+                if aura.tick_timer <= 0.0 {
+                    aura.tick_timer += aura.tick_interval;
+                    pending_ticks.push((
+                        aura.source,
+                        id,
+                        aura.tick_damage * aura.stacks.max(1) as f32,
+                        aura.id.clone(),
+                    ));
+                }
+            }
+            if aura.remaining <= 0.0 {
+                expired.push(ai);
+            }
+        }
+        for ai in expired.into_iter().rev() {
+            entities[ei].auras.remove(ai);
+        }
+    }
+
+    for (source, target, amount, aura_id) in pending_ticks {
+        deal_damage(entities, source, target, amount, Some(&aura_id), events);
     }
 }
 
@@ -140,7 +296,7 @@ pub fn spawn_mob_loot(
     };
     let id = *next_id;
     *next_id += 1;
-    entities.push(create_loot(id, x, z, copper, item));
+    entities.push(crate::entity::create_loot(id, x, z, copper, item));
     id
 }
 
@@ -193,6 +349,26 @@ fn ability_range(player: &Entity) -> f32 {
         .unwrap_or(MELEE_RANGE)
 }
 
+fn resolve_ability_hit(
+    entities: &mut [Entity],
+    src: EntityId,
+    tid: EntityId,
+    abil_id: &str,
+    def_name: &str,
+    def_damage: f32,
+    events: &mut Vec<SimEvent>,
+) {
+    let Some(pi) = entities.iter().position(|e| e.id == src) else {
+        return;
+    };
+    let dmg = def_damage + entities[pi].attack_damage * 0.35;
+    if matches!(entities[pi].resource_type, Some(ResourceType::Rage)) {
+        gain_resource(&mut entities[pi], 5.0);
+    }
+    deal_damage(entities, src, tid, dmg, Some(def_name), events);
+    apply_primary_dot(entities, src, tid, abil_id, events);
+}
+
 pub fn update_player_combat(
     player_id: EntityId,
     entities: &mut [Entity],
@@ -203,6 +379,7 @@ pub fn update_player_combat(
         return;
     };
     if !entities[pi].alive {
+        entities[pi].cast = None;
         return;
     }
 
@@ -214,19 +391,25 @@ pub fn update_player_combat(
     if entities[pi].ability_cd > 0.0 {
         entities[pi].ability_cd = (entities[pi].ability_cd - DT).max(0.0);
     }
+    if entities[pi].gcd > 0.0 {
+        entities[pi].gcd = (entities[pi].gcd - DT).max(0.0);
+    }
 
     let target_id = entities[pi].target;
     let Some(tid) = target_id else {
         entities[pi].swing_timer = 0.0;
+        entities[pi].cast = None;
         return;
     };
     let Some(ti) = entities.iter().position(|e| e.id == tid) else {
         entities[pi].target = None;
+        entities[pi].cast = None;
         return;
     };
     if !entities[ti].alive || entities[ti].kind != EntityKind::Mob {
         entities[pi].target = None;
         entities[pi].auto_attack = false;
+        entities[pi].cast = None;
         return;
     }
 
@@ -237,20 +420,55 @@ pub fn update_player_combat(
 
     entities[pi].yaw = face_toward(&entities[pi], &entities[ti]);
 
-    // Primary ability (instant).
-    if matches!(ability_slot, Some(AbilitySlot::Primary)) && entities[pi].ability_cd <= 0.0 {
+    // Advance in-progress cast.
+    if entities[pi].cast.is_some() {
+        let cast_target = entities[pi].cast.as_ref().map(|c| c.target);
+        if cast_target != Some(tid) || !in_ability {
+            entities[pi].cast = None;
+        } else if let Some(mut cast) = entities[pi].cast.take() {
+            cast.elapsed += DT;
+            if cast.elapsed >= cast.duration {
+                let abil_id = cast.ability_id.clone();
+                if let Some(def) = ability(&abil_id) {
+                    let src = entities[pi].id;
+                    resolve_ability_hit(entities, src, tid, &abil_id, def.name, def.damage, events);
+                }
+            } else {
+                entities[pi].cast = Some(cast);
+            }
+        }
+        // While casting, still allow auto-attack below; do not start a new ability.
+    } else if matches!(ability_slot, Some(AbilitySlot::Primary))
+        && entities[pi].ability_cd <= 0.0
+        && entities[pi].gcd <= 0.0
+    {
         if let Some(abil_id) = entities[pi].primary_ability.clone() {
             if let Some(def) = ability(&abil_id) {
                 if in_ability && spend_resource(&mut entities[pi], def.cost) {
                     entities[pi].ability_cd = def.cooldown;
+                    entities[pi].gcd = GCD_SEC;
                     entities[pi].auto_attack = true;
-                    let dmg = def.damage + entities[pi].attack_damage * 0.35;
-                    let src = entities[pi].id;
-                    deal_damage(entities, src, tid, dmg, Some(def.name), events);
-                    if matches!(entities[pi].resource_type, Some(ResourceType::Rage)) {
-                        gain_resource(&mut entities[pi], 5.0);
+                    if def.cast_time > 0.0 {
+                        entities[pi].cast = Some(CastState {
+                            ability_id: abil_id,
+                            elapsed: 0.0,
+                            duration: def.cast_time,
+                            target: tid,
+                        });
+                    } else {
+                        let src = entities[pi].id;
+                        resolve_ability_hit(
+                            entities,
+                            src,
+                            tid,
+                            &abil_id,
+                            def.name,
+                            def.damage,
+                            events,
+                        );
+                        // Instant ability: skip auto this frame (legacy behavior).
+                        return;
                     }
-                    return;
                 }
             }
         }
@@ -285,7 +503,12 @@ pub fn update_mob_combat(
     if !entities[mi].alive || entities[mi].kind != EntityKind::Mob {
         return;
     }
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
+
+    // Prefer sticky current target / threat table over the suggested focus.
+    let focus = prefer_mob_target(&entities[mi], entities, 40.0).unwrap_or(player_id);
+    entities[mi].target = Some(focus);
+
+    let Some(pi) = entities.iter().position(|e| e.id == focus) else {
         return;
     };
     if !entities[pi].alive {
@@ -305,5 +528,162 @@ pub fn update_mob_combat(
     entities[mi].swing_timer = MOB_SWING_SEC;
     let dmg = entities[mi].attack_damage.max(3.0);
     let src = entities[mi].id;
-    deal_damage(entities, src, player_id, dmg, None, events);
+    deal_damage(entities, src, focus, dmg, None, events);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entity::AuraInstance;
+    use woc_content::PlayerClass;
+    use woc_protocol::AbilitySlot;
+
+    fn player_and_mob() -> (Entity, Entity) {
+        let mut player = crate::entity::create_player(1, "Tester", PlayerClass::Warrior, 0.0, 0.0);
+        player.resource = 100.0;
+        player.ability_cd = 0.0;
+        player.gcd = 0.0;
+        player.primary_ability = Some("heroic_strike".into());
+        let mut mob =
+            crate::entity::create_mob_from_template(2, "young_wolf", 1.0, 0.0).expect("wolf");
+        mob.hp = 500.0;
+        mob.hp_max = 500.0;
+        player.target = Some(mob.id);
+        player.auto_attack = true;
+        (player, mob)
+    }
+
+    #[test]
+    fn gcd_blocks_second_ability_cast() {
+        let (player, mob) = player_and_mob();
+        let mob_hp = mob.hp;
+        let mut entities = vec![player, mob];
+        let mut events = Vec::new();
+
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        let after_first = entities[1].hp;
+        assert!(after_first < mob_hp, "first cast should deal damage");
+        assert!(entities[0].gcd > 0.0, "GCD should start after ability");
+
+        // Clear per-ability CD so only GCD can block. Freeze auto-swing so it
+        // cannot masquerade as an ability hit.
+        entities[0].ability_cd = 0.0;
+        entities[0].resource = 100.0;
+        entities[0].auto_attack = false;
+        entities[0].swing_timer = 99.0;
+        let hp_before_second = entities[1].hp;
+        let auras_before = entities[1].auras.len();
+        events.clear();
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        assert_eq!(
+            entities[1].hp, hp_before_second,
+            "GCD must block a second ability cast"
+        );
+        assert_eq!(
+            entities[1].auras.len(),
+            auras_before,
+            "GCD must not re-apply primary DoT"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Damage { ability: Some(_), .. })),
+            "no ability damage while on GCD"
+        );
+
+        // Expire GCD and ability CD; cast should land again.
+        entities[0].gcd = 0.0;
+        entities[0].ability_cd = 0.0;
+        entities[0].resource = 100.0;
+        entities[0].auto_attack = false;
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        assert!(entities[1].hp < hp_before_second, "cast after GCD should hit");
+    }
+
+    #[test]
+    fn aura_expires_after_remaining_elapses() {
+        let mut mob = crate::entity::create_mob_from_template(2, "young_wolf", 0.0, 0.0).unwrap();
+        mob.auras.push(AuraInstance {
+            id: "rend".into(),
+            remaining: DT * 1.5,
+            stacks: 1,
+            tick_timer: 999.0,
+            tick_interval: 999.0,
+            tick_damage: 0.0,
+            source: 1,
+        });
+        let mut entities = vec![mob];
+        let mut events = Vec::new();
+
+        tick_auras(&mut entities, &mut events);
+        assert_eq!(entities[0].auras.len(), 1, "aura still active mid-duration");
+        assert!(entities[0].auras[0].remaining > 0.0);
+
+        tick_auras(&mut entities, &mut events);
+        assert!(
+            entities[0].auras.is_empty(),
+            "aura must expire once remaining elapses"
+        );
+    }
+
+    #[test]
+    fn aura_dot_ticks_damage_each_interval() {
+        let mut mob = crate::entity::create_mob_from_template(2, "young_wolf", 0.0, 0.0).unwrap();
+        let start_hp = mob.hp;
+        mob.auras.push(AuraInstance {
+            id: "rend".into(),
+            remaining: 10.0,
+            stacks: 1,
+            tick_timer: DT,
+            tick_interval: 3.0 * DT,
+            tick_damage: 7.0,
+            source: 1,
+        });
+        let mut entities = vec![mob];
+        let mut events = Vec::new();
+
+        tick_auras(&mut entities, &mut events);
+        assert!(entities[0].hp < start_hp, "DoT should tick once");
+        let after_tick = entities[0].hp;
+
+        tick_auras(&mut entities, &mut events);
+        assert_eq!(
+            entities[0].hp, after_tick,
+            "no second tick before interval elapses"
+        );
+    }
+
+    #[test]
+    fn fireball_starts_timed_cast() {
+        let mut player =
+            crate::entity::create_player(1, "Mage", PlayerClass::Mage, 0.0, 0.0);
+        player.resource = 100.0;
+        player.primary_ability = Some("fireball".into());
+        let mut mob =
+            crate::entity::create_mob_from_template(2, "young_wolf", 5.0, 0.0).unwrap();
+        mob.hp = 500.0;
+        mob.hp_max = 500.0;
+        player.target = Some(mob.id);
+        let start_hp = mob.hp;
+        let mut entities = vec![player, mob];
+        let mut events = Vec::new();
+
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        assert!(entities[0].cast.is_some(), "fireball should begin casting");
+        assert_eq!(entities[1].hp, start_hp, "no damage until cast completes");
+        assert!(entities[0].gcd > 0.0);
+
+        // Advance cast to completion.
+        let duration = entities[0].cast.as_ref().unwrap().duration;
+        let ticks = (duration / DT).ceil() as u32 + 1;
+        for _ in 0..ticks {
+            update_player_combat(1, &mut entities, None, &mut events);
+        }
+        assert!(entities[0].cast.is_none());
+        assert!(entities[1].hp < start_hp, "damage after cast finishes");
+        assert!(
+            entities[1].auras.iter().any(|a| a.id == IGNITE_ID),
+            "ignite DoT applied on fireball hit"
+        );
+    }
 }
