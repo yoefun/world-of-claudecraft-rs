@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 — 2026-07-28
+
+### Added
+
+- Multi-player sticky realm: per-player xp/copper, intent map, spawn/despawn without resetting Eastbrook.
+- Expanded `SimContext` + locked tick-phase fingerprint.
+- Death / spirit release / Eastbrook graveyard respawn.
+- Combat core: GCD, timed casts, DoT auras, threat stub; snapshot auras/cast/`is_dead`.
+- Deeper bags: Head/OffHand/Legs/Feet, `UseItem` consumables, level-req equip.
+- Tab targeting + clear target.
+- Bevy client online mode (`ws://127.0.0.1:8787/ws/game`) alongside offline.
+- Content stubs: talents, zone2 placeholders, graveyards, dungeons.
+- Client module split (title / char create / world / input / hud / online).
+
+### Changed
+
+- Parity target `framework` → `online-alive` (upstream pin remains 0.31.0).
+- Rewrite version `0.2.0` → `0.3.0`.
+
 ## 0.2.0 — 2026-07-28
 
 ### Added
