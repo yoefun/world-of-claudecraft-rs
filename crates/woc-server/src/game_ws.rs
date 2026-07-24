@@ -140,6 +140,11 @@ async fn handle_socket(socket: WebSocket) {
                     WorldHost::interact(&mut realm.sim, pid, target_id, action);
                 }
             }
+            // Party/chat stubs — accepted on the wire, no-op until Wave 2 handlers land.
+            WsClientMsg::PartyInvite { .. }
+            | WsClientMsg::PartyAccept
+            | WsClientMsg::PartyLeave
+            | WsClientMsg::Chat { .. } => {}
         }
     }
 
