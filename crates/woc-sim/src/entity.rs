@@ -109,6 +109,8 @@ pub struct Entity {
     pub corpse_x: Option<f32>,
     /// Death corpse Z (player only; set on death, cleared on spirit release).
     pub corpse_z: Option<f32>,
+    /// Mob respawn countdown while dead (0 when alive / unarmed).
+    pub respawn_timer: f32,
 }
 
 impl Entity {
@@ -166,6 +168,7 @@ impl Entity {
             threat: HashMap::new(),
             corpse_x: None,
             corpse_z: None,
+            respawn_timer: 0.0,
         }
     }
 }
