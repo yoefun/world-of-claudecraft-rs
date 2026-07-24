@@ -4,11 +4,14 @@
 pub mod abilities;
 pub mod classes;
 pub mod dungeons;
+pub mod gather_nodes;
 pub mod graveyards;
 pub mod items;
 pub mod mobs;
 pub mod npcs;
+pub mod professions;
 pub mod quests;
+pub mod recipes;
 pub mod talents;
 pub mod zone1;
 pub mod zone2;
@@ -16,11 +19,16 @@ pub mod zone2;
 pub use abilities::{ability, AbilityDef, ABILITIES};
 pub use classes::{class_def, ClassDef, PlayerClass, ResourceType, CLASSES};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
+pub use gather_nodes::{
+    gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES,
+};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
+pub use professions::{profession, ProfessionDef, ProfessionKind, PROFESSIONS};
 pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
+pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
 pub use talents::{talent, TalentDef, TALENTS};
 pub use zone1::{MobSpot, NpcSpot, ZoneLayout, EASTBROOK};
 pub use zone2::{EASTFEN, MIREFEN};
@@ -148,5 +156,95 @@ mod tests {
         assert!(EASTFEN.mobs.is_empty());
         assert!(MIREFEN.npcs.is_empty());
         assert!(MIREFEN.mobs.is_empty());
+    }
+
+    #[test]
+    fn professions_include_gathering_and_crafting() {
+        assert!(
+            PROFESSIONS
+                .iter()
+                .any(|p| p.kind == ProfessionKind::Gathering),
+            "expected at least one gathering profession"
+        );
+        assert!(
+            PROFESSIONS
+                .iter()
+                .any(|p| p.kind == ProfessionKind::Crafting),
+            "expected at least one crafting profession"
+        );
+        assert!(profession("herbalism").is_some());
+        assert!(profession("alchemy").is_some());
+    }
+
+    #[test]
+    fn gather_nodes_resolve_profession_item_and_zone() {
+        assert!(
+            GATHER_NODES.len() >= 3,
+            "expected ≥3 gather nodes, got {}",
+            GATHER_NODES.len()
+        );
+        for node in GATHER_NODES {
+            assert!(
+                profession(node.profession_id).is_some(),
+                "gather node {} missing profession {}",
+                node.id,
+                node.profession_id
+            );
+            assert!(
+                ITEMS.iter().any(|i| i.id == node.item_id),
+                "gather node {} missing item {}",
+                node.id,
+                node.item_id
+            );
+            assert!(
+                KNOWN_ZONE_IDS.contains(&node.zone_id),
+                "gather node {} references unknown zone_id {}",
+                node.id,
+                node.zone_id
+            );
+            assert!(node.count >= 1);
+        }
+        assert!(gather_node("eastbrook_meadow_silverleaf").is_some());
+        assert!(gather_nodes_for_zone("eastbrook").count() >= 3);
+    }
+
+    #[test]
+    fn recipes_consume_reagents_and_produce_items() {
+        assert!(
+            RECIPES.len() >= 2,
+            "expected ≥2 recipes, got {}",
+            RECIPES.len()
+        );
+        for r in RECIPES {
+            assert!(
+                profession(r.profession_id).is_some(),
+                "recipe {} missing profession {}",
+                r.id,
+                r.profession_id
+            );
+            assert!(
+                !r.reagents.is_empty(),
+                "recipe {} must consume reagents",
+                r.id
+            );
+            for reagent in r.reagents {
+                assert!(
+                    ITEMS.iter().any(|i| i.id == reagent.item_id),
+                    "recipe {} missing reagent {}",
+                    r.id,
+                    reagent.item_id
+                );
+                assert!(reagent.count >= 1);
+            }
+            assert!(
+                ITEMS.iter().any(|i| i.id == r.product_item_id),
+                "recipe {} missing product {}",
+                r.id,
+                r.product_item_id
+            );
+            assert!(r.product_count >= 1);
+        }
+        assert!(recipe("minor_healing_salve").is_some());
+        assert!(recipes_for_profession("alchemy").count() >= 2);
     }
 }
