@@ -1,5 +1,9 @@
 //! NPC definitions.
 
+use std::sync::LazyLock;
+
+use crate::npcs_zone2::ZONE2_NPCS;
+
 #[derive(Debug, Clone)]
 pub struct VendorOffer {
     pub item_id: &'static str,
@@ -16,7 +20,7 @@ pub struct NpcDef {
     pub vendor_stock: &'static [VendorOffer],
 }
 
-pub static NPCS: &[NpcDef] = &[
+pub static ZONE1_NPCS: &[NpcDef] = &[
     NpcDef {
         id: "captain_alden",
         name: "Captain Alden",
@@ -55,6 +59,14 @@ pub static NPCS: &[NpcDef] = &[
         vendor_stock: &[],
     },
 ];
+
+/// Zone1 + zone2 NPC definitions.
+pub static NPCS: LazyLock<&'static [NpcDef]> = LazyLock::new(|| {
+    let mut all = Vec::with_capacity(ZONE1_NPCS.len() + ZONE2_NPCS.len());
+    all.extend_from_slice(ZONE1_NPCS);
+    all.extend_from_slice(ZONE2_NPCS);
+    Box::leak(all.into_boxed_slice())
+});
 
 pub fn npc(id: &str) -> Option<&'static NpcDef> {
     NPCS.iter().find(|n| n.id == id)
