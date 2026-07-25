@@ -11,8 +11,9 @@ use woc_version::footer;
 
 use crate::char_create::{CharName, SelectedClass};
 use crate::hud::{
-    HudBagText, HudHpText, HudNetText, HudQuestText, HudRoot, HudTargetText, HudToastText,
-    HudXpText,
+    HudActionBarText, HudBagText, HudCastFill, HudCastPanel, HudCastText, HudCharPanel,
+    HudCharText, HudHpText, HudNetText, HudQuestText, HudRoot, HudTargetText, HudToastText,
+    HudVendorOffers, HudVendorPanel, HudVendorTitle, HudXpText,
 };
 use crate::online;
 use crate::{AppState, GameHost, NetStatus, PlayMode};
@@ -145,6 +146,9 @@ fn setup_world(
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::SpaceBetween,
                 padding: UiRect::all(Val::Px(12.0)),
@@ -200,10 +204,68 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB attack · 1 ability · E interact · B bags · L quests · RMB look · Esc",
+                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · RMB look · Esc",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
+                ));
+            });
+
+            // Character sheet overlay (toggle C)
+            root.spawn((
+                HudCharPanel,
+                Visibility::Hidden,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(12.0),
+                    top: Val::Px(200.0),
+                    width: Val::Px(280.0),
+                    padding: UiRect::all(Val::Px(12.0)),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.04, 0.06, 0.1, 0.88)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    HudCharText,
+                    Text::new(""),
+                    TextFont::from_font_size(15.0),
+                    TextColor(Color::srgb(0.9, 0.92, 0.85)),
+                ));
+            });
+
+            // Vendor panel (visible when open_vendor is Some)
+            root.spawn((
+                HudVendorPanel,
+                Visibility::Hidden,
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(12.0),
+                    top: Val::Px(160.0),
+                    width: Val::Px(320.0),
+                    padding: UiRect::all(Val::Px(12.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(8.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.05, 0.1, 0.08, 0.9)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    HudVendorTitle,
+                    Text::new("Vendor"),
+                    TextFont::from_font_size(18.0),
+                    TextColor(Color::srgb(0.85, 0.95, 0.75)),
+                ));
+                panel.spawn((
+                    HudVendorOffers,
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.0),
+                        ..default()
+                    },
                 ));
             });
 
@@ -215,6 +277,68 @@ fn setup_world(
                 ..default()
             },))
                 .with_children(|bot| {
+                    // Cast bar
+                    bot.spawn((
+                        HudCastPanel,
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(360.0),
+                            height: Val::Px(28.0),
+                            flex_direction: FlexDirection::Column,
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            padding: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.75)),
+                    ))
+                    .with_children(|cast| {
+                        cast.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Px(10.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.15, 0.15, 0.2, 0.9)),
+                        ))
+                        .with_children(|track| {
+                            track.spawn((
+                                HudCastFill,
+                                Node {
+                                    width: Val::Percent(0.0),
+                                    height: Val::Percent(100.0),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgb(0.35, 0.55, 0.95)),
+                            ));
+                        });
+                        cast.spawn((
+                            HudCastText,
+                            Text::new(""),
+                            TextFont::from_font_size(14.0),
+                            TextColor(Color::srgb(0.85, 0.9, 1.0)),
+                        ));
+                    });
+
+                    // Action bar
+                    bot.spawn((
+                        Node {
+                            width: Val::Px(520.0),
+                            padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
+                            justify_content: JustifyContent::Center,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.04, 0.05, 0.08, 0.8)),
+                    ))
+                    .with_children(|bar| {
+                        bar.spawn((
+                            HudActionBarText,
+                            Text::new("[1] Ability   [2] —   [3] —   [4] —   [5] —"),
+                            TextFont::from_font_size(16.0),
+                            TextColor(Color::srgb(0.9, 0.88, 0.7)),
+                        ));
+                    });
+
                     bot.spawn((
                         HudToastText,
                         Text::new(""),
