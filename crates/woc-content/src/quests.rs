@@ -1,5 +1,9 @@
 //! Quest definitions for Eastbrook framework slice.
 
+use std::sync::LazyLock;
+
+use crate::quests_zone2::ZONE2_QUESTS;
+
 #[derive(Debug, Clone)]
 pub enum QuestObjective {
     Kill {
@@ -36,7 +40,7 @@ pub struct QuestDef {
     pub reward: QuestReward,
 }
 
-pub static QUESTS: &[QuestDef] = &[
+pub static ZONE1_QUESTS: &[QuestDef] = &[
     QuestDef {
         id: "wolves_at_the_gate",
         name: "Wolves at the Gate",
@@ -88,6 +92,14 @@ pub static QUESTS: &[QuestDef] = &[
         },
     },
 ];
+
+/// Zone1 + zone2 quest definitions.
+pub static QUESTS: LazyLock<&'static [QuestDef]> = LazyLock::new(|| {
+    let mut all = Vec::with_capacity(ZONE1_QUESTS.len() + ZONE2_QUESTS.len());
+    all.extend_from_slice(ZONE1_QUESTS);
+    all.extend_from_slice(ZONE2_QUESTS);
+    Box::leak(all.into_boxed_slice())
+});
 
 pub fn quest(id: &str) -> Option<&'static QuestDef> {
     QUESTS.iter().find(|q| q.id == id)
