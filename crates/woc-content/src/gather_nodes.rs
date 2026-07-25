@@ -1,0 +1,62 @@
+//! World gather-node placements for gathering professions.
+
+#[derive(Debug, Clone, Copy)]
+pub struct GatherNodeDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    /// Profession required to harvest (`herbalism`, …).
+    pub profession_id: &'static str,
+    pub zone_id: &'static str,
+    pub x: f32,
+    pub z: f32,
+    /// Item granted on a successful gather.
+    pub item_id: &'static str,
+    pub count: u32,
+    pub skill_req: u32,
+}
+
+/// Conceptual placements around Eastbrook Vale (near meadow / brook edges).
+pub static GATHER_NODES: &[GatherNodeDef] = &[
+    GatherNodeDef {
+        id: "eastbrook_meadow_silverleaf",
+        name: "Silverleaf Patch",
+        profession_id: "herbalism",
+        zone_id: "eastbrook",
+        x: 14.0,
+        z: 10.0,
+        item_id: "silverleaf",
+        count: 1,
+        skill_req: 1,
+    },
+    GatherNodeDef {
+        id: "eastbrook_brook_peacebloom",
+        name: "Peacebloom Clump",
+        profession_id: "herbalism",
+        zone_id: "eastbrook",
+        x: -10.0,
+        z: 12.0,
+        item_id: "peacebloom",
+        count: 1,
+        skill_req: 1,
+    },
+    GatherNodeDef {
+        id: "eastbrook_north_briar",
+        name: "Briarroot Thicket",
+        profession_id: "herbalism",
+        zone_id: "eastbrook",
+        x: -6.0,
+        z: -18.0,
+        item_id: "briarroot",
+        count: 1,
+        skill_req: 1,
+    },
+];
+
+pub fn gather_node(id: &str) -> Option<&'static GatherNodeDef> {
+    GATHER_NODES.iter().find(|n| n.id == id)
+}
+
+/// All gather nodes placed in `zone_id`.
+pub fn gather_nodes_for_zone(zone_id: &str) -> impl Iterator<Item = &'static GatherNodeDef> + '_ {
+    GATHER_NODES.iter().filter(move |n| n.zone_id == zone_id)
+}

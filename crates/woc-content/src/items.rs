@@ -210,6 +210,13 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         18.0,
         1,
     ),
+    // Profession reagents (herbalism gather yields).
+    misc("silverleaf", "Silverleaf", ItemKind::Junk, 1),
+    misc("peacebloom", "Peacebloom", ItemKind::Junk, 1),
+    misc("briarroot", "Briarroot", ItemKind::Junk, 2),
+    // Alchemy craft products.
+    consumable("minor_healing_salve", "Minor Healing Salve", 8, 2, 55.0),
+    consumable("briar_tonic", "Briar Tonic", 10, 3, 35.0),
 ];
 
 /// Zone1 + zone2 item definitions.
