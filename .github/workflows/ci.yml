@@ -13,6 +13,24 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      # Optional Postgres for woc-persist integration tests (unit tests skip if unused).
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: woc
+          POSTGRES_PASSWORD: woc
+          POSTGRES_DB: woc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U woc -d woc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Integration tests in woc-persist run only when this is set; unit tests always pass without DB.
+      DATABASE_URL: postgres://woc:woc@localhost:5432/woc
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly

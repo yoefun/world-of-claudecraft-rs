@@ -1,0 +1,25 @@
+[package]
+name = "woc-persist"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Account auth and character save/load for World of ClaudeCraft (Rust)"
+
+[features]
+default = ["postgres"]
+# Postgres backend via sqlx. Disable for compile-only / no-DB environments:
+#   cargo check -p woc-persist --no-default-features
+postgres = ["dep:sqlx"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+argon2 = { workspace = true }
+sqlx = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
