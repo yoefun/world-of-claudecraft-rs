@@ -25,13 +25,15 @@ use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::player_motion::step_player_motion;
 use crate::quests::on_mob_killed;
 use crate::rng::Rng;
+use crate::social::chat::{handle_chat, ChatEffect};
+use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
 use crate::world::WORLD_SEED;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
     AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot,
     InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress, QuestLogEntry, SimEvent,
-    TickSnapshot, DT, PROTOCOL_REV,
+    TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
@@ -48,6 +50,8 @@ pub struct Sim {
     pub events: Vec<SimEvent>,
     /// Per-player intents for the next tick.
     pub intents: HashMap<EntityId, PlayerIntent>,
+    /// Party invite / membership roster for this realm.
+    pub parties: PartyRoster,
 }
 
 impl Sim {
@@ -88,6 +92,7 @@ impl Sim {
             player_id: 0,
             events: Vec::new(),
             intents: HashMap::new(),
+            parties: PartyRoster::new(),
         }
     }
 
@@ -134,6 +139,7 @@ impl Sim {
 
     /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
     pub fn despawn_player(&mut self, player_id: EntityId) {
+        let _ = self.parties.on_despawn(player_id);
         self.entities
             .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
         self.intents.remove(&player_id);
@@ -145,6 +151,37 @@ impl Sim {
                 .map(|e| e.id)
                 .unwrap_or(0);
         }
+    }
+
+    /// Party invite by target player name.
+    pub fn party_invite(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.invite(player_id, name, &self.entities))
+    }
+
+    /// Accept a pending party invite.
+    pub fn party_accept(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.accept(player_id, &self.entities))
+    }
+
+    /// Leave the current party (dissolves when size drops below 2).
+    pub fn party_leave(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.leave(player_id))
+    }
+
+    /// Say / party chat.
+    pub fn chat(&mut self, player_id: EntityId, channel: &str, text: &str) -> Vec<WsServerMsg> {
+        map_chat_effects(handle_chat(
+            &self.parties,
+            &self.entities,
+            player_id,
+            channel,
+            text,
+        ))
+    }
+
+    /// Current party member list for `player_id`, if any.
+    pub fn party_members(&self, player_id: EntityId) -> Option<Vec<EntityId>> {
+        self.parties.members_of(player_id)
     }
 
     pub fn player_count(&self) -> usize {
@@ -316,14 +353,22 @@ impl Sim {
         tick_auras(&mut self.entities, &mut self.events);
         tick_mob_respawns(&mut self.entities, DT);
 
-        // Phase 4: kill rewards → killer
+        // Phase 4: kill rewards → killer (+ party share stub)
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);
         for reward in rewards {
-            if let Some(pi) = self.entities.iter().position(|e| e.id == reward.killer) {
-                if self.entities[pi].kind == EntityKind::Player {
-                    grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
-                    if let Some(ref tid) = reward.template_id {
-                        on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
+            let mut recipients = vec![reward.killer];
+            for mate in kill_credit_share(&self.parties, reward.killer) {
+                if !recipients.contains(&mate) {
+                    recipients.push(mate);
+                }
+            }
+            for rid in recipients {
+                if let Some(pi) = self.entities.iter().position(|e| e.id == rid) {
+                    if self.entities[pi].kind == EntityKind::Player {
+                        grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
+                        if let Some(ref tid) = reward.template_id {
+                            on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
+                        }
                     }
                 }
             }
@@ -512,9 +557,47 @@ impl Sim {
             auras,
             cast,
             is_dead: player.map(|p| !p.alive).unwrap_or(false),
+            party_id: self.parties.party_id(player_id),
             ..Default::default()
         }
     }
+}
+
+fn map_party_effects(effects: Vec<PartyEffect>) -> Vec<WsServerMsg> {
+    effects
+        .into_iter()
+        .map(|e| match e {
+            PartyEffect::Update { members } => WsServerMsg::PartyUpdate { members },
+            // Prefer Chat toasts over Error so the client does not flip NetStatus.
+            PartyEffect::Error { message } | PartyEffect::Notice { message } => WsServerMsg::Chat {
+                channel: "system".into(),
+                from: "Party".into(),
+                text: message,
+            },
+        })
+        .collect()
+}
+
+fn map_chat_effects(effects: Vec<ChatEffect>) -> Vec<WsServerMsg> {
+    effects
+        .into_iter()
+        .map(|e| match e {
+            ChatEffect::Message {
+                channel,
+                from,
+                text,
+            } => WsServerMsg::Chat {
+                channel,
+                from,
+                text,
+            },
+            ChatEffect::Error { message } => WsServerMsg::Chat {
+                channel: "system".into(),
+                from: "Chat".into(),
+                text: message,
+            },
+        })
+        .collect()
 }
 
 fn nearest_mob(entities: &[Entity], from: &Entity, max_range: f32) -> Option<EntityId> {
@@ -960,5 +1043,51 @@ mod tests {
                 assert!((ea.hp - eb.hp).abs() < 1e-5);
             }
         }
+    }
+
+    #[test]
+    fn party_invite_accept_leave_and_chat_roundtrip() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let outs = sim.party_invite(a, "Bob");
+        assert!(
+            outs.iter()
+                .any(|m| matches!(m, WsServerMsg::Chat { channel, .. } if channel == "system")),
+            "invite notice: {outs:?}"
+        );
+        let outs = sim.party_accept(b);
+        assert!(
+            outs.iter().any(|m| matches!(
+                m,
+                WsServerMsg::PartyUpdate { members } if members.len() == 2
+            )),
+            "party update: {outs:?}"
+        );
+        assert_eq!(sim.party_members(a), Some(vec![a, b]));
+        let snap = sim.snapshot_for_player(a);
+        assert_eq!(snap.party_id, sim.parties.party_id(a));
+        assert!(snap.party_id.is_some());
+
+        let outs = sim.chat(a, "party", "pulling");
+        assert!(matches!(
+            outs.as_slice(),
+            [WsServerMsg::Chat {
+                channel,
+                from,
+                text
+            }] if channel == "party" && from == "Alice" && text == "pulling"
+        ));
+
+        let outs = sim.party_leave(b);
+        assert!(
+            outs.iter().any(|m| matches!(
+                m,
+                WsServerMsg::PartyUpdate { members } if members.is_empty()
+            )),
+            "dissolve: {outs:?}"
+        );
+        assert!(sim.party_members(a).is_none());
+        assert!(sim.snapshot_for_player(a).party_id.is_none());
     }
 }

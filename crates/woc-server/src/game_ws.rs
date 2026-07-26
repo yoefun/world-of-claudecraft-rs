@@ -140,11 +140,54 @@ async fn handle_socket(socket: WebSocket) {
                     WorldHost::interact(&mut realm.sim, pid, target_id, action);
                 }
             }
-            // Party/chat stubs — accepted on the wire, no-op until Wave 2 handlers land.
-            WsClientMsg::PartyInvite { .. }
-            | WsClientMsg::PartyAccept
-            | WsClientMsg::PartyLeave
-            | WsClientMsg::Chat { .. } => {}
+            WsClientMsg::PartyInvite { name } => {
+                if let Some(pid) = player_id {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_invite(pid, &name);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .snapshots
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyAccept => {
+                if let Some(pid) = player_id {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_accept(pid);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .snapshots
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyLeave => {
+                if let Some(pid) = player_id {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_leave(pid);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .snapshots
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::Chat { channel, text } => {
+                if let Some(pid) = player_id {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.chat(pid, &channel, &text);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .snapshots
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
         }
     }
 
@@ -248,5 +291,34 @@ mod tests {
         // After one tick B moved on X relative to spawn offset — just check alive intents applied
         let _ = (bx1, bx0);
         assert_eq!(realm.sim.player_count(), 2);
+    }
+
+    #[test]
+    fn party_and_chat_handlers_via_sim() {
+        let mut realm = Realm::new();
+        let a = realm
+            .sim
+            .spawn_player("Alice", PlayerClass::Warrior)
+            .unwrap();
+        let b = realm.sim.spawn_player("Bob", PlayerClass::Rogue).unwrap();
+        let _ = realm.sim.party_invite(a, "Bob");
+        let outs = realm.sim.party_accept(b);
+        assert!(outs.iter().any(|m| matches!(
+            m,
+            WsServerMsg::PartyUpdate { members } if members.contains(&a) && members.contains(&b)
+        )));
+        let outs = realm.sim.chat(a, "say", "hi");
+        assert!(matches!(
+            outs.as_slice(),
+            [WsServerMsg::Chat {
+                channel,
+                from,
+                text
+            }] if channel == "say" && from == "Alice" && text == "hi"
+        ));
+        let members = realm.sim.party_members(a).expect("party");
+        assert_eq!(members.len(), 2);
+        let _ = realm.sim.party_leave(a);
+        assert!(realm.sim.party_members(b).is_none());
     }
 }

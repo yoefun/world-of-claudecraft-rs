@@ -16,6 +16,7 @@ pub mod player_motion;
 pub mod quests;
 pub mod rng;
 pub mod sim;
+pub mod social;
 pub mod spirit;
 pub mod stats;
 pub mod targeting;
