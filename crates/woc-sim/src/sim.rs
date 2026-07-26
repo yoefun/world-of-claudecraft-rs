@@ -21,7 +21,7 @@ use crate::entity::{
     create_mob_from_template, create_npc_from_template, create_player, Entity, QuestState,
 };
 use crate::interaction::vendor_snapshot;
-use crate::mob::update_mob_ai;
+use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::player_motion::step_player_motion;
 use crate::quests::on_mob_killed;
 use crate::rng::Rng;
@@ -31,7 +31,7 @@ use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
     AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot,
     InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress, QuestLogEntry, SimEvent,
-    TickSnapshot, PROTOCOL_REV,
+    TickSnapshot, DT, PROTOCOL_REV,
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
@@ -314,6 +314,7 @@ impl Sim {
 
         // Aura/timer decay (hook into tick after combat; keeps TICK_PHASES fingerprint stable).
         tick_auras(&mut self.entities, &mut self.events);
+        tick_mob_respawns(&mut self.entities, DT);
 
         // Phase 4: kill rewards → killer
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);

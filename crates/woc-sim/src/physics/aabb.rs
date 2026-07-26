@@ -110,6 +110,7 @@ fn sweep_point_xz(ox: f32, oz: f32, dx: f32, dz: f32, box_xz: &Aabb) -> Option<f
 ///
 /// Vertical extent still matters: colliders that do not overlap the character in Y
 /// are ignored (walk under high overhangs / ignore buried volumes).
+#[allow(clippy::too_many_arguments)]
 pub fn sweep_character_xz(
     x: f32,
     y: f32,
