@@ -11,6 +11,7 @@ pub mod host;
 pub mod interaction;
 pub mod inventory;
 pub mod mob;
+pub mod pet;
 pub mod physics;
 pub mod player_motion;
 pub mod quests;

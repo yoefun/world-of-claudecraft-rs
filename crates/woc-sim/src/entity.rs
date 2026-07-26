@@ -111,6 +111,8 @@ pub struct Entity {
     pub corpse_z: Option<f32>,
     /// Mob respawn countdown while dead (0 when alive / unarmed).
     pub respawn_timer: f32,
+    /// Owning player id for summoned pets (`None` for everyone else).
+    pub owner_id: Option<EntityId>,
 }
 
 impl Entity {
@@ -118,7 +120,7 @@ impl Entity {
         terrain_height(x, z, WORLD_SEED)
     }
 
-    fn blank(
+    pub(crate) fn blank(
         id: EntityId,
         kind: EntityKind,
         name: &str,
@@ -169,6 +171,7 @@ impl Entity {
             corpse_x: None,
             corpse_z: None,
             respawn_timer: 0.0,
+            owner_id: None,
         }
     }
 }
