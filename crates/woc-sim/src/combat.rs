@@ -5,23 +5,29 @@ use crate::rng::Rng;
 use crate::types::{
     player_hp, xp_to_next, MELEE_RANGE, MOB_SWING_SEC, PLAYER_SWING_SEC, RANGED_FALLBACK,
 };
-use woc_content::{ability, class_def, mob, ResourceType};
+use woc_content::{ability, class_ability_for_slot, class_def, mob, AbilityDef, ResourceType};
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, SimEvent, DT};
 
 /// Global cooldown after starting an ability (seconds).
 pub const GCD_SEC: f32 = 1.5;
 
-/// Default DoT applied by melee primary hits (Rend).
+/// Default DoT applied by melee kit hits (Rend).
 const REND_ID: &str = "rend";
 const REND_DURATION: f32 = 9.0;
 const REND_TICK_INTERVAL: f32 = 3.0;
 const REND_TICK_DAMAGE: f32 = 4.0;
 
-/// DoT applied when Fireball lands (Ignite).
+/// DoT applied when Fireball / incinerate lands (Ignite).
 const IGNITE_ID: &str = "ignite";
 const IGNITE_DURATION: f32 = 8.0;
 const IGNITE_TICK_INTERVAL: f32 = 2.0;
 const IGNITE_TICK_DAMAGE: f32 = 6.0;
+
+/// Nature / shadow DoT from sting / corruption / moonfire / holy fire.
+const STING_ID: &str = "sting";
+const STING_DURATION: f32 = 12.0;
+const STING_TICK_INTERVAL: f32 = 3.0;
+const STING_TICK_DAMAGE: f32 = 5.0;
 
 pub fn dist2d(a: &Entity, b: &Entity) -> f32 {
     let dx = a.x - b.x;
@@ -142,15 +148,21 @@ pub fn apply_aura(target: &mut Entity, aura: AuraInstance, events: &mut Vec<SimE
     });
 }
 
-fn apply_primary_dot(entities: &mut [Entity], source: EntityId, target: EntityId, ability_id: &str, events: &mut Vec<SimEvent>) {
+fn apply_primary_dot(
+    entities: &mut [Entity],
+    source: EntityId,
+    target: EntityId,
+    ability_id: &str,
+    events: &mut Vec<SimEvent>,
+) {
     let Some(ti) = entities.iter().position(|e| e.id == target) else {
         return;
     };
     if !entities[ti].alive {
         return;
     }
-    let aura = if ability_id == "fireball" {
-        AuraInstance {
+    let aura = match ability_id {
+        "fireball" | "incinerate" | "lava_burst" => AuraInstance {
             id: IGNITE_ID.into(),
             remaining: IGNITE_DURATION,
             stacks: 1,
@@ -158,23 +170,32 @@ fn apply_primary_dot(entities: &mut [Entity], source: EntityId, target: EntityId
             tick_interval: IGNITE_TICK_INTERVAL,
             tick_damage: IGNITE_TICK_DAMAGE,
             source,
+        },
+        "heroic_strike" | "cleave" | "crusader_strike" | "sinister_strike" | "eviscerate" => {
+            AuraInstance {
+                id: REND_ID.into(),
+                remaining: REND_DURATION,
+                stacks: 1,
+                tick_timer: REND_TICK_INTERVAL,
+                tick_interval: REND_TICK_INTERVAL,
+                tick_damage: REND_TICK_DAMAGE,
+                source,
+            }
         }
-    } else if ability_id == "heroic_strike" || ability_id == "crusader_strike" || ability_id == "sinister_strike"
-    {
-        AuraInstance {
-            id: REND_ID.into(),
-            remaining: REND_DURATION,
+        "serpent_sting" | "corruption" | "moonfire" | "holy_fire" => AuraInstance {
+            id: STING_ID.into(),
+            remaining: STING_DURATION,
             stacks: 1,
-            tick_timer: REND_TICK_INTERVAL,
-            tick_interval: REND_TICK_INTERVAL,
-            tick_damage: REND_TICK_DAMAGE,
+            tick_timer: STING_TICK_INTERVAL,
+            tick_interval: STING_TICK_INTERVAL,
+            tick_damage: STING_TICK_DAMAGE,
             source,
-        }
-    } else {
-        return;
+        },
+        _ => return,
     };
     apply_aura(&mut entities[ti], aura, events);
 }
+
 
 /// Tick all entity auras: DoT damage + expiry. Call once per sim tick.
 pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
@@ -270,6 +291,7 @@ pub fn grant_xp(player: &mut Entity, amount: u32, events: &mut Vec<SimEvent>) {
         events.push(SimEvent::Toast {
             message: format!("You reached level {}!", player.level),
         });
+        crate::entity::refresh_known_abilities(player);
     }
 }
 
@@ -349,6 +371,59 @@ fn ability_range(player: &Entity) -> f32 {
         .unwrap_or(MELEE_RANGE)
 }
 
+fn slot_as_u8(slot: AbilitySlot) -> u8 {
+    match slot {
+        AbilitySlot::Primary => 1,
+        AbilitySlot::Slot2 => 2,
+        AbilitySlot::Slot3 => 3,
+        AbilitySlot::Slot4 => 4,
+        AbilitySlot::Slot5 => 5,
+    }
+}
+
+/// Resolve a pressed ability slot to a known, level-unlocked ability def.
+fn resolve_slot_ability(player: &Entity, slot: AbilitySlot) -> Option<&'static AbilityDef> {
+    let class = player.class_id?;
+    let def = class_ability_for_slot(class, slot_as_u8(slot))?;
+    player
+        .known_abilities
+        .iter()
+        .any(|id| id == def.id)
+        .then_some(def)
+}
+
+fn tick_ability_cds(player: &mut Entity) {
+    let ids: Vec<String> = player.ability_cds.keys().cloned().collect();
+    for id in ids {
+        if let Some(cd) = player.ability_cds.get_mut(&id) {
+            *cd = (*cd - DT).max(0.0);
+        }
+    }
+    player.ability_cds.retain(|_, cd| *cd > 0.0);
+    // Keep legacy `ability_cd` mirrored to the primary for HUD/snapshot.
+    player.ability_cd = player
+        .primary_ability
+        .as_deref()
+        .and_then(|id| player.ability_cds.get(id).copied())
+        .unwrap_or(0.0);
+}
+
+fn start_ability_cd(player: &mut Entity, abil_id: &str, cooldown: f32) {
+    player.ability_cds.insert(abil_id.to_string(), cooldown);
+    if player.primary_ability.as_deref() == Some(abil_id) {
+        player.ability_cd = cooldown;
+    }
+}
+
+fn ability_on_cd(player: &Entity, abil_id: &str) -> bool {
+    player
+        .ability_cds
+        .get(abil_id)
+        .copied()
+        .unwrap_or(0.0)
+        > 0.0
+}
+
 fn resolve_ability_hit(
     entities: &mut [Entity],
     src: EntityId,
@@ -388,9 +463,7 @@ pub fn update_player_combat(
         gain_resource(&mut entities[pi], 1.5 * DT);
     }
 
-    if entities[pi].ability_cd > 0.0 {
-        entities[pi].ability_cd = (entities[pi].ability_cd - DT).max(0.0);
-    }
+    tick_ability_cds(&mut entities[pi]);
     if entities[pi].gcd > 0.0 {
         entities[pi].gcd = (entities[pi].gcd - DT).max(0.0);
     }
@@ -416,14 +489,20 @@ pub fn update_player_combat(
     let range = ability_range(&entities[pi]).max(MELEE_RANGE);
     let d = dist2d(&entities[pi], &entities[ti]);
     let in_melee = d <= MELEE_RANGE;
-    let in_ability = d <= range.max(RANGED_FALLBACK.min(range));
 
     entities[pi].yaw = face_toward(&entities[pi], &entities[ti]);
 
     // Advance in-progress cast.
     if entities[pi].cast.is_some() {
+        let cast_range = entities[pi]
+            .cast
+            .as_ref()
+            .and_then(|c| ability(&c.ability_id))
+            .map(|a| a.range)
+            .unwrap_or(range);
+        let in_cast_range = d <= cast_range.max(RANGED_FALLBACK.min(cast_range));
         let cast_target = entities[pi].cast.as_ref().map(|c| c.target);
-        if cast_target != Some(tid) || !in_ability {
+        if cast_target != Some(tid) || !in_cast_range {
             entities[pi].cast = None;
         } else if let Some(mut cast) = entities[pi].cast.take() {
             cast.elapsed += DT;
@@ -438,19 +517,22 @@ pub fn update_player_combat(
             }
         }
         // While casting, still allow auto-attack below; do not start a new ability.
-    } else if matches!(ability_slot, Some(AbilitySlot::Primary))
-        && entities[pi].ability_cd <= 0.0
-        && entities[pi].gcd <= 0.0
-    {
-        if let Some(abil_id) = entities[pi].primary_ability.clone() {
-            if let Some(def) = ability(&abil_id) {
-                if in_ability && spend_resource(&mut entities[pi], def.cost) {
-                    entities[pi].ability_cd = def.cooldown;
+    } else if let Some(slot) = ability_slot {
+        if entities[pi].gcd <= 0.0 {
+            if let Some(def) = resolve_slot_ability(&entities[pi], slot) {
+                let abil_id = def.id;
+                let abil_range = def.range.max(RANGED_FALLBACK.min(def.range));
+                let in_slot_range = d <= abil_range;
+                if in_slot_range
+                    && !ability_on_cd(&entities[pi], abil_id)
+                    && spend_resource(&mut entities[pi], def.cost)
+                {
+                    start_ability_cd(&mut entities[pi], abil_id, def.cooldown);
                     entities[pi].gcd = GCD_SEC;
                     entities[pi].auto_attack = true;
                     if def.cast_time > 0.0 {
                         entities[pi].cast = Some(CastState {
-                            ability_id: abil_id,
+                            ability_id: abil_id.to_string(),
                             elapsed: 0.0,
                             duration: def.cast_time,
                             target: tid,
@@ -461,7 +543,7 @@ pub fn update_player_combat(
                             entities,
                             src,
                             tid,
-                            &abil_id,
+                            abil_id,
                             def.name,
                             def.damage,
                             events,
@@ -490,6 +572,7 @@ pub fn update_player_combat(
     let src = entities[pi].id;
     deal_damage(entities, src, tid, dmg, None, events);
 }
+
 
 pub fn update_mob_combat(
     mob_id: EntityId,
@@ -568,6 +651,7 @@ mod tests {
         // Clear per-ability CD so only GCD can block. Freeze auto-swing so it
         // cannot masquerade as an ability hit.
         entities[0].ability_cd = 0.0;
+        entities[0].ability_cds.clear();
         entities[0].resource = 100.0;
         entities[0].auto_attack = false;
         entities[0].swing_timer = 99.0;
@@ -594,6 +678,7 @@ mod tests {
         // Expire GCD and ability CD; cast should land again.
         entities[0].gcd = 0.0;
         entities[0].ability_cd = 0.0;
+        entities[0].ability_cds.clear();
         entities[0].resource = 100.0;
         entities[0].auto_attack = false;
         update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
@@ -684,6 +769,117 @@ mod tests {
         assert!(
             entities[1].auras.iter().any(|a| a.id == IGNITE_ID),
             "ignite DoT applied on fireball hit"
+        );
+    }
+
+    #[test]
+    fn create_player_knows_level_one_kit_abilities() {
+        let player = crate::entity::create_player(1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        assert!(
+            player.known_abilities.iter().any(|a| a == "heroic_strike"),
+            "primary known at level 1"
+        );
+        assert!(
+            !player.known_abilities.iter().any(|a| a == "cleave"),
+            "slot2 gated until level 3"
+        );
+        assert!(
+            !player.known_abilities.iter().any(|a| a == "execute"),
+            "slot3 gated until level 6"
+        );
+    }
+
+    #[test]
+    fn level_up_unlocks_gated_kit_abilities() {
+        let mut player = crate::entity::create_player(1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        let mut events = Vec::new();
+        grant_xp(&mut player, 10_000, &mut events);
+        assert!(player.level >= 3, "leveled enough for cleave");
+        assert!(
+            player.known_abilities.iter().any(|a| a == "cleave"),
+            "cleave unlocked after level gate"
+        );
+    }
+
+    #[test]
+    fn slot2_ability_deals_damage_when_known() {
+        let mut player = crate::entity::create_player(1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        player.level = 3;
+        crate::entity::refresh_known_abilities(&mut player);
+        player.resource = 100.0;
+        player.ability_cd = 0.0;
+        player.gcd = 0.0;
+        let mut mob =
+            crate::entity::create_mob_from_template(2, "young_wolf", 1.0, 0.0).expect("wolf");
+        mob.hp = 500.0;
+        mob.hp_max = 500.0;
+        player.target = Some(mob.id);
+        let start_hp = mob.hp;
+        let mut entities = vec![player, mob];
+        let mut events = Vec::new();
+
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Slot2), &mut events);
+        assert!(
+            entities[1].hp < start_hp,
+            "slot2 (cleave) should deal damage when known"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Damage { ability: Some(n), .. } if n == "Cleave")),
+            "cleave damage event"
+        );
+    }
+
+    #[test]
+    fn slot2_blocked_when_ability_unknown() {
+        let mut player = crate::entity::create_player(1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        assert_eq!(player.level, 1);
+        player.resource = 100.0;
+        let mut mob =
+            crate::entity::create_mob_from_template(2, "young_wolf", 1.0, 0.0).expect("wolf");
+        mob.hp = 500.0;
+        mob.hp_max = 500.0;
+        player.target = Some(mob.id);
+        let start_hp = mob.hp;
+        let mut entities = vec![player, mob];
+        let mut events = Vec::new();
+
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Slot2), &mut events);
+        assert_eq!(
+            entities[1].hp, start_hp,
+            "unknown slot2 must not deal damage"
+        );
+    }
+
+    #[test]
+    fn slot3_and_primary_use_independent_cooldowns() {
+        let mut player = crate::entity::create_player(1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        player.level = 6;
+        crate::entity::refresh_known_abilities(&mut player);
+        player.resource = 100.0;
+        let mut mob =
+            crate::entity::create_mob_from_template(2, "young_wolf", 1.0, 0.0).expect("wolf");
+        mob.hp = 500.0;
+        mob.hp_max = 500.0;
+        player.target = Some(mob.id);
+        let mut entities = vec![player, mob];
+        let mut events = Vec::new();
+
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        let after_primary = entities[1].hp;
+        assert!(after_primary < 500.0);
+
+        // Clear GCD only; primary CD remains. Slot3 should still fire.
+        entities[0].gcd = 0.0;
+        entities[0].resource = 100.0;
+        entities[0].auto_attack = false;
+        entities[0].swing_timer = 99.0;
+        events.clear();
+        update_player_combat(1, &mut entities, Some(AbilitySlot::Slot3), &mut events);
+        assert!(
+            entities[1].hp < after_primary,
+            "slot3 execute should ignore primary ability CD"
         );
     }
 }

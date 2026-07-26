@@ -21,7 +21,10 @@ pub mod zone1;
 pub mod zone2;
 
 pub use abilities::{ability, AbilityDef, ABILITIES};
-pub use classes::{class_def, ClassDef, PlayerClass, ResourceType, CLASSES};
+pub use classes::{
+    class_ability_for_slot, class_def, known_abilities_at_level, ClassDef, ClassKitEntry,
+    PlayerClass, ResourceType, CLASSES,
+};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
 pub use gather_nodes::{
     gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES,
@@ -73,6 +76,69 @@ mod tests {
                     "missing start item {item_id}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn every_class_has_multi_ability_kit() {
+        assert_eq!(CLASSES.len(), 9);
+        for class in CLASSES {
+            assert!(
+                class.kit.len() >= 3,
+                "{} kit needs ≥3 abilities, got {}",
+                class.name,
+                class.kit.len()
+            );
+            let mut slots = Vec::new();
+            for entry in class.kit {
+                assert!(
+                    (1..=5).contains(&entry.slot),
+                    "{} kit slot {} out of 1..=5",
+                    class.name,
+                    entry.slot
+                );
+                assert!(
+                    !slots.contains(&entry.slot),
+                    "{} duplicate kit slot {}",
+                    class.name,
+                    entry.slot
+                );
+                slots.push(entry.slot);
+                let abil = ability(entry.ability_id).unwrap_or_else(|| {
+                    panic!("{} kit refs missing ability {}", class.name, entry.ability_id)
+                });
+                assert!(abil.min_level >= 1, "{} min_level", abil.id);
+                if entry.slot == 1 {
+                    assert_eq!(
+                        entry.ability_id, class.primary_ability,
+                        "{} slot 1 must match primary_ability",
+                        class.name
+                    );
+                    assert_eq!(abil.min_level, 1, "{} primary must be level 1", class.name);
+                }
+            }
+            assert!(
+                slots.contains(&1),
+                "{} kit must include slot 1 (primary)",
+                class.name
+            );
+            assert!(
+                class.kit.iter().any(|e| {
+                    ability(e.ability_id).map(|a| a.min_level > 1).unwrap_or(false)
+                }),
+                "{} needs at least one level-gated ability",
+                class.name
+            );
+        }
+    }
+
+    #[test]
+    fn kit_slot_lookup_matches_keys() {
+        for class in CLASSES {
+            let primary = class_ability_for_slot(class.id, 1).expect("slot 1");
+            assert_eq!(primary.id, class.primary_ability);
+            assert!(class_ability_for_slot(class.id, 2).is_some());
+            assert!(class_ability_for_slot(class.id, 3).is_some());
         }
     }
 
