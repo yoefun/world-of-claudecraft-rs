@@ -1,0 +1,21 @@
+[package]
+name = "woc-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Authoritative host scaffold for World of ClaudeCraft (Rust)"
+
+[[bin]]
+name = "woc-server"
+path = "src/main.rs"
+
+[dependencies]
+woc-version = { workspace = true }
+woc-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
