@@ -20,6 +20,8 @@ pub enum EntityKind {
     Mob,
     Npc,
     Loot,
+    /// Summoned hunter/warlock companion.
+    Pet,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +69,10 @@ pub enum InteractAction {
     BankDeposit { bag_slot: u8, count: u32 },
     /// Withdraw bank items into the bag (stub).
     BankWithdraw { bank_slot: u8, count: u32 },
+    /// Summon the class pet (hunter / warlock).
+    SummonPet,
+    /// Dismiss the active pet.
+    DismissPet,
 }
 
 /// Per-tick intent from a local or remote player.
@@ -609,6 +615,8 @@ mod tests {
                 bank_slot: 0,
                 count: 2,
             },
+            InteractAction::SummonPet,
+            InteractAction::DismissPet,
         ];
         for a in actions {
             let v = serde_json::to_value(&a).unwrap();
