@@ -43,12 +43,12 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Subsystem | Target rewrite | Status |
 | --- | --- | --- |
 | Mob respawn / social aggro | 0.3.x | done (R1) |
-| Postgres auth + character CRUD | 0.4 | partial (R1 persist+API) |
-| Multi-ability kits | 0.5 | planned |
+| Postgres auth + character CRUD | 0.4 | done (R1+R2 login UI) |
+| Multi-ability kits | 0.5 | done (R2) |
 | Talents / loadouts | 0.5 | planned |
-| Pets | 0.5 | planned |
+| Pets | 0.5 | done (R2) |
 | Zone2 / Zone3 | 0.6 | partial (zone2 content R1) |
-| Party + chat | 0.7 | planned |
+| Party + chat | 0.7 | done (R2) |
 | Group loot rules | 0.7 | planned |
 | Dungeons / instances | 0.7 | planned |
 | Delves | 0.7.x | planned |
