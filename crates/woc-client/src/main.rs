@@ -1,14 +1,18 @@
 //! Bevy host for the framework slice (offline sim embed + online WS).
 
+mod api;
 mod char_create;
+mod char_select;
 mod hud;
 mod input;
+mod login;
 mod online;
 mod title;
 mod world_setup;
 
 use bevy::prelude::*;
 use std::sync::Mutex;
+use uuid::Uuid;
 use woc_protocol::{
     EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg,
 };
@@ -27,6 +31,7 @@ fn main() {
         }))
         .init_state::<AppState>()
         .init_resource::<PlayMode>()
+        .init_resource::<AuthSession>()
         .insert_resource(ClearColor(Color::srgb(0.45, 0.62, 0.78)))
         .insert_resource(AmbientLight {
             color: Color::srgb(0.92, 0.94, 0.88),
@@ -35,7 +40,9 @@ fn main() {
         })
         .add_plugins((
             title::plugin,
+            login::plugin,
             char_create::plugin,
+            char_select::plugin,
             world_setup::plugin,
             hud::plugin,
         ))
@@ -64,8 +71,22 @@ fn main() {
 pub(crate) enum AppState {
     #[default]
     Title,
+    /// Online: register / login against REST auth.
+    Login,
+    /// Offline: local name/class pick.
     CharCreate,
+    /// Online: list / create / enter character via REST.
+    CharSelect,
     InWorld,
+}
+
+/// Bearer session + character roster after online login.
+#[derive(Resource, Debug, Clone, Default)]
+pub(crate) struct AuthSession {
+    pub(crate) token: Option<String>,
+    pub(crate) account_id: Option<Uuid>,
+    pub(crate) characters: Vec<api::CharacterSummary>,
+    pub(crate) selected: Option<Uuid>,
 }
 
 /// Title / session mode: local sim vs WebSocket server.
