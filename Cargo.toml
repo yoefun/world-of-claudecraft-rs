@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/woc-version",
+    "crates/woc-protocol",
+    "crates/woc-sim",
+    "crates/woc-server",
+    "crates/woc-client",
+]
+default-members = [
+    "crates/woc-version",
+    "crates/woc-protocol",
+    "crates/woc-sim",
+    "crates/woc-server",
+    "crates/woc-client",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["World of ClaudeCraft Rust rewrite contributors"]
+repository = "https://github.com/yoefun/world-of-claudecraft-rs"
+description = "Rust rewrite of World of ClaudeCraft (combat-slice scaffold)"
+
+[workspace.dependencies]
+woc-version = { path = "crates/woc-version" }
+woc-protocol = { path = "crates/woc-protocol" }
+woc-sim = { path = "crates/woc-sim" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+bevy = { version = "0.16", default-features = true }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

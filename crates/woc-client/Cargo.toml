@@ -1,0 +1,16 @@
+[package]
+name = "woc-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Bevy offline host for World of ClaudeCraft (Rust) combat slice"
+
+[[bin]]
+name = "woc-client"
+path = "src/main.rs"
+
+[dependencies]
+woc-version = { workspace = true }
+woc-protocol = { workspace = true }
+woc-sim = { workspace = true }
+bevy = { workspace = true }

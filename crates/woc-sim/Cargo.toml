@@ -1,0 +1,11 @@
+[package]
+name = "woc-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Deterministic game core for World of ClaudeCraft (Rust)"
+
+[dependencies]
+woc-protocol = { workspace = true }
+
+[dev-dependencies]
