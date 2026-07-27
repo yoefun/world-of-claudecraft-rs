@@ -15,18 +15,19 @@
 //! # How to run (server + online client)
 //!
 //! ```bash
-//! # Terminal A — authoritative realm
+//! # Terminal A — authoritative realm (auth + characters + WS)
 //! cargo run -p woc-server
 //!
 //! # Terminal B — Bevy client in Online mode
 //! cargo run -p woc-client
-//! # Title: press 2 (or ←/→) to select Online, Enter → create character → Enter world
+//! # Title: 2 Online → Login/Register → Character Select → Enter world (WS Hello)
 //!
 //! # Optional Terminal C — second client (same Online path) to see co-presence
 //! cargo run -p woc-client
 //! ```
 //!
-//! Default URL: [`ONLINE_WS_URL`] (`ws://127.0.0.1:8787/ws/game`).
+//! REST base: `http://127.0.0.1:8787/api/*`.  
+//! Default WS URL: [`ONLINE_WS_URL`] (`ws://127.0.0.1:8787/ws/game`).
 
 use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
