@@ -1,10 +1,11 @@
-//! Bevy offline host for the combat slice.
+//! Bevy offline host for the framework slice.
 
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use std::collections::HashSet;
-use woc_protocol::{AbilitySlot, EntityId, EntityKind, PlayerIntent, SimEvent, DT};
+use woc_content::PlayerClass;
+use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, SimEvent, DT};
 use woc_sim::{terrain_height, Sim, WORLD_HALF, WORLD_SEED};
 use woc_version::footer;
 
@@ -26,6 +27,11 @@ fn main() {
             ..default()
         })
         .insert_resource(CharName("Aldric".into()))
+        .insert_resource(SelectedClass(PlayerClass::Warrior))
+        .insert_resource(UiFlags {
+            show_bags: false,
+            show_quests: false,
+        })
         .add_systems(Startup, setup_camera_light)
         .add_systems(OnEnter(AppState::Title), setup_title)
         .add_systems(OnExit(AppState::Title), cleanup_ui)
@@ -44,6 +50,7 @@ fn main() {
                 grab_cursor,
                 camera_look,
                 collect_intent,
+                handle_interact_keys,
                 sim_fixed_step,
                 sync_visuals,
                 update_hud,
@@ -84,8 +91,23 @@ struct HudToastText;
 #[derive(Component)]
 struct NameInputDisplay;
 
+#[derive(Component)]
+struct HudQuestText;
+
+#[derive(Component)]
+struct HudBagText;
+
 #[derive(Resource)]
 struct CharName(String);
+
+#[derive(Resource)]
+struct SelectedClass(PlayerClass);
+
+#[derive(Resource)]
+struct UiFlags {
+    show_bags: bool,
+    show_quests: bool,
+}
 
 #[derive(Resource)]
 struct OfflineHost {
@@ -147,7 +169,7 @@ fn setup_title(mut commands: Commands) {
                 TextColor(Color::srgb(0.95, 0.86, 0.55)),
             ));
             p.spawn((
-                Text::new("Rust rewrite · combat slice"),
+                Text::new("Rust rewrite · framework slice"),
                 TextFont::from_font_size(22.0),
                 TextColor(Color::srgb(0.85, 0.9, 0.95)),
             ));
@@ -157,7 +179,7 @@ fn setup_title(mut commands: Commands) {
                 TextColor(Color::srgb(0.7, 0.75, 0.8)),
             ));
             p.spawn((
-                Text::new("Press Enter to create a Warrior"),
+                Text::new("Press Enter to create a character"),
                 TextFont::from_font_size(20.0),
                 TextColor(Color::srgb(0.9, 0.92, 0.85)),
             ));
@@ -170,8 +192,12 @@ fn title_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<AppSt
     }
 }
 
-fn setup_char_create(mut commands: Commands, name: Res<CharName>) {
+fn setup_char_create(mut commands: Commands, name: Res<CharName>, class: Res<SelectedClass>) {
     let label = format!("Name: {}", name.0);
+    let class_label = format!(
+        "Class: {}  (Left/Right to change)",
+        woc_content::class_def(class.0).name
+    );
     commands
         .spawn((
             UiRoot,
@@ -188,14 +214,9 @@ fn setup_char_create(mut commands: Commands, name: Res<CharName>) {
         ))
         .with_children(|p| {
             p.spawn((
-                Text::new("Create Warrior"),
+                Text::new("Create Character"),
                 TextFont::from_font_size(36.0),
                 TextColor(Color::srgb(0.95, 0.86, 0.55)),
-            ));
-            p.spawn((
-                Text::new("Class: Warrior (only class in 0.1)"),
-                TextFont::from_font_size(18.0),
-                TextColor(Color::WHITE),
             ));
             p.spawn((
                 NameInputDisplay,
@@ -204,18 +225,29 @@ fn setup_char_create(mut commands: Commands, name: Res<CharName>) {
                 TextColor(Color::srgb(0.85, 0.95, 0.85)),
             ));
             p.spawn((
-                Text::new("Type a name, Backspace to edit, Enter to enter world"),
+                ClassLabel,
+                Text::new(class_label),
+                TextFont::from_font_size(18.0),
+                TextColor(Color::WHITE),
+            ));
+            p.spawn((
+                Text::new("Type a name · ←/→ class · Enter to enter Eastbrook"),
                 TextFont::from_font_size(16.0),
                 TextColor(Color::srgb(0.75, 0.8, 0.85)),
             ));
         });
 }
 
+#[derive(Component)]
+struct ClassLabel;
+
 fn char_create_input(
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut name: ResMut<CharName>,
+    mut class: ResMut<SelectedClass>,
     mut next: ResMut<NextState<AppState>>,
     mut q: Query<&mut Text, With<NameInputDisplay>>,
+    mut cq: Query<&mut Text, (With<ClassLabel>, Without<NameInputDisplay>)>,
     mut events: EventReader<bevy::input::keyboard::KeyboardInput>,
 ) {
     use bevy::input::ButtonState;
@@ -236,6 +268,18 @@ fn char_create_input(
     if keys.just_pressed(KeyCode::Backspace) {
         name.0.pop();
     }
+    if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowRight) {
+        let idx = PlayerClass::ALL
+            .iter()
+            .position(|c| *c == class.0)
+            .unwrap_or(0);
+        let next_idx = if keys.just_pressed(KeyCode::ArrowRight) {
+            (idx + 1) % PlayerClass::ALL.len()
+        } else {
+            (idx + PlayerClass::ALL.len() - 1) % PlayerClass::ALL.len()
+        };
+        class.0 = PlayerClass::ALL[next_idx];
+    }
     if keys.just_pressed(KeyCode::Enter) {
         if name.0.trim().is_empty() {
             name.0 = "Aldric".into();
@@ -245,6 +289,12 @@ fn char_create_input(
     }
     if let Ok(mut text) = q.single_mut() {
         **text = format!("Name: {}", name.0);
+    }
+    if let Ok(mut text) = cq.single_mut() {
+        **text = format!(
+            "Class: {}  (Left/Right to change)",
+            woc_content::class_def(class.0).name
+        );
     }
 }
 
@@ -259,8 +309,9 @@ fn setup_world(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     name: Res<CharName>,
+    class: Res<SelectedClass>,
 ) {
-    let sim = Sim::new_combat_slice(name.0.trim());
+    let sim = Sim::new_eastbrook(name.0.trim(), class.0);
     let host = OfflineHost {
         sim,
         accumulator: 0.0,
@@ -343,7 +394,21 @@ fn setup_world(
                     TextColor(Color::srgb(0.85, 0.9, 0.95)),
                 ));
                 top.spawn((
-                    Text::new("LMB target/attack · 1 Heroic Strike · RMB look · Esc free cursor"),
+                    HudQuestText,
+                    Text::new("Quest: —"),
+                    TextFont::from_font_size(15.0),
+                    TextColor(Color::srgb(0.95, 0.9, 0.55)),
+                ));
+                top.spawn((
+                    HudBagText,
+                    Text::new(""),
+                    TextFont::from_font_size(14.0),
+                    TextColor(Color::srgb(0.8, 0.85, 0.7)),
+                ));
+                top.spawn((
+                    Text::new(
+                        "LMB attack · 1 ability · E interact · B bags · L quests · RMB look · Esc",
+                    ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
                 ));
@@ -379,7 +444,7 @@ fn spawn_all_visuals(
     sim: &Sim,
 ) {
     for e in &sim.entities {
-        if !e.alive && e.kind != EntityKind::Mob {
+        if !e.alive && e.kind != EntityKind::Mob && e.kind != EntityKind::Npc {
             continue;
         }
         spawn_one_visual(commands, meshes, materials, e.id, e.kind, e.alive);
@@ -406,6 +471,10 @@ fn spawn_one_visual(
             } else {
                 Color::srgb(0.2, 0.2, 0.2)
             },
+        ),
+        EntityKind::Npc => (
+            meshes.add(Capsule3d::new(0.32, 0.95)),
+            Color::srgb(0.55, 0.75, 0.45),
         ),
         EntityKind::Loot => (meshes.add(Sphere::new(0.25)), Color::srgb(0.9, 0.75, 0.2)),
     };
@@ -520,6 +589,111 @@ fn collect_intent(
     host.pending_intent = intent;
 }
 
+fn handle_interact_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut host: ResMut<OfflineHost>,
+    mut ui: ResMut<UiFlags>,
+) {
+    if keys.just_pressed(KeyCode::KeyB) {
+        ui.show_bags = !ui.show_bags;
+    }
+    if keys.just_pressed(KeyCode::KeyL) {
+        ui.show_quests = !ui.show_quests;
+    }
+    if !keys.just_pressed(KeyCode::KeyE) {
+        return;
+    }
+    let Some(player) = host.sim.player().cloned() else {
+        return;
+    };
+    // Prefer nearest NPC; if vendor open and Digit2.. accept first available quest via talk flow.
+    let mut best: Option<(EntityId, f32, bool)> = None;
+    for e in &host.sim.entities {
+        if e.kind != EntityKind::Npc || !e.alive {
+            continue;
+        }
+        let dx = e.x - player.x;
+        let dz = e.z - player.z;
+        let d = (dx * dx + dz * dz).sqrt();
+        if d < 5.0 && best.map(|(_, bd, _)| d < bd).unwrap_or(true) {
+            best = Some((e.id, d, e.template_id.as_deref() == Some("captain_alden")));
+        }
+    }
+    let Some((nid, _, is_alden)) = best else {
+        host.recent_toasts.push(("No NPC nearby.".into(), 2.0));
+        return;
+    };
+
+    // Talk first.
+    host.sim.interact(nid, InteractAction::Talk);
+
+    // Auto-accept / turn-in Alden quests if available.
+    if is_alden {
+        let log = host
+            .sim
+            .player()
+            .map(|p| p.quest_log.clone())
+            .unwrap_or_default();
+        let has_wolves = log.iter().any(|q| q.quest_id == "wolves_at_the_gate");
+        let wolves_ready = log.iter().any(|q| {
+            q.quest_id == "wolves_at_the_gate" && matches!(q.state, woc_sim::QuestState::Ready)
+        });
+        if wolves_ready {
+            host.sim.interact(
+                nid,
+                InteractAction::TurnInQuest {
+                    quest_id: "wolves_at_the_gate".into(),
+                },
+            );
+        } else if !has_wolves {
+            host.sim.interact(
+                nid,
+                InteractAction::AcceptQuest {
+                    quest_id: "wolves_at_the_gate".into(),
+                },
+            );
+        }
+        let has_boar = log.iter().any(|q| q.quest_id == "boar_tusks");
+        let boar_ready = log
+            .iter()
+            .any(|q| q.quest_id == "boar_tusks" && matches!(q.state, woc_sim::QuestState::Ready));
+        if boar_ready {
+            host.sim.interact(
+                nid,
+                InteractAction::TurnInQuest {
+                    quest_id: "boar_tusks".into(),
+                },
+            );
+        } else if !has_boar && has_wolves {
+            host.sim.interact(
+                nid,
+                InteractAction::AcceptQuest {
+                    quest_id: "boar_tusks".into(),
+                },
+            );
+        }
+    }
+
+    // Buy ration from vendor if talking to Wilkes and copper allows.
+    if host
+        .sim
+        .entities
+        .iter()
+        .find(|e| e.id == nid)
+        .and_then(|e| e.template_id.as_deref())
+        == Some("trader_wilkes")
+        && host.sim.copper >= 12
+    {
+        host.sim.interact(
+            nid,
+            InteractAction::Buy {
+                item_id: "travelers_ration".into(),
+                count: 1,
+            },
+        );
+    }
+}
+
 fn sim_fixed_step(
     time: Res<Time>,
     mut host: ResMut<OfflineHost>,
@@ -557,6 +731,20 @@ fn sim_fixed_step(
                 }
                 host.recent_toasts.push((msg, 2.5));
             }
+            SimEvent::QuestAccepted { quest_id, .. } => {
+                host.recent_toasts
+                    .push((format!("Quest accepted: {quest_id}"), 3.0));
+            }
+            SimEvent::QuestCompleted { quest_id, .. } => {
+                host.recent_toasts
+                    .push((format!("Quest complete: {quest_id}"), 3.0));
+            }
+            SimEvent::QuestProgress { text, .. } => {
+                host.recent_toasts.push((text, 2.0));
+            }
+            SimEvent::NpcDialog { text, .. } => {
+                host.recent_toasts.push((text, 3.0));
+            }
             _ => {}
         }
     }
@@ -591,10 +779,11 @@ fn sync_visuals(
         if let Some(e) = host.sim.entities.iter().find(|e| e.id == vis.id) {
             let y_off = match e.kind {
                 EntityKind::Player => 0.9,
+                EntityKind::Npc => 0.9,
                 EntityKind::Mob => 0.3,
                 EntityKind::Loot => 0.25,
             };
-            if e.alive || e.kind == EntityKind::Mob {
+            if e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc {
                 tf.translation = Vec3::new(e.x, e.y + y_off, e.z);
                 tf.rotation = Quat::from_rotation_y(e.yaw);
                 tf.scale = Vec3::ONE;
@@ -630,9 +819,29 @@ fn sync_visuals(
 
 fn update_hud(
     host: Res<OfflineHost>,
+    ui: Res<UiFlags>,
     mut hp: Query<&mut Text, With<HudHpText>>,
     mut xp: Query<&mut Text, (With<HudXpText>, Without<HudHpText>)>,
     mut target: Query<&mut Text, (With<HudTargetText>, Without<HudHpText>, Without<HudXpText>)>,
+    mut quest: Query<
+        &mut Text,
+        (
+            With<HudQuestText>,
+            Without<HudHpText>,
+            Without<HudXpText>,
+            Without<HudTargetText>,
+        ),
+    >,
+    mut bags: Query<
+        &mut Text,
+        (
+            With<HudBagText>,
+            Without<HudHpText>,
+            Without<HudXpText>,
+            Without<HudTargetText>,
+            Without<HudQuestText>,
+        ),
+    >,
     mut toast: Query<
         &mut Text,
         (
@@ -640,31 +849,41 @@ fn update_hud(
             Without<HudHpText>,
             Without<HudXpText>,
             Without<HudTargetText>,
+            Without<HudQuestText>,
+            Without<HudBagText>,
         ),
     >,
 ) {
     let snap = host.sim.snapshot();
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
         if let Ok(mut t) = hp.single_mut() {
+            let abil = if snap.ability_name.is_empty() {
+                "Ability"
+            } else {
+                &snap.ability_name
+            };
             **t = format!(
-                "HP {:.0}/{:.0}   Rage {:.0}/{:.0}   [1] Heroic Strike {}",
+                "HP {:.0}/{:.0}   {} {:.0}/{:.0}   [1] {} {}",
                 player.hp,
                 player.hp_max,
+                snap.progress.resource_type,
                 player.resource,
                 player.resource_max,
+                abil,
                 if snap.ability_ready { "READY" } else { "CD" }
             );
         }
     }
     if let Ok(mut t) = xp.single_mut() {
-        let bag = snap.progress.bag_item.as_deref().unwrap_or("—");
+        let gear = snap.equipment.main_hand.as_deref().unwrap_or("—");
         **t = format!(
-            "Lv {}   XP {}/{}   Copper {}   Bag: {}",
+            "Lv {} {}   XP {}/{}   Copper {}   Weapon: {}",
             snap.progress.level,
+            snap.progress.class_id,
             snap.progress.xp,
             snap.progress.xp_to_level,
             snap.progress.copper,
-            bag
+            gear
         );
     }
     if let Ok(mut t) = target.single_mut() {
@@ -683,6 +902,45 @@ fn update_hud(
         } else {
             "Target: none".into()
         };
+    }
+    if let Ok(mut t) = quest.single_mut() {
+        if ui.show_quests {
+            if snap.quest_log.is_empty() {
+                **t = "Quests: (none — talk to Captain Alden with E)".into();
+            } else {
+                let lines: Vec<String> = snap
+                    .quest_log
+                    .iter()
+                    .map(|q| format!("{} [{}]", q.quest_id, q.state))
+                    .collect();
+                **t = format!("Quests: {}", lines.join(" · "));
+            }
+        } else {
+            let active = snap
+                .quest_log
+                .iter()
+                .find(|q| q.state == "active" || q.state == "ready");
+            **t = match active {
+                Some(q) => format!("Quest: {} [{}] (L list)", q.quest_id, q.state),
+                None => "Quest: — (E talk · L list)".into(),
+            };
+        }
+    }
+    if let Ok(mut t) = bags.single_mut() {
+        if ui.show_bags {
+            if snap.inventory.is_empty() {
+                **t = "Bags: empty".into();
+            } else {
+                let items: Vec<String> = snap
+                    .inventory
+                    .iter()
+                    .map(|s| format!("{}×{}", s.count, s.item_id))
+                    .collect();
+                **t = format!("Bags: {}", items.join(", "));
+            }
+        } else {
+            **t = format!("Bags: {} slots used (B)", snap.inventory.len());
+        }
     }
     if let Ok(mut t) = toast.single_mut() {
         **t = host

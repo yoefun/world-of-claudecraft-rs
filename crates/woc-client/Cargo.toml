@@ -13,4 +13,5 @@ path = "src/main.rs"
 woc-version = { workspace = true }
 woc-protocol = { workspace = true }
 woc-sim = { workspace = true }
+woc-content = { workspace = true }
 bevy = { workspace = true }

@@ -1,7 +1,6 @@
-//! Thin authoritative-host scaffold.
-//!
-//! v0.1 exposes health/version only. A future release will host `woc-sim` over WebSocket
-//! using the same protocol types as the offline Bevy host.
+//! Authoritative host: HTTP health/version + WebSocket game loop.
+
+mod game_ws;
 
 use axum::{routing::get, Json, Router};
 use serde::Serialize;
@@ -30,11 +29,6 @@ async fn version() -> Json<VersionInfo> {
     Json(VersionInfo::current())
 }
 
-async fn ws_placeholder() -> &'static str {
-    "WebSocket game host not implemented in rewrite 0.1.0 (combat-slice is offline Bevy). \
-     Upstream pin: see GET /version."
-}
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -44,7 +38,8 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
-        .route("/ws", get(ws_placeholder))
+        .route("/ws/game", get(game_ws::ws_handler))
+        .route("/ws", get(game_ws::ws_handler))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 

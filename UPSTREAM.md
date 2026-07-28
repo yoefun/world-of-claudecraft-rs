@@ -5,11 +5,11 @@ This repository is a **Rust rewrite** of
 
 | Field | Value |
 | --- | --- |
-| Rewrite version | `0.1.0` |
+| Rewrite version | `0.2.0` |
 | Upstream repo | https://github.com/levy-street/world-of-claudecraft |
 | Upstream version | `0.31.0` |
 | Upstream commit | `a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9` |
-| Parity target | `combat-slice` |
+| Parity target | `framework` |
 
 Machine-readable source of truth: [`VERSION.toml`](VERSION.toml).
 
@@ -23,5 +23,5 @@ Machine-readable source of truth: [`VERSION.toml`](VERSION.toml).
 ## Relationship to upstream
 
 - We reimplement behavior inspired by the TypeScript `src/sim/` core.
-- v0.1 does **not** aim for byte-identical terrain or combat parity.
-- The client is a native Bevy host; the browser/Three.js stack is out of scope for this slice.
+- Framework milestone aims for an Eastbrook quest/inventory loop, not byte-identical terrain or full content parity.
+- The client is a native Bevy host; the browser/Three.js stack remains out of scope.

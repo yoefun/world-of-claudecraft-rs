@@ -1,12 +1,11 @@
-//! Combat: auto-attack, Heroic Strike, damage, death, XP, loot.
+//! Combat: auto-attack, primary ability, damage, death, XP, loot.
 
 use crate::entity::{create_loot, Entity};
 use crate::rng::Rng;
 use crate::types::{
-    warrior_hp, xp_to_next, HEROIC_STRIKE_BONUS, HEROIC_STRIKE_CD, HEROIC_STRIKE_COST, MELEE_RANGE,
-    WARRIOR_RAGE_MAX, WARRIOR_SWING_SEC, WARRIOR_WEAPON_DAMAGE, WOLF_COPPER_MAX, WOLF_COPPER_MIN,
-    WOLF_DAMAGE, WOLF_SWING_SEC, WOLF_XP,
+    player_hp, xp_to_next, MELEE_RANGE, MOB_SWING_SEC, PLAYER_SWING_SEC, RANGED_FALLBACK,
 };
+use woc_content::{ability, class_def, mob, ResourceType};
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, SimEvent, DT};
 
 pub fn dist2d(a: &Entity, b: &Entity) -> f32 {
@@ -19,11 +18,11 @@ pub fn face_toward(from: &Entity, to: &Entity) -> f32 {
     (to.x - from.x).atan2(to.z - from.z)
 }
 
-fn gain_rage(player: &mut Entity, amount: f32) {
-    player.resource = (player.resource + amount).min(WARRIOR_RAGE_MAX);
+fn gain_resource(player: &mut Entity, amount: f32) {
+    player.resource = (player.resource + amount).min(player.resource_max);
 }
 
-fn spend_rage(player: &mut Entity, amount: f32) -> bool {
+fn spend_resource(player: &mut Entity, amount: f32) -> bool {
     if player.resource + 1e-3 < amount {
         return false;
     }
@@ -36,43 +35,37 @@ pub fn deal_damage(
     source: EntityId,
     target: EntityId,
     amount: f32,
-    ability: Option<&str>,
+    ability_name: Option<&str>,
     events: &mut Vec<SimEvent>,
 ) {
     let Some(ti) = entities.iter().position(|e| e.id == target) else {
         return;
     };
-    if !entities[ti].alive {
+    if !entities[ti].alive || entities[ti].kind == EntityKind::Npc {
         return;
     }
-    entities[ti].hp = (entities[ti].hp - amount).max(0.0);
+    let mitigated = (amount - entities[ti].armor * 0.05).max(1.0);
+    entities[ti].hp = (entities[ti].hp - mitigated).max(0.0);
     events.push(SimEvent::Damage {
         source,
         target,
-        amount,
-        ability: ability.map(|s| s.to_string()),
+        amount: mitigated,
+        ability: ability_name.map(|s| s.to_string()),
     });
     if entities[ti].hp <= 0.0 {
         entities[ti].alive = false;
         let victim_name = entities[ti].name.clone();
-        let kind = entities[ti].kind;
-        let xp = entities[ti].xp_value;
-        let x = entities[ti].x;
-        let z = entities[ti].z;
         events.push(SimEvent::Kill {
             killer: source,
             victim: target,
             victim_name,
         });
-        if kind == EntityKind::Mob {
-            // XP / loot handled by caller with rng after kill detection.
-            let _ = (xp, x, z);
-        }
     }
 }
 
 pub struct KillReward {
     pub victim: EntityId,
+    pub template_id: Option<String>,
     pub x: f32,
     pub z: f32,
     pub xp: u32,
@@ -86,9 +79,10 @@ pub fn collect_pending_mob_kills(events: &[SimEvent], entities: &[Entity]) -> Ve
                 if e.kind == EntityKind::Mob {
                     out.push(KillReward {
                         victim: *victim,
+                        template_id: e.template_id.clone(),
                         x: e.x,
                         z: e.z,
-                        xp: if e.xp_value == 0 { WOLF_XP } else { e.xp_value },
+                        xp: e.xp_value,
                     });
                 }
             }
@@ -106,7 +100,10 @@ pub fn grant_xp(player: &mut Entity, xp: &mut u32, amount: u32, events: &mut Vec
         }
         *xp -= need;
         player.level += 1;
-        player.hp_max = warrior_hp(player.level);
+        if let Some(class) = player.class_id {
+            let def = class_def(class);
+            player.hp_max = player_hp(def.base_hp, player.level) + player.armor * 0.5;
+        }
         player.hp = player.hp_max;
         events.push(SimEvent::LevelUp {
             player: player.id,
@@ -118,18 +115,26 @@ pub fn grant_xp(player: &mut Entity, xp: &mut u32, amount: u32, events: &mut Vec
     }
 }
 
-pub fn spawn_wolf_loot(
+pub fn spawn_mob_loot(
     next_id: &mut EntityId,
     entities: &mut Vec<Entity>,
     rng: &mut Rng,
+    template_id: Option<&str>,
     x: f32,
     z: f32,
 ) -> EntityId {
-    let copper = rng.gen_range_u32(WOLF_COPPER_MIN, WOLF_COPPER_MAX);
-    let item = if rng.next_f32() < 0.35 {
-        Some("Torn Wolf Pelt".to_string())
+    let (copper, item) = if let Some(tid) = template_id.and_then(mob) {
+        let copper = rng.gen_range_u32(tid.copper_min, tid.copper_max);
+        let mut dropped = None;
+        for entry in tid.loot {
+            if rng.next_f32() < entry.chance {
+                dropped = Some(entry.item_id.to_string());
+                break;
+            }
+        }
+        (copper, dropped)
     } else {
-        None
+        (rng.gen_range_u32(3, 8), None)
     };
     let id = *next_id;
     *next_id += 1;
@@ -141,7 +146,6 @@ pub fn try_pickup_loot(
     player_id: EntityId,
     entities: &mut [Entity],
     copper: &mut u32,
-    bag_item: &mut Option<String>,
     events: &mut Vec<SimEvent>,
 ) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
@@ -151,7 +155,10 @@ pub fn try_pickup_loot(
         .iter()
         .enumerate()
         .filter(|(i, e)| {
-            *i != pi && e.kind == EntityKind::Loot && e.alive && dist2d(&entities[pi], e) < 2.0
+            *i != pi
+                && e.kind == EntityKind::Loot
+                && e.alive
+                && dist2d(&entities[pi], e) < crate::types::LOOT_RANGE
         })
         .map(|(_, e)| e.id)
         .collect();
@@ -161,11 +168,17 @@ pub fn try_pickup_loot(
         };
         let c = entities[li].loot_copper;
         let item = entities[li].loot_item.clone();
+        if let Some(ref it) = item {
+            if crate::inventory::grant_item(&mut entities[pi], it, 1, events).is_err() {
+                events.push(SimEvent::Toast {
+                    message: "Inventory full.".into(),
+                });
+                continue;
+            }
+            crate::quests::on_inventory_changed(&mut entities[pi], events);
+        }
         entities[li].alive = false;
         *copper = copper.saturating_add(c);
-        if let Some(ref it) = item {
-            *bag_item = Some(it.clone());
-        }
         events.push(SimEvent::Loot {
             player: player_id,
             copper: c,
@@ -174,10 +187,19 @@ pub fn try_pickup_loot(
     }
 }
 
+fn ability_range(player: &Entity) -> f32 {
+    player
+        .primary_ability
+        .as_deref()
+        .and_then(ability)
+        .map(|a| a.range)
+        .unwrap_or(MELEE_RANGE)
+}
+
 pub fn update_player_combat(
     player_id: EntityId,
     entities: &mut [Entity],
-    ability: Option<AbilitySlot>,
+    ability_slot: Option<AbilitySlot>,
     events: &mut Vec<SimEvent>,
 ) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
@@ -185,6 +207,11 @@ pub fn update_player_combat(
     };
     if !entities[pi].alive {
         return;
+    }
+
+    // Soft regen for mana/energy out of swings.
+    if let Some(ResourceType::Mana | ResourceType::Energy) = entities[pi].resource_type {
+        gain_resource(&mut entities[pi], 1.5 * DT);
     }
 
     if entities[pi].ability_cd > 0.0 {
@@ -206,47 +233,47 @@ pub fn update_player_combat(
         return;
     }
 
+    let range = ability_range(&entities[pi]).max(MELEE_RANGE);
     let d = dist2d(&entities[pi], &entities[ti]);
-    if d > MELEE_RANGE {
-        return;
+    let in_melee = d <= MELEE_RANGE;
+    let in_ability = d <= range.max(RANGED_FALLBACK.min(range));
+
+    entities[pi].yaw = face_toward(&entities[pi], &entities[ti]);
+
+    // Primary ability (instant).
+    if matches!(ability_slot, Some(AbilitySlot::Primary)) && entities[pi].ability_cd <= 0.0 {
+        if let Some(abil_id) = entities[pi].primary_ability.clone() {
+            if let Some(def) = ability(&abil_id) {
+                if in_ability && spend_resource(&mut entities[pi], def.cost) {
+                    entities[pi].ability_cd = def.cooldown;
+                    entities[pi].auto_attack = true;
+                    let dmg = def.damage + entities[pi].attack_damage * 0.35;
+                    let src = entities[pi].id;
+                    deal_damage(entities, src, tid, dmg, Some(def.name), events);
+                    if matches!(entities[pi].resource_type, Some(ResourceType::Rage)) {
+                        gain_resource(&mut entities[pi], 5.0);
+                    }
+                    return;
+                }
+            }
+        }
     }
 
-    // Face target while swinging.
-    let yaw = face_toward(&entities[pi], &entities[ti]);
-    entities[pi].yaw = yaw;
-
-    // Heroic Strike: next melee swing deals bonus damage + spends rage.
-    let mut heroic = false;
-    if matches!(ability, Some(AbilitySlot::Primary))
-        && entities[pi].ability_cd <= 0.0
-        && entities[pi].resource + 1e-3 >= HEROIC_STRIKE_COST
-        && spend_rage(&mut entities[pi], HEROIC_STRIKE_COST)
-    {
-        heroic = true;
-        entities[pi].ability_cd = HEROIC_STRIKE_CD;
-        entities[pi].auto_attack = true;
-    }
-
-    if !entities[pi].auto_attack && !heroic {
+    if !entities[pi].auto_attack || !in_melee {
         return;
     }
 
     entities[pi].swing_timer -= DT;
-    if entities[pi].swing_timer > 0.0 && !heroic {
+    if entities[pi].swing_timer > 0.0 {
         return;
     }
-    entities[pi].swing_timer = WARRIOR_SWING_SEC;
-
-    let mut dmg = WARRIOR_WEAPON_DAMAGE;
-    let ability_name = if heroic {
-        dmg += HEROIC_STRIKE_BONUS;
-        Some("Heroic Strike")
-    } else {
-        None
-    };
-    gain_rage(&mut entities[pi], 5.0);
+    entities[pi].swing_timer = PLAYER_SWING_SEC;
+    let dmg = entities[pi].attack_damage.max(4.0);
+    if matches!(entities[pi].resource_type, Some(ResourceType::Rage)) {
+        gain_resource(&mut entities[pi], 5.0);
+    }
     let src = entities[pi].id;
-    deal_damage(entities, src, tid, dmg, ability_name, events);
+    deal_damage(entities, src, tid, dmg, None, events);
 }
 
 pub fn update_mob_combat(
@@ -278,7 +305,8 @@ pub fn update_mob_combat(
     if entities[mi].swing_timer > 0.0 {
         return;
     }
-    entities[mi].swing_timer = WOLF_SWING_SEC;
+    entities[mi].swing_timer = MOB_SWING_SEC;
+    let dmg = entities[mi].attack_damage.max(3.0);
     let src = entities[mi].id;
-    deal_damage(entities, src, player_id, WOLF_DAMAGE, None, events);
+    deal_damage(entities, src, player_id, dmg, None, events);
 }

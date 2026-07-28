@@ -1,10 +1,9 @@
 [package]
-name = "woc-protocol"
+name = "woc-content"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Shared intents, snapshots, and events for WoC-rs hosts"
+description = "Authoritative game content tables for World of ClaudeCraft (Rust)"
 
 [dependencies]
 serde = { workspace = true }
-serde_json = { workspace = true }
