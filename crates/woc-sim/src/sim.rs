@@ -190,6 +190,14 @@ impl Sim {
         Ok(())
     }
 
+    /// Release a dead player's spirit: respawn at the Eastbrook graveyard.
+    ///
+    /// Call from the interact/toast UI path when the player confirms release.
+    /// Returns `false` if the player is missing or still alive.
+    pub fn release_spirit(&mut self, player_id: EntityId) -> bool {
+        crate::spirit::release_spirit(&mut self.entities, player_id, &mut self.events)
+    }
+
     /// Build a context bag for leaf modules (emit / lookup / mutate).
     pub fn context(&mut self) -> SimContext<'_> {
         SimContext {
@@ -307,6 +315,8 @@ impl Sim {
                 reward.z,
             );
         }
+        // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
+        crate::death::on_player_death_check(&mut self.entities, &mut self.events);
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
@@ -448,6 +458,7 @@ impl Sim {
             quest_log,
             open_vendor,
             ability_name,
+            is_dead: player.map(|p| !p.alive).unwrap_or(false),
             ..Default::default()
         }
     }
@@ -788,6 +799,88 @@ mod tests {
             saw_loot || sim.copper() > 0 || !sim.snapshot().inventory.is_empty(),
             "expected loot drop or auto-pickup"
         );
+    }
+
+    #[test]
+    fn death_release_spirit_respawns_at_eastbrook_graveyard() {
+        let gy = woc_content::graveyard("eastbrook_graveyard").expect("eastbrook graveyard");
+        let mut sim = Sim::new_eastbrook("Deadman", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        let death_x = 22.0;
+        let death_z = -20.0;
+        if let Some(p) = sim.player_mut() {
+            p.x = death_x;
+            p.z = death_z;
+            p.y = Entity::ground_at(p.x, p.z);
+            p.hp = 0.0;
+            p.auto_attack = true;
+            p.target = Some(99);
+        }
+
+        let (_snap, events) = sim.tick(PlayerIntent::default());
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SimEvent::PlayerDied { player } if *player == pid)),
+            "expected PlayerDied event"
+        );
+        let snap = sim.snapshot_for_player(pid);
+        assert!(snap.is_dead, "snapshot must reflect is_dead");
+        assert!(!sim.player().unwrap().alive);
+        assert!(!sim.player().unwrap().auto_attack);
+
+        // Dead player cannot deal damage even with attack intent.
+        let wolf_id = sim
+            .entities
+            .iter()
+            .find(|e| e.kind == EntityKind::Mob && e.alive)
+            .map(|e| e.id);
+        if let Some(wid) = wolf_id {
+            let hp_before = sim.entities.iter().find(|e| e.id == wid).unwrap().hp;
+            let intent = PlayerIntent {
+                attack: true,
+                ability: Some(AbilitySlot::Primary),
+                target_id: Some(wid),
+                ..Default::default()
+            };
+            let (_s, ev) = sim.tick(intent);
+            let hp_after = sim.entities.iter().find(|e| e.id == wid).unwrap().hp;
+            assert_eq!(hp_before, hp_after, "dead player must not deal damage");
+            assert!(
+                !ev.iter().any(|e| matches!(
+                    e,
+                    SimEvent::Damage { source, .. } if *source == pid
+                )),
+                "no Damage from dead player"
+            );
+        }
+
+        assert!(sim.release_spirit(pid), "release_spirit should succeed");
+        let p = sim.player().unwrap();
+        assert!(p.alive);
+        assert!((p.x - gy.x).abs() < 1e-5, "x {} vs gy {}", p.x, gy.x);
+        assert!((p.z - gy.z).abs() < 1e-5, "z {} vs gy {}", p.z, gy.z);
+        assert!((p.hp - p.hp_max).abs() < 1e-5);
+        let snap = sim.snapshot_for_player(pid);
+        assert!(!snap.is_dead);
+    }
+
+    #[test]
+    fn death_release_spirit_is_deterministic() {
+        let mut a = Sim::new_eastbrook("Twin", PlayerClass::Mage);
+        let mut b = Sim::new_eastbrook("Twin", PlayerClass::Mage);
+        for sim in [&mut a, &mut b] {
+            if let Some(p) = sim.player_mut() {
+                p.hp = 0.0;
+            }
+            let _ = sim.tick(PlayerIntent::default());
+            assert!(sim.release_spirit(sim.player_id));
+        }
+        let pa = a.player().unwrap();
+        let pb = b.player().unwrap();
+        assert!((pa.x - pb.x).abs() < 1e-5);
+        assert!((pa.z - pb.z).abs() < 1e-5);
+        assert!((pa.hp - pb.hp).abs() < 1e-5);
     }
 
     #[test]
