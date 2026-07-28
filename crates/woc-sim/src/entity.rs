@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::types::player_hp;
-use crate::world::{terrain_height, WORLD_SEED};
+use crate::world::{ground_height, WORLD_SEED};
 use woc_content::{
     class_def, known_abilities_at_level, mob, npc, ItemKind, PlayerClass, ResourceType,
 };
@@ -141,7 +141,7 @@ pub struct Entity {
 
 impl Entity {
     pub fn ground_at(x: f32, z: f32) -> f32 {
-        terrain_height(x, z, WORLD_SEED)
+        ground_height(x, z, WORLD_SEED)
     }
 
     pub(crate) fn blank(

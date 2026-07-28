@@ -1,146 +1,131 @@
-//! Zone 2 spawn layouts — Eastfen Marsh and Mirefen.
+//! Zone 2 / 3 spawn layouts — absolute strip coordinates (Fenbridge / Highwatch).
 
 use crate::zone1::{MobSpot, NpcSpot, ZoneLayout};
 
-/// Eastfen Marsh — boardwalk outpost, crawler nests, toad pools, and wisp reeds.
+/// Eastfen Marsh alias layout — Fenbridge hub (upstream mirefen_marsh).
 pub static EASTFEN: ZoneLayout = ZoneLayout {
-    name: "Eastfen Marsh",
+    name: "Mirefen Marsh",
     player_spawn_x: 2.0,
-    player_spawn_z: 4.0,
+    player_spawn_z: 304.0,
     npcs: &[
         NpcSpot {
             npc_id: "warden_selene",
             x: 0.0,
-            z: 6.0,
+            z: 306.0,
         },
         NpcSpot {
             npc_id: "apothecary_vex",
             x: 5.0,
-            z: 3.0,
+            z: 303.0,
         },
         NpcSpot {
             npc_id: "scout_darian",
             x: -3.0,
-            z: 2.0,
+            z: 302.0,
         },
     ],
     mobs: &[
-        // Fen crawler camp — west of the boardwalk.
+        // Prowler Reeds ~(-40, 230).
         MobSpot {
             mob_id: "fen_crawler",
-            x: -18.0,
-            z: -6.0,
+            x: -40.0,
+            z: 230.0,
         },
         MobSpot {
             mob_id: "fen_crawler",
-            x: -22.0,
-            z: -2.0,
+            x: -35.0,
+            z: 235.0,
         },
         MobSpot {
             mob_id: "fen_crawler",
-            x: -20.0,
-            z: 4.0,
+            x: 35.0,
+            z: 225.0,
         },
         MobSpot {
             mob_id: "fen_crawler",
-            x: -16.0,
-            z: 0.0,
-        },
-        // Mire toad pools — south.
-        MobSpot {
-            mob_id: "mire_toad",
-            x: 4.0,
-            z: -20.0,
+            x: 30.0,
+            z: 228.0,
         },
         MobSpot {
             mob_id: "mire_toad",
-            x: 10.0,
-            z: -24.0,
+            x: -82.0,
+            z: 273.0,
         },
         MobSpot {
             mob_id: "mire_toad",
-            x: 0.0,
-            z: -26.0,
-        },
-        // Bog wisp reeds — northeast.
-        MobSpot {
-            mob_id: "bog_wisp",
-            x: 22.0,
-            z: 14.0,
+            x: -120.0,
+            z: 350.0,
         },
         MobSpot {
-            mob_id: "bog_wisp",
-            x: 26.0,
-            z: 18.0,
+            mob_id: "mire_toad",
+            x: -110.0,
+            z: 310.0,
         },
         MobSpot {
             mob_id: "bog_wisp",
-            x: 28.0,
-            z: 10.0,
+            x: 70.0,
+            z: 300.0,
+        },
+        MobSpot {
+            mob_id: "bog_wisp",
+            x: 95.0,
+            z: 340.0,
+        },
+        MobSpot {
+            mob_id: "bog_wisp",
+            x: 80.0,
+            z: 315.0,
         },
     ],
 };
 
-/// Mirefen — lantern camp, drowned landing, rotcap grove, and terror sinkhole.
+/// Mirefen deep-marsh camp — same zone band, north of Fenbridge.
 pub static MIREFEN: ZoneLayout = ZoneLayout {
     name: "Mirefen",
     player_spawn_x: 3.0,
-    player_spawn_z: 8.0,
+    player_spawn_z: 308.0,
     npcs: &[
         NpcSpot {
             npc_id: "keeper_orla",
             x: 1.0,
-            z: 11.0,
+            z: 311.0,
         },
         NpcSpot {
             npc_id: "ferryman_noll",
             x: 7.0,
-            z: 6.0,
+            z: 306.0,
         },
     ],
     mobs: &[
-        // Mire leeches — clustered around the drowned western landing.
         MobSpot {
-            mob_id: "mire_leech",
-            x: -18.0,
-            z: 5.0,
+            mob_id: "mire_toad",
+            x: 90.0,
+            z: 420.0,
         },
         MobSpot {
-            mob_id: "mire_leech",
-            x: -22.0,
-            z: 0.0,
+            mob_id: "mire_toad",
+            x: 115.0,
+            z: 450.0,
         },
         MobSpot {
-            mob_id: "mire_leech",
-            x: -16.0,
-            z: -5.0,
+            mob_id: "fen_crawler",
+            x: -80.0,
+            z: 420.0,
         },
         MobSpot {
-            mob_id: "mire_leech",
-            x: -24.0,
-            z: -8.0,
-        },
-        // Rotcap shamblers — beneath the southern fungus grove.
-        MobSpot {
-            mob_id: "rotcap_shambler",
-            x: -2.0,
-            z: -22.0,
+            mob_id: "fen_crawler",
+            x: -105.0,
+            z: 455.0,
         },
         MobSpot {
-            mob_id: "rotcap_shambler",
-            x: 5.0,
-            z: -25.0,
+            mob_id: "bog_wisp",
+            x: 15.0,
+            z: 470.0,
         },
-        MobSpot {
-            mob_id: "rotcap_shambler",
-            x: 11.0,
-            z: -20.0,
-        },
-        // World boss — alone in the eastern sinkhole.
         MobSpot {
             mob_id: "mire_terror",
-            x: 31.0,
-            z: 17.0,
+            x: 149.5,
+            z: 295.0,
         },
     ],
 };

@@ -19,8 +19,10 @@ pub mod quests;
 pub mod quests_zone2;
 pub mod recipes;
 pub mod talents;
+pub mod world_spatial;
 pub mod zone1;
 pub mod zone2;
+pub mod zone3;
 
 pub use abilities::{ability, AbilityDef, ABILITIES};
 pub use classes::{
@@ -45,11 +47,29 @@ pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
 pub use quests_zone2::ZONE2_QUESTS;
 pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
 pub use talents::{talent, TalentDef, TALENTS};
+pub use world_spatial::{
+    canonical_zone_id, zone_at, zone_by_id, BiomeId, CampDef, HeightStamp, HubDef, LakeDef,
+    ZoneBand, CAMPS, JAIL_TERRAIN_EDITS, LAKE_BLEND_RADIUS_MULT, SOWFIELD_FLAT_FALLOFF,
+    SOWFIELD_FLAT_HEIGHT, SOWFIELD_FLAT_X_MAX, SOWFIELD_FLAT_X_MIN, SOWFIELD_FLAT_Z_MAX,
+    SOWFIELD_FLAT_Z_MIN, WATER_LEVEL, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED,
+    WORLD_SIZE, ZONE_EASTBROOK, ZONE_MIREFEN, ZONE_THORNPEAK, ZONES,
+};
 pub use zone1::{MobSpot, NpcSpot, ZoneLayout, EASTBROOK};
 pub use zone2::{EASTFEN, MIREFEN};
+pub use zone3::THORNPEAK;
 
-/// Known zone id strings referenced by graveyards and future zone tables.
-pub const KNOWN_ZONE_IDS: &[&str] = &["eastbrook", "eastfen", "mirefen"];
+/// Known zone id strings (aliases + canonical upstream ids).
+pub const KNOWN_ZONE_IDS: &[&str] = &[
+    "eastbrook",
+    "eastbrook_vale",
+    "eastfen",
+    "mirefen",
+    "mirefen_marsh",
+    "thornpeak",
+    "thornpeak_heights",
+    "fenbridge",
+    "highwatch",
+];
 
 #[cfg(test)]
 mod tests {

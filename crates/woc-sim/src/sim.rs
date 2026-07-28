@@ -17,9 +17,7 @@ use crate::combat::{
     update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
-use crate::entity::{
-    create_mob_from_template, create_npc_from_template, create_player, Entity, QuestState,
-};
+use crate::entity::{create_player, Entity, QuestState};
 use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
@@ -29,6 +27,7 @@ use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
+use crate::zones::populate_all_overworld;
 use crate::world::WORLD_SEED;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
@@ -60,33 +59,13 @@ pub struct Sim {
 }
 
 impl Sim {
-    /// Eastbrook NPCs + mobs only (no player). Used by the online sticky realm.
+    /// Continuous overworld (all zone bands) with no player. Online sticky realm.
     pub fn new_empty_eastbrook() -> Self {
         let seed = WORLD_SEED;
         let mut rng = Rng::new(seed);
         let mut next_id = 1u32;
         let mut entities = Vec::new();
-
-        for spot in EASTBROOK.npcs {
-            let id = next_id;
-            next_id += 1;
-            if let Some(npc) = create_npc_from_template(id, spot.npc_id, spot.x, spot.z) {
-                entities.push(npc);
-            }
-        }
-
-        for spot in EASTBROOK.mobs {
-            let id = next_id;
-            next_id += 1;
-            if let Some(mut mob) = create_mob_from_template(id, spot.mob_id, spot.x, spot.z) {
-                mob.x += (rng.next_f32() - 0.5) * 1.5;
-                mob.z += (rng.next_f32() - 0.5) * 1.5;
-                mob.home_x = mob.x;
-                mob.home_z = mob.z;
-                mob.y = Entity::ground_at(mob.x, mob.z);
-                entities.push(mob);
-            }
-        }
+        populate_all_overworld(&mut entities, &mut next_id, &mut rng);
 
         Self {
             tick: 0,

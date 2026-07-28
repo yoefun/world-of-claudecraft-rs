@@ -80,6 +80,12 @@ pub fn leave_instance(
         return false;
     };
 
+    // Drop instance-local actors before restoring overworld population.
+    entities.retain(|entity| {
+        entity.kind == EntityKind::Player
+            || entity.instance_id.as_deref() != Some(instance_id.as_str())
+    });
+
     if !load_overworld_zone(entities, player_id, def.zone_id) {
         return false;
     }

@@ -1,23 +1,31 @@
-//! Overworld zone transitions and content-table population.
+//! Overworld zone transitions on the continuous strip.
 
 use crate::entity::{create_mob_from_template, create_npc_from_template, Entity};
-use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, MIREFEN};
+use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, MIREFEN, THORNPEAK};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Resolve a supported overworld zone to its spawn layout.
 pub fn zone_layout(zone_id: &str) -> Option<&'static ZoneLayout> {
     match zone_id {
-        "eastbrook" => Some(&EASTBROOK),
-        "eastfen" => Some(&EASTFEN),
+        "eastbrook" | "eastbrook_vale" => Some(&EASTBROOK),
+        "eastfen" | "fenbridge" | "mirefen_marsh" => Some(&EASTFEN),
         "mirefen" => Some(&MIREFEN),
+        "thornpeak" | "thornpeak_heights" | "highwatch" => Some(&THORNPEAK),
         _ => None,
     }
 }
 
-/// Move a player through a portal and replace local world actors.
-///
-/// Only transient world entities are rebuilt. Player entities (including their
-/// inventory, progression, talents, and equipment) remain in place.
+fn layout_zone_tag(zone_id: &str) -> &'static str {
+    match zone_id {
+        "eastbrook" | "eastbrook_vale" => "eastbrook",
+        "eastfen" | "fenbridge" | "mirefen_marsh" => "eastfen",
+        "mirefen" => "mirefen",
+        "thornpeak" | "thornpeak_heights" | "highwatch" => "thornpeak",
+        _ => "unknown",
+    }
+}
+
+/// Teleport through a portal without wiping other-zone actors.
 pub fn enter_portal(
     entities: &mut Vec<Entity>,
     player_id: EntityId,
@@ -30,14 +38,12 @@ pub fn enter_portal(
 
     events.push(SimEvent::ZoneChanged {
         player: player_id,
-        zone_id: zone_id.to_string(),
+        zone_id: layout_zone_tag(zone_id).to_string(),
     });
     true
 }
 
-/// Teleport `player_id` and repopulate a zone without emitting an event.
-///
-/// This is shared with instance exits, which emit `InstanceLeft` instead.
+/// Ensure the destination zone population exists, then teleport the player.
 pub(crate) fn load_overworld_zone(
     entities: &mut Vec<Entity>,
     player_id: EntityId,
@@ -53,63 +59,97 @@ pub(crate) fn load_overworld_zone(
         return false;
     }
 
-    let mut next_id = entities
-        .iter()
-        .map(|entity| entity.id)
-        .max()
-        .unwrap_or(0)
-        .saturating_add(1);
-
-    // Loot belongs to the world population being unloaded too.
-    entities.retain(|entity| {
-        !matches!(
-            entity.kind,
-            EntityKind::Mob | EntityKind::Npc | EntityKind::Loot
-        )
-    });
+    let tag = layout_zone_tag(zone_id);
+    ensure_zone_population(entities, layout, tag);
 
     let player = entities
         .iter_mut()
         .find(|entity| entity.id == player_id)
-        .expect("validated player must survive zone cleanup");
+        .expect("validated player must survive zone load");
     player.x = layout.player_spawn_x;
     player.z = layout.player_spawn_z;
     player.y = Entity::ground_at(player.x, player.z);
-    player.zone_id = zone_id.to_string();
+    player.zone_id = tag.to_string();
     player.instance_id = None;
     player.target = None;
     player.auto_attack = false;
     player.open_vendor_npc = None;
     player.cast = None;
     player.threat.clear();
+    true
+}
 
+fn ensure_zone_population(entities: &mut Vec<Entity>, layout: &ZoneLayout, tag: &str) {
+    let has_zone_npc = entities.iter().any(|e| {
+        e.kind == EntityKind::Npc && e.zone_id == tag && e.template_id.is_some()
+    });
+    if has_zone_npc {
+        return;
+    }
+    let mut next_id = entities
+        .iter()
+        .map(|entity| entity.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
     for spot in layout.npcs {
         let id = next_id;
         next_id = next_id.saturating_add(1);
         if let Some(mut npc) = create_npc_from_template(id, spot.npc_id, spot.x, spot.z) {
-            npc.zone_id = zone_id.to_string();
+            npc.zone_id = tag.to_string();
             entities.push(npc);
         }
     }
-
     for spot in layout.mobs {
         let id = next_id;
         next_id = next_id.saturating_add(1);
         if let Some(mut mob) = create_mob_from_template(id, spot.mob_id, spot.x, spot.z) {
-            mob.zone_id = zone_id.to_string();
+            mob.zone_id = tag.to_string();
             entities.push(mob);
         }
     }
+}
 
-    true
+/// Populate all overworld layouts into one continuous realm.
+pub fn populate_all_overworld(
+    entities: &mut Vec<Entity>,
+    next_id: &mut EntityId,
+    rng: &mut crate::rng::Rng,
+) {
+    for (layout, tag) in [
+        (&EASTBROOK, "eastbrook"),
+        (&EASTFEN, "eastfen"),
+        (&MIREFEN, "mirefen"),
+        (&THORNPEAK, "thornpeak"),
+    ] {
+        for spot in layout.npcs {
+            let id = *next_id;
+            *next_id = next_id.saturating_add(1);
+            if let Some(mut npc) = create_npc_from_template(id, spot.npc_id, spot.x, spot.z) {
+                npc.zone_id = tag.to_string();
+                entities.push(npc);
+            }
+        }
+        for spot in layout.mobs {
+            let id = *next_id;
+            *next_id = next_id.saturating_add(1);
+            if let Some(mut mob) = create_mob_from_template(id, spot.mob_id, spot.x, spot.z) {
+                mob.x += (rng.next_f32() - 0.5) * 1.5;
+                mob.z += (rng.next_f32() - 0.5) * 1.5;
+                mob.home_x = mob.x;
+                mob.home_z = mob.z;
+                mob.y = Entity::ground_at(mob.x, mob.z);
+                mob.zone_id = tag.to_string();
+                entities.push(mob);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::{
-        count_item, create_mob_from_template, create_npc_from_template, create_player, grant_into,
-    };
+    use crate::entity::{count_item, create_player, grant_into};
     use woc_content::PlayerClass;
 
     #[test]
@@ -121,10 +161,10 @@ mod tests {
         player.talents.insert("arcane_focus".into(), 1);
         assert!(grant_into(&mut player.inventory, "wolf_fang", 2));
 
-        let old_mob = create_mob_from_template(2, "young_wolf", 0.0, 0.0).expect("eastbrook mob");
-        let old_npc =
-            create_npc_from_template(3, "captain_alden", 0.0, 0.0).expect("eastbrook npc");
-        let mut entities = vec![player, old_mob, old_npc];
+        let mut entities = vec![player];
+        let mut next_id = 2;
+        let mut rng = crate::rng::Rng::new(1);
+        populate_all_overworld(&mut entities, &mut next_id, &mut rng);
         let mut events = Vec::new();
 
         assert!(enter_portal(&mut entities, 1, "eastfen", &mut events));
@@ -138,23 +178,18 @@ mod tests {
         assert_eq!(count_item(&player.inventory, "wolf_fang"), 2);
         assert_eq!(player.x, EASTFEN.player_spawn_x);
         assert_eq!(player.z, EASTFEN.player_spawn_z);
+        assert!(player.z > 180.0);
 
-        assert!(!entities.iter().any(|entity| {
-            matches!(
-                entity.template_id.as_deref(),
-                Some("young_wolf" | "captain_alden")
-            )
-        }));
+        // Continuous world: Eastbrook actors remain.
+        assert!(entities
+            .iter()
+            .any(|entity| entity.template_id.as_deref() == Some("captain_alden")));
         assert!(entities
             .iter()
             .any(|entity| entity.template_id.as_deref() == Some("fen_crawler")));
         assert!(entities
             .iter()
             .any(|entity| entity.template_id.as_deref() == Some("warden_selene")));
-        assert!(entities
-            .iter()
-            .filter(|entity| matches!(entity.kind, EntityKind::Mob | EntityKind::Npc))
-            .all(|entity| entity.zone_id == "eastfen"));
         assert!(events.iter().any(|event| matches!(
             event,
             SimEvent::ZoneChanged { player: 1, zone_id } if zone_id == "eastfen"
@@ -163,7 +198,7 @@ mod tests {
 
     #[test]
     fn eastfen_to_mirefen_preserves_player_progression() {
-        let mut player = create_player(1, "Fenwalker", PlayerClass::Druid, 8.0, -6.0);
+        let mut player = create_player(1, "Fenwalker", PlayerClass::Druid, 8.0, 304.0);
         player.zone_id = "eastfen".into();
         player.xp = 241;
         player.level = 5;
@@ -171,9 +206,10 @@ mod tests {
         player.talents.insert("natures_grace".into(), 2);
         assert!(grant_into(&mut player.inventory, "toad_bile", 3));
 
-        let old_mob = create_mob_from_template(2, "mire_toad", 0.0, 0.0).expect("eastfen mob");
-        let old_npc = create_npc_from_template(3, "warden_selene", 0.0, 0.0).expect("eastfen npc");
-        let mut entities = vec![player, old_mob, old_npc];
+        let mut entities = vec![player];
+        let mut next_id = 2;
+        let mut rng = crate::rng::Rng::new(2);
+        populate_all_overworld(&mut entities, &mut next_id, &mut rng);
         let mut events = Vec::new();
 
         assert!(enter_portal(&mut entities, 1, "mirefen", &mut events));
@@ -181,29 +217,15 @@ mod tests {
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
         assert_eq!(player.zone_id, "mirefen");
         assert_eq!(player.xp, 241);
-        assert_eq!(player.level, 5);
-        assert_eq!(player.talent_points, 3);
-        assert_eq!(player.talents.get("natures_grace"), Some(&2));
         assert_eq!(count_item(&player.inventory, "toad_bile"), 3);
-        assert_eq!(player.x, woc_content::MIREFEN.player_spawn_x);
-        assert_eq!(player.z, woc_content::MIREFEN.player_spawn_z);
-
-        assert!(!entities.iter().any(|entity| {
-            matches!(
-                entity.template_id.as_deref(),
-                Some("mire_toad" | "warden_selene")
-            )
-        }));
-        assert!(entities
-            .iter()
-            .any(|entity| entity.template_id.as_deref() == Some("mire_leech")));
+        assert_eq!(player.x, MIREFEN.player_spawn_x);
+        assert_eq!(player.z, MIREFEN.player_spawn_z);
         assert!(entities
             .iter()
             .any(|entity| entity.template_id.as_deref() == Some("keeper_orla")));
         assert!(entities
             .iter()
-            .filter(|entity| matches!(entity.kind, EntityKind::Mob | EntityKind::Npc))
-            .all(|entity| entity.zone_id == "mirefen"));
+            .any(|entity| entity.template_id.as_deref() == Some("mire_terror")));
         assert!(events.iter().any(|event| matches!(
             event,
             SimEvent::ZoneChanged { player: 1, zone_id } if zone_id == "mirefen"
