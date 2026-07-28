@@ -26,6 +26,10 @@ pub enum EntityKind {
 pub enum AbilitySlot {
     /// Class primary ability.
     Primary = 1,
+    Slot2 = 2,
+    Slot3 = 3,
+    Slot4 = 4,
+    Slot5 = 5,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +57,16 @@ pub enum InteractAction {
     UseItem { bag_slot: u8 },
     LootCorpse { target_id: EntityId },
     CloseVendor,
+    /// Release spirit while dead (Wave 1 stub).
+    ReleaseSpirit,
+    /// Train a profession by content id (stub).
+    TrainProfession { id: String },
+    /// Gather from a world node (stub).
+    Gather { node_id: EntityId },
+    /// Deposit bag items into the bank (stub).
+    BankDeposit { bag_slot: u8, count: u32 },
+    /// Withdraw bank items into the bag (stub).
+    BankWithdraw { bank_slot: u8, count: u32 },
 }
 
 /// Per-tick intent from a local or remote player.
@@ -337,6 +351,15 @@ pub enum WsClientMsg {
         target_id: EntityId,
         action: InteractAction,
     },
+    PartyInvite {
+        name: String,
+    },
+    PartyAccept,
+    PartyLeave,
+    Chat {
+        channel: String,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -352,6 +375,14 @@ pub enum WsServerMsg {
     },
     Error {
         message: String,
+    },
+    PartyUpdate {
+        members: Vec<EntityId>,
+    },
+    Chat {
+        channel: String,
+        from: String,
+        text: String,
     },
 }
 
@@ -500,6 +531,102 @@ mod tests {
             let v = serde_json::to_value(&e).unwrap();
             let back: SimEvent = serde_json::from_value(v).unwrap();
             assert_eq!(back, e);
+        }
+    }
+
+    #[test]
+    fn ability_slot_roundtrip_and_discriminants() {
+        assert_eq!(AbilitySlot::Primary as u8, 1);
+        assert_eq!(AbilitySlot::Slot2 as u8, 2);
+        assert_eq!(AbilitySlot::Slot3 as u8, 3);
+        assert_eq!(AbilitySlot::Slot4 as u8, 4);
+        assert_eq!(AbilitySlot::Slot5 as u8, 5);
+        for slot in [
+            AbilitySlot::Primary,
+            AbilitySlot::Slot2,
+            AbilitySlot::Slot3,
+            AbilitySlot::Slot4,
+            AbilitySlot::Slot5,
+        ] {
+            let v = serde_json::to_value(&slot).unwrap();
+            let back: AbilitySlot = serde_json::from_value(v).unwrap();
+            assert_eq!(back, slot);
+        }
+        // Old JSON still deserializes Primary.
+        let old: AbilitySlot = serde_json::from_str("\"Primary\"").unwrap();
+        assert_eq!(old, AbilitySlot::Primary);
+    }
+
+    #[test]
+    fn party_chat_ws_msg_roundtrip() {
+        let client_msgs = vec![
+            WsClientMsg::PartyInvite {
+                name: "Bob".into(),
+            },
+            WsClientMsg::PartyAccept,
+            WsClientMsg::PartyLeave,
+            WsClientMsg::Chat {
+                channel: "say".into(),
+                text: "hello".into(),
+            },
+        ];
+        for msg in client_msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
+
+        let server_msgs = vec![
+            WsServerMsg::PartyUpdate {
+                members: vec![1, 2, 3],
+            },
+            WsServerMsg::Chat {
+                channel: "say".into(),
+                from: "Ada".into(),
+                text: "hello".into(),
+            },
+        ];
+        for msg in server_msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsServerMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
+    }
+
+    #[test]
+    fn interact_action_stub_roundtrip() {
+        let actions = vec![
+            InteractAction::ReleaseSpirit,
+            InteractAction::TrainProfession {
+                id: "mining".into(),
+            },
+            InteractAction::Gather { node_id: 42 },
+            InteractAction::BankDeposit {
+                bag_slot: 1,
+                count: 3,
+            },
+            InteractAction::BankWithdraw {
+                bank_slot: 0,
+                count: 2,
+            },
+        ];
+        for a in actions {
+            let v = serde_json::to_value(&a).unwrap();
+            let back: InteractAction = serde_json::from_value(v).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{a:?}"));
+        }
+    }
+
+    #[test]
+    fn old_ws_hello_json_still_deserializes() {
+        let json = r#"{"type":"hello","name":"Ada","class_id":"mage"}"#;
+        let msg: WsClientMsg = serde_json::from_str(json).unwrap();
+        match msg {
+            WsClientMsg::Hello { name, class_id } => {
+                assert_eq!(name, "Ada");
+                assert_eq!(class_id, "mage");
+            }
+            _ => panic!("expected Hello"),
         }
     }
 }
