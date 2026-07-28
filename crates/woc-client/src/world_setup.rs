@@ -491,6 +491,11 @@ fn apply_online_messages(host: &mut GameHost) {
                 host.net_status = NetStatus::Error(message.clone());
                 host.recent_toasts.push((message, 5.0));
             }
+            WsServerMsg::Chat { channel, from, text } => {
+                host.recent_toasts
+                    .push((format!("[{channel}] {from}: {text}"), 4.0));
+            }
+            WsServerMsg::PartyUpdate { .. } => {}
         }
     }
 }

@@ -29,7 +29,12 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Nine classes + starter kits | done | |
 | Inventory / equipment / quests / vendor | done | framework |
 | Heightfield terrain | partial | not byte-identical |
-| Player motion / colliders | partial | Wave 1 motion collider deferred |
+| Player motion / colliders | done | Eastbrook inn AABB + sweep (R1) |
+| Mob respawn / social aggro | done | (R1) |
+| `woc-persist` + auth API | partial | memory default; Postgres optional (R1) |
+| Zone2 content tables | partial | Eastfen filled; transition later |
+| Professions content | partial | herbalism/alchemy tables (R1) |
+| Client UI chrome | done | char/vendor/cast/action bar (R1) |
 | Mob respawn / social aggro | planned | Wave 1B |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 
@@ -37,19 +42,19 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 
 | Subsystem | Target rewrite | Status |
 | --- | --- | --- |
-| Mob respawn / social aggro | 0.3.x | planned |
-| Postgres auth + character CRUD | 0.4 | planned |
+| Mob respawn / social aggro | 0.3.x | done (R1) |
+| Postgres auth + character CRUD | 0.4 | partial (R1 persist+API) |
 | Multi-ability kits | 0.5 | planned |
 | Talents / loadouts | 0.5 | planned |
 | Pets | 0.5 | planned |
-| Zone2 / Zone3 | 0.6 | planned |
+| Zone2 / Zone3 | 0.6 | partial (zone2 content R1) |
 | Party + chat | 0.7 | planned |
 | Group loot rules | 0.7 | planned |
 | Dungeons / instances | 0.7 | planned |
 | Delves | 0.7.x | planned |
 | Bank + mail | 0.8 | planned |
 | Auction market | 0.8 | planned |
-| Professions gather/craft | 0.9 | planned |
+| Professions gather/craft | 0.9 | partial (content R1) |
 | Duel + PvP honor | 0.9 | planned |
 | World boss + deeds | 1.0-pre | planned |
 
