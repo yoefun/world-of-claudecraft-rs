@@ -4,3 +4,4 @@
 .env
 *.log
 Cargo.lock.bak
+.worktrees/
