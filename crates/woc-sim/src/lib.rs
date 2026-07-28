@@ -7,6 +7,7 @@ pub mod combat;
 pub mod context;
 pub mod corpse;
 pub mod death;
+pub mod delves;
 pub mod entity;
 pub mod host;
 pub mod instances;

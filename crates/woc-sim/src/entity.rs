@@ -135,6 +135,8 @@ pub struct Entity {
     pub professions: HashMap<String, u32>,
     /// Active dungeon/instance id, if any.
     pub instance_id: Option<String>,
+    /// Zero-based room index while inside a delve.
+    pub delve_room: Option<u32>,
 }
 
 impl Entity {
@@ -204,6 +206,7 @@ impl Entity {
             pvp_flagged: false,
             professions: HashMap::new(),
             instance_id: None,
+            delve_room: None,
         }
     }
 }
