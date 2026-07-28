@@ -563,7 +563,6 @@ impl Sim {
             cast,
             is_dead: player.map(|p| !p.alive).unwrap_or(false),
             party_id: self.parties.party_id(player_id),
-            ..Default::default()
         }
     }
 }
@@ -647,7 +646,7 @@ fn nearest_alive_player(entities: &[Entity], from: &Entity, max_range: f32) -> O
 mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
-    use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
+    use woc_protocol::{AbilitySlot, InteractAction, WorldHost, WsServerMsg};
 
     #[test]
     fn tick_phase_order_fingerprint_locked() {
