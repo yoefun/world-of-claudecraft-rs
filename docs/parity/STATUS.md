@@ -1,49 +1,43 @@
 # Parity status
 
-## Rewrite program ↔ upstream 0.31.0
+## Rewrite 0.3.0 ↔ upstream 0.31.0 (`online-alive`)
 
 Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
 
 Completion design: [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](../superpowers/specs/2026-07-28-rust-rewrite-completion-design.md)  
 Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`](../superpowers/plans/2026-07-28-rust-rewrite-completion.md)
 
-### Framework (0.2.0) — shipped
+### Shipped through Wave 1
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `0.2.0` / framework |
-| `woc-content` Eastbrook tables | done | classes/items/mobs/npcs/quests/zone1 |
-| Deterministic tick (20 Hz) | done | |
+| Version / upstream pin | done | `0.3.0` / online-alive |
+| `woc-content` Eastbrook tables | done | |
+| Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
-| SimContext seam | done | emit/lookup/mutate + locked phase fingerprint — Wave 0A |
-| WorldHost trait | done | offline Bevy + server |
-| Nine classes + starter kits | done | one primary ability each |
-| Inventory backpack + stacking | done | 16-slot bag |
-| Equipment + `recalc_player_stats` | done | MainHand / Chest |
-| Quest accept / credit / turn-in | done | 3 Eastbrook quests |
-| NPC talk + dialog events | done | |
-| Vendor buy/sell | done | Trader Wilkes |
-| Eastbrook multi-camp spawn | done | wolves + boars |
-| Client UI windows | partial | modules split (0B); bags/quest toggles; chrome Wave 0B.2 later |
-| `woc-server` WebSocket sim host | done | sticky realm; multi-player spawn/despawn — Wave 0A |
-| Multi-player Entity economy | done | xp/copper on Entity; intent map — Wave 0A |
-| Content stubs (talents/zone2/…) | done | empty tables + graveyard — Wave 0B |
-| Protocol death/aura/party fields | done | additive defaults; PROTOCOL_REV stays 2 — Wave 0B |
-| Client online mode | planned | Wave 1 |
+| SimContext seam | done | emit/lookup/mutate |
+| Multi-player Entity economy | done | xp/copper on Entity; intent map |
+| Sticky WS realm | done | Hello spawn/despawn; no full reset |
+| Client online mode | done | title Offline\|Online; tungstenite thread |
+| Death / spirit / graveyard | done | `release_spirit` → eastbrook graveyard |
+| Combat core (GCD/cast/aura/threat) | done | DoTs + timed cast + GCD |
+| Deeper bags / consumables | done | Head/OH/Legs/Feet; UseItem; level_req |
+| Tab targeting | done | `Sim::tab_target` / `clear_target` |
+| Client module split | done | title/char_create/world/input/hud/online |
+| Content stubs (talents/zone2/…) | done | |
+| Protocol death/aura/party fields | done | additive; PROTOCOL_REV 2 |
+| Nine classes + starter kits | done | |
+| Inventory / equipment / quests / vendor | done | framework |
 | Heightfield terrain | partial | not byte-identical |
-| Player motion | partial | Wave 1 colliders |
+| Player motion / colliders | partial | Wave 1 motion collider deferred |
+| Mob respawn / social aggro | planned | Wave 1B |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 
-### Completion backlog (planned)
+### Completion backlog
 
 | Subsystem | Target rewrite | Status |
 | --- | --- | --- |
-| Multi-player Entity + sticky realm | 0.2.x / 0.3 | done (0A) |
-| Death / spirit / graveyard | 0.3 | planned |
-| Combat core (GCD/cast/aura/threat) | 0.3 | planned |
-| Deeper bags / consumables | 0.3 | planned |
-| Tab targeting | 0.3 | planned |
-| Mob respawn / social aggro | 0.3 | planned |
+| Mob respawn / social aggro | 0.3.x | planned |
 | Postgres auth + character CRUD | 0.4 | planned |
 | Multi-ability kits | 0.5 | planned |
 | Talents / loadouts | 0.5 | planned |
@@ -70,6 +64,6 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Admin SPA / Discord OAuth polish | deferred |
 | Vale Cup / Card Duel / Fiesta | deferred |
 
-## Rewrite 0.1.0 baseline (`combat-slice`)
+## Rewrite 0.2.0 / 0.1.0
 
-Superseded by 0.2.0 framework tables above.
+Superseded by tables above.
