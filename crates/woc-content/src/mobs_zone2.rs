@@ -1,4 +1,4 @@
-//! Zone 2 (Eastfen Marsh) mob templates.
+//! Zone 2 (Eastfen Marsh and Mirefen) mob templates.
 
 use crate::mobs::{LootEntry, MobTemplate};
 
@@ -45,6 +45,51 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         loot: &[LootEntry {
             item_id: "wisp_ember",
             chance: 0.65,
+            count: 1,
+        }],
+    },
+    MobTemplate {
+        id: "mire_leech",
+        name: "Mire Leech",
+        level: 5,
+        hp: 135.0,
+        xp: 85,
+        copper_min: 14,
+        copper_max: 28,
+        attack_damage: 16.0,
+        loot: &[LootEntry {
+            item_id: "leech_ichor",
+            chance: 0.75,
+            count: 1,
+        }],
+    },
+    MobTemplate {
+        id: "rotcap_shambler",
+        name: "Rotcap Shambler",
+        level: 6,
+        hp: 165.0,
+        xp: 105,
+        copper_min: 18,
+        copper_max: 34,
+        attack_damage: 18.0,
+        loot: &[LootEntry {
+            item_id: "rotcap_spore",
+            chance: 0.70,
+            count: 1,
+        }],
+    },
+    MobTemplate {
+        id: "mire_terror",
+        name: "Mire Terror",
+        level: 7,
+        hp: 650.0,
+        xp: 450,
+        copper_min: 80,
+        copper_max: 120,
+        attack_damage: 28.0,
+        loot: &[LootEntry {
+            item_id: "terror_scale",
+            chance: 1.0,
             count: 1,
         }],
     },

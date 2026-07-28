@@ -316,6 +316,14 @@ mod tests {
             graveyard_for_zone("eastbrook").is_some(),
             "graveyard_for_zone(eastbrook) must resolve"
         );
+        assert!(
+            graveyard("mirefen_graveyard").is_some(),
+            "mirefen_graveyard id must resolve"
+        );
+        assert!(
+            graveyard_for_zone("mirefen").is_some(),
+            "graveyard_for_zone(mirefen) must resolve"
+        );
         for g in GRAVEYARDS {
             assert!(
                 KNOWN_ZONE_IDS.contains(&g.zone_id),
@@ -348,9 +356,41 @@ mod tests {
     }
 
     #[test]
-    fn mirefen_remains_placeholder() {
-        assert!(MIREFEN.npcs.is_empty());
-        assert!(MIREFEN.mobs.is_empty());
+    fn mirefen_layout_has_resolvable_content() {
+        assert!(
+            MIREFEN.npcs.len() >= 2,
+            "mirefen needs ≥2 NPC spots, got {}",
+            MIREFEN.npcs.len()
+        );
+        let mob_templates = MIREFEN
+            .mobs
+            .iter()
+            .map(|spot| spot.mob_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            mob_templates.len() >= 3,
+            "mirefen needs ≥3 distinct mob templates, got {}",
+            mob_templates.len()
+        );
+        assert!(
+            (MIREFEN.player_spawn_x != 0.0) || (MIREFEN.player_spawn_z != 0.0),
+            "mirefen player spawn should be set"
+        );
+
+        for spot in MIREFEN.npcs {
+            assert!(
+                NPCS.iter().any(|npc| npc.id == spot.npc_id),
+                "missing npc {}",
+                spot.npc_id
+            );
+        }
+        for spot in MIREFEN.mobs {
+            assert!(
+                MOBS.iter().any(|mob| mob.id == spot.mob_id),
+                "missing mob {}",
+                spot.mob_id
+            );
+        }
     }
 
     #[test]
