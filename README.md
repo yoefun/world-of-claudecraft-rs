@@ -53,6 +53,14 @@ One sim, multiple hosts (same idea as upstream):
 - Online `woc-server` will host the same sim later (stubbed in 0.1)
 - Client never decides combat outcomes — only sends intents and renders snapshots
 
+## Roadmap (next: 0.2 framework)
+
+`0.1.0` = combat slice. Next milestone **`0.2.0` framework complete**: data-driven Eastbrook loop (9 classes, inventory, quests, NPC/vendor, `WorldHost`, WebSocket server).
+
+- Design: [`docs/superpowers/specs/2026-07-28-rust-rewrite-framework-design.md`](docs/superpowers/specs/2026-07-28-rust-rewrite-framework-design.md)
+- Plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-framework.md`](docs/superpowers/plans/2026-07-28-rust-rewrite-framework.md)
+- Parity: [`docs/parity/STATUS.md`](docs/parity/STATUS.md)
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE). Upstream project is also MIT.
