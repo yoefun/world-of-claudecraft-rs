@@ -1,5 +1,9 @@
 //! Mob templates.
 
+use std::sync::LazyLock;
+
+use crate::mobs_zone2::ZONE2_MOBS;
+
 #[derive(Debug, Clone)]
 pub struct LootEntry {
     pub item_id: &'static str,
@@ -21,7 +25,7 @@ pub struct MobTemplate {
     pub loot: &'static [LootEntry],
 }
 
-pub static MOBS: &[MobTemplate] = &[
+pub static ZONE1_MOBS: &[MobTemplate] = &[
     MobTemplate {
         id: "young_wolf",
         name: "Young Wolf",
@@ -68,6 +72,14 @@ pub static MOBS: &[MobTemplate] = &[
         }],
     },
 ];
+
+/// Zone1 + zone2 mob templates.
+pub static MOBS: LazyLock<&'static [MobTemplate]> = LazyLock::new(|| {
+    let mut all = Vec::with_capacity(ZONE1_MOBS.len() + ZONE2_MOBS.len());
+    all.extend_from_slice(ZONE1_MOBS);
+    all.extend_from_slice(ZONE2_MOBS);
+    Box::leak(all.into_boxed_slice())
+});
 
 pub fn mob(id: &str) -> Option<&'static MobTemplate> {
     MOBS.iter().find(|m| m.id == id)

@@ -1,0 +1,51 @@
+//! Zone 2 (Eastfen Marsh) mob templates.
+
+use crate::mobs::{LootEntry, MobTemplate};
+
+pub static ZONE2_MOBS: &[MobTemplate] = &[
+    MobTemplate {
+        id: "fen_crawler",
+        name: "Fen Crawler",
+        level: 3,
+        hp: 90.0,
+        xp: 55,
+        copper_min: 8,
+        copper_max: 18,
+        attack_damage: 11.0,
+        loot: &[LootEntry {
+            item_id: "fen_silk",
+            chance: 0.70,
+            count: 1,
+        }],
+    },
+    MobTemplate {
+        id: "mire_toad",
+        name: "Mire Toad",
+        level: 3,
+        hp: 100.0,
+        xp: 58,
+        copper_min: 9,
+        copper_max: 20,
+        attack_damage: 10.0,
+        loot: &[LootEntry {
+            item_id: "toad_bile",
+            chance: 0.80,
+            count: 1,
+        }],
+    },
+    MobTemplate {
+        id: "bog_wisp",
+        name: "Bog Wisp",
+        level: 4,
+        hp: 75.0,
+        xp: 70,
+        copper_min: 12,
+        copper_max: 24,
+        attack_damage: 14.0,
+        loot: &[LootEntry {
+            item_id: "wisp_ember",
+            chance: 0.65,
+            count: 1,
+        }],
+    },
+];
