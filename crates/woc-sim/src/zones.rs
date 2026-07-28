@@ -80,9 +80,9 @@ pub(crate) fn load_overworld_zone(
 }
 
 fn ensure_zone_population(entities: &mut Vec<Entity>, layout: &ZoneLayout, tag: &str) {
-    let has_zone_npc = entities.iter().any(|e| {
-        e.kind == EntityKind::Npc && e.zone_id == tag && e.template_id.is_some()
-    });
+    let has_zone_npc = entities
+        .iter()
+        .any(|e| e.kind == EntityKind::Npc && e.zone_id == tag && e.template_id.is_some());
     if has_zone_npc {
         return;
     }

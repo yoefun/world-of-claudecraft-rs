@@ -17,29 +17,29 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Seeded RNG (mulberry32) | done | |
 | SimContext seam | done | emit/lookup/mutate |
 | Multi-player Entity economy | done | |
-| Sticky WS realm | done | |
-| Client online mode | done | |
+| Sticky WS realm | done | authenticated Hello + per-player snapshots |
+| Client online mode | done | token + character_id Hello |
 | Death / spirit / graveyard | done | |
-| Combat core (GCD/cast/aura/threat) | done | |
-| Deeper bags / consumables | done | |
+| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT |
+| Deeper bags / consumables | done | absolute inventory/bank slot indices |
 | Tab targeting | done | |
 | Player motion / colliders | done | |
 | Mob respawn / social aggro | done | |
-| `woc-persist` + auth API | done | R4 fields: talents/bank/honor/zone/professions |
+| `woc-persist` + auth API | done | R4 fields + deeds; WS load/save loop |
 | Client login / char select | done | |
 | Multi-ability kits | done | |
-| Talents / loadouts | done | spend/respec + damage_pct; client panel N |
+| Talents / loadouts | done | 3/class; damage/hp/armor/resource effects |
 | Pets | done | hunter/warlock |
-| Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen content + portals |
-| Party + chat | done | |
+| Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen + Thornpeak quests/mobs |
+| Party + chat | done | kill credit within 40 yd + same instance |
 | Group loot rules | done | FFA + Need/Greed |
-| Dungeons / instances | done | eastbrook_crypt boss shell |
+| Dungeons / instances | done | unique instance keys; party share; overworld preserved |
 | Delves | done | eastbrook_hollow 3-room loop + reward |
-| Bank + mail | done | sim + client panels K/M |
-| Auction market | done | sim + client panel U |
+| Bank + mail | done | durable character bank; mail keyed by character UUID |
+| Auction market | done | durable listings; offline proceed/return via mail |
 | Professions gather/craft | done | herbalism → alchemy salve |
 | Duel + PvP honor | done | |
-| World boss + deeds | done | mire_terror + deed honor |
+| World boss + deeds | done | one-shot deed completion persisted |
 | Client economy/talent chrome | done | N/K/M/U panels |
 | Heightfield terrain | done | Continuous strip seed `20061`; golden ε≈1e-3 vs upstream pin; editor custom maps deferred |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |

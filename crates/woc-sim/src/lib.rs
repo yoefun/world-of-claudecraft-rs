@@ -16,6 +16,7 @@ pub mod inventory;
 pub mod mail;
 pub mod market;
 pub mod mob;
+pub mod persist_state;
 pub mod pet;
 pub mod physics;
 pub mod player_motion;
@@ -35,10 +36,13 @@ pub mod worldboss;
 pub mod zones;
 
 pub use entity::QuestState;
+pub use persist_state::{
+    apply_player_state, create_player_from_state, export_player_state, PlayerPersistentState,
+};
 pub use rng::{fbm2, hash2, noise2, Rng};
 pub use sim::{Sim, MAX_REALM_PLAYERS};
 pub use woc_content::PlayerClass;
 pub use world::{
     ground_height, terrain_height, terrain_steepness, water_bodies, water_level, water_level_at,
-    WORLD_HALF, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED, PLAYER_MAX_CLIMB_SLOPE,
+    PLAYER_MAX_CLIMB_SLOPE, WORLD_HALF, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED,
 };

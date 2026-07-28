@@ -27,8 +27,8 @@ use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
-use crate::zones::populate_all_overworld;
 use crate::world::WORLD_SEED;
+use crate::zones::populate_all_overworld;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
     AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot,
@@ -123,6 +123,64 @@ impl Sim {
             self.player_id = id;
         }
         Some(id)
+    }
+
+    /// Spawn a player and apply durable progression (online persist path).
+    pub fn spawn_player_with_state(
+        &mut self,
+        name: &str,
+        class: PlayerClass,
+        state: &crate::persist_state::PlayerPersistentState,
+    ) -> Option<EntityId> {
+        let players = self
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Player)
+            .count();
+        if players >= MAX_REALM_PLAYERS {
+            return None;
+        }
+        // Reject duplicate durable character already in realm.
+        if let Some(ref did) = state.durable_id {
+            if self.entities.iter().any(|e| {
+                e.kind == EntityKind::Player && e.durable_id.as_deref() == Some(did.as_str())
+            }) {
+                return None;
+            }
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        let mut player = crate::persist_state::create_player_from_state(id, name, class, state);
+        // Virgin / eastbrook spawn: slight offset so multiplayer doesn't stack.
+        if state.is_virgin()
+            || (player.zone_id == "eastbrook"
+                && state.pos_x.abs() < 0.01
+                && state.pos_z.abs() < 0.01)
+        {
+            let offset = players as f32 * 1.5;
+            player.x = EASTBROOK.player_spawn_x + offset;
+            player.z = EASTBROOK.player_spawn_z;
+            player.y = Entity::ground_at(player.x, player.z);
+            player.home_x = player.x;
+            player.home_z = player.z;
+        } else {
+            player.y = Entity::ground_at(player.x, player.z);
+        }
+        self.entities.push(player);
+        self.intents.insert(id, PlayerIntent::default());
+        if self.player_id == 0 {
+            self.player_id = id;
+        }
+        Some(id)
+    }
+
+    /// Export durable progression for a player (for disconnect autosave).
+    pub fn export_player_state(
+        &self,
+        player_id: EntityId,
+    ) -> Option<crate::persist_state::PlayerPersistentState> {
+        let player = self.entities.iter().find(|e| e.id == player_id)?;
+        crate::persist_state::export_player_state(player)
     }
 
     /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
@@ -349,7 +407,7 @@ impl Sim {
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);
         for reward in rewards {
             let mut recipients = vec![reward.killer];
-            for mate in kill_credit_share(&self.parties, reward.killer) {
+            for mate in kill_credit_share(&self.parties, &self.entities, reward.killer) {
                 if !recipients.contains(&mate) {
                     recipients.push(mate);
                 }
@@ -383,7 +441,8 @@ impl Sim {
 
         // PvP duel resolve + honor (does not add a locked tick phase).
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.entities, &mut self.events);
-        self.market.tick_expire(self.tick, &mut self.entities);
+        self.market
+            .tick_expire(self.tick, &mut self.entities, &mut self.mail);
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
@@ -439,8 +498,10 @@ impl Sim {
             .map(|p| {
                 p.inventory
                     .iter()
-                    .filter_map(|s| {
+                    .enumerate()
+                    .filter_map(|(i, s)| {
                         s.as_ref().map(|st| InvSlotSnapshot {
+                            slot: i as u8,
                             item_id: st.item_id.clone(),
                             count: st.count,
                         })
@@ -507,10 +568,19 @@ impl Sim {
         let gcd = player.map(|p| p.gcd).unwrap_or(0.0);
         let casting = player.map(|p| p.cast.is_some()).unwrap_or(false);
 
+        let viewer_instance = player.and_then(|p| p.instance_id.clone());
         let entities = self
             .entities
             .iter()
             .filter(|e| e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc)
+            .filter(|e| match (&viewer_instance, &e.instance_id) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a == b,
+                // Overworld viewers see overworld actors; instance players see
+                // their instance plus other players (for co-presence at portals).
+                (Some(_), None) => e.kind == EntityKind::Player,
+                (None, Some(_)) => e.kind == EntityKind::Player,
+            })
             .map(|e| EntitySnapshot {
                 id: e.id,
                 kind: e.kind,
@@ -578,8 +648,10 @@ impl Sim {
                 .map(|p| {
                     p.bank
                         .iter()
-                        .filter_map(|s| {
+                        .enumerate()
+                        .filter_map(|(i, s)| {
                             s.as_ref().map(|st| InvSlotSnapshot {
+                                slot: i as u8,
                                 item_id: st.item_id.clone(),
                                 count: st.count,
                             })
@@ -587,7 +659,7 @@ impl Sim {
                         .collect()
                 })
                 .unwrap_or_default(),
-            mail: self.mail.snapshot_for(player_id),
+            mail: self.mail.snapshot_for_entity(player_id, &self.entities),
             market: self.market.snapshot_public(),
             honor: player.map(|p| p.honor).unwrap_or(0),
             pvp_flagged: player.map(|p| p.pvp_flagged).unwrap_or(false),

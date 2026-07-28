@@ -1,6 +1,7 @@
 //! Authoritative host: HTTP health/version + auth/characters + WebSocket game loop.
 
 mod auth;
+mod bridge;
 mod characters;
 mod game_ws;
 

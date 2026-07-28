@@ -63,10 +63,7 @@ fn setup_title(mut commands: Commands, mode: Res<PlayMode>) {
 fn mode_prompt(mode: PlayMode) -> String {
     match mode {
         PlayMode::Offline => "Mode: Offline  (local sim)".into(),
-        PlayMode::Online => format!(
-            "Mode: Online  ({} → login)",
-            crate::online::ONLINE_WS_URL
-        ),
+        PlayMode::Online => format!("Mode: Online  ({} → login)", crate::online::ONLINE_WS_URL),
     }
 }
 

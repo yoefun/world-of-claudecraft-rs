@@ -54,10 +54,7 @@ pub struct LootRules {
 
 impl LootRules {
     pub fn mode_for_party(&self, party_id: u32) -> LootMode {
-        self.modes
-            .get(&party_id)
-            .copied()
-            .unwrap_or(LootMode::Ffa)
+        self.modes.get(&party_id).copied().unwrap_or(LootMode::Ffa)
     }
 
     pub fn set_mode(&mut self, party_id: u32, mode: LootMode) {
@@ -217,13 +214,9 @@ mod tests {
             &mut entities,
             &mut events
         ));
-        assert!(events.iter().any(|e| matches!(
-            e,
-            SimEvent::LootAwarded {
-                winner: 2,
-                ..
-            }
-        )));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, SimEvent::LootAwarded { winner: 2, .. })));
         assert!(!entities[2].alive);
     }
 }

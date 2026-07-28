@@ -136,6 +136,7 @@ pub fn apply_aura(target: &mut Entity, aura: AuraInstance, events: &mut Vec<SimE
         existing.remaining = existing.remaining.max(aura.remaining);
         existing.stacks = existing.stacks.max(aura.stacks);
         existing.tick_damage = aura.tick_damage;
+        existing.tick_heal = aura.tick_heal;
         existing.tick_interval = aura.tick_interval;
         existing.source = aura.source;
     } else {
@@ -170,6 +171,7 @@ fn apply_primary_dot(
             tick_timer: IGNITE_TICK_INTERVAL,
             tick_interval: IGNITE_TICK_INTERVAL,
             tick_damage: IGNITE_TICK_DAMAGE,
+            tick_heal: 0.0,
             source,
         },
         "heroic_strike" | "cleave" | "crusader_strike" | "sinister_strike" | "eviscerate" => {
@@ -180,6 +182,7 @@ fn apply_primary_dot(
                 tick_timer: REND_TICK_INTERVAL,
                 tick_interval: REND_TICK_INTERVAL,
                 tick_damage: REND_TICK_DAMAGE,
+                tick_heal: 0.0,
                 source,
             }
         }
@@ -190,6 +193,7 @@ fn apply_primary_dot(
             tick_timer: STING_TICK_INTERVAL,
             tick_interval: STING_TICK_INTERVAL,
             tick_damage: STING_TICK_DAMAGE,
+            tick_heal: 0.0,
             source,
         },
         _ => return,
@@ -197,10 +201,11 @@ fn apply_primary_dot(
     apply_aura(&mut entities[ti], aura, events);
 }
 
-/// Tick all entity auras: DoT damage + expiry. Call once per sim tick.
+/// Tick all entity auras: DoT damage, HoT heals, and expiry.
 pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
-    // Collect DoT applications first to avoid borrow issues across entities.
-    let mut pending_ticks: Vec<(EntityId, EntityId, f32, String)> = Vec::new();
+    // Collect tick applications first to avoid borrow issues across entities.
+    let mut pending_dots: Vec<(EntityId, EntityId, f32, String)> = Vec::new();
+    let mut pending_hots: Vec<(EntityId, f32, String)> = Vec::new();
     let ids: Vec<EntityId> = entities.iter().map(|e| e.id).collect();
 
     for id in ids {
@@ -214,16 +219,24 @@ pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
         let mut expired = Vec::new();
         for (ai, aura) in entities[ei].auras.iter_mut().enumerate() {
             aura.remaining -= DT;
-            if aura.tick_damage > 0.0 && aura.tick_interval > 0.0 {
+            let has_tick =
+                (aura.tick_damage > 0.0 || aura.tick_heal > 0.0) && aura.tick_interval > 0.0;
+            if has_tick {
                 aura.tick_timer -= DT;
                 if aura.tick_timer <= 0.0 {
                     aura.tick_timer += aura.tick_interval;
-                    pending_ticks.push((
-                        aura.source,
-                        id,
-                        aura.tick_damage * aura.stacks.max(1) as f32,
-                        aura.id.clone(),
-                    ));
+                    let stacks = aura.stacks.max(1) as f32;
+                    if aura.tick_damage > 0.0 {
+                        pending_dots.push((
+                            aura.source,
+                            id,
+                            aura.tick_damage * stacks,
+                            aura.id.clone(),
+                        ));
+                    }
+                    if aura.tick_heal > 0.0 {
+                        pending_hots.push((id, aura.tick_heal * stacks, aura.id.clone()));
+                    }
                 }
             }
             if aura.remaining <= 0.0 {
@@ -235,8 +248,34 @@ pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
         }
     }
 
-    for (source, target, amount, aura_id) in pending_ticks {
+    for (source, target, amount, aura_id) in pending_dots {
         deal_damage(entities, source, target, amount, Some(&aura_id), events);
+    }
+    for (target, amount, aura_id) in pending_hots {
+        apply_hot_tick(entities, target, amount, &aura_id, events);
+    }
+}
+
+fn apply_hot_tick(
+    entities: &mut [Entity],
+    target: EntityId,
+    amount: f32,
+    aura_id: &str,
+    events: &mut Vec<SimEvent>,
+) {
+    let Some(ti) = entities.iter().position(|e| e.id == target) else {
+        return;
+    };
+    if !entities[ti].alive {
+        return;
+    }
+    let before = entities[ti].hp;
+    entities[ti].hp = (entities[ti].hp + amount).min(entities[ti].hp_max);
+    let healed = entities[ti].hp - before;
+    if healed > 0.0 {
+        events.push(SimEvent::Toast {
+            message: format!("{aura_id} heals for {:.0}.", healed),
+        });
     }
 }
 
@@ -691,6 +730,7 @@ mod tests {
             tick_timer: 999.0,
             tick_interval: 999.0,
             tick_damage: 0.0,
+            tick_heal: 0.0,
             source: 1,
         });
         let mut entities = vec![mob];
@@ -718,6 +758,7 @@ mod tests {
             tick_timer: DT,
             tick_interval: 3.0 * DT,
             tick_damage: 7.0,
+            tick_heal: 0.0,
             source: 1,
         });
         let mut entities = vec![mob];

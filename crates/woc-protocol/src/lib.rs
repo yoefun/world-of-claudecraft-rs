@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 pub type EntityId = u32;
 
 /// Protocol revision for snapshot / WS envelopes (0.1 was implicit rev 1).
-/// Kept at 2: Wave 1 death/aura/party fields are additive with `#[serde(default)]`.
-pub const PROTOCOL_REV: u32 = 2;
+/// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
+pub const PROTOCOL_REV: u32 = 3;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -49,36 +49,68 @@ pub enum EquipSlot {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InteractAction {
     Talk,
-    AcceptQuest { quest_id: String },
-    TurnInQuest { quest_id: String },
-    Buy { item_id: String, count: u32 },
-    Sell { bag_slot: u8, count: u32 },
-    Equip { bag_slot: u8 },
-    Unequip { equip_slot: EquipSlot },
+    AcceptQuest {
+        quest_id: String,
+    },
+    TurnInQuest {
+        quest_id: String,
+    },
+    Buy {
+        item_id: String,
+        count: u32,
+    },
+    Sell {
+        bag_slot: u8,
+        count: u32,
+    },
+    Equip {
+        bag_slot: u8,
+    },
+    Unequip {
+        equip_slot: EquipSlot,
+    },
     /// Use a bag item (consumable heal, etc.). Additive Wave 0.3.
-    UseItem { bag_slot: u8 },
-    LootCorpse { target_id: EntityId },
+    UseItem {
+        bag_slot: u8,
+    },
+    LootCorpse {
+        target_id: EntityId,
+    },
     CloseVendor,
     /// Release spirit while dead (Wave 1 stub).
     ReleaseSpirit,
     /// Train a profession by content id (stub).
-    TrainProfession { id: String },
+    TrainProfession {
+        id: String,
+    },
     /// Gather from a world node (stub).
-    Gather { node_id: EntityId },
+    Gather {
+        node_id: EntityId,
+    },
     /// Deposit bag items into the bank.
-    BankDeposit { bag_slot: u8, count: u32 },
+    BankDeposit {
+        bag_slot: u8,
+        count: u32,
+    },
     /// Withdraw bank items into the bag.
-    BankWithdraw { bank_slot: u8, count: u32 },
+    BankWithdraw {
+        bank_slot: u8,
+        count: u32,
+    },
     /// Summon the class pet (hunter / warlock).
     SummonPet,
     /// Dismiss the active pet.
     DismissPet,
     /// Spend one talent point into a talent id.
-    LearnTalent { talent_id: String },
+    LearnTalent {
+        talent_id: String,
+    },
     /// Refund talent points (respec).
     RespecTalents,
     /// Craft a recipe by content id.
-    Craft { recipe_id: String },
+    Craft {
+        recipe_id: String,
+    },
     /// Send mail (copper and/or one bag stack) to a player name.
     MailSend {
         to_name: String,
@@ -87,13 +119,23 @@ pub enum InteractAction {
         count: u32,
     },
     /// Collect a mail by id into bag/copper.
-    MailCollect { mail_id: u32 },
+    MailCollect {
+        mail_id: u32,
+    },
     /// List a bag stack on the auction house.
-    MarketList { bag_slot: u8, count: u32, price: u32 },
+    MarketList {
+        bag_slot: u8,
+        count: u32,
+        price: u32,
+    },
     /// Buy an auction listing by id.
-    MarketBuy { listing_id: u32 },
+    MarketBuy {
+        listing_id: u32,
+    },
     /// Cancel own listing.
-    MarketCancel { listing_id: u32 },
+    MarketCancel {
+        listing_id: u32,
+    },
     /// Challenge target player to a duel.
     DuelChallenge,
     /// Accept a pending duel.
@@ -101,23 +143,37 @@ pub enum InteractAction {
     /// Toggle open-world PvP flag.
     TogglePvp,
     /// Travel through a portal / zone transition.
-    EnterPortal { zone_id: String },
+    EnterPortal {
+        zone_id: String,
+    },
     /// Enter a dungeon instance (party-aware).
-    EnterDungeon { dungeon_id: String },
+    EnterDungeon {
+        dungeon_id: String,
+    },
     /// Enter a dedicated multi-room solo delve.
-    EnterDelve { delve_id: String },
+    EnterDelve {
+        delve_id: String,
+    },
     /// Advance the active delve after clearing its current room.
     AdvanceDelve,
     /// Leave the current instance back to the overworld zone.
     LeaveInstance,
     /// Need roll on pending party loot.
-    LootNeed { loot_id: EntityId },
+    LootNeed {
+        loot_id: EntityId,
+    },
     /// Greed roll on pending party loot.
-    LootGreed { loot_id: EntityId },
+    LootGreed {
+        loot_id: EntityId,
+    },
     /// Pass on pending party loot.
-    LootPass { loot_id: EntityId },
+    LootPass {
+        loot_id: EntityId,
+    },
     /// Party leader sets loot mode (`ffa` | `need_greed`).
-    SetLootMode { mode: String },
+    SetLootMode {
+        mode: String,
+    },
 }
 
 /// Per-tick intent from a local or remote player.
@@ -159,6 +215,9 @@ pub struct EntitySnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvSlotSnapshot {
+    /// Absolute bag/bank slot index (holes allowed). Defaults to 0 for old peers.
+    #[serde(default)]
+    pub slot: u8,
     pub item_id: String,
     pub count: u32,
 }
@@ -547,9 +606,19 @@ pub trait WorldHost {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsClientMsg {
+    /// Join the realm. Online clients MUST send `token` + `character_id`;
+    /// name/class are ignored when those are present (loaded from persist).
     Hello {
+        #[serde(default)]
         name: String,
+        #[serde(default)]
         class_id: String,
+        /// Bearer session token from REST login/register.
+        #[serde(default)]
+        token: Option<String>,
+        /// Durable character UUID (string form).
+        #[serde(default)]
+        character_id: Option<String>,
     },
     Intent(PlayerIntent),
     Interact {
@@ -633,13 +702,25 @@ mod tests {
         let msg = WsClientMsg::Hello {
             name: "Ada".into(),
             class_id: "mage".into(),
+            token: Some("tok".into()),
+            character_id: Some("11111111-1111-1111-1111-111111111111".into()),
         };
         let s = serde_json::to_string(&msg).unwrap();
         let back: WsClientMsg = serde_json::from_str(&s).unwrap();
         match back {
-            WsClientMsg::Hello { name, class_id } => {
+            WsClientMsg::Hello {
+                name,
+                class_id,
+                token,
+                character_id,
+            } => {
                 assert_eq!(name, "Ada");
                 assert_eq!(class_id, "mage");
+                assert_eq!(token.as_deref(), Some("tok"));
+                assert_eq!(
+                    character_id.as_deref(),
+                    Some("11111111-1111-1111-1111-111111111111")
+                );
             }
             _ => panic!("expected Hello"),
         }
@@ -782,9 +863,7 @@ mod tests {
     #[test]
     fn party_chat_ws_msg_roundtrip() {
         let client_msgs = vec![
-            WsClientMsg::PartyInvite {
-                name: "Bob".into(),
-            },
+            WsClientMsg::PartyInvite { name: "Bob".into() },
             WsClientMsg::PartyAccept,
             WsClientMsg::PartyLeave,
             WsClientMsg::Chat {
@@ -910,9 +989,16 @@ mod tests {
         let json = r#"{"type":"hello","name":"Ada","class_id":"mage"}"#;
         let msg: WsClientMsg = serde_json::from_str(json).unwrap();
         match msg {
-            WsClientMsg::Hello { name, class_id } => {
+            WsClientMsg::Hello {
+                name,
+                class_id,
+                token,
+                character_id,
+            } => {
                 assert_eq!(name, "Ada");
                 assert_eq!(class_id, "mage");
+                assert!(token.is_none());
+                assert!(character_id.is_none());
             }
             _ => panic!("expected Hello"),
         }

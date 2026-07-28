@@ -114,12 +114,7 @@ const fn consumable(
     }
 }
 
-const fn misc(
-    id: &'static str,
-    name: &'static str,
-    kind: ItemKind,
-    vendor_sell: u32,
-) -> ItemDef {
+const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell: u32) -> ItemDef {
     ItemDef {
         id,
         name,

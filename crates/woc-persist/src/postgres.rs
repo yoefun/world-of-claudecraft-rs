@@ -14,6 +14,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 const MIGRATION_SQL: &str = include_str!("../migrations/001_init.sql");
+const MIGRATION_SQL_002: &str = include_str!("../migrations/002_realm_economy.sql");
 
 #[derive(Clone)]
 pub struct PostgresStore {
@@ -33,7 +34,10 @@ impl PostgresStore {
     }
 
     pub async fn migrate(&self) -> PersistResult<()> {
-        for stmt in split_sql(MIGRATION_SQL) {
+        for stmt in split_sql(MIGRATION_SQL)
+            .into_iter()
+            .chain(split_sql(MIGRATION_SQL_002))
+        {
             sqlx::query(&stmt).execute(&self.pool).await?;
         }
         Ok(())
@@ -241,6 +245,46 @@ impl PostgresStore {
         self.get_character(character_id).await
     }
 
+    pub async fn save_character_for_account(
+        &self,
+        account_id: Uuid,
+        character_id: Uuid,
+        save: CharacterSave,
+    ) -> PersistResult<Character> {
+        let c = self.get_character(character_id).await?;
+        if c.account_id != account_id {
+            return Err(PersistError::Forbidden);
+        }
+        self.save_character(character_id, save).await
+    }
+
+    pub async fn load_economy(&self) -> PersistResult<crate::economy::RealmEconomy> {
+        let row = sqlx::query("SELECT data::text AS data FROM realm_economy WHERE id = 1")
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => {
+                let data: String = r.get("data");
+                Ok(crate::economy::economy_from_json(&data)?)
+            }
+            None => Ok(crate::economy::RealmEconomy::default()),
+        }
+    }
+
+    pub async fn save_economy(&self, economy: crate::economy::RealmEconomy) -> PersistResult<()> {
+        let data = crate::economy::economy_to_json(&economy)?;
+        sqlx::query(
+            r#"
+            INSERT INTO realm_economy (id, data) VALUES (1, $1::jsonb)
+            ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+            "#,
+        )
+        .bind(&data)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn mint_session(&self, account_id: Uuid) -> PersistResult<String> {
         let token = format!("pg_{}", Uuid::new_v4());
         sqlx::query("INSERT INTO sessions (token, account_id) VALUES ($1, $2)")
@@ -277,6 +321,7 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         honor: completion.honor,
         professions: completion.professions,
         pvp_flagged: completion.pvp_flagged,
+        completed_deeds: completion.completed_deeds,
     })
 }
 
