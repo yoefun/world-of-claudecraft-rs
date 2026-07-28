@@ -7,5 +7,4 @@ description = "Deterministic game core for World of ClaudeCraft (Rust)"
 
 [dependencies]
 woc-protocol = { workspace = true }
-
-[dev-dependencies]
+woc-content = { workspace = true }

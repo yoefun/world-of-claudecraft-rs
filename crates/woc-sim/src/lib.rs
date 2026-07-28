@@ -1,15 +1,23 @@
-//! Deterministic World of ClaudeCraft sim (combat-slice).
+//! Deterministic World of ClaudeCraft sim (framework slice).
 //!
 //! Host-agnostic: no Bevy, no networking, no wall clock.
 
 pub mod combat;
+pub mod context;
 pub mod entity;
+pub mod host;
+pub mod interaction;
+pub mod inventory;
 pub mod mob;
 pub mod player_motion;
+pub mod quests;
 pub mod rng;
 pub mod sim;
+pub mod stats;
 pub mod types;
 pub mod world;
 
+pub use entity::QuestState;
 pub use sim::Sim;
+pub use woc_content::PlayerClass;
 pub use world::{terrain_height, WORLD_HALF, WORLD_SEED};

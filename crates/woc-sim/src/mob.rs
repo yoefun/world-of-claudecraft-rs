@@ -2,7 +2,7 @@
 
 use crate::combat::dist2d;
 use crate::entity::Entity;
-use crate::types::{AGGRO_RANGE, LEASH_RANGE, MELEE_RANGE, WOLF_SPEED};
+use crate::types::{AGGRO_RANGE, LEASH_RANGE, MELEE_RANGE, MOB_SPEED};
 use crate::world::terrain_height;
 use crate::world::WORLD_SEED;
 use woc_protocol::{EntityId, EntityKind, DT};
@@ -41,7 +41,7 @@ pub fn update_mob_ai(mob_id: EntityId, player_id: EntityId, entities: &mut [Enti
     let (px, pz) = (entities[pi].x, entities[pi].z);
     if entities[mi].target == Some(player_id) {
         if d_player > MELEE_RANGE * 0.85 {
-            move_toward(&mut entities[mi], px, pz, WOLF_SPEED);
+            move_toward(&mut entities[mi], px, pz, MOB_SPEED);
         }
     } else {
         move_toward_home(&mut entities[mi]);
@@ -74,5 +74,5 @@ fn move_toward_home(mob: &mut Entity) {
         mob.y = terrain_height(mob.x, mob.z, WORLD_SEED);
         return;
     }
-    move_toward(mob, mob.home_x, mob.home_z, WOLF_SPEED * 0.85);
+    move_toward(mob, mob.home_x, mob.home_z, MOB_SPEED * 0.85);
 }
