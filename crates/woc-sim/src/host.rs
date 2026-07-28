@@ -94,14 +94,22 @@ impl WorldHost for Sim {
                 );
             }
             InteractAction::MarketBuy { listing_id } => {
-                let _ =
-                    self.market
-                        .buy(&mut self.entities, player_id, listing_id, &mut self.events);
+                let _ = self.market.buy(
+                    &mut self.entities,
+                    &mut self.mail,
+                    player_id,
+                    listing_id,
+                    &mut self.events,
+                );
             }
             InteractAction::MarketCancel { listing_id } => {
-                let _ =
-                    self.market
-                        .cancel(&mut self.entities, player_id, listing_id, &mut self.events);
+                let _ = self.market.cancel(
+                    &mut self.entities,
+                    &mut self.mail,
+                    player_id,
+                    listing_id,
+                    &mut self.events,
+                );
             }
             InteractAction::DuelChallenge => {
                 let _ = challenge_duel(&mut self.pvp, &self.entities, player_id, target_id);
@@ -117,7 +125,14 @@ impl WorldHost for Sim {
                 let _ = enter_portal(&mut self.entities, player_id, &zone_id, &mut self.events);
             }
             InteractAction::EnterDungeon { dungeon_id } => {
-                let _ = enter_dungeon(&mut self.entities, player_id, &dungeon_id, &mut self.events);
+                let _ = enter_dungeon(
+                    &mut self.entities,
+                    &mut self.next_id,
+                    &self.parties,
+                    player_id,
+                    &dungeon_id,
+                    &mut self.events,
+                );
             }
             InteractAction::EnterDelve { delve_id } => {
                 if enter_delve(&mut self.entities, player_id, &delve_id, &mut self.events) {

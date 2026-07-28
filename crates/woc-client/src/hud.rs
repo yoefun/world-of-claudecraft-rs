@@ -117,19 +117,12 @@ fn vendor_cache_key(v: &VendorSnapshot) -> String {
 }
 
 pub(crate) fn first_junk_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String)> {
-    snap.inventory
-        .iter()
-        .enumerate()
-        .find(|(_, stack)| {
-            item(&stack.item_id)
-                .map(|def| def.kind == ItemKind::Junk)
-                .unwrap_or(false)
-        })
-        .and_then(|(slot, stack)| {
-            u8::try_from(slot)
-                .ok()
-                .map(|slot| (slot, stack.count, stack.item_id.clone()))
-        })
+    snap.inventory.iter().find_map(|stack| {
+        item(&stack.item_id)
+            .map(|def| def.kind == ItemKind::Junk)
+            .unwrap_or(false)
+            .then(|| (stack.slot, stack.count, stack.item_id.clone()))
+    })
 }
 
 fn zone_name(snap: &TickSnapshot) -> &str {
@@ -717,10 +710,12 @@ mod tests {
             skill: 18,
         });
         snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
             item_id: "wolf_fang".into(),
             count: 3,
         });
         snap.bank.push(InvSlotSnapshot {
+            slot: 0,
             item_id: "silverleaf".into(),
             count: 4,
         });

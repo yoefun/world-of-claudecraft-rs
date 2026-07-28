@@ -1,4 +1,4 @@
-//! World boss and deed stubs for completion parity.
+//! World boss and deed completion (one-shot honor awards).
 
 use crate::entity::Entity;
 use woc_protocol::{EntityId, SimEvent};
@@ -18,10 +18,15 @@ pub static DEEDS: &[DeedDef] = &[DeedDef {
 }];
 
 /// Credit a deed when a matching world boss template is killed.
+///
+/// Returns true only the first time a player completes the deed.
 pub fn on_boss_killed(player: &mut Entity, template_id: &str, events: &mut Vec<SimEvent>) -> bool {
     let Some(deed) = DEEDS.iter().find(|d| d.boss_template == template_id) else {
         return false;
     };
+    if !player.completed_deeds.insert(deed.id.to_string()) {
+        return false;
+    }
     events.push(SimEvent::Toast {
         message: format!("Deed complete: {}", deed.name),
     });
@@ -45,10 +50,14 @@ mod tests {
     use woc_content::PlayerClass;
 
     #[test]
-    fn deed_credits_honor() {
+    fn deed_credits_honor_once() {
         let mut player = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
         let mut events = Vec::new();
         assert!(on_boss_killed(&mut player, "mire_terror", &mut events));
+        assert_eq!(player.honor, 25);
+        assert!(player.completed_deeds.contains("eastfen_mire_terror"));
+        events.clear();
+        assert!(!on_boss_killed(&mut player, "mire_terror", &mut events));
         assert_eq!(player.honor, 25);
     }
 }

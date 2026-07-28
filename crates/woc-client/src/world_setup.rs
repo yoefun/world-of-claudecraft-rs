@@ -62,6 +62,7 @@ fn setup_world(
     name: Res<CharName>,
     class: Res<SelectedClass>,
     play_mode: Res<PlayMode>,
+    session: Res<crate::AuthSession>,
 ) {
     let host = match *play_mode {
         PlayMode::Offline => {
@@ -84,10 +85,9 @@ fn setup_world(
             }
         }
         PlayMode::Online => {
-            let (to_net, from_net, _handle) = online::spawn_online_session(
-                name.0.trim().to_string(),
-                class.0.as_str().to_string(),
-            );
+            let token = session.token.clone().unwrap_or_default();
+            let character_id = session.selected.unwrap_or_else(uuid::Uuid::nil);
+            let (to_net, from_net, _handle) = online::spawn_online_session(token, character_id);
             GameHost {
                 play_mode: PlayMode::Online,
                 sim: None,

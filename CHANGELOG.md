@@ -8,17 +8,21 @@
 - Golden harness `crates/woc-sim/tests/data/terrain_golden.json` (noise + height/steepness; ε≈1e-3 vs JS).
 - `WorldSpatial` content layer + absolute strip coordinates for Eastbrook / Eastfen / Mirefen / Thornpeak.
 - Chunked Bevy terrain/water sampling via the same `terrain_height` / `ground_height` functions.
-- Talents: class trees, spend/respec, damage_pct multipliers on combat.
-- Party loot rules: FFA + Need/Greed rolls via sim RNG.
+- Talents: class trees (3/class, tiers 1–2), spend/respec; damage/hp/armor/resource effects.
+- Party loot rules: FFA + Need/Greed rolls via sim RNG; kill credit share within 40 yd.
 - Economy: personal bank deposit/withdraw; mail send/collect; auction list/buy/cancel/expire.
+- Durable realm economy (`realm_economy` / in-memory): mail + auction survive restart; offline AH settlement via system mail.
+- Online persist loop: authenticated WS Hello (`token` + `character_id`), inject CharacterSave on enter, autosave on disconnect + periodic economy checkpoint.
 - Professions sim: train herbalism/alchemy → gather nodes → craft recipes.
-- Zone transition Eastbrook ↔ Eastfen ↔ Mirefen without wiping player progression.
-- Dungeon instance shell (`eastbrook_crypt`) with boss spawn + leave.
+- Zone transition Eastbrook ↔ Eastfen ↔ Mirefen ↔ Thornpeak without wiping player progression.
+- Thornpeak zone3 NPCs/mobs/quests; deeper talent trees.
+- Dungeon instances with unique keys (party-shared); overworld actors preserved.
 - Delve loop (`eastbrook_hollow`): 3 rooms → advance → reward.
 - Light PvP: duel challenge/accept, open-world PvP flag, honor currency.
-- World boss deed (`mire_terror` / eastfen_mire_terror) granting honor on kill.
-- Protocol additive interact/events/snapshot fields for the above (rev still 2).
-- Persist R4 character fields: zone, talents, bank, honor, professions (backward-compatible JSON).
+- World boss deed (`mire_terror` / eastfen_mire_terror): one-shot honor, persisted `completed_deeds`.
+- Consumable HoT linger after rations/salves.
+- Protocol rev 3: authenticated Hello fields; absolute inventory/bank `slot` indices.
+- Persist R4+ character fields: zone, talents, bank, honor, professions, deeds (backward-compatible JSON).
 - Bevy client panels: talents (N), bank (K), mail (M), market (U).
 
 ### Changed
@@ -29,6 +33,7 @@
 - Parity target `online-alive` → `completion`.
 - Rewrite version `0.3.0` → `1.0.0-pre`.
 - Mirefen filled from placeholder to open-world content.
+- Online WS snapshots are per-player (no longer broadcast primary-player view to all sockets).
 
 ## 0.3.0 — 2026-07-28
 

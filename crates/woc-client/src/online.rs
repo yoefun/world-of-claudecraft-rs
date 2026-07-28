@@ -48,15 +48,20 @@ pub type InboundRx = Receiver<WsServerMsg>;
 
 /// Spawn the WebSocket IO thread and return channels for Bevy.
 ///
-/// Immediately queues a `Hello` with the given character name/class.
+/// Immediately queues an authenticated `Hello` for the selected character.
 pub fn spawn_online_session(
-    name: String,
-    class_id: String,
+    token: String,
+    character_id: uuid::Uuid,
 ) -> (OutboundTx, InboundRx, thread::JoinHandle<()>) {
     let (to_net_tx, to_net_rx) = mpsc::channel::<WsClientMsg>();
     let (from_net_tx, from_net_rx) = mpsc::channel::<WsServerMsg>();
 
-    let hello = WsClientMsg::Hello { name, class_id };
+    let hello = WsClientMsg::Hello {
+        name: String::new(),
+        class_id: String::new(),
+        token: Some(token),
+        character_id: Some(character_id.to_string()),
+    };
     let _ = to_net_tx.send(hello);
 
     let handle = thread::Builder::new()
