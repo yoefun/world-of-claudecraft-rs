@@ -1,4 +1,4 @@
-//! Zone 2 (Eastfen Marsh) NPC definitions.
+//! Zone 2 (Eastfen Marsh and Mirefen) NPC definitions.
 
 use crate::npcs::{NpcDef, VendorOffer};
 
@@ -39,5 +39,34 @@ pub static ZONE2_NPCS: &[NpcDef] = &[
         is_quest_giver: true,
         is_vendor: false,
         vendor_stock: &[],
+    },
+    NpcDef {
+        id: "keeper_orla",
+        name: "Keeper Orla",
+        greeting: "Keep to the lantern posts. Mirefen swallows careless travelers.",
+        is_quest_giver: true,
+        is_vendor: false,
+        vendor_stock: &[],
+    },
+    NpcDef {
+        id: "ferryman_noll",
+        name: "Ferryman Noll",
+        greeting: "The skiff still floats, which is more than I can say for the old road.",
+        is_quest_giver: true,
+        is_vendor: true,
+        vendor_stock: &[
+            VendorOffer {
+                item_id: "deepfen_draught",
+                count: 20,
+            },
+            VendorOffer {
+                item_id: "travelers_ration",
+                count: 20,
+            },
+            VendorOffer {
+                item_id: "spring_water",
+                count: 40,
+            },
+        ],
     },
 ];
