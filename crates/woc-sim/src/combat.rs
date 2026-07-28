@@ -64,6 +64,7 @@ pub fn deal_damage(
 }
 
 pub struct KillReward {
+    pub killer: EntityId,
     pub victim: EntityId,
     pub template_id: Option<String>,
     pub x: f32,
@@ -74,10 +75,11 @@ pub struct KillReward {
 pub fn collect_pending_mob_kills(events: &[SimEvent], entities: &[Entity]) -> Vec<KillReward> {
     let mut out = Vec::new();
     for ev in events {
-        if let SimEvent::Kill { victim, .. } = ev {
+        if let SimEvent::Kill { killer, victim, .. } = ev {
             if let Some(e) = entities.iter().find(|e| e.id == *victim) {
                 if e.kind == EntityKind::Mob {
                     out.push(KillReward {
+                        killer: *killer,
                         victim: *victim,
                         template_id: e.template_id.clone(),
                         x: e.x,
@@ -91,14 +93,14 @@ pub fn collect_pending_mob_kills(events: &[SimEvent], entities: &[Entity]) -> Ve
     out
 }
 
-pub fn grant_xp(player: &mut Entity, xp: &mut u32, amount: u32, events: &mut Vec<SimEvent>) {
-    *xp = xp.saturating_add(amount);
+pub fn grant_xp(player: &mut Entity, amount: u32, events: &mut Vec<SimEvent>) {
+    player.xp = player.xp.saturating_add(amount);
     loop {
         let need = xp_to_next(player.level);
-        if *xp < need {
+        if player.xp < need {
             break;
         }
-        *xp -= need;
+        player.xp -= need;
         player.level += 1;
         if let Some(class) = player.class_id {
             let def = class_def(class);
@@ -142,12 +144,7 @@ pub fn spawn_mob_loot(
     id
 }
 
-pub fn try_pickup_loot(
-    player_id: EntityId,
-    entities: &mut [Entity],
-    copper: &mut u32,
-    events: &mut Vec<SimEvent>,
-) {
+pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimEvent>) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
         return;
     };
@@ -178,7 +175,7 @@ pub fn try_pickup_loot(
             crate::quests::on_inventory_changed(&mut entities[pi], events);
         }
         entities[li].alive = false;
-        *copper = copper.saturating_add(c);
+        entities[pi].copper = entities[pi].copper.saturating_add(c);
         events.push(SimEvent::Loot {
             player: player_id,
             copper: c,

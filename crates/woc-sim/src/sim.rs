@@ -1,9 +1,22 @@
 //! Sim coordinator: tick loop, intents, snapshots.
+//!
+//! # Tick phases (locked order — do not reorder)
+//!
+//! See [`crate::context::TICK_PHASES`]. Actual `tick` execution:
+//! 1. `apply_intents_motion` — per-player intent + motion
+//! 2. `player_combat` — per-player combat
+//! 3. `mob_ai_combat` — mob AI (nearest living player) + mob combat
+//! 4. `kill_rewards` — XP/quest credit to killer + loot spawn
+//! 5. `loot_pickup` — proximity pickup for all players
+//! 6. `build_snapshot` — snapshot for primary/`snapshot_for` viewer
+
+use std::collections::HashMap;
 
 use crate::combat::{
     collect_pending_mob_kills, grant_xp, spawn_mob_loot, try_pickup_loot, update_mob_combat,
     update_player_combat,
 };
+use crate::context::SimContext;
 use crate::entity::{
     create_mob_from_template, create_npc_from_template, create_player, Entity, QuestState,
 };
@@ -20,37 +33,29 @@ use woc_protocol::{
     PlayerIntent, PlayerProgress, QuestLogEntry, SimEvent, TickSnapshot, PROTOCOL_REV,
 };
 
+/// Max concurrent player entities on one Eastbrook realm (dev scaffold).
+pub const MAX_REALM_PLAYERS: usize = 8;
+
 pub struct Sim {
     pub tick: u64,
     pub seed: u32,
     pub rng: Rng,
     pub entities: Vec<Entity>,
     pub next_id: EntityId,
+    /// Primary / local player id (offline host). `0` when the realm has no players yet.
     pub player_id: EntityId,
-    pub player_xp: u32,
-    pub copper: u32,
     pub events: Vec<SimEvent>,
-    pub pending_intent: PlayerIntent,
-    pub class: PlayerClass,
+    /// Per-player intents for the next tick.
+    pub intents: HashMap<EntityId, PlayerIntent>,
 }
 
 impl Sim {
-    /// Start Eastbrook from content tables.
-    pub fn new_eastbrook(player_name: &str, class: PlayerClass) -> Self {
+    /// Eastbrook NPCs + mobs only (no player). Used by the online sticky realm.
+    pub fn new_empty_eastbrook() -> Self {
         let seed = WORLD_SEED;
         let mut rng = Rng::new(seed);
         let mut next_id = 1u32;
         let mut entities = Vec::new();
-
-        let player_id = next_id;
-        next_id += 1;
-        entities.push(create_player(
-            player_id,
-            player_name,
-            class,
-            EASTBROOK.player_spawn_x,
-            EASTBROOK.player_spawn_z,
-        ));
 
         for spot in EASTBROOK.npcs {
             let id = next_id;
@@ -79,18 +84,73 @@ impl Sim {
             rng,
             entities,
             next_id,
-            player_id,
-            player_xp: 0,
-            copper: 0,
+            player_id: 0,
             events: Vec::new(),
-            pending_intent: PlayerIntent::default(),
-            class,
+            intents: HashMap::new(),
         }
+    }
+
+    /// Start Eastbrook from content tables with one local player.
+    pub fn new_eastbrook(player_name: &str, class: PlayerClass) -> Self {
+        let mut sim = Self::new_empty_eastbrook();
+        let _ = sim.spawn_player(player_name, class);
+        sim
     }
 
     /// Backward-compatible Warrior Eastbrook spawn.
     pub fn new_combat_slice(player_name: &str) -> Self {
         Self::new_eastbrook(player_name, PlayerClass::Warrior)
+    }
+
+    /// Spawn a player into the existing realm without resetting NPCs/mobs.
+    pub fn spawn_player(&mut self, name: &str, class: PlayerClass) -> Option<EntityId> {
+        let players = self
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Player)
+            .count();
+        if players >= MAX_REALM_PLAYERS {
+            return None;
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        let offset = players as f32 * 1.5;
+        let mut player = create_player(
+            id,
+            name,
+            class,
+            EASTBROOK.player_spawn_x + offset,
+            EASTBROOK.player_spawn_z,
+        );
+        player.y = Entity::ground_at(player.x, player.z);
+        self.entities.push(player);
+        self.intents.insert(id, PlayerIntent::default());
+        if self.player_id == 0 {
+            self.player_id = id;
+        }
+        Some(id)
+    }
+
+    /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
+    pub fn despawn_player(&mut self, player_id: EntityId) {
+        self.entities
+            .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
+        self.intents.remove(&player_id);
+        if self.player_id == player_id {
+            self.player_id = self
+                .entities
+                .iter()
+                .find(|e| e.kind == EntityKind::Player)
+                .map(|e| e.id)
+                .unwrap_or(0);
+        }
+    }
+
+    pub fn player_count(&self) -> usize {
+        self.entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Player)
+            .count()
     }
 
     pub fn player(&self) -> Option<&Entity> {
@@ -100,6 +160,16 @@ impl Sim {
     pub fn player_mut(&mut self) -> Option<&mut Entity> {
         let id = self.player_id;
         self.entities.iter_mut().find(|e| e.id == id)
+    }
+
+    /// Convenience: primary player copper (0 if none).
+    pub fn copper(&self) -> u32 {
+        self.player().map(|p| p.copper).unwrap_or(0)
+    }
+
+    /// Convenience: primary player XP (0 if none).
+    pub fn player_xp(&self) -> u32 {
+        self.player().map(|p| p.xp).unwrap_or(0)
     }
 
     pub fn interact(&mut self, target_id: EntityId, action: InteractAction) {
@@ -120,43 +190,71 @@ impl Sim {
         Ok(())
     }
 
+    /// Build a context bag for leaf modules (emit / lookup / mutate).
+    pub fn context(&mut self) -> SimContext<'_> {
+        SimContext {
+            events: &mut self.events,
+            entities: &mut self.entities,
+            rng: &mut self.rng,
+            next_id: &mut self.next_id,
+        }
+    }
+
+    /// Offline / single-intent tick: applies `intent` to the primary player.
     pub fn tick(&mut self, intent: PlayerIntent) -> (TickSnapshot, Vec<SimEvent>) {
+        if self.player_id != 0 {
+            self.intents.insert(self.player_id, intent);
+        }
+        self.tick_all()
+    }
+
+    /// Multi-player tick using the intent map.
+    pub fn tick_all(&mut self) -> (TickSnapshot, Vec<SimEvent>) {
         self.events.clear();
-        self.pending_intent = intent;
         self.tick += 1;
 
-        // Phase 1–2: apply intent + motion
-        if let Some(pi) = self.entities.iter().position(|e| e.id == self.player_id) {
-            if self.entities[pi].alive {
-                step_player_motion(
-                    &mut self.entities[pi],
-                    intent.move_x,
-                    intent.move_z,
-                    intent.facing,
-                );
-                if let Some(tid) = intent.target_id {
-                    self.entities[pi].target = Some(tid);
-                }
-                if intent.attack {
-                    self.entities[pi].auto_attack = true;
-                    if self.entities[pi].target.is_none() {
-                        if let Some(tid) = nearest_mob(&self.entities, &self.entities[pi], 30.0) {
-                            self.entities[pi].target = Some(tid);
-                        }
+        let player_ids: Vec<EntityId> = self
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Player)
+            .map(|e| e.id)
+            .collect();
+
+        // Phase 1: apply intents + motion
+        for &pid in &player_ids {
+            let intent = self.intents.get(&pid).copied().unwrap_or_default();
+            let Some(pi) = self.entities.iter().position(|e| e.id == pid) else {
+                continue;
+            };
+            if !self.entities[pi].alive {
+                continue;
+            }
+            step_player_motion(
+                &mut self.entities[pi],
+                intent.move_x,
+                intent.move_z,
+                intent.facing,
+            );
+            if let Some(tid) = intent.target_id {
+                self.entities[pi].target = Some(tid);
+            }
+            if intent.attack {
+                self.entities[pi].auto_attack = true;
+                if self.entities[pi].target.is_none() {
+                    if let Some(tid) = nearest_mob(&self.entities, &self.entities[pi], 30.0) {
+                        self.entities[pi].target = Some(tid);
                     }
                 }
             }
         }
 
-        // Phase 3: player combat
-        update_player_combat(
-            self.player_id,
-            &mut self.entities,
-            intent.ability,
-            &mut self.events,
-        );
+        // Phase 2: player combat
+        for &pid in &player_ids {
+            let ability = self.intents.get(&pid).and_then(|i| i.ability);
+            update_player_combat(pid, &mut self.entities, ability, &mut self.events);
+        }
 
-        // Phase 4: mob AI + combat
+        // Phase 3: mob AI + combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
             .entities
             .iter()
@@ -164,21 +262,40 @@ impl Sim {
             .map(|e| e.id)
             .collect();
         for mid in &mob_ids {
-            update_mob_ai(*mid, self.player_id, &mut self.entities);
+            let focus = {
+                let Some(mob) = self.entities.iter().find(|e| e.id == *mid) else {
+                    continue;
+                };
+                nearest_alive_player(&self.entities, mob, 40.0)
+            };
+            if let Some(pid) = focus {
+                update_mob_ai(*mid, pid, &mut self.entities);
+            }
         }
         for mid in &mob_ids {
-            update_mob_combat(*mid, self.player_id, &mut self.entities, &mut self.events);
+            let focus = self
+                .entities
+                .iter()
+                .find(|e| e.id == *mid)
+                .and_then(|m| m.target)
+                .or_else(|| {
+                    let mob = self.entities.iter().find(|e| e.id == *mid)?;
+                    nearest_alive_player(&self.entities, mob, 40.0)
+                });
+            if let Some(pid) = focus {
+                update_mob_combat(*mid, pid, &mut self.entities, &mut self.events);
+            }
         }
 
-        // Rewards for kills
+        // Phase 4: kill rewards → killer
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);
         for reward in rewards {
-            if let Some(pi) = self.entities.iter().position(|e| e.id == self.player_id) {
-                let mut xp = self.player_xp;
-                grant_xp(&mut self.entities[pi], &mut xp, reward.xp, &mut self.events);
-                self.player_xp = xp;
-                if let Some(ref tid) = reward.template_id {
-                    on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
+            if let Some(pi) = self.entities.iter().position(|e| e.id == reward.killer) {
+                if self.entities[pi].kind == EntityKind::Player {
+                    grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
+                    if let Some(ref tid) = reward.template_id {
+                        on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
+                    }
                 }
             }
             spawn_mob_loot(
@@ -191,25 +308,28 @@ impl Sim {
             );
         }
 
-        // Phase 6: loot pickup
-        {
-            let mut copper = self.copper;
-            try_pickup_loot(
-                self.player_id,
-                &mut self.entities,
-                &mut copper,
-                &mut self.events,
-            );
-            self.copper = copper;
+        // Phase 5: loot pickup for all players
+        for &pid in &player_ids {
+            try_pickup_loot(pid, &mut self.entities, &mut self.events);
         }
 
-        let snapshot = self.snapshot();
+        // Phase 6: snapshot
+        let viewer = if self.player_id != 0 {
+            self.player_id
+        } else {
+            player_ids.first().copied().unwrap_or(0)
+        };
+        let snapshot = self.snapshot_for_player(viewer);
         let events = self.events.clone();
         (snapshot, events)
     }
 
     pub fn snapshot(&self) -> TickSnapshot {
-        let player = self.player();
+        self.snapshot_for_player(self.player_id)
+    }
+
+    pub fn snapshot_for_player(&self, player_id: EntityId) -> TickSnapshot {
+        let player = self.entities.iter().find(|e| e.id == player_id);
         let level = player.map(|p| p.level).unwrap_or(1);
         let target_id = player.and_then(|p| p.target);
         let ability_cd = player.map(|p| p.ability_cd).unwrap_or(0.0);
@@ -223,14 +343,20 @@ impl Sim {
             .and_then(ability)
             .map(|a| a.cooldown)
             .unwrap_or(3.0);
-        let class_id = self.class.as_str().to_string();
-        let resource_type = class_def(self.class).resource_type;
-        let resource_type = match resource_type {
-            woc_content::ResourceType::Rage => "rage",
-            woc_content::ResourceType::Mana => "mana",
-            woc_content::ResourceType::Energy => "energy",
-        }
-        .to_string();
+        let class_id = player
+            .and_then(|p| p.class_id)
+            .map(|c| c.as_str().to_string())
+            .unwrap_or_default();
+        let resource_type = player
+            .and_then(|p| p.class_id)
+            .map(|c| class_def(c).resource_type)
+            .map(|rt| match rt {
+                woc_content::ResourceType::Rage => "rage",
+                woc_content::ResourceType::Mana => "mana",
+                woc_content::ResourceType::Energy => "energy",
+            })
+            .unwrap_or("")
+            .to_string();
 
         let inventory = player
             .map(|p| {
@@ -298,13 +424,13 @@ impl Sim {
 
         TickSnapshot {
             tick: self.tick,
-            player_id: self.player_id,
+            player_id,
             entities,
             progress: PlayerProgress {
-                xp: self.player_xp,
+                xp: player.map(|p| p.xp).unwrap_or(0),
                 xp_to_level: xp_to_next(level),
                 level,
-                copper: self.copper,
+                copper: player.map(|p| p.copper).unwrap_or(0),
                 bag_item: None,
                 class_id,
                 resource_type,
@@ -345,10 +471,54 @@ fn nearest_mob(entities: &[Entity], from: &Entity, max_range: f32) -> Option<Ent
     best.map(|(id, _)| id)
 }
 
+fn nearest_alive_player(entities: &[Entity], from: &Entity, max_range: f32) -> Option<EntityId> {
+    let mut best: Option<(EntityId, f32)> = None;
+    for e in entities {
+        if e.kind != EntityKind::Player || !e.alive {
+            continue;
+        }
+        let dx = e.x - from.x;
+        let dz = e.z - from.z;
+        let d = (dx * dx + dz * dz).sqrt();
+        if d > max_range {
+            continue;
+        }
+        if best.map(|(_, bd)| d < bd).unwrap_or(true) {
+            best = Some((e.id, d));
+        }
+    }
+    best.map(|(id, _)| id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
+
+    #[test]
+    fn tick_phase_order_fingerprint_locked() {
+        assert_eq!(TICK_PHASES.len(), 6);
+        assert_eq!(TICK_PHASES[0], "apply_intents_motion");
+        assert_eq!(TICK_PHASES[5], "build_snapshot");
+        // Locked fingerprint — update deliberately if phases change.
+        assert_eq!(tick_phase_fingerprint(), 1724209595281213949u64);
+    }
+
+    #[test]
+    fn sim_context_emit_and_lookup() {
+        let mut sim = Sim::new_eastbrook("Ctx", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        {
+            let mut ctx = sim.context();
+            assert!(ctx.entity(pid).is_some());
+            ctx.emit(SimEvent::Toast {
+                message: "hi".into(),
+            });
+            assert_eq!(ctx.player_ids().len(), 1);
+        }
+        assert_eq!(sim.events.len(), 1);
+    }
 
     #[test]
     fn eastbrook_spawns_npcs_and_mobs_from_content() {
@@ -368,6 +538,46 @@ mod tests {
     }
 
     #[test]
+    fn sticky_spawn_does_not_reset_npcs() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let npc_before = sim
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Npc)
+            .count();
+        let mob_before = sim
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Mob)
+            .count();
+        let a = sim.spawn_player("A", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("B", PlayerClass::Mage).unwrap();
+        assert_ne!(a, b);
+        assert_eq!(sim.player_count(), 2);
+        let npc_after = sim
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Npc)
+            .count();
+        let mob_after = sim
+            .entities
+            .iter()
+            .filter(|e| e.kind == EntityKind::Mob)
+            .count();
+        assert_eq!(npc_before, npc_after);
+        assert_eq!(mob_before, mob_after);
+        sim.despawn_player(a);
+        assert_eq!(sim.player_count(), 1);
+        assert_eq!(
+            sim.entities
+                .iter()
+                .filter(|e| e.kind == EntityKind::Npc)
+                .count(),
+            npc_before
+        );
+    }
+
+    #[test]
     fn all_nine_classes_spawn() {
         for class in PlayerClass::ALL {
             let sim = Sim::new_eastbrook("C", class);
@@ -382,7 +592,7 @@ mod tests {
     fn loot_goes_into_backpack() {
         let mut sim = Sim::new_eastbrook("Looter", PlayerClass::Warrior);
         assert!(sim.grant_item(sim.player_id, "wolf_fang", 1).is_ok());
-        let snap = sim.snapshot_for(sim.player_id);
+        let snap = sim.snapshot_for_player(sim.player_id);
         assert!(snap
             .inventory
             .iter()
@@ -405,7 +615,6 @@ mod tests {
             },
         );
 
-        // Kill three young wolves by dealing lethal damage.
         let wolf_ids: Vec<EntityId> = sim
             .entities
             .iter()
@@ -453,7 +662,6 @@ mod tests {
             .any(|q| q.quest_id == "wolves_at_the_gate" && q.state == QuestState::Ready);
         assert!(ready, "quest should be ready after 3 kills");
 
-        // Return to quest giver for turn-in.
         let (gx, gz) = {
             let g = sim.entities.iter().find(|e| e.id == giver).unwrap();
             (g.x, g.z)
@@ -470,7 +678,7 @@ mod tests {
                 quest_id: "wolves_at_the_gate".into(),
             },
         );
-        let log = sim.snapshot_for(sim.player_id).quest_log;
+        let log = WorldHost::snapshot_for(&sim, sim.player_id).quest_log;
         assert!(log
             .iter()
             .any(|q| q.quest_id == "wolves_at_the_gate" && q.state == "completed"));
@@ -479,14 +687,13 @@ mod tests {
     #[test]
     fn vendor_buy_spend_copper() {
         let mut sim = Sim::new_eastbrook("V", PlayerClass::Warrior);
-        sim.copper = 100;
+        sim.player_mut().unwrap().copper = 100;
         let vendor = sim
             .entities
             .iter()
             .find(|e| e.template_id.as_deref() == Some("trader_wilkes"))
             .unwrap()
             .id;
-        // Move player next to vendor.
         let (vx, vz) = {
             let v = sim.entities.iter().find(|e| e.id == vendor).unwrap();
             (v.x, v.z)
@@ -504,9 +711,9 @@ mod tests {
                 count: 1,
             },
         );
-        assert!(sim.copper < 100);
+        assert!(sim.copper() < 100);
         assert!(sim
-            .snapshot_for(sim.player_id)
+            .snapshot_for_player(sim.player_id)
             .inventory
             .iter()
             .any(|s| s.item_id == "travelers_ration"));
@@ -567,17 +774,17 @@ mod tests {
                     saw_loot = true;
                 }
             }
-            if saw_kill && (sim.player_xp > 0 || sim.player().map(|p| p.level).unwrap_or(1) > 1) {
+            if saw_kill && (sim.player_xp() > 0 || sim.player().map(|p| p.level).unwrap_or(1) > 1) {
                 break;
             }
         }
         assert!(saw_kill, "expected a wolf kill within 400 ticks");
         assert!(
-            sim.player_xp > 0 || sim.player().map(|p| p.level).unwrap_or(1) > 1,
+            sim.player_xp() > 0 || sim.player().map(|p| p.level).unwrap_or(1) > 1,
             "expected XP or level-up after kill"
         );
         assert!(
-            saw_loot || sim.copper > 0 || !sim.snapshot().inventory.is_empty(),
+            saw_loot || sim.copper() > 0 || !sim.snapshot().inventory.is_empty(),
             "expected loot drop or auto-pickup"
         );
     }

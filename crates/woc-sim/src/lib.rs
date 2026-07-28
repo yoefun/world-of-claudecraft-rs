@@ -18,6 +18,6 @@ pub mod types;
 pub mod world;
 
 pub use entity::QuestState;
-pub use sim::Sim;
+pub use sim::{Sim, MAX_REALM_PLAYERS};
 pub use woc_content::PlayerClass;
 pub use world::{terrain_height, WORLD_HALF, WORLD_SEED};

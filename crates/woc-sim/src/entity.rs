@@ -66,6 +66,10 @@ pub struct Entity {
     pub equipment: Equipment,
     pub quest_log: Vec<QuestProgress>,
     pub open_vendor_npc: Option<EntityId>,
+    /// Player experience toward next level (mobs/NPCs unused).
+    pub xp: u32,
+    /// Player copper currency (mobs/NPCs unused).
+    pub copper: u32,
 }
 
 impl Entity {
@@ -115,6 +119,8 @@ impl Entity {
             equipment: Equipment::default(),
             quest_log: Vec::new(),
             open_vendor_npc: None,
+            xp: 0,
+            copper: 0,
         }
     }
 }

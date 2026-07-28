@@ -15,7 +15,7 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | `woc-content` Eastbrook tables | done | classes/items/mobs/npcs/quests/zone1 |
 | Deterministic tick (20 Hz) | done | |
 | Seeded RNG (mulberry32) | done | |
-| SimContext seam | partial | unused by leaves — Wave 0 |
+| SimContext seam | done | emit/lookup/mutate + locked phase fingerprint — Wave 0A |
 | WorldHost trait | done | offline Bevy + server |
 | Nine classes + starter kits | done | one primary ability each |
 | Inventory backpack + stacking | done | 16-slot bag |
@@ -25,7 +25,8 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Vendor buy/sell | done | Trader Wilkes |
 | Eastbrook multi-camp spawn | done | wolves + boars |
 | Client UI windows | partial | bags/quest toggles — Wave 0 |
-| `woc-server` WebSocket sim host | partial | in-memory; Hello resets realm — Wave 0 |
+| `woc-server` WebSocket sim host | done | sticky realm; multi-player spawn/despawn — Wave 0A |
+| Multi-player Entity economy | done | xp/copper on Entity; intent map — Wave 0A |
 | Client online mode | planned | Wave 1 |
 | Heightfield terrain | partial | not byte-identical |
 | Player motion | partial | Wave 1 colliders |
@@ -35,7 +36,7 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 
 | Subsystem | Target rewrite | Status |
 | --- | --- | --- |
-| Multi-player Entity + sticky realm | 0.2.x / 0.3 | planned |
+| Multi-player Entity + sticky realm | 0.2.x / 0.3 | done (0A) |
 | Death / spirit / graveyard | 0.3 | planned |
 | Combat core (GCD/cast/aura/threat) | 0.3 | planned |
 | Deeper bags / consumables | 0.3 | planned |
