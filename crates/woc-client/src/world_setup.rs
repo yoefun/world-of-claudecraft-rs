@@ -11,9 +11,10 @@ use woc_version::footer;
 
 use crate::char_create::{CharName, SelectedClass};
 use crate::hud::{
-    HudActionBarText, HudBagText, HudCastFill, HudCastPanel, HudCastText, HudCharPanel,
-    HudCharText, HudHpText, HudNetText, HudQuestText, HudRoot, HudTargetText, HudToastText,
-    HudVendorOffers, HudVendorPanel, HudVendorTitle, HudXpText,
+    ChromePanelKind, HudActionBarText, HudBagText, HudCastFill, HudCastPanel, HudCastText,
+    HudCharPanel, HudCharText, HudChromePanel, HudChromeText, HudHpText, HudNetText, HudQuestText,
+    HudRoot, HudTargetText, HudToastText, HudVendorOffers, HudVendorPanel, HudVendorTitle,
+    HudXpText,
 };
 use crate::online;
 use crate::{AppState, GameHost, NetStatus, PlayMode};
@@ -90,10 +91,7 @@ fn setup_world(
                 snapshot: TickSnapshot::default(),
                 accumulator: 0.0,
                 pending_intent: PlayerIntent::default(),
-                recent_toasts: vec![(
-                    format!("Connecting to {}…", online::ONLINE_WS_URL),
-                    4.0,
-                )],
+                recent_toasts: vec![(format!("Connecting to {}…", online::ONLINE_WS_URL), 4.0)],
                 look_yaw: 0.0,
                 look_pitch: -0.35,
                 cursor_grabbed: false,
@@ -204,7 +202,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · RMB look · Esc",
+                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · N talents · K bank · M mail · U market · RMB look · Esc",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
@@ -234,6 +232,95 @@ fn setup_world(
                     TextColor(Color::srgb(0.9, 0.92, 0.85)),
                 ));
             });
+
+            // Snapshot-backed progression / economy panels (N/K/M/U).
+            root.spawn((Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(12.0),
+                right: Val::Px(12.0),
+                top: Val::Px(200.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(12.0),
+                ..default()
+            },))
+                .with_children(|row| {
+                    row.spawn((
+                        HudChromePanel(ChromePanelKind::Talents),
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(300.0),
+                            padding: UiRect::all(Val::Px(12.0)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.08, 0.06, 0.12, 0.92)),
+                    ))
+                    .with_children(|panel| {
+                        panel.spawn((
+                            HudChromeText(ChromePanelKind::Talents),
+                            Text::new(""),
+                            TextFont::from_font_size(15.0),
+                            TextColor(Color::srgb(0.9, 0.86, 0.98)),
+                        ));
+                    });
+                    row.spawn((
+                        HudChromePanel(ChromePanelKind::Bank),
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(300.0),
+                            padding: UiRect::all(Val::Px(12.0)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.08, 0.08, 0.05, 0.92)),
+                    ))
+                    .with_children(|panel| {
+                        panel.spawn((
+                            HudChromeText(ChromePanelKind::Bank),
+                            Text::new(""),
+                            TextFont::from_font_size(15.0),
+                            TextColor(Color::srgb(0.95, 0.9, 0.7)),
+                        ));
+                    });
+                    row.spawn((
+                        HudChromePanel(ChromePanelKind::Mail),
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(300.0),
+                            padding: UiRect::all(Val::Px(12.0)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.05, 0.08, 0.11, 0.92)),
+                    ))
+                    .with_children(|panel| {
+                        panel.spawn((
+                            HudChromeText(ChromePanelKind::Mail),
+                            Text::new(""),
+                            TextFont::from_font_size(15.0),
+                            TextColor(Color::srgb(0.78, 0.9, 0.98)),
+                        ));
+                    });
+                    row.spawn((
+                        HudChromePanel(ChromePanelKind::Market),
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(300.0),
+                            padding: UiRect::all(Val::Px(12.0)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.05, 0.1, 0.08, 0.92)),
+                    ))
+                    .with_children(|panel| {
+                        panel.spawn((
+                            HudChromeText(ChromePanelKind::Market),
+                            Text::new(""),
+                            TextFont::from_font_size(15.0),
+                            TextColor(Color::srgb(0.82, 0.96, 0.8)),
+                        ));
+                    });
+                });
 
             // Vendor panel (visible when open_vendor is Some)
             root.spawn((
@@ -495,7 +582,11 @@ fn apply_online_messages(host: &mut GameHost) {
                 host.net_status = NetStatus::Error(message.clone());
                 host.recent_toasts.push((message, 5.0));
             }
-            WsServerMsg::Chat { channel, from, text } => {
+            WsServerMsg::Chat {
+                channel,
+                from,
+                text,
+            } => {
                 host.recent_toasts
                     .push((format!("[{channel}] {from}: {text}"), 4.0));
             }
