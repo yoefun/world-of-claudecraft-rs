@@ -27,8 +27,8 @@ use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
-use crate::zones::populate_all_overworld;
 use crate::world::WORLD_SEED;
+use crate::zones::populate_all_overworld;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
     AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot,

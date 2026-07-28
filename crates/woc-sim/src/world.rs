@@ -236,7 +236,8 @@ fn mirefen_impact_crater_offset(x: f32, z: f32) -> f32 {
         return bowl;
     }
     let rim_t = (d - rim_start) / (MIREFEN_CRATER_R - rim_start);
-    let rim = MIREFEN_CRATER_RIM_H * smoothstep(0.0, 0.35, rim_t) * (1.0 - smoothstep(0.72, 1.0, rim_t));
+    let rim =
+        MIREFEN_CRATER_RIM_H * smoothstep(0.0, 0.35, rim_t) * (1.0 - smoothstep(0.72, 1.0, rim_t));
     bowl + rim
 }
 
@@ -272,10 +273,7 @@ fn apply_edit_layer(x: f32, z: f32, h0: f32) -> f32 {
 }
 
 fn ridges() -> [(f32, f32); 2] {
-    [
-        (ZONES[0].z_max, 0.0),
-        (ZONES[1].z_max, 0.0),
-    ]
+    [(ZONES[0].z_max, 0.0), (ZONES[1].z_max, 0.0)]
 }
 
 /// Baseline terrain height (renderer mesh).

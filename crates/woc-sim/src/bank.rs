@@ -111,7 +111,11 @@ mod tests {
         let bank_slot = entities[0]
             .bank
             .iter()
-            .position(|s| s.as_ref().map(|st| st.item_id == "silverleaf").unwrap_or(false))
+            .position(|s| {
+                s.as_ref()
+                    .map(|st| st.item_id == "silverleaf")
+                    .unwrap_or(false)
+            })
             .unwrap() as u8;
         assert!(withdraw(&mut entities, 1, bank_slot, 2, &mut events));
     }

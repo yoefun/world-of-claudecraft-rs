@@ -49,36 +49,68 @@ pub enum EquipSlot {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InteractAction {
     Talk,
-    AcceptQuest { quest_id: String },
-    TurnInQuest { quest_id: String },
-    Buy { item_id: String, count: u32 },
-    Sell { bag_slot: u8, count: u32 },
-    Equip { bag_slot: u8 },
-    Unequip { equip_slot: EquipSlot },
+    AcceptQuest {
+        quest_id: String,
+    },
+    TurnInQuest {
+        quest_id: String,
+    },
+    Buy {
+        item_id: String,
+        count: u32,
+    },
+    Sell {
+        bag_slot: u8,
+        count: u32,
+    },
+    Equip {
+        bag_slot: u8,
+    },
+    Unequip {
+        equip_slot: EquipSlot,
+    },
     /// Use a bag item (consumable heal, etc.). Additive Wave 0.3.
-    UseItem { bag_slot: u8 },
-    LootCorpse { target_id: EntityId },
+    UseItem {
+        bag_slot: u8,
+    },
+    LootCorpse {
+        target_id: EntityId,
+    },
     CloseVendor,
     /// Release spirit while dead (Wave 1 stub).
     ReleaseSpirit,
     /// Train a profession by content id (stub).
-    TrainProfession { id: String },
+    TrainProfession {
+        id: String,
+    },
     /// Gather from a world node (stub).
-    Gather { node_id: EntityId },
+    Gather {
+        node_id: EntityId,
+    },
     /// Deposit bag items into the bank.
-    BankDeposit { bag_slot: u8, count: u32 },
+    BankDeposit {
+        bag_slot: u8,
+        count: u32,
+    },
     /// Withdraw bank items into the bag.
-    BankWithdraw { bank_slot: u8, count: u32 },
+    BankWithdraw {
+        bank_slot: u8,
+        count: u32,
+    },
     /// Summon the class pet (hunter / warlock).
     SummonPet,
     /// Dismiss the active pet.
     DismissPet,
     /// Spend one talent point into a talent id.
-    LearnTalent { talent_id: String },
+    LearnTalent {
+        talent_id: String,
+    },
     /// Refund talent points (respec).
     RespecTalents,
     /// Craft a recipe by content id.
-    Craft { recipe_id: String },
+    Craft {
+        recipe_id: String,
+    },
     /// Send mail (copper and/or one bag stack) to a player name.
     MailSend {
         to_name: String,
@@ -87,13 +119,23 @@ pub enum InteractAction {
         count: u32,
     },
     /// Collect a mail by id into bag/copper.
-    MailCollect { mail_id: u32 },
+    MailCollect {
+        mail_id: u32,
+    },
     /// List a bag stack on the auction house.
-    MarketList { bag_slot: u8, count: u32, price: u32 },
+    MarketList {
+        bag_slot: u8,
+        count: u32,
+        price: u32,
+    },
     /// Buy an auction listing by id.
-    MarketBuy { listing_id: u32 },
+    MarketBuy {
+        listing_id: u32,
+    },
     /// Cancel own listing.
-    MarketCancel { listing_id: u32 },
+    MarketCancel {
+        listing_id: u32,
+    },
     /// Challenge target player to a duel.
     DuelChallenge,
     /// Accept a pending duel.
@@ -101,23 +143,37 @@ pub enum InteractAction {
     /// Toggle open-world PvP flag.
     TogglePvp,
     /// Travel through a portal / zone transition.
-    EnterPortal { zone_id: String },
+    EnterPortal {
+        zone_id: String,
+    },
     /// Enter a dungeon instance (party-aware).
-    EnterDungeon { dungeon_id: String },
+    EnterDungeon {
+        dungeon_id: String,
+    },
     /// Enter a dedicated multi-room solo delve.
-    EnterDelve { delve_id: String },
+    EnterDelve {
+        delve_id: String,
+    },
     /// Advance the active delve after clearing its current room.
     AdvanceDelve,
     /// Leave the current instance back to the overworld zone.
     LeaveInstance,
     /// Need roll on pending party loot.
-    LootNeed { loot_id: EntityId },
+    LootNeed {
+        loot_id: EntityId,
+    },
     /// Greed roll on pending party loot.
-    LootGreed { loot_id: EntityId },
+    LootGreed {
+        loot_id: EntityId,
+    },
     /// Pass on pending party loot.
-    LootPass { loot_id: EntityId },
+    LootPass {
+        loot_id: EntityId,
+    },
     /// Party leader sets loot mode (`ffa` | `need_greed`).
-    SetLootMode { mode: String },
+    SetLootMode {
+        mode: String,
+    },
 }
 
 /// Per-tick intent from a local or remote player.
@@ -782,9 +838,7 @@ mod tests {
     #[test]
     fn party_chat_ws_msg_roundtrip() {
         let client_msgs = vec![
-            WsClientMsg::PartyInvite {
-                name: "Bob".into(),
-            },
+            WsClientMsg::PartyInvite { name: "Bob".into() },
             WsClientMsg::PartyAccept,
             WsClientMsg::PartyLeave,
             WsClientMsg::Chat {

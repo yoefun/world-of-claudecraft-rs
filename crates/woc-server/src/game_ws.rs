@@ -7,9 +7,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{broadcast, Mutex};
 use woc_content::PlayerClass;
-use woc_protocol::{
-    EntityId, WorldHost, WsClientMsg, WsServerMsg, PROTOCOL_REV, TICK_RATE,
-};
+use woc_protocol::{EntityId, WorldHost, WsClientMsg, WsServerMsg, PROTOCOL_REV, TICK_RATE};
 use woc_sim::Sim;
 
 struct Realm {

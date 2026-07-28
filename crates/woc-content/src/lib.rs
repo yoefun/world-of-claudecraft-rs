@@ -31,9 +31,7 @@ pub use classes::{
 };
 pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
-pub use gather_nodes::{
-    gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES,
-};
+pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
 pub use items_zone2::ZONE2_ITEMS;
@@ -52,7 +50,7 @@ pub use world_spatial::{
     ZoneBand, CAMPS, JAIL_TERRAIN_EDITS, LAKE_BLEND_RADIUS_MULT, SOWFIELD_FLAT_FALLOFF,
     SOWFIELD_FLAT_HEIGHT, SOWFIELD_FLAT_X_MAX, SOWFIELD_FLAT_X_MIN, SOWFIELD_FLAT_Z_MAX,
     SOWFIELD_FLAT_Z_MIN, WATER_LEVEL, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED,
-    WORLD_SIZE, ZONE_EASTBROOK, ZONE_MIREFEN, ZONE_THORNPEAK, ZONES,
+    WORLD_SIZE, ZONES, ZONE_EASTBROOK, ZONE_MIREFEN, ZONE_THORNPEAK,
 };
 pub use zone1::{MobSpot, NpcSpot, ZoneLayout, EASTBROOK};
 pub use zone2::{EASTFEN, MIREFEN};
@@ -129,7 +127,10 @@ mod tests {
                 );
                 slots.push(entry.slot);
                 let abil = ability(entry.ability_id).unwrap_or_else(|| {
-                    panic!("{} kit refs missing ability {}", class.name, entry.ability_id)
+                    panic!(
+                        "{} kit refs missing ability {}",
+                        class.name, entry.ability_id
+                    )
                 });
                 assert!(abil.min_level >= 1, "{} min_level", abil.id);
                 if entry.slot == 1 {
@@ -148,7 +149,9 @@ mod tests {
             );
             assert!(
                 class.kit.iter().any(|e| {
-                    ability(e.ability_id).map(|a| a.min_level > 1).unwrap_or(false)
+                    ability(e.ability_id)
+                        .map(|a| a.min_level > 1)
+                        .unwrap_or(false)
                 }),
                 "{} needs at least one level-gated ability",
                 class.name

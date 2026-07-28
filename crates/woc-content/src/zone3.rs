@@ -6,13 +6,11 @@ pub static THORNPEAK: ZoneLayout = ZoneLayout {
     name: "Thornpeak Heights",
     player_spawn_x: 2.0,
     player_spawn_z: 664.0,
-    npcs: &[
-        NpcSpot {
-            npc_id: "warden_selene",
-            x: 0.0,
-            z: 666.0,
-        },
-    ],
+    npcs: &[NpcSpot {
+        npc_id: "warden_selene",
+        x: 0.0,
+        z: 666.0,
+    }],
     mobs: &[
         MobSpot {
             mob_id: "fen_crawler",

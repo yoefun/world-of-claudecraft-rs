@@ -40,5 +40,5 @@ pub use sim::{Sim, MAX_REALM_PLAYERS};
 pub use woc_content::PlayerClass;
 pub use world::{
     ground_height, terrain_height, terrain_steepness, water_bodies, water_level, water_level_at,
-    WORLD_HALF, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED, PLAYER_MAX_CLIMB_SLOPE,
+    PLAYER_MAX_CLIMB_SLOPE, WORLD_HALF, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED,
 };
