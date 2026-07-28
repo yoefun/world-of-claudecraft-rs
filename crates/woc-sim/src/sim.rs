@@ -22,6 +22,7 @@ use crate::entity::{
 };
 use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
+use crate::pet::{dismiss_pet, tick_pets};
 use crate::player_motion::step_player_motion;
 use crate::quests::on_mob_killed;
 use crate::rng::Rng;
@@ -134,6 +135,7 @@ impl Sim {
 
     /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
     pub fn despawn_player(&mut self, player_id: EntityId) {
+        let _ = dismiss_pet(&mut self.entities, player_id, &mut self.events);
         self.entities
             .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
         self.intents.remove(&player_id);
@@ -278,6 +280,9 @@ impl Sim {
             let ability = self.intents.get(&pid).and_then(|i| i.ability);
             update_player_combat(pid, &mut self.entities, ability, &mut self.events);
         }
+
+        // Pet AI (after player combat; keeps TICK_PHASES fingerprint stable).
+        tick_pets(&mut self.entities, &mut self.events);
 
         // Phase 3: mob AI + combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
@@ -960,5 +965,70 @@ mod tests {
                 assert!((ea.hp - eb.hp).abs() < 1e-5);
             }
         }
+    }
+
+    #[test]
+    fn hunter_summon_shows_pet_in_snapshot_and_dismisses() {
+        let mut sim = Sim::new_eastbrook("Hunt", PlayerClass::Hunter);
+        let pid = sim.player_id;
+        sim.interact(pid, InteractAction::SummonPet);
+        let snap = sim.snapshot();
+        let pet = snap
+            .entities
+            .iter()
+            .find(|e| e.kind == EntityKind::Pet)
+            .expect("snapshot should include pet entity");
+        assert_eq!(pet.template_id.as_deref(), Some("hunter_wolf"));
+        assert!(pet.alive);
+        sim.interact(pid, InteractAction::DismissPet);
+        let snap = sim.snapshot();
+        assert!(!snap.entities.iter().any(|e| e.kind == EntityKind::Pet));
+    }
+
+    #[test]
+    fn pet_tick_damages_player_target_via_sim() {
+        let mut sim = Sim::new_eastbrook("Hunt", PlayerClass::Hunter);
+        let pid = sim.player_id;
+        let mob_id = sim
+            .entities
+            .iter()
+            .find(|e| e.kind == EntityKind::Mob && e.alive)
+            .map(|e| e.id)
+            .expect("mob");
+        // Pull mob near player and pet into melee.
+        let (px, pz) = {
+            let p = sim.player().unwrap();
+            (p.x, p.z)
+        };
+        if let Some(m) = sim.entities.iter_mut().find(|e| e.id == mob_id) {
+            m.x = px + 1.5;
+            m.z = pz;
+        }
+        sim.interact(pid, InteractAction::SummonPet);
+        let pet_id = sim
+            .entities
+            .iter()
+            .find(|e| e.kind == EntityKind::Pet)
+            .map(|e| e.id)
+            .unwrap();
+        if let Some(pet) = sim.entities.iter_mut().find(|e| e.id == pet_id) {
+            pet.x = px + 1.5;
+            pet.z = pz;
+            pet.swing_timer = 0.0;
+        }
+        let hp_before = sim.entities.iter().find(|e| e.id == mob_id).unwrap().hp;
+        let intent = PlayerIntent {
+            attack: true,
+            target_id: Some(mob_id),
+            ..Default::default()
+        };
+        for _ in 0..40 {
+            let _ = sim.tick(intent);
+        }
+        let hp_after = sim.entities.iter().find(|e| e.id == mob_id).unwrap().hp;
+        assert!(
+            hp_after < hp_before,
+            "expected pet+player damage ({hp_after} < {hp_before})"
+        );
     }
 }

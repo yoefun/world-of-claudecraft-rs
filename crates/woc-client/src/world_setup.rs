@@ -394,6 +394,10 @@ fn spawn_one_visual(
             Color::srgb(0.55, 0.75, 0.45),
         ),
         EntityKind::Loot => (meshes.add(Sphere::new(0.25)), Color::srgb(0.9, 0.75, 0.2)),
+        EntityKind::Pet => (
+            meshes.add(Cuboid::new(0.7, 0.45, 1.0)),
+            Color::srgb(0.35, 0.55, 0.65),
+        ),
     };
     commands.spawn((
         SimVisual { id },
@@ -572,6 +576,7 @@ pub(crate) fn sync_visuals(
                 EntityKind::Npc => 0.9,
                 EntityKind::Mob => 0.3,
                 EntityKind::Loot => 0.25,
+                EntityKind::Pet => 0.35,
             };
             if e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc {
                 tf.translation = Vec3::new(e.x, e.y + y_off, e.z);
