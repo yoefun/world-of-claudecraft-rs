@@ -63,7 +63,10 @@ fn setup_title(mut commands: Commands, mode: Res<PlayMode>) {
 fn mode_prompt(mode: PlayMode) -> String {
     match mode {
         PlayMode::Offline => "Mode: Offline  (local sim)".into(),
-        PlayMode::Online => format!("Mode: Online  ({})", crate::online::ONLINE_WS_URL),
+        PlayMode::Online => format!(
+            "Mode: Online  ({} → login)",
+            crate::online::ONLINE_WS_URL
+        ),
     }
 }
 
@@ -89,6 +92,9 @@ fn title_input(
         **text = mode_prompt(*mode);
     }
     if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
-        next.set(AppState::CharCreate);
+        match *mode {
+            PlayMode::Offline => next.set(AppState::CharCreate),
+            PlayMode::Online => next.set(AppState::Login),
+        }
     }
 }
