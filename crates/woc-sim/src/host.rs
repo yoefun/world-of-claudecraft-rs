@@ -1,6 +1,7 @@
 //! `WorldHost` implementation for `Sim` (multi-player aware).
 
 use crate::bank;
+use crate::delves::{enter_delve, try_advance_delve};
 use crate::interaction::handle_interact;
 use crate::instances::{enter_dungeon, leave_instance};
 use crate::pet::{dismiss_pet, summon_pet};
@@ -139,6 +140,35 @@ impl WorldHost for Sim {
                     &dungeon_id,
                     &mut self.events,
                 );
+            }
+            InteractAction::EnterDelve { delve_id } => {
+                if enter_delve(
+                    &mut self.entities,
+                    player_id,
+                    &delve_id,
+                    &mut self.events,
+                ) {
+                    self.next_id = self
+                        .entities
+                        .iter()
+                        .map(|entity| entity.id)
+                        .max()
+                        .unwrap_or(0)
+                        .saturating_add(1)
+                        .max(self.next_id);
+                }
+            }
+            InteractAction::AdvanceDelve => {
+                if try_advance_delve(&mut self.entities, player_id, &mut self.events) {
+                    self.next_id = self
+                        .entities
+                        .iter()
+                        .map(|entity| entity.id)
+                        .max()
+                        .unwrap_or(0)
+                        .saturating_add(1)
+                        .max(self.next_id);
+                }
             }
             InteractAction::LeaveInstance => {
                 let _ = leave_instance(&mut self.entities, player_id, &mut self.events);

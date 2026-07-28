@@ -104,6 +104,10 @@ pub enum InteractAction {
     EnterPortal { zone_id: String },
     /// Enter a dungeon instance (party-aware).
     EnterDungeon { dungeon_id: String },
+    /// Enter a dedicated multi-room solo delve.
+    EnterDelve { delve_id: String },
+    /// Advance the active delve after clearing its current room.
+    AdvanceDelve,
     /// Leave the current instance back to the overworld zone.
     LeaveInstance,
     /// Need roll on pending party loot.
@@ -519,6 +523,17 @@ pub enum SimEvent {
     InstanceLeft {
         player: EntityId,
     },
+    DelveRoomCleared {
+        player: EntityId,
+        delve_id: String,
+        room: u32,
+    },
+    DelveCompleted {
+        player: EntityId,
+        delve_id: String,
+        reward_copper: u32,
+        reward_item: Option<String>,
+    },
 }
 
 /// Host facade shared by offline Bevy and online server.
@@ -848,6 +863,10 @@ mod tests {
             InteractAction::EnterDungeon {
                 dungeon_id: "eastbrook_crypt".into(),
             },
+            InteractAction::EnterDelve {
+                delve_id: "eastbrook_hollow".into(),
+            },
+            InteractAction::AdvanceDelve,
             InteractAction::LeaveInstance,
             InteractAction::LootNeed { loot_id: 9 },
             InteractAction::LootGreed { loot_id: 9 },
@@ -860,6 +879,29 @@ mod tests {
             let v = serde_json::to_value(&a).unwrap();
             let back: InteractAction = serde_json::from_value(v).unwrap();
             assert_eq!(format!("{back:?}"), format!("{a:?}"));
+        }
+    }
+
+    #[test]
+    fn delve_events_roundtrip() {
+        let events = [
+            SimEvent::DelveRoomCleared {
+                player: 7,
+                delve_id: "eastbrook_hollow".into(),
+                room: 1,
+            },
+            SimEvent::DelveCompleted {
+                player: 7,
+                delve_id: "eastbrook_hollow".into(),
+                reward_copper: 75,
+                reward_item: Some("eastbrook_greaves".into()),
+            },
+        ];
+
+        for event in events {
+            let value = serde_json::to_value(&event).unwrap();
+            let back: SimEvent = serde_json::from_value(value).unwrap();
+            assert_eq!(back, event);
         }
     }
 
