@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use woc_content::PlayerClass;
 
-use crate::{cleanup_ui, AppState, UiRoot};
+use crate::{cleanup_ui, AppState, PlayMode, UiRoot};
 
 #[derive(Resource)]
 pub(crate) struct CharName(pub(crate) String);
@@ -28,12 +28,21 @@ pub(crate) fn plugin(app: &mut App) {
         );
 }
 
-fn setup_char_create(mut commands: Commands, name: Res<CharName>, class: Res<SelectedClass>) {
+fn setup_char_create(
+    mut commands: Commands,
+    name: Res<CharName>,
+    class: Res<SelectedClass>,
+    mode: Res<PlayMode>,
+) {
     let label = format!("Name: {}", name.0);
     let class_label = format!(
         "Class: {}  (Left/Right to change)",
         woc_content::class_def(class.0).name
     );
+    let mode_hint = match *mode {
+        PlayMode::Offline => "Entering Offline Eastbrook (local sim)".to_string(),
+        PlayMode::Online => format!("Entering Online → {}", crate::online::ONLINE_WS_URL),
+    };
     commands
         .spawn((
             UiRoot,
@@ -65,6 +74,11 @@ fn setup_char_create(mut commands: Commands, name: Res<CharName>, class: Res<Sel
                 Text::new(class_label),
                 TextFont::from_font_size(18.0),
                 TextColor(Color::WHITE),
+            ));
+            p.spawn((
+                Text::new(mode_hint),
+                TextFont::from_font_size(15.0),
+                TextColor(Color::srgb(0.7, 0.85, 0.95)),
             ));
             p.spawn((
                 Text::new("Type a name · ←/→ class · Enter to enter Eastbrook"),

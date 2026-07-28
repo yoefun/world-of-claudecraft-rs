@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::OfflineHost;
+use crate::{GameHost, NetStatus, PlayMode};
 
 #[derive(Component)]
 pub(crate) struct HudRoot;
@@ -25,6 +25,9 @@ pub(crate) struct HudQuestText;
 #[derive(Component)]
 pub(crate) struct HudBagText;
 
+#[derive(Component)]
+pub(crate) struct HudNetText;
+
 #[derive(Resource)]
 pub(crate) struct UiFlags {
     pub(crate) show_bags: bool,
@@ -39,7 +42,7 @@ pub(crate) fn plugin(app: &mut App) {
 }
 
 pub(crate) fn update_hud(
-    host: Res<OfflineHost>,
+    host: Res<GameHost>,
     ui: Res<UiFlags>,
     mut hp: Query<&mut Text, With<HudHpText>>,
     mut xp: Query<&mut Text, (With<HudXpText>, Without<HudHpText>)>,
@@ -74,8 +77,20 @@ pub(crate) fn update_hud(
             Without<HudBagText>,
         ),
     >,
+    mut net: Query<
+        &mut Text,
+        (
+            With<HudNetText>,
+            Without<HudHpText>,
+            Without<HudXpText>,
+            Without<HudTargetText>,
+            Without<HudQuestText>,
+            Without<HudBagText>,
+            Without<HudToastText>,
+        ),
+    >,
 ) {
-    let snap = host.sim.snapshot();
+    let snap = &host.snapshot;
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
         if let Ok(mut t) = hp.single_mut() {
             let abil = if snap.ability_name.is_empty() {
@@ -94,6 +109,8 @@ pub(crate) fn update_hud(
                 if snap.ability_ready { "READY" } else { "CD" }
             );
         }
+    } else if let Ok(mut t) = hp.single_mut() {
+        **t = "HP --".into();
     }
     if let Ok(mut t) = xp.single_mut() {
         let gear = snap.equipment.main_hand.as_deref().unwrap_or("—");
@@ -170,9 +187,24 @@ pub(crate) fn update_hud(
             .map(|(m, _)| m.clone())
             .unwrap_or_default();
     }
+    if let Ok(mut t) = net.single_mut() {
+        **t = match host.play_mode {
+            PlayMode::Offline => "Host: Offline".into(),
+            PlayMode::Online => match &host.net_status {
+                NetStatus::Idle => "Online: idle".into(),
+                NetStatus::Connecting => {
+                    format!("Online: connecting… {}", crate::online::ONLINE_WS_URL)
+                }
+                NetStatus::Connected { player_id } => {
+                    format!("Online: connected (player #{player_id})")
+                }
+                NetStatus::Error(msg) => format!("Online: error — {msg}"),
+            },
+        };
+    }
 }
 
-pub(crate) fn toast_fade(time: Res<Time>, mut host: ResMut<OfflineHost>) {
+pub(crate) fn toast_fade(time: Res<Time>, mut host: ResMut<GameHost>) {
     let dt = time.delta_secs();
     for (_, life) in &mut host.recent_toasts {
         *life -= dt;

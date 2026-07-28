@@ -1,9 +1,9 @@
-//! Title screen systems.
+//! Title screen systems (Offline | Online mode picker).
 
 use bevy::prelude::*;
 use woc_version::footer;
 
-use crate::{cleanup_ui, AppState, UiRoot};
+use crate::{cleanup_ui, AppState, PlayMode, UiRoot};
 
 pub(crate) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(AppState::Title), setup_title)
@@ -11,7 +11,11 @@ pub(crate) fn plugin(app: &mut App) {
         .add_systems(Update, title_input.run_if(in_state(AppState::Title)));
 }
 
-fn setup_title(mut commands: Commands) {
+#[derive(Component)]
+struct ModeLabel;
+
+fn setup_title(mut commands: Commands, mode: Res<PlayMode>) {
+    let mode_line = mode_prompt(*mode);
     commands
         .spawn((
             UiRoot,
@@ -43,14 +47,47 @@ fn setup_title(mut commands: Commands) {
                 TextColor(Color::srgb(0.7, 0.75, 0.8)),
             ));
             p.spawn((
-                Text::new("Press Enter to create a character"),
-                TextFont::from_font_size(20.0),
+                ModeLabel,
+                Text::new(mode_line),
+                TextFont::from_font_size(22.0),
                 TextColor(Color::srgb(0.9, 0.92, 0.85)),
+            ));
+            p.spawn((
+                Text::new("1 Offline · 2 Online · ←/→ · Enter to continue"),
+                TextFont::from_font_size(18.0),
+                TextColor(Color::srgb(0.75, 0.8, 0.85)),
             ));
         });
 }
 
-fn title_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<AppState>>) {
+fn mode_prompt(mode: PlayMode) -> String {
+    match mode {
+        PlayMode::Offline => "Mode: Offline  (local sim)".into(),
+        PlayMode::Online => format!("Mode: Online  ({})", crate::online::ONLINE_WS_URL),
+    }
+}
+
+fn title_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut mode: ResMut<PlayMode>,
+    mut next: ResMut<NextState<AppState>>,
+    mut label: Query<&mut Text, With<ModeLabel>>,
+) {
+    if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
+        *mode = PlayMode::Offline;
+    }
+    if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+        *mode = PlayMode::Online;
+    }
+    if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowRight) {
+        *mode = match *mode {
+            PlayMode::Offline => PlayMode::Online,
+            PlayMode::Online => PlayMode::Offline,
+        };
+    }
+    if let Ok(mut text) = label.single_mut() {
+        **text = mode_prompt(*mode);
+    }
     if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
         next.set(AppState::CharCreate);
     }
