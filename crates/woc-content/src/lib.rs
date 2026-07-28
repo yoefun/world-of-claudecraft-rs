@@ -11,12 +11,15 @@ pub mod items;
 pub mod items_zone2;
 pub mod mobs;
 pub mod mobs_zone2;
+pub mod mobs_zone3;
 pub mod npcs;
 pub mod npcs_zone2;
+pub mod npcs_zone3;
 pub mod pets;
 pub mod professions;
 pub mod quests;
 pub mod quests_zone2;
+pub mod quests_zone3;
 pub mod recipes;
 pub mod talents;
 pub mod world_spatial;
@@ -37,12 +40,15 @@ pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
+pub use mobs_zone3::ZONE3_MOBS;
 pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
+pub use npcs_zone3::ZONE3_NPCS;
 pub use pets::{pet, pet_for_class, PetDef, PETS};
 pub use professions::{profession, ProfessionDef, ProfessionKind, PROFESSIONS};
 pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
 pub use quests_zone2::ZONE2_QUESTS;
+pub use quests_zone3::ZONE3_QUESTS;
 pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
 pub use talents::{talent, TalentDef, TALENTS};
 pub use world_spatial::{
@@ -416,6 +422,88 @@ mod tests {
                 spot.mob_id
             );
         }
+    }
+
+    #[test]
+    fn thornpeak_layout_has_resolvable_unique_content() {
+        assert!(
+            THORNPEAK.npcs.len() >= 3,
+            "thornpeak needs ≥3 NPC spots, got {}",
+            THORNPEAK.npcs.len()
+        );
+        assert!(
+            THORNPEAK.mobs.len() >= 6,
+            "thornpeak needs ≥6 mob spots, got {}",
+            THORNPEAK.mobs.len()
+        );
+
+        let mob_templates = THORNPEAK
+            .mobs
+            .iter()
+            .map(|spot| spot.mob_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            mob_templates.len() >= 3,
+            "thornpeak needs ≥3 distinct mob templates, got {}",
+            mob_templates.len()
+        );
+
+        for npc_id in ["commander_elara", "pathfinder_toren", "quartermaster_bren"] {
+            assert!(npc(npc_id).is_some(), "missing Thornpeak NPC {npc_id}");
+            assert!(
+                THORNPEAK.npcs.iter().any(|spot| spot.npc_id == npc_id),
+                "Thornpeak layout missing NPC {npc_id}"
+            );
+        }
+        for mob_id in ["ridge_stalker", "cragback_boar", "gale_harpy"] {
+            assert!(mob(mob_id).is_some(), "missing Thornpeak mob {mob_id}");
+            assert!(
+                THORNPEAK.mobs.iter().any(|spot| spot.mob_id == mob_id),
+                "Thornpeak layout missing mob {mob_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn thornpeak_has_dedicated_quests_and_graveyard() {
+        let quest_ids = [
+            "stalkers_on_the_ridge",
+            "tusks_for_highwatch",
+            "harpies_over_highwatch",
+        ];
+        let quests = quest_ids
+            .iter()
+            .map(|id| quest(id).unwrap_or_else(|| panic!("missing Thornpeak quest {id}")))
+            .collect::<Vec<_>>();
+
+        assert!(quests.iter().all(|quest| {
+            quest.objectives.iter().all(|objective| {
+                matches!(
+                    objective,
+                    QuestObjective::Kill { .. } | QuestObjective::Collect { .. }
+                )
+            })
+        }));
+        assert!(
+            quests.iter().any(|quest| {
+                quest
+                    .objectives
+                    .iter()
+                    .any(|objective| matches!(objective, QuestObjective::Kill { .. }))
+            }),
+            "Thornpeak needs a kill quest"
+        );
+        assert!(
+            quests.iter().any(|quest| {
+                quest
+                    .objectives
+                    .iter()
+                    .any(|objective| matches!(objective, QuestObjective::Collect { .. }))
+            }),
+            "Thornpeak needs a collect quest"
+        );
+        assert!(graveyard("thornpeak_graveyard").is_some());
+        assert!(graveyard_for_zone("thornpeak").is_some());
     }
 
     #[test]
