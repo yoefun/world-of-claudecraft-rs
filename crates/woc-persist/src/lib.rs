@@ -29,7 +29,7 @@ pub use memory::MemoryStore;
 pub use models::{
     equipment_from_json, equipment_to_json, inventory_from_json, inventory_to_json,
     quests_from_json, quests_to_json, Character, CharacterSave, CharacterSummary, EquipmentDto,
-    InvStackDto, QuestProgressDto,
+    InvStackDto, ProfessionSkillDto, QuestProgressDto, TalentRankDto,
 };
 pub use password::{hash_password, verify_password};
 pub use store::{validate_character_name, validate_username};
