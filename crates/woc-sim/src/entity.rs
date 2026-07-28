@@ -1,9 +1,33 @@
 //! Entity factories and live entity state.
 
+use std::collections::HashMap;
+
 use crate::types::player_hp;
 use crate::world::{terrain_height, WORLD_SEED};
 use woc_content::{class_def, mob, npc, ItemKind, PlayerClass, ResourceType};
 use woc_protocol::{EntityId, EntityKind};
+
+/// Live aura instance (DoT/HoT/buff) on an entity.
+#[derive(Debug, Clone)]
+pub struct AuraInstance {
+    pub id: String,
+    pub remaining: f32,
+    pub stacks: u32,
+    /// Countdown to next damage/heal tick.
+    pub tick_timer: f32,
+    pub tick_interval: f32,
+    pub tick_damage: f32,
+    pub source: EntityId,
+}
+
+/// In-progress ability cast.
+#[derive(Debug, Clone)]
+pub struct CastState {
+    pub ability_id: String,
+    pub elapsed: f32,
+    pub duration: f32,
+    pub target: EntityId,
+}
 
 #[derive(Debug, Clone)]
 pub struct InvStack {
@@ -70,6 +94,14 @@ pub struct Entity {
     pub xp: u32,
     /// Player copper currency (mobs/NPCs unused).
     pub copper: u32,
+    /// Active auras (Wave 1 combat core).
+    pub auras: Vec<AuraInstance>,
+    /// Ability currently being cast, if any.
+    pub cast: Option<CastState>,
+    /// Global cooldown remaining (blocks starting another ability).
+    pub gcd: f32,
+    /// Threat table keyed by attacker id (mobs; players unused).
+    pub threat: HashMap<EntityId, f32>,
 }
 
 impl Entity {
@@ -121,6 +153,10 @@ impl Entity {
             open_vendor_npc: None,
             xp: 0,
             copper: 0,
+            auras: Vec::new(),
+            cast: None,
+            gcd: 0.0,
+            threat: HashMap::new(),
         }
     }
 }

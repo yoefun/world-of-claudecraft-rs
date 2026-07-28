@@ -13,8 +13,8 @@
 use std::collections::HashMap;
 
 use crate::combat::{
-    collect_pending_mob_kills, grant_xp, spawn_mob_loot, try_pickup_loot, update_mob_combat,
-    update_player_combat,
+    collect_pending_mob_kills, grant_xp, spawn_mob_loot, tick_auras, try_pickup_loot,
+    update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
 use crate::entity::{
@@ -29,8 +29,9 @@ use crate::types::xp_to_next;
 use crate::world::WORLD_SEED;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
-    EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot, InteractAction, InvSlotSnapshot,
-    PlayerIntent, PlayerProgress, QuestLogEntry, SimEvent, TickSnapshot, PROTOCOL_REV,
+    AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot,
+    InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress, QuestLogEntry, SimEvent,
+    TickSnapshot, PROTOCOL_REV,
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
@@ -287,6 +288,9 @@ impl Sim {
             }
         }
 
+        // Aura/timer decay (hook into tick after combat; keeps TICK_PHASES fingerprint stable).
+        tick_auras(&mut self.entities, &mut self.events);
+
         // Phase 4: kill rewards → killer
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);
         for reward in rewards {
@@ -400,6 +404,33 @@ impl Sim {
 
         let open_vendor = player.and_then(|p| vendor_snapshot(&self.entities, p));
 
+        let auras = player
+            .map(|p| {
+                p.auras
+                    .iter()
+                    .map(|a| AuraSnapshot {
+                        id: a.id.clone(),
+                        remaining: a.remaining.max(0.0),
+                        stacks: a.stacks,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let cast = player.and_then(|p| {
+            p.cast.as_ref().map(|c| CastSnapshot {
+                ability_id: c.ability_id.clone(),
+                progress: if c.duration > 0.0 {
+                    (c.elapsed / c.duration).clamp(0.0, 1.0)
+                } else {
+                    1.0
+                },
+            })
+        });
+
+        let gcd = player.map(|p| p.gcd).unwrap_or(0.0);
+        let casting = player.map(|p| p.cast.is_some()).unwrap_or(false);
+
         let entities = self
             .entities
             .iter()
@@ -436,7 +467,7 @@ impl Sim {
                 resource_type,
             },
             target_id,
-            ability_ready: ability_cd <= 0.0,
+            ability_ready: ability_cd <= 0.0 && gcd <= 0.0 && !casting,
             ability_cooldown: if cd_max > 0.0 {
                 ability_cd / cd_max
             } else {
@@ -448,6 +479,8 @@ impl Sim {
             quest_log,
             open_vendor,
             ability_name,
+            auras,
+            cast,
             ..Default::default()
         }
     }
