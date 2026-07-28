@@ -12,6 +12,7 @@ pub mod mobs;
 pub mod mobs_zone2;
 pub mod npcs;
 pub mod npcs_zone2;
+pub mod pets;
 pub mod professions;
 pub mod quests;
 pub mod quests_zone2;
@@ -36,6 +37,7 @@ pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
 pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
+pub use pets::{pet, pet_for_class, PetDef, PETS};
 pub use professions::{profession, ProfessionDef, ProfessionKind, PROFESSIONS};
 pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
 pub use quests_zone2::ZONE2_QUESTS;
@@ -330,6 +332,18 @@ mod tests {
         assert!(DUNGEONS.is_empty());
         assert!(talent("missing_talent").is_none());
         assert!(dungeon("missing_dungeon").is_none());
+    }
+
+    #[test]
+    fn hunter_and_warlock_have_pet_defs() {
+        assert_eq!(PETS.len(), 2);
+        let hunter = pet_for_class(PlayerClass::Hunter).expect("hunter pet");
+        assert_eq!(hunter.id, "hunter_wolf");
+        assert!(pet(hunter.id).is_some());
+        let warlock = pet_for_class(PlayerClass::Warlock).expect("warlock pet");
+        assert_eq!(warlock.id, "warlock_imp");
+        assert!(pet_for_class(PlayerClass::Warrior).is_none());
+        assert!(pet("missing_pet").is_none());
     }
 
     #[test]
