@@ -68,6 +68,13 @@ pub(crate) fn collect_intent(
     if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
         intent.ability = Some(AbilitySlot::Primary);
     }
+    // Slots 2–5 reserved for ability kits (no-op until protocol/sim expose them).
+    let _ = (
+        keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2),
+        keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3),
+        keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4),
+        keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5),
+    );
     if mouse.just_pressed(MouseButton::Left) || keys.pressed(KeyCode::KeyF) {
         intent.attack = true;
         host.local_auto_attack = true;
@@ -117,6 +124,9 @@ pub(crate) fn handle_interact_keys(
     }
     if keys.just_pressed(KeyCode::KeyL) {
         ui.show_quests = !ui.show_quests;
+    }
+    if keys.just_pressed(KeyCode::KeyC) {
+        ui.show_character = !ui.show_character;
     }
     if !keys.just_pressed(KeyCode::KeyE) {
         return;
@@ -187,20 +197,4 @@ pub(crate) fn handle_interact_keys(
         }
     }
 
-    let is_wilkes = host
-        .snapshot
-        .entities
-        .iter()
-        .find(|e| e.id == nid)
-        .and_then(|e| e.template_id.as_deref())
-        == Some("trader_wilkes");
-    if is_wilkes && host.snapshot.progress.copper >= 12 {
-        host.interact(
-            nid,
-            InteractAction::Buy {
-                item_id: "travelers_ration".into(),
-                count: 1,
-            },
-        );
-    }
 }
