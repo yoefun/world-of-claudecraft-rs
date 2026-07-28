@@ -153,7 +153,7 @@ async fn handle_socket(socket: WebSocket) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use woc_protocol::EntityKind;
+    use woc_protocol::{EntityKind, PlayerIntent, WorldHost};
 
     #[test]
     fn sticky_hello_keeps_npc_roster() {
