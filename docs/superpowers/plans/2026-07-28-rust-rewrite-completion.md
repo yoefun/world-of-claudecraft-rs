@@ -24,6 +24,8 @@
 
 **Design:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](../specs/2026-07-28-rust-rewrite-completion-design.md)
 
+**Max-parallel remaining schedule:** [`2026-07-28-parallel-remaining.md`](2026-07-28-parallel-remaining.md) (Batch R1+).
+
 ---
 
 ## File ownership map (avoid parallel conflicts)
