@@ -117,6 +117,13 @@ impl MemoryStore {
             inventory: Vec::new(),
             equipment: EquipmentDto::default(),
             quests: Vec::new(),
+            zone_id: "eastbrook".into(),
+            talent_points: 0,
+            talents: Vec::new(),
+            bank: Vec::new(),
+            honor: 0,
+            professions: Vec::new(),
+            pvp_flagged: false,
         };
         g.characters.insert(character.id, character.clone());
         Ok(character)
@@ -182,7 +189,7 @@ fn mint_token(inner: &mut Inner, account_id: Uuid) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{InvStackDto, QuestProgressDto};
+    use crate::models::{InvStackDto, ProfessionSkillDto, QuestProgressDto, TalentRankDto};
 
     #[tokio::test]
     async fn register_login_and_character_roundtrip() {
@@ -219,6 +226,22 @@ mod tests {
                 state: "active".into(),
                 counts: vec![1],
             }],
+            zone_id: "eastfen".into(),
+            talent_points: 2,
+            talents: vec![TalentRankDto {
+                talent_id: "shield_mastery".into(),
+                rank: 2,
+            }],
+            bank: vec![Some(InvStackDto {
+                item_id: "silverleaf".into(),
+                count: 8,
+            })],
+            honor: 125,
+            professions: vec![ProfessionSkillDto {
+                id: "herbalism".into(),
+                skill: 42,
+            }],
+            pvp_flagged: true,
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();
         assert_eq!(saved.to_save(), save);
