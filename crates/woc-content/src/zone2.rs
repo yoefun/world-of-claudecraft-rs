@@ -81,11 +81,66 @@ pub static EASTFEN: ZoneLayout = ZoneLayout {
     ],
 };
 
-/// Mirefen — empty placeholder layout (later wave).
+/// Mirefen — lantern camp, drowned landing, rotcap grove, and terror sinkhole.
 pub static MIREFEN: ZoneLayout = ZoneLayout {
     name: "Mirefen",
-    player_spawn_x: 0.0,
-    player_spawn_z: 0.0,
-    npcs: &[],
-    mobs: &[],
+    player_spawn_x: 3.0,
+    player_spawn_z: 8.0,
+    npcs: &[
+        NpcSpot {
+            npc_id: "keeper_orla",
+            x: 1.0,
+            z: 11.0,
+        },
+        NpcSpot {
+            npc_id: "ferryman_noll",
+            x: 7.0,
+            z: 6.0,
+        },
+    ],
+    mobs: &[
+        // Mire leeches — clustered around the drowned western landing.
+        MobSpot {
+            mob_id: "mire_leech",
+            x: -18.0,
+            z: 5.0,
+        },
+        MobSpot {
+            mob_id: "mire_leech",
+            x: -22.0,
+            z: 0.0,
+        },
+        MobSpot {
+            mob_id: "mire_leech",
+            x: -16.0,
+            z: -5.0,
+        },
+        MobSpot {
+            mob_id: "mire_leech",
+            x: -24.0,
+            z: -8.0,
+        },
+        // Rotcap shamblers — beneath the southern fungus grove.
+        MobSpot {
+            mob_id: "rotcap_shambler",
+            x: -2.0,
+            z: -22.0,
+        },
+        MobSpot {
+            mob_id: "rotcap_shambler",
+            x: 5.0,
+            z: -25.0,
+        },
+        MobSpot {
+            mob_id: "rotcap_shambler",
+            x: 11.0,
+            z: -20.0,
+        },
+        // World boss — alone in the eastern sinkhole.
+        MobSpot {
+            mob_id: "mire_terror",
+            x: 31.0,
+            z: 17.0,
+        },
+    ],
 };
