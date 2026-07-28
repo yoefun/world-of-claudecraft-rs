@@ -5,6 +5,7 @@ members = [
     "crates/woc-protocol",
     "crates/woc-content",
     "crates/woc-sim",
+    "crates/woc-persist",
     "crates/woc-server",
     "crates/woc-client",
 ]
@@ -13,6 +14,7 @@ default-members = [
     "crates/woc-protocol",
     "crates/woc-content",
     "crates/woc-sim",
+    "crates/woc-persist",
     "crates/woc-server",
     "crates/woc-client",
 ]
@@ -30,6 +32,7 @@ woc-version = { path = "crates/woc-version" }
 woc-protocol = { path = "crates/woc-protocol" }
 woc-content = { path = "crates/woc-content" }
 woc-sim = { path = "crates/woc-sim" }
+woc-persist = { path = "crates/woc-persist" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
@@ -38,6 +41,10 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 bevy = { version = "0.16", default-features = true }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+argon2 = "0.5"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "uuid"] }
 
 [profile.dev]
 opt-level = 1
