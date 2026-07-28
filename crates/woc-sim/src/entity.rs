@@ -119,6 +119,22 @@ pub struct Entity {
     pub respawn_timer: f32,
     /// Owning player id for summoned pets (`None` for everyone else).
     pub owner_id: Option<EntityId>,
+    /// Current zone id (overworld or instance).
+    pub zone_id: String,
+    /// Unspent talent points.
+    pub talent_points: u32,
+    /// Learned talent ranks keyed by talent id.
+    pub talents: HashMap<String, u32>,
+    /// Personal bank inventory (fixed slot count).
+    pub bank: Vec<Option<InvStack>>,
+    /// PvP honor currency.
+    pub honor: u32,
+    /// Open-world PvP flag.
+    pub pvp_flagged: bool,
+    /// Profession skill ranks keyed by profession id.
+    pub professions: HashMap<String, u32>,
+    /// Active dungeon/instance id, if any.
+    pub instance_id: Option<String>,
 }
 
 impl Entity {
@@ -180,6 +196,14 @@ impl Entity {
             corpse_z: None,
             respawn_timer: 0.0,
             owner_id: None,
+            zone_id: "eastbrook".into(),
+            talent_points: 0,
+            talents: HashMap::new(),
+            bank: vec![None; crate::types::BANK_SLOTS],
+            honor: 0,
+            pvp_flagged: false,
+            professions: HashMap::new(),
+            instance_id: None,
         }
     }
 }

@@ -5,11 +5,11 @@ This repository is a **Rust rewrite** of
 
 | Field | Value |
 | --- | --- |
-| Rewrite version | `0.3.0` |
+| Rewrite version | `1.0.0-pre` |
 | Upstream repo | https://github.com/levy-street/world-of-claudecraft |
 | Upstream version | `0.31.0` |
 | Upstream commit | `a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9` |
-| Parity target | `online-alive` |
+| Parity target | `completion` |
 
 Machine-readable source of truth: [`VERSION.toml`](VERSION.toml).
 
