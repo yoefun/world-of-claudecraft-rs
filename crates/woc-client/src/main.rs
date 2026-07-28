@@ -49,6 +49,9 @@ fn main() {
                 world_setup::sim_fixed_step,
                 world_setup::sync_visuals,
                 hud::update_hud,
+                hud::sync_vendor_panel,
+                hud::vendor_buy_clicks,
+                hud::vendor_ungrab_cursor,
                 hud::toast_fade,
             )
                 .chain()
