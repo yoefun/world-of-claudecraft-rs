@@ -15,13 +15,14 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
-- Walk Eastbrook Vale and travel to Eastfen; dungeon crypt instance
+- Walk Eastbrook Vale, Eastfen, and Mirefen; dungeon crypt + 3-room delve
 - Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot
 - Bank, mail, auction house; herbalism → alchemy craft loop
-- Duels, PvP flag, honor; deed stub on world-boss template kill
+- Duels, PvP flag, honor; Mire Terror deed
+- Client panels: talents / bank / mail / market
 - Version footer: `WoC-rs 1.0.0-pre · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`)
-- Persist auth + character CRUD (memory default; Postgres optional)
+- Persist auth + character CRUD including talents/bank/honor/zone (memory default; Postgres optional)
 
 ## Crates
 
@@ -67,7 +68,7 @@ REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` o
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1** ability, **E** interact, **B** bags, **L** quests, **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **M** mail (P collect), **U** market (O buy), **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
 
 ## Architecture
 

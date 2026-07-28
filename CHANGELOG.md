@@ -8,16 +8,20 @@
 - Party loot rules: FFA + Need/Greed rolls via sim RNG.
 - Economy: personal bank deposit/withdraw; mail send/collect; auction list/buy/cancel/expire.
 - Professions sim: train herbalism/alchemy → gather nodes → craft recipes.
-- Zone transition Eastbrook ↔ Eastfen without wiping player progression.
+- Zone transition Eastbrook ↔ Eastfen ↔ Mirefen without wiping player progression.
 - Dungeon instance shell (`eastbrook_crypt`) with boss spawn + leave.
+- Delve loop (`eastbrook_hollow`): 3 rooms → advance → reward.
 - Light PvP: duel challenge/accept, open-world PvP flag, honor currency.
-- World boss deed stub (`eastfen_mire_terror`) granting honor on template kill.
+- World boss deed (`mire_terror` / eastfen_mire_terror) granting honor on kill.
 - Protocol additive interact/events/snapshot fields for the above (rev still 2).
+- Persist R4 character fields: zone, talents, bank, honor, professions (backward-compatible JSON).
+- Bevy client panels: talents (N), bank (K), mail (M), market (U).
 
 ### Changed
 
 - Parity target `online-alive` → `completion`.
 - Rewrite version `0.3.0` → `1.0.0-pre`.
+- Mirefen filled from placeholder to open-world content.
 
 ## 0.3.0 — 2026-07-28
 

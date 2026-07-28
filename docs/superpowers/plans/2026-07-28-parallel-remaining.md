@@ -84,9 +84,21 @@ Everything else fans out.
 - [x] Zone transition to Eastfen without wiping player state
 - [x] Duel + PvP flag + honor
 - [x] ≥1 dungeon instance + boss under party loot
-- [ ] Delve optional same shell (partial — reuse dungeon shell)
+- [x] Delve optional same shell (`eastbrook_hollow` dedicated room loop)
 - [x] World boss + deed
 - [x] VERSION/STATUS/CHANGELOG + CI green
+- [x] Mirefen / zone3 content + portal
+- [x] Client UI: talents/bank/mail/market
+- [x] Persist R4 character fields
+
+## Batch R4 — polish (2026-07-28) — **DONE**
+
+| # | Workstream | Branch | Result |
+| --- | --- | --- | --- |
+| 1 | `ws-delve` | `cursor/ws-delve-8136` | merged |
+| 2 | `ws-zone3-mirefen` | `cursor/ws-zone3-mirefen-8136` | merged |
+| 3 | `ws-client-r4-ui` | `cursor/ws-client-r4-ui-8136` | merged |
+| 4 | `ws-persist-r4` | `cursor/ws-persist-r4-8136` | merged |
 
 ## Main-agent rules
 
