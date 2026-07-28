@@ -55,16 +55,17 @@ cargo run -p woc-server
 
 # Terminal B — Bevy client
 cargo run -p woc-client
-# Title: press 2 (or ←/→) to select Online, Enter → create character → Enter world
+# Title: 2 Online → Login/Register (F2) → Character Select → Enter world
 
 # Terminal C — optional second client (same Online path) for co-presence
 cargo run -p woc-client
 ```
 
-Default endpoint: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
-Online IO uses a dedicated OS thread + sync `tungstenite` bridged via `std::sync::mpsc` so Bevy’s update loop stays sync.
+REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` on a worker thread).  
+Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
+Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1** ability, **E** interact, **B** bags, **L** quests, **Esc** release cursor. Title: **1/2** Offline|Online. Character create: **←/→** change class.
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1** ability, **E** interact, **B** bags, **L** quests, **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
 
 ## Architecture
 
