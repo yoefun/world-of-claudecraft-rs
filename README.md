@@ -1,25 +1,28 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-0.3.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.0.0--pre-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `0.3.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`online-alive`**.
+**Rewrite `1.0.0-pre`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`completion`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 
-## What works in 0.3 (online-alive)
+## What works in 1.0-pre (completion)
 
-- Native Bevy client embedding a shared deterministic sim
-- Create any of **9 classes**, walk Eastbrook Vale
-- Talk to NPCs (E), accept/turn in quests, fight wolves & boars
-- Backpack inventory, equipment, vendor buy, XP/loot/level-up
-- Version footer: `WoC-rs 0.3.0 · upstream 0.31.0`
+- Native Bevy client embedding a shared deterministic sim (offline + online)
+- Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
+- Walk Eastbrook Vale, Eastfen, and Mirefen; dungeon crypt + 3-room delve
+- Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot
+- Bank, mail, auction house; herbalism → alchemy craft loop
+- Duels, PvP flag, honor; Mire Terror deed
+- Client panels: talents / bank / mail / market
+- Version footer: `WoC-rs 1.0.0-pre · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`)
-- Online Bevy client mode; death/respawn; GCD/casts/DoTs; deeper gear + tab target
+- Persist auth + character CRUD including talents/bank/honor/zone (memory default; Postgres optional)
 
 ## Crates
 
@@ -65,7 +68,7 @@ REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` o
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1** ability, **E** interact, **B** bags, **L** quests, **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **M** mail (P collect), **U** market (O buy), **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
 
 ## Architecture
 
@@ -78,7 +81,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Next:** completion program — online, persist, class depth, zones, group PvE, economy, professions, light PvP (`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Current:** `1.0.0-pre` / `completion`. Remaining polish: dedicated delve loop, denser zone3, Bevy UI for new systems.
 
 ## License
 

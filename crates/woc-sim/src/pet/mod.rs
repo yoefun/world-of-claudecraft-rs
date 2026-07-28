@@ -3,7 +3,7 @@
 use crate::combat::{deal_damage, dist2d, face_toward};
 use crate::entity::Entity;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
-use crate::world::{terrain_height, WORLD_SEED};
+use crate::world::{ground_height, WORLD_SEED};
 use woc_content::{pet_for_class, PetDef, PlayerClass};
 use woc_protocol::{EntityId, EntityKind, SimEvent, DT};
 
@@ -148,14 +148,16 @@ fn tick_one_pet(pet_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimE
 
     // Resolve attack target: owner's living mob/player target (not the pet itself).
     let attack_tid = owner_target.and_then(|tid| {
-        entities.iter().find(|e| {
-            e.id == tid
-                && e.alive
-                && e.id != pet_id
-                && e.id != owner_id
-                && matches!(e.kind, EntityKind::Mob | EntityKind::Player)
-        })
-        .map(|e| e.id)
+        entities
+            .iter()
+            .find(|e| {
+                e.id == tid
+                    && e.alive
+                    && e.id != pet_id
+                    && e.id != owner_id
+                    && matches!(e.kind, EntityKind::Mob | EntityKind::Player)
+            })
+            .map(|e| e.id)
     });
 
     entities[pi].target = attack_tid;
@@ -213,7 +215,7 @@ fn move_toward(pet: &mut Entity, tx: f32, tz: f32, speed: f32) {
     let step = speed * DT;
     pet.x += dx / d * step.min(d);
     pet.z += dz / d * step.min(d);
-    pet.y = terrain_height(pet.x, pet.z, WORLD_SEED);
+    pet.y = ground_height(pet.x, pet.z, WORLD_SEED);
     pet.yaw = dx.atan2(dz);
 }
 
@@ -322,7 +324,10 @@ mod tests {
         let second = find_pet(&entities, 1).unwrap();
         assert_ne!(first, second);
         assert_eq!(
-            entities.iter().filter(|e| e.kind == EntityKind::Pet).count(),
+            entities
+                .iter()
+                .filter(|e| e.kind == EntityKind::Pet)
+                .count(),
             1
         );
     }

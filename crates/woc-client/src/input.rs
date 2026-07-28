@@ -3,9 +3,10 @@
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent};
+use woc_content::talents::talents_for_class;
+use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, TickSnapshot};
 
-use crate::hud::UiFlags;
+use crate::hud::{first_junk_bag_stack, UiFlags};
 use crate::GameHost;
 
 pub(crate) fn grab_cursor(
@@ -114,6 +115,19 @@ pub(crate) fn collect_intent(
     host.pending_intent = intent;
 }
 
+fn first_available_talent_id(snap: &TickSnapshot) -> Option<String> {
+    talents_for_class(&snap.progress.class_id)
+        .find(|def| {
+            snap.talents
+                .iter()
+                .find(|rank| rank.talent_id == def.id)
+                .map(|rank| rank.rank)
+                .unwrap_or(0)
+                < def.max_rank
+        })
+        .map(|def| def.id.to_string())
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
@@ -127,7 +141,120 @@ pub(crate) fn handle_interact_keys(
     }
     if keys.just_pressed(KeyCode::KeyC) {
         ui.show_character = !ui.show_character;
+        if ui.show_character {
+            ui.show_talents = false;
+            ui.show_bank = false;
+            ui.show_mail = false;
+            ui.show_market = false;
+        }
     }
+    if keys.just_pressed(KeyCode::KeyN) {
+        ui.show_talents = !ui.show_talents;
+        if ui.show_talents {
+            ui.show_character = false;
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyK) {
+        ui.show_bank = !ui.show_bank;
+        if ui.show_bank {
+            ui.show_character = false;
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyM) {
+        ui.show_mail = !ui.show_mail;
+        if ui.show_mail {
+            ui.show_character = false;
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyU) {
+        ui.show_market = !ui.show_market;
+        if ui.show_market {
+            ui.show_character = false;
+        }
+    }
+
+    let player_id = host.snapshot.player_id;
+    if ui.show_talents && (keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::KeyY)) {
+        if host.snapshot.talent_points == 0 {
+            host.recent_toasts
+                .push(("No unspent talent points.".into(), 2.0));
+        } else if let Some(talent_id) = first_available_talent_id(&host.snapshot) {
+            host.interact(
+                player_id,
+                InteractAction::LearnTalent {
+                    talent_id: talent_id.clone(),
+                },
+            );
+            host.recent_toasts
+                .push((format!("Learning talent: {talent_id}"), 2.0));
+        } else {
+            host.recent_toasts
+                .push(("No available class talent.".into(), 2.0));
+        }
+    }
+    if ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
+        host.interact(player_id, InteractAction::RespecTalents);
+        host.recent_toasts.push(("Respeccing talents.".into(), 2.0));
+    }
+    if ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
+        if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
+            host.interact(player_id, InteractAction::BankDeposit { bag_slot, count });
+            host.recent_toasts
+                .push((format!("Depositing {count}×{item_id}."), 2.0));
+        } else {
+            host.recent_toasts
+                .push(("No junk stack in bags.".into(), 2.0));
+        }
+    }
+    if ui.show_bank && keys.just_pressed(KeyCode::KeyH) {
+        if let Some(stack) = host.snapshot.bank.first().cloned() {
+            host.interact(
+                player_id,
+                InteractAction::BankWithdraw {
+                    bank_slot: 0,
+                    count: stack.count,
+                },
+            );
+            host.recent_toasts.push((
+                format!("Withdrawing {}×{}.", stack.count, stack.item_id),
+                2.0,
+            ));
+        } else {
+            host.recent_toasts.push(("Bank is empty.".into(), 2.0));
+        }
+    }
+    if ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        if let Some(mail) = host.snapshot.mail.first() {
+            let mail_id = mail.id;
+            host.interact(player_id, InteractAction::MailCollect { mail_id });
+            host.recent_toasts
+                .push((format!("Collecting mail #{mail_id}."), 2.0));
+        } else {
+            host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+        if let Some(listing) = host.snapshot.market.first().cloned() {
+            if listing.price <= host.snapshot.progress.copper {
+                host.interact(
+                    player_id,
+                    InteractAction::MarketBuy {
+                        listing_id: listing.id,
+                    },
+                );
+                host.recent_toasts.push((
+                    format!("Buying listing #{} for {}c.", listing.id, listing.price),
+                    2.0,
+                ));
+            } else {
+                host.recent_toasts
+                    .push(("Not enough copper for first listing.".into(), 2.0));
+            }
+        } else {
+            host.recent_toasts.push(("No market listings.".into(), 2.0));
+        }
+    }
+
     if !keys.just_pressed(KeyCode::KeyE) {
         return;
     }
@@ -196,5 +323,46 @@ pub(crate) fn handle_interact_keys(
             );
         }
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use woc_protocol::{InvSlotSnapshot, TalentRankSnapshot, TickSnapshot};
+
+    #[test]
+    fn first_available_talent_uses_class_and_skips_max_rank() {
+        let mut snap = TickSnapshot::default();
+        snap.progress.class_id = "warrior".into();
+        snap.talents.push(TalentRankSnapshot {
+            talent_id: "warrior_cruelty".into(),
+            rank: 5,
+        });
+
+        assert_eq!(first_available_talent_id(&snap), None);
+
+        snap.talents[0].rank = 4;
+        assert_eq!(
+            first_available_talent_id(&snap).as_deref(),
+            Some("warrior_cruelty")
+        );
+    }
+
+    #[test]
+    fn first_junk_stack_ignores_non_junk_inventory() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            item_id: "baked_bread".into(),
+            count: 2,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            item_id: "wolf_fang".into(),
+            count: 3,
+        });
+
+        assert_eq!(
+            first_junk_bag_stack(&snap),
+            Some((1, 3, "wolf_fang".into()))
+        );
+    }
 }

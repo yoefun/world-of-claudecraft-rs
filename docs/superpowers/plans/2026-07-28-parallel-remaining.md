@@ -53,18 +53,52 @@ Everything else fans out.
 | 4 | `ws-zone-transition` | zone2 content | CORE `sim.rs` zone change (main or single agent) |
 | 5 | `ws-client-login` | persist auth | `woc-client` login UI |
 
-## Batch R3 — after R2 (parallel where noted)
+## Batch R3 — after R2 (parallel where noted) — **ACTIVE 2026-07-28**
 
-| Streams | Parallel? |
-| --- | --- |
-| talents (after kits) | with pets polish |
-| loot-rules (after party) | alone then dungeons |
-| bank ∥ mail (after persist) | yes |
-| market (after bank) | |
-| professions sim (after content + zones) | with market |
-| pvp duel/honor | with professions |
-| dungeon shell → delve | sequential-ish |
-| worldboss/deeds | with pvp |
+**Base tip:** `develop` @ `791c3f9` (R1+R2 merged). Integration: `cursor/r3-completion-8136`.
+
+| # | Workstream | Branch | Exclusive paths | Depends |
+| --- | --- | --- | --- | --- |
+| 0 | `ws-proto-r3` | (integration) | `woc-protocol` only | — freeze first |
+| 1 | `ws-talents` | `cursor/ws-talents-8136` | `woc-content/talents.rs`, `woc-sim/src/talents.rs` | PROTO |
+| 2 | `ws-loot-rules` | `cursor/ws-loot-rules-8136` | `woc-sim/src/social/loot.rs` | PROTO + party |
+| 3 | `ws-bank` | `cursor/ws-bank-8136` | `woc-sim/src/bank.rs` | PROTO |
+| 4 | `ws-mail` | `cursor/ws-mail-8136` | `woc-sim/src/mail.rs` | PROTO |
+| 5 | `ws-market` | `cursor/ws-market-8136` | `woc-sim/src/market.rs` | after bank types stable |
+| 6 | `ws-professions-sim` | `cursor/ws-professions-sim-8136` | `woc-sim/src/professions/**` | PROTO + content tables |
+| 7 | `ws-pvp` | `cursor/ws-pvp-8136` | `woc-sim/src/pvp/**` | PROTO |
+| 8 | `ws-zone-transition` | `cursor/ws-zone-transition-8136` | zone content + `zones.rs` helpers (leave `sim.rs` to main) | zone2 content |
+| 9 | `ws-dungeons` | `cursor/ws-dungeons-8136` | `woc-content/dungeons.rs`, `woc-sim/src/instances/**` | loot-rules preferred |
+| 10 | `ws-worldboss-deeds` | `cursor/ws-worldboss-8136` | content deeds/boss + `woc-sim/src/worldboss.rs` | combat |
+
+**R3 launch order:** PROTO → (talents ∥ loot ∥ bank ∥ mail ∥ professions ∥ pvp ∥ zone helpers ∥ dungeon content ∥ worldboss) → market (after bank) → main wires `sim.rs` → version/STATUS gate.
+
+### Remaining DoD checklist (→ `1.0.0-pre` / `completion`)
+
+- [x] Talents: spend points; ≥1 talent changes damage; respec
+- [x] Loot rules: FFA vs Need/Greed via sim RNG
+- [x] Bank deposit/withdraw durable
+- [x] Mail send/collect (+ item)
+- [x] Market list/buy/expire/fee
+- [x] Professions: gather → craft one full loop
+- [x] Zone transition to Eastfen without wiping player state
+- [x] Duel + PvP flag + honor
+- [x] ≥1 dungeon instance + boss under party loot
+- [x] Delve optional same shell (`eastbrook_hollow` dedicated room loop)
+- [x] World boss + deed
+- [x] VERSION/STATUS/CHANGELOG + CI green
+- [x] Mirefen / zone3 content + portal
+- [x] Client UI: talents/bank/mail/market
+- [x] Persist R4 character fields
+
+## Batch R4 — polish (2026-07-28) — **DONE**
+
+| # | Workstream | Branch | Result |
+| --- | --- | --- | --- |
+| 1 | `ws-delve` | `cursor/ws-delve-8136` | merged |
+| 2 | `ws-zone3-mirefen` | `cursor/ws-zone3-mirefen-8136` | merged |
+| 3 | `ws-client-r4-ui` | `cursor/ws-client-r4-ui-8136` | merged |
+| 4 | `ws-persist-r4` | `cursor/ws-persist-r4-8136` | merged |
 
 ## Main-agent rules
 

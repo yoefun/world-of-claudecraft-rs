@@ -7,12 +7,12 @@ use super::Aabb;
 /// Footprint sits past the graveyard (`z ≈ 8`) so northbound walkers from spawn
 /// `(2, 4)` collide with a solid volume.
 pub const EASTBROOK_INN: Aabb = Aabb::new(
-    -1.0, // min_x
-    -4.0, // min_y (covers heightfield bowl)
-    10.0, // min_z
-    3.0,  // max_x
-    8.0,  // max_y
-    14.0, // max_z
+    -1.0,  // min_x
+    -2.0,  // min_y (hub plateau ~1.5)
+    10.0,  // min_z
+    3.0,   // max_x
+    12.0,  // max_y
+    14.0,  // max_z
 );
 
 /// All solid building AABBs in Eastbrook Vale (extensible).

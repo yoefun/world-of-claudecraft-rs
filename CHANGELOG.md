@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.0.0-pre — 2026-07-28
+
+### Added
+
+- Upstream-aligned continuous strip heightfield (seed `20061`, pin `a3e5e959`): biome bands, hubs, lakes, camps, Sowfield flatten, ridge/rim walls, terrace.
+- Golden harness `crates/woc-sim/tests/data/terrain_golden.json` (noise + height/steepness; ε≈1e-3 vs JS).
+- `WorldSpatial` content layer + absolute strip coordinates for Eastbrook / Eastfen / Mirefen / Thornpeak.
+- Chunked Bevy terrain/water sampling via the same `terrain_height` / `ground_height` functions.
+- Talents: class trees, spend/respec, damage_pct multipliers on combat.
+- Party loot rules: FFA + Need/Greed rolls via sim RNG.
+- Economy: personal bank deposit/withdraw; mail send/collect; auction list/buy/cancel/expire.
+- Professions sim: train herbalism/alchemy → gather nodes → craft recipes.
+- Zone transition Eastbrook ↔ Eastfen ↔ Mirefen without wiping player progression.
+- Dungeon instance shell (`eastbrook_crypt`) with boss spawn + leave.
+- Delve loop (`eastbrook_hollow`): 3 rooms → advance → reward.
+- Light PvP: duel challenge/accept, open-world PvP flag, honor currency.
+- World boss deed (`mire_terror` / eastfen_mire_terror) granting honor on kill.
+- Protocol additive interact/events/snapshot fields for the above (rev still 2).
+- Persist R4 character fields: zone, talents, bank, honor, professions (backward-compatible JSON).
+- Bevy client panels: talents (N), bank (K), mail (M), market (U).
+
+### Changed
+
+- World bounds: `WORLD_MAX_X=180`, `z ∈ [-180, 900]` (replaces square `WORLD_HALF=120` bowl).
+- Zone portals teleport on the shared coordinate system without wiping other-zone actors.
+- Player/mob/pet motion climb limit `1.5` rise/run + `ground_height` footing.
+- Parity target `online-alive` → `completion`.
+- Rewrite version `0.3.0` → `1.0.0-pre`.
+- Mirefen filled from placeholder to open-world content.
+
 ## 0.3.0 — 2026-07-28
 
 ### Added

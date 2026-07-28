@@ -17,9 +17,7 @@ use crate::combat::{
     update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
-use crate::entity::{
-    create_mob_from_template, create_npc_from_template, create_player, Entity, QuestState,
-};
+use crate::entity::{create_player, Entity, QuestState};
 use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
@@ -29,6 +27,7 @@ use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
+use crate::zones::populate_all_overworld;
 use crate::world::WORLD_SEED;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
@@ -53,36 +52,20 @@ pub struct Sim {
     pub intents: HashMap<EntityId, PlayerIntent>,
     /// Party invite / membership roster for this realm.
     pub parties: PartyRoster,
+    pub mail: crate::mail::Mailbox,
+    pub market: crate::market::AuctionHouse,
+    pub loot_rules: crate::social::LootRules,
+    pub pvp: crate::pvp::PvpState,
 }
 
 impl Sim {
-    /// Eastbrook NPCs + mobs only (no player). Used by the online sticky realm.
+    /// Continuous overworld (all zone bands) with no player. Online sticky realm.
     pub fn new_empty_eastbrook() -> Self {
         let seed = WORLD_SEED;
         let mut rng = Rng::new(seed);
         let mut next_id = 1u32;
         let mut entities = Vec::new();
-
-        for spot in EASTBROOK.npcs {
-            let id = next_id;
-            next_id += 1;
-            if let Some(npc) = create_npc_from_template(id, spot.npc_id, spot.x, spot.z) {
-                entities.push(npc);
-            }
-        }
-
-        for spot in EASTBROOK.mobs {
-            let id = next_id;
-            next_id += 1;
-            if let Some(mut mob) = create_mob_from_template(id, spot.mob_id, spot.x, spot.z) {
-                mob.x += (rng.next_f32() - 0.5) * 1.5;
-                mob.z += (rng.next_f32() - 0.5) * 1.5;
-                mob.home_x = mob.x;
-                mob.home_z = mob.z;
-                mob.y = Entity::ground_at(mob.x, mob.z);
-                entities.push(mob);
-            }
-        }
+        populate_all_overworld(&mut entities, &mut next_id, &mut rng);
 
         Self {
             tick: 0,
@@ -94,6 +77,10 @@ impl Sim {
             events: Vec::new(),
             intents: HashMap::new(),
             parties: PartyRoster::new(),
+            mail: crate::mail::Mailbox::new(),
+            market: crate::market::AuctionHouse::new(),
+            loot_rules: crate::social::LootRules::default(),
+            pvp: crate::pvp::PvpState::default(),
         }
     }
 
@@ -373,6 +360,11 @@ impl Sim {
                         grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
                         if let Some(ref tid) = reward.template_id {
                             on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
+                            crate::worldboss::on_boss_killed(
+                                &mut self.entities[pi],
+                                tid,
+                                &mut self.events,
+                            );
                         }
                     }
                 }
@@ -388,6 +380,10 @@ impl Sim {
         }
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
         crate::death::on_player_death_check(&mut self.entities, &mut self.events);
+
+        // PvP duel resolve + honor (does not add a locked tick phase).
+        crate::pvp::tick_pvp(&mut self.pvp, &mut self.entities, &mut self.events);
+        self.market.tick_expire(self.tick, &mut self.entities);
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
@@ -563,6 +559,50 @@ impl Sim {
             cast,
             is_dead: player.map(|p| !p.alive).unwrap_or(false),
             party_id: self.parties.party_id(player_id),
+            zone_id: player
+                .map(|p| p.zone_id.clone())
+                .unwrap_or_else(|| "eastbrook".into()),
+            talent_points: player.map(|p| p.talent_points).unwrap_or(0),
+            talents: player
+                .map(|p| {
+                    p.talents
+                        .iter()
+                        .map(|(id, rank)| woc_protocol::TalentRankSnapshot {
+                            talent_id: id.clone(),
+                            rank: *rank,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            bank: player
+                .map(|p| {
+                    p.bank
+                        .iter()
+                        .filter_map(|s| {
+                            s.as_ref().map(|st| InvSlotSnapshot {
+                                item_id: st.item_id.clone(),
+                                count: st.count,
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            mail: self.mail.snapshot_for(player_id),
+            market: self.market.snapshot_public(),
+            honor: player.map(|p| p.honor).unwrap_or(0),
+            pvp_flagged: player.map(|p| p.pvp_flagged).unwrap_or(false),
+            professions: player
+                .map(|p| {
+                    p.professions
+                        .iter()
+                        .map(|(id, skill)| woc_protocol::ProfessionSkillSnapshot {
+                            id: id.clone(),
+                            skill: *skill,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            loot_mode: self.parties.loot_mode(player_id),
         }
     }
 }

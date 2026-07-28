@@ -59,11 +59,7 @@ pub fn add_threat(mob: &mut Entity, source: EntityId, amount: f32) {
 }
 
 /// Prefer current living target; else highest threat in range; else `None`.
-pub fn prefer_mob_target(
-    mob: &Entity,
-    entities: &[Entity],
-    max_range: f32,
-) -> Option<EntityId> {
+pub fn prefer_mob_target(mob: &Entity, entities: &[Entity], max_range: f32) -> Option<EntityId> {
     if let Some(tid) = mob.target {
         if entities
             .iter()
@@ -105,7 +101,12 @@ pub fn deal_damage(
     if !entities[ti].alive || entities[ti].kind == EntityKind::Npc {
         return;
     }
-    let mitigated = (amount - entities[ti].armor * 0.05).max(1.0);
+    let talent_mult = entities
+        .iter()
+        .find(|e| e.id == source)
+        .map(crate::talents::damage_multiplier)
+        .unwrap_or(1.0);
+    let mitigated = (amount * talent_mult - entities[ti].armor * 0.05).max(1.0);
     entities[ti].hp = (entities[ti].hp - mitigated).max(0.0);
     if entities[ti].kind == EntityKind::Mob {
         add_threat(&mut entities[ti], source, mitigated);
@@ -195,7 +196,6 @@ fn apply_primary_dot(
     };
     apply_aura(&mut entities[ti], aura, events);
 }
-
 
 /// Tick all entity auras: DoT damage + expiry. Call once per sim tick.
 pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
@@ -291,6 +291,7 @@ pub fn grant_xp(player: &mut Entity, amount: u32, events: &mut Vec<SimEvent>) {
         events.push(SimEvent::Toast {
             message: format!("You reached level {}!", player.level),
         });
+        crate::talents::on_level_up(player);
         crate::entity::refresh_known_abilities(player);
     }
 }
@@ -416,12 +417,7 @@ fn start_ability_cd(player: &mut Entity, abil_id: &str, cooldown: f32) {
 }
 
 fn ability_on_cd(player: &Entity, abil_id: &str) -> bool {
-    player
-        .ability_cds
-        .get(abil_id)
-        .copied()
-        .unwrap_or(0.0)
-        > 0.0
+    player.ability_cds.get(abil_id).copied().unwrap_or(0.0) > 0.0
 }
 
 fn resolve_ability_hit(
@@ -540,13 +536,7 @@ pub fn update_player_combat(
                     } else {
                         let src = entities[pi].id;
                         resolve_ability_hit(
-                            entities,
-                            src,
-                            tid,
-                            abil_id,
-                            def.name,
-                            def.damage,
-                            events,
+                            entities, src, tid, abil_id, def.name, def.damage, events,
                         );
                         // Instant ability: skip auto this frame (legacy behavior).
                         return;
@@ -572,7 +562,6 @@ pub fn update_player_combat(
     let src = entities[pi].id;
     deal_damage(entities, src, tid, dmg, None, events);
 }
-
 
 pub fn update_mob_combat(
     mob_id: EntityId,
@@ -669,9 +658,13 @@ mod tests {
             "GCD must not re-apply primary DoT"
         );
         assert!(
-            !events
-                .iter()
-                .any(|e| matches!(e, SimEvent::Damage { ability: Some(_), .. })),
+            !events.iter().any(|e| matches!(
+                e,
+                SimEvent::Damage {
+                    ability: Some(_),
+                    ..
+                }
+            )),
             "no ability damage while on GCD"
         );
 
@@ -682,7 +675,10 @@ mod tests {
         entities[0].resource = 100.0;
         entities[0].auto_attack = false;
         update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
-        assert!(entities[1].hp < hp_before_second, "cast after GCD should hit");
+        assert!(
+            entities[1].hp < hp_before_second,
+            "cast after GCD should hit"
+        );
     }
 
     #[test]
@@ -740,12 +736,10 @@ mod tests {
 
     #[test]
     fn fireball_starts_timed_cast() {
-        let mut player =
-            crate::entity::create_player(1, "Mage", PlayerClass::Mage, 0.0, 0.0);
+        let mut player = crate::entity::create_player(1, "Mage", PlayerClass::Mage, 0.0, 0.0);
         player.resource = 100.0;
         player.primary_ability = Some("fireball".into());
-        let mut mob =
-            crate::entity::create_mob_from_template(2, "young_wolf", 5.0, 0.0).unwrap();
+        let mut mob = crate::entity::create_mob_from_template(2, "young_wolf", 5.0, 0.0).unwrap();
         mob.hp = 500.0;
         mob.hp_max = 500.0;
         player.target = Some(mob.id);

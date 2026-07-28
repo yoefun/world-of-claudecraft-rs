@@ -32,7 +32,14 @@ impl Aabb {
 
     /// Character footprint AABB standing on `(x, y, z)` with horizontal radius and height.
     pub fn character(x: f32, y: f32, z: f32, radius: f32, height: f32) -> Self {
-        Self::new(x - radius, y, z - radius, x + radius, y + height, z + radius)
+        Self::new(
+            x - radius,
+            y,
+            z - radius,
+            x + radius,
+            y + height,
+            z + radius,
+        )
     }
 
     #[inline]

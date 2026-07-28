@@ -10,6 +10,7 @@ pub const LEASH_RANGE: f32 = 40.0;
 pub const INTERACT_RANGE: f32 = 4.0;
 pub const LOOT_RANGE: f32 = 2.0;
 pub const BACKPACK_SLOTS: usize = 16;
+pub const BANK_SLOTS: usize = 24;
 pub const PLAYER_SWING_SEC: f32 = 2.0;
 pub const MOB_SWING_SEC: f32 = 2.0;
 pub const MOB_SPEED: f32 = 5.5;

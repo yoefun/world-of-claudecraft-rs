@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use woc_protocol::{EntityId, InteractAction, VendorSnapshot};
+use woc_content::{item, talents::talents_for_class, ItemKind};
+use woc_protocol::{EntityId, InteractAction, TickSnapshot, VendorSnapshot};
 
 use crate::{GameHost, NetStatus, PlayMode};
 
@@ -64,11 +65,29 @@ pub(crate) struct HudCastFill;
 #[derive(Component)]
 pub(crate) struct HudActionBarText;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ChromePanelKind {
+    Talents,
+    Bank,
+    Mail,
+    Market,
+}
+
+#[derive(Component)]
+pub(crate) struct HudChromePanel(pub(crate) ChromePanelKind);
+
+#[derive(Component)]
+pub(crate) struct HudChromeText(pub(crate) ChromePanelKind);
+
 #[derive(Resource)]
 pub(crate) struct UiFlags {
     pub(crate) show_bags: bool,
     pub(crate) show_quests: bool,
     pub(crate) show_character: bool,
+    pub(crate) show_talents: bool,
+    pub(crate) show_bank: bool,
+    pub(crate) show_mail: bool,
+    pub(crate) show_market: bool,
 }
 
 #[derive(Resource, Default)]
@@ -81,6 +100,10 @@ pub(crate) fn plugin(app: &mut App) {
         show_bags: false,
         show_quests: false,
         show_character: false,
+        show_talents: false,
+        show_bank: false,
+        show_mail: false,
+        show_market: false,
     })
     .init_resource::<VendorUiCache>();
 }
@@ -91,6 +114,186 @@ fn vendor_cache_key(v: &VendorSnapshot) -> String {
         key.push_str(&format!("|{}:{}:{}", o.item_id, o.count, o.price));
     }
     key
+}
+
+pub(crate) fn first_junk_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String)> {
+    snap.inventory
+        .iter()
+        .enumerate()
+        .find(|(_, stack)| {
+            item(&stack.item_id)
+                .map(|def| def.kind == ItemKind::Junk)
+                .unwrap_or(false)
+        })
+        .and_then(|(slot, stack)| {
+            u8::try_from(slot)
+                .ok()
+                .map(|slot| (slot, stack.count, stack.item_id.clone()))
+        })
+}
+
+fn zone_name(snap: &TickSnapshot) -> &str {
+    if snap.zone_id.is_empty() {
+        "—"
+    } else {
+        &snap.zone_id
+    }
+}
+
+fn talent_panel_text(snap: &TickSnapshot) -> String {
+    let professions = if snap.professions.is_empty() {
+        "none".into()
+    } else {
+        snap.professions
+            .iter()
+            .map(|p| format!("{} {}", p.id, p.skill))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut lines = vec![
+        "Talents [N]".to_string(),
+        format!("Zone: {}   Honor: {}", zone_name(snap), snap.honor),
+        format!("Professions: {professions}"),
+        format!("Points: {}", snap.talent_points),
+    ];
+    let mut any = false;
+    for def in talents_for_class(&snap.progress.class_id) {
+        any = true;
+        let rank = snap
+            .talents
+            .iter()
+            .find(|rank| rank.talent_id == def.id)
+            .map(|rank| rank.rank)
+            .unwrap_or(0);
+        lines.push(format!(
+            "  {} {}/{} — {}",
+            def.id, rank, def.max_rank, def.name
+        ));
+    }
+    if !any {
+        for rank in &snap.talents {
+            lines.push(format!("  {} rank {}", rank.talent_id, rank.rank));
+            any = true;
+        }
+    }
+    if !any {
+        lines.push("  (none for current class)".into());
+    }
+    lines.push("[Enter/Y] Learn first available   [R] Respec".into());
+    lines.join("\n")
+}
+
+fn bank_panel_text(snap: &TickSnapshot) -> String {
+    let mut lines = vec![
+        "Bank [K]".to_string(),
+        format!("Zone: {}", zone_name(snap)),
+        "Stored:".into(),
+    ];
+    if snap.bank.is_empty() {
+        lines.push("  (empty)".into());
+    } else {
+        lines.extend(
+            snap.bank
+                .iter()
+                .enumerate()
+                .map(|(slot, stack)| format!("  [{slot}] {}×{}", stack.count, stack.item_id)),
+        );
+    }
+    match first_junk_bag_stack(snap) {
+        Some((_, count, item_id)) => {
+            lines.push(format!("[G] Deposit {count}×{item_id} (first bag junk)"));
+        }
+        None => lines.push("[G] Deposit first bag junk (none)".into()),
+    }
+    match snap.bank.first() {
+        Some(stack) => lines.push(format!(
+            "[H] Withdraw {}×{} (first bank slot)",
+            stack.count, stack.item_id
+        )),
+        None => lines.push("[H] Withdraw first bank slot (empty)".into()),
+    }
+    lines.join("\n")
+}
+
+fn mail_panel_text(snap: &TickSnapshot) -> String {
+    let mut lines = vec!["Mail [M]".to_string(), format!("Zone: {}", zone_name(snap))];
+    if snap.mail.is_empty() {
+        lines.push("  (inbox empty)".into());
+    } else {
+        for mail in &snap.mail {
+            let mut attachments = Vec::new();
+            if mail.copper > 0 {
+                attachments.push(format!("{}c", mail.copper));
+            }
+            if let Some(item_id) = &mail.item_id {
+                attachments.push(format!("{}×{item_id}", mail.item_count));
+            }
+            let suffix = if attachments.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", attachments.join(" + "))
+            };
+            lines.push(format!(
+                "  #{} {} — {}{}",
+                mail.id, mail.from, mail.subject, suffix
+            ));
+        }
+    }
+    lines.push("[P] Collect first mail".into());
+    lines.join("\n")
+}
+
+fn market_panel_text(snap: &TickSnapshot) -> String {
+    let mut lines = vec![
+        "Market [U]".to_string(),
+        format!(
+            "Zone: {}   Copper: {}   Honor: {}",
+            zone_name(snap),
+            snap.progress.copper,
+            snap.honor
+        ),
+    ];
+    if snap.market.is_empty() {
+        lines.push("  (no listings)".into());
+    } else {
+        lines.extend(snap.market.iter().map(|listing| {
+            format!(
+                "  #{} {}×{} — {}c ({})",
+                listing.id, listing.count, listing.item_id, listing.price, listing.seller
+            )
+        }));
+    }
+    lines.push("[O] Buy first listing (if affordable)".into());
+    lines.join("\n")
+}
+
+pub(crate) fn update_chrome_panels(
+    host: Res<GameHost>,
+    ui: Res<UiFlags>,
+    mut panels: Query<(&HudChromePanel, &mut Visibility)>,
+    mut texts: Query<(&HudChromeText, &mut Text)>,
+) {
+    for (panel, mut visibility) in &mut panels {
+        let shown = match panel.0 {
+            ChromePanelKind::Talents => ui.show_talents,
+            ChromePanelKind::Bank => ui.show_bank,
+            ChromePanelKind::Mail => ui.show_mail,
+            ChromePanelKind::Market => ui.show_market,
+        };
+        *visibility = if shown {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    for (panel, mut text) in &mut texts {
+        **text = match panel.0 {
+            ChromePanelKind::Talents => talent_panel_text(&host.snapshot),
+            ChromePanelKind::Bank => bank_panel_text(&host.snapshot),
+            ChromePanelKind::Mail => mail_panel_text(&host.snapshot),
+            ChromePanelKind::Market => market_panel_text(&host.snapshot),
+        };
+    }
 }
 
 pub(crate) fn update_hud(
@@ -337,11 +540,7 @@ pub(crate) fn update_hud(
                 *vis = Visibility::Visible;
             }
             if let Ok(mut t) = cast_text.single_mut() {
-                **t = format!(
-                    "Casting {}… {:.0}%",
-                    cast.ability_id,
-                    cast.progress * 100.0
-                );
+                **t = format!("Casting {}… {:.0}%", cast.ability_id, cast.progress * 100.0);
             }
             if let Ok(mut node) = cast_fill.single_mut() {
                 node.width = Val::Percent((cast.progress * 100.0).clamp(0.0, 100.0));
@@ -403,10 +602,8 @@ pub(crate) fn sync_vendor_panel(
             let empty = stock.is_empty();
             commands.entity(offers_e).with_children(|parent| {
                 for offer in stock {
-                    let label = format!(
-                        "Buy {} ×{} — {}c",
-                        offer.item_id, offer.count, offer.price
-                    );
+                    let label =
+                        format!("Buy {} ×{} — {}c", offer.item_id, offer.count, offer.price);
                     parent
                         .spawn((
                             Button,
@@ -494,4 +691,94 @@ pub(crate) fn toast_fade(time: Res<Time>, mut host: ResMut<GameHost>) {
         *life -= dt;
     }
     host.recent_toasts.retain(|(_, life)| *life > 0.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use woc_protocol::{
+        InvSlotSnapshot, MailSnapshot, MarketListingSnapshot, ProfessionSkillSnapshot,
+        TalentRankSnapshot, TickSnapshot,
+    };
+
+    fn chrome_snapshot() -> TickSnapshot {
+        let mut snap = TickSnapshot::default();
+        snap.progress.class_id = "warrior".into();
+        snap.progress.copper = 75;
+        snap.zone_id = "eastbrook".into();
+        snap.honor = 12;
+        snap.talent_points = 2;
+        snap.talents.push(TalentRankSnapshot {
+            talent_id: "warrior_cruelty".into(),
+            rank: 1,
+        });
+        snap.professions.push(ProfessionSkillSnapshot {
+            id: "herbalism".into(),
+            skill: 18,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            item_id: "wolf_fang".into(),
+            count: 3,
+        });
+        snap.bank.push(InvSlotSnapshot {
+            item_id: "silverleaf".into(),
+            count: 4,
+        });
+        snap.mail.push(MailSnapshot {
+            id: 7,
+            from: "Ada".into(),
+            subject: "Parcel".into(),
+            copper: 9,
+            item_id: Some("baked_bread".into()),
+            item_count: 2,
+        });
+        snap.market.push(MarketListingSnapshot {
+            id: 11,
+            seller: "Grace".into(),
+            item_id: "peacebloom".into(),
+            count: 5,
+            price: 30,
+        });
+        snap
+    }
+
+    #[test]
+    fn talent_panel_formats_progression_context_and_help() {
+        let text = talent_panel_text(&chrome_snapshot());
+
+        assert!(text.contains("Points: 2"));
+        assert!(text.contains("warrior_cruelty 1/5"));
+        assert!(text.contains("Zone: eastbrook"));
+        assert!(text.contains("Honor: 12"));
+        assert!(text.contains("herbalism 18"));
+        assert!(text.contains("[Enter/Y] Learn"));
+        assert!(text.contains("[R] Respec"));
+    }
+
+    #[test]
+    fn bank_panel_formats_slots_and_action_targets() {
+        let text = bank_panel_text(&chrome_snapshot());
+
+        assert!(text.contains("[0] 4×silverleaf"));
+        assert!(text.contains("[G] Deposit 3×wolf_fang"));
+        assert!(text.contains("[H] Withdraw 4×silverleaf"));
+    }
+
+    #[test]
+    fn mail_panel_formats_attachments_and_collect_help() {
+        let text = mail_panel_text(&chrome_snapshot());
+
+        assert!(text.contains("#7 Ada — Parcel"));
+        assert!(text.contains("9c + 2×baked_bread"));
+        assert!(text.contains("[P] Collect first mail"));
+    }
+
+    #[test]
+    fn market_panel_formats_listings_wallet_and_buy_help() {
+        let text = market_panel_text(&chrome_snapshot());
+
+        assert!(text.contains("Copper: 75"));
+        assert!(text.contains("#11 5×peacebloom — 30c (Grace)"));
+        assert!(text.contains("[O] Buy first listing"));
+    }
 }

@@ -4,8 +4,8 @@
 
 use crate::error::{PersistError, PersistResult};
 use crate::models::{
-    equipment_from_json, equipment_to_json, inventory_from_json, inventory_to_json,
-    quests_from_json, quests_to_json, Character, CharacterSave, EquipmentDto,
+    completion_from_json, completion_to_json, equipment_from_json, equipment_to_json,
+    inventory_from_json, inventory_to_json, Character, CharacterSave, EquipmentDto,
 };
 use crate::password::{hash_password, verify_password};
 use crate::store::{validate_character_name, validate_username};
@@ -118,7 +118,10 @@ impl PostgresStore {
         let id = Uuid::new_v4();
         let inventory = inventory_to_json(&[])?;
         let equipment = equipment_to_json(&EquipmentDto::default())?;
-        let quests = quests_to_json(&[])?;
+        let completion = completion_to_json(&CharacterSave {
+            level: 1,
+            ..Default::default()
+        })?;
         let res = sqlx::query(
             r#"
             INSERT INTO characters (
@@ -136,7 +139,7 @@ impl PostgresStore {
         .bind(&class_id)
         .bind(&inventory)
         .bind(&equipment)
-        .bind(&quests)
+        .bind(&completion)
         .execute(&self.pool)
         .await;
         match res {
@@ -205,7 +208,7 @@ impl PostgresStore {
     ) -> PersistResult<Character> {
         let inventory = inventory_to_json(&save.inventory)?;
         let equipment = equipment_to_json(&save.equipment)?;
-        let quests = quests_to_json(&save.quests)?;
+        let completion = completion_to_json(&save)?;
         let res = sqlx::query(
             r#"
             UPDATE characters SET
@@ -229,7 +232,7 @@ impl PostgresStore {
         .bind(save.pos_z)
         .bind(&inventory)
         .bind(&equipment)
-        .bind(&quests)
+        .bind(&completion)
         .execute(&self.pool)
         .await?;
         if res.rows_affected() == 0 {
@@ -252,7 +255,8 @@ impl PostgresStore {
 fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
     let inventory_json: String = row.get("inventory_json");
     let equipment_json: String = row.get("equipment_json");
-    let quests_json: String = row.get("quests_json");
+    let completion_json: String = row.get("quests_json");
+    let completion = completion_from_json(&completion_json)?;
     Ok(Character {
         id: row.get("id"),
         account_id: row.get("account_id"),
@@ -265,7 +269,14 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         pos_z: row.get("pos_z"),
         inventory: inventory_from_json(&inventory_json)?,
         equipment: equipment_from_json(&equipment_json)?,
-        quests: quests_from_json(&quests_json)?,
+        quests: completion.quests,
+        zone_id: completion.zone_id,
+        talent_points: completion.talent_points,
+        talents: completion.talents,
+        bank: completion.bank,
+        honor: completion.honor,
+        professions: completion.professions,
+        pvp_flagged: completion.pvp_flagged,
     })
 }
 
@@ -291,6 +302,7 @@ fn split_sql(sql: &str) -> Vec<String> {
 #[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
+    use crate::models::{InvStackDto, ProfessionSkillDto, TalentRankDto};
 
     fn database_url() -> Option<String> {
         std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())
@@ -316,10 +328,26 @@ mod tests {
             copper: 5,
             pos_x: 1.0,
             pos_z: 2.0,
+            zone_id: "eastfen".into(),
+            talent_points: 2,
+            talents: vec![TalentRankDto {
+                talent_id: "arcane_focus".into(),
+                rank: 2,
+            }],
+            bank: vec![Some(InvStackDto {
+                item_id: "silverleaf".into(),
+                count: 8,
+            })],
+            honor: 125,
+            professions: vec![ProfessionSkillDto {
+                id: "herbalism".into(),
+                skill: 42,
+            }],
+            pvp_flagged: true,
             ..Default::default()
         };
-        let saved = store.save_character(c.id, save).await.unwrap();
-        assert_eq!(saved.level, 2);
+        let saved = store.save_character(c.id, save.clone()).await.unwrap();
+        assert_eq!(saved.to_save(), save);
         store.delete_character(aid, c.id).await.unwrap();
     }
 }

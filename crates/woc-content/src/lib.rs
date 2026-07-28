@@ -3,6 +3,7 @@
 
 pub mod abilities;
 pub mod classes;
+pub mod delves;
 pub mod dungeons;
 pub mod gather_nodes;
 pub mod graveyards;
@@ -18,14 +19,17 @@ pub mod quests;
 pub mod quests_zone2;
 pub mod recipes;
 pub mod talents;
+pub mod world_spatial;
 pub mod zone1;
 pub mod zone2;
+pub mod zone3;
 
 pub use abilities::{ability, AbilityDef, ABILITIES};
 pub use classes::{
     class_ability_for_slot, class_def, known_abilities_at_level, ClassDef, ClassKitEntry,
     PlayerClass, ResourceType, CLASSES,
 };
+pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
 pub use gather_nodes::{
     gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES,
@@ -43,11 +47,29 @@ pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
 pub use quests_zone2::ZONE2_QUESTS;
 pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
 pub use talents::{talent, TalentDef, TALENTS};
+pub use world_spatial::{
+    canonical_zone_id, zone_at, zone_by_id, BiomeId, CampDef, HeightStamp, HubDef, LakeDef,
+    ZoneBand, CAMPS, JAIL_TERRAIN_EDITS, LAKE_BLEND_RADIUS_MULT, SOWFIELD_FLAT_FALLOFF,
+    SOWFIELD_FLAT_HEIGHT, SOWFIELD_FLAT_X_MAX, SOWFIELD_FLAT_X_MIN, SOWFIELD_FLAT_Z_MAX,
+    SOWFIELD_FLAT_Z_MIN, WATER_LEVEL, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED,
+    WORLD_SIZE, ZONE_EASTBROOK, ZONE_MIREFEN, ZONE_THORNPEAK, ZONES,
+};
 pub use zone1::{MobSpot, NpcSpot, ZoneLayout, EASTBROOK};
 pub use zone2::{EASTFEN, MIREFEN};
+pub use zone3::THORNPEAK;
 
-/// Known zone id strings referenced by graveyards and future zone tables.
-pub const KNOWN_ZONE_IDS: &[&str] = &["eastbrook", "eastfen", "mirefen"];
+/// Known zone id strings (aliases + canonical upstream ids).
+pub const KNOWN_ZONE_IDS: &[&str] = &[
+    "eastbrook",
+    "eastbrook_vale",
+    "eastfen",
+    "mirefen",
+    "mirefen_marsh",
+    "thornpeak",
+    "thornpeak_heights",
+    "fenbridge",
+    "highwatch",
+];
 
 #[cfg(test)]
 mod tests {
@@ -316,6 +338,14 @@ mod tests {
             graveyard_for_zone("eastbrook").is_some(),
             "graveyard_for_zone(eastbrook) must resolve"
         );
+        assert!(
+            graveyard("mirefen_graveyard").is_some(),
+            "mirefen_graveyard id must resolve"
+        );
+        assert!(
+            graveyard_for_zone("mirefen").is_some(),
+            "graveyard_for_zone(mirefen) must resolve"
+        );
         for g in GRAVEYARDS {
             assert!(
                 KNOWN_ZONE_IDS.contains(&g.zone_id),
@@ -327,10 +357,11 @@ mod tests {
     }
 
     #[test]
-    fn empty_talent_and_dungeon_lookups_are_safe() {
-        assert!(TALENTS.is_empty());
-        assert!(DUNGEONS.is_empty());
+    fn talent_and_dungeon_lookups_are_safe() {
+        assert!(!TALENTS.is_empty());
+        assert!(!DUNGEONS.is_empty());
         assert!(talent("missing_talent").is_none());
+        assert!(dungeon("eastbrook_crypt").is_some());
         assert!(dungeon("missing_dungeon").is_none());
     }
 
@@ -347,9 +378,41 @@ mod tests {
     }
 
     #[test]
-    fn mirefen_remains_placeholder() {
-        assert!(MIREFEN.npcs.is_empty());
-        assert!(MIREFEN.mobs.is_empty());
+    fn mirefen_layout_has_resolvable_content() {
+        assert!(
+            MIREFEN.npcs.len() >= 2,
+            "mirefen needs ≥2 NPC spots, got {}",
+            MIREFEN.npcs.len()
+        );
+        let mob_templates = MIREFEN
+            .mobs
+            .iter()
+            .map(|spot| spot.mob_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            mob_templates.len() >= 3,
+            "mirefen needs ≥3 distinct mob templates, got {}",
+            mob_templates.len()
+        );
+        assert!(
+            (MIREFEN.player_spawn_x != 0.0) || (MIREFEN.player_spawn_z != 0.0),
+            "mirefen player spawn should be set"
+        );
+
+        for spot in MIREFEN.npcs {
+            assert!(
+                NPCS.iter().any(|npc| npc.id == spot.npc_id),
+                "missing npc {}",
+                spot.npc_id
+            );
+        }
+        for spot in MIREFEN.mobs {
+            assert!(
+                MOBS.iter().any(|mob| mob.id == spot.mob_id),
+                "missing mob {}",
+                spot.mob_id
+            );
+        }
     }
 
     #[test]

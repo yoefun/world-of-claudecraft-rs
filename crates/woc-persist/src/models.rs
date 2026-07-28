@@ -18,10 +18,24 @@ pub struct Character {
     pub inventory: Vec<Option<InvStackDto>>,
     pub equipment: EquipmentDto,
     pub quests: Vec<QuestProgressDto>,
+    #[serde(default = "default_zone_id")]
+    pub zone_id: String,
+    #[serde(default)]
+    pub talent_points: u32,
+    #[serde(default)]
+    pub talents: Vec<TalentRankDto>,
+    #[serde(default)]
+    pub bank: Vec<Option<InvStackDto>>,
+    #[serde(default)]
+    pub honor: u32,
+    #[serde(default)]
+    pub professions: Vec<ProfessionSkillDto>,
+    #[serde(default)]
+    pub pvp_flagged: bool,
 }
 
 /// Fields updated on save (position / progression / bags).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CharacterSave {
     pub level: u32,
     pub xp: u32,
@@ -31,6 +45,87 @@ pub struct CharacterSave {
     pub inventory: Vec<Option<InvStackDto>>,
     pub equipment: EquipmentDto,
     pub quests: Vec<QuestProgressDto>,
+    #[serde(default = "default_zone_id")]
+    pub zone_id: String,
+    #[serde(default)]
+    pub talent_points: u32,
+    #[serde(default)]
+    pub talents: Vec<TalentRankDto>,
+    #[serde(default)]
+    pub bank: Vec<Option<InvStackDto>>,
+    #[serde(default)]
+    pub honor: u32,
+    #[serde(default)]
+    pub professions: Vec<ProfessionSkillDto>,
+    #[serde(default)]
+    pub pvp_flagged: bool,
+}
+
+impl Default for CharacterSave {
+    fn default() -> Self {
+        Self {
+            level: 0,
+            xp: 0,
+            copper: 0,
+            pos_x: 0.0,
+            pos_z: 0.0,
+            inventory: Vec::new(),
+            equipment: EquipmentDto::default(),
+            quests: Vec::new(),
+            zone_id: default_zone_id(),
+            talent_points: 0,
+            talents: Vec::new(),
+            bank: Vec::new(),
+            honor: 0,
+            professions: Vec::new(),
+            pvp_flagged: false,
+        }
+    }
+}
+
+/// Completion state stored in the historical `quests_json` Postgres column.
+///
+/// The reader also accepts the legacy bare quest array so existing rows remain loadable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct CharacterCompletionDto {
+    #[serde(default)]
+    pub quests: Vec<QuestProgressDto>,
+    #[serde(default = "default_zone_id")]
+    pub zone_id: String,
+    #[serde(default)]
+    pub talent_points: u32,
+    #[serde(default)]
+    pub talents: Vec<TalentRankDto>,
+    #[serde(default)]
+    pub bank: Vec<Option<InvStackDto>>,
+    #[serde(default)]
+    pub honor: u32,
+    #[serde(default)]
+    pub professions: Vec<ProfessionSkillDto>,
+    #[serde(default)]
+    pub pvp_flagged: bool,
+}
+
+impl From<&CharacterSave> for CharacterCompletionDto {
+    fn from(save: &CharacterSave) -> Self {
+        Self {
+            quests: save.quests.clone(),
+            zone_id: save.zone_id.clone(),
+            talent_points: save.talent_points,
+            talents: save.talents.clone(),
+            bank: save.bank.clone(),
+            honor: save.honor,
+            professions: save.professions.clone(),
+            pvp_flagged: save.pvp_flagged,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StoredCompletionDto {
+    Current(CharacterCompletionDto),
+    Legacy(Vec<QuestProgressDto>),
 }
 
 impl Character {
@@ -44,6 +139,13 @@ impl Character {
             inventory: self.inventory.clone(),
             equipment: self.equipment.clone(),
             quests: self.quests.clone(),
+            zone_id: self.zone_id.clone(),
+            talent_points: self.talent_points,
+            talents: self.talents.clone(),
+            bank: self.bank.clone(),
+            honor: self.honor,
+            professions: self.professions.clone(),
+            pvp_flagged: self.pvp_flagged,
         }
     }
 
@@ -56,13 +158,36 @@ impl Character {
         self.inventory = save.inventory;
         self.equipment = save.equipment;
         self.quests = save.quests;
+        self.zone_id = save.zone_id;
+        self.talent_points = save.talent_points;
+        self.talents = save.talents;
+        self.bank = save.bank;
+        self.honor = save.honor;
+        self.professions = save.professions;
+        self.pvp_flagged = save.pvp_flagged;
     }
+}
+
+fn default_zone_id() -> String {
+    "eastbrook".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InvStackDto {
     pub item_id: String,
     pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TalentRankDto {
+    pub talent_id: String,
+    pub rank: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProfessionSkillDto {
+    pub id: String,
+    pub skill: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -132,4 +257,177 @@ pub fn quests_to_json(quests: &[QuestProgressDto]) -> Result<String, serde_json:
 
 pub fn quests_from_json(s: &str) -> Result<Vec<QuestProgressDto>, serde_json::Error> {
     serde_json::from_str(s)
+}
+
+pub(crate) fn completion_to_json(save: &CharacterSave) -> Result<String, serde_json::Error> {
+    serde_json::to_string(&CharacterCompletionDto::from(save))
+}
+
+pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, serde_json::Error> {
+    serde_json::from_str::<StoredCompletionDto>(s).map(|stored| match stored {
+        StoredCompletionDto::Current(state) => state,
+        StoredCompletionDto::Legacy(quests) => CharacterCompletionDto {
+            quests,
+            zone_id: default_zone_id(),
+            talent_points: 0,
+            talents: Vec::new(),
+            bank: Vec::new(),
+            honor: 0,
+            professions: Vec::new(),
+            pvp_flagged: false,
+        },
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn old_character_json_uses_r4_defaults() {
+        let character: Character = serde_json::from_value(json!({
+            "id": Uuid::nil(),
+            "account_id": Uuid::nil(),
+            "name": "Aldric",
+            "class_id": "warrior",
+            "level": 3,
+            "xp": 450,
+            "copper": 12,
+            "pos_x": 10.5,
+            "pos_z": -2.0,
+            "inventory": [],
+            "equipment": {},
+            "quests": []
+        }))
+        .unwrap();
+
+        assert_eq!(character.zone_id, "eastbrook");
+        assert_eq!(character.talent_points, 0);
+        assert!(character.talents.is_empty());
+        assert!(character.bank.is_empty());
+        assert_eq!(character.honor, 0);
+        assert!(character.professions.is_empty());
+        assert!(!character.pvp_flagged);
+    }
+
+    #[test]
+    fn old_character_save_json_uses_r4_defaults() {
+        let save: CharacterSave = serde_json::from_value(json!({
+            "level": 3,
+            "xp": 450,
+            "copper": 12,
+            "pos_x": 10.5,
+            "pos_z": -2.0,
+            "inventory": [],
+            "equipment": {},
+            "quests": []
+        }))
+        .unwrap();
+
+        assert_eq!(save.zone_id, "eastbrook");
+        assert_eq!(save.talent_points, 0);
+        assert!(save.talents.is_empty());
+        assert!(save.bank.is_empty());
+        assert_eq!(save.honor, 0);
+        assert!(save.professions.is_empty());
+        assert!(!save.pvp_flagged);
+    }
+
+    #[test]
+    fn character_save_roundtrips_r4_completion_fields() {
+        let mut character = Character {
+            id: Uuid::nil(),
+            account_id: Uuid::nil(),
+            name: "Aldric".into(),
+            class_id: "warrior".into(),
+            level: 1,
+            xp: 0,
+            copper: 0,
+            pos_x: 0.0,
+            pos_z: 0.0,
+            inventory: Vec::new(),
+            equipment: EquipmentDto::default(),
+            quests: Vec::new(),
+            zone_id: "eastbrook".into(),
+            talent_points: 0,
+            talents: Vec::new(),
+            bank: Vec::new(),
+            honor: 0,
+            professions: Vec::new(),
+            pvp_flagged: false,
+        };
+        let save = CharacterSave {
+            zone_id: "eastfen".into(),
+            talent_points: 2,
+            talents: vec![TalentRankDto {
+                talent_id: "shield_mastery".into(),
+                rank: 3,
+            }],
+            bank: vec![Some(InvStackDto {
+                item_id: "silverleaf".into(),
+                count: 8,
+            })],
+            honor: 125,
+            professions: vec![ProfessionSkillDto {
+                id: "herbalism".into(),
+                skill: 42,
+            }],
+            pvp_flagged: true,
+            ..Default::default()
+        };
+
+        character.apply_save(save.clone());
+
+        assert_eq!(character.to_save(), save);
+    }
+
+    #[test]
+    fn completion_json_reads_legacy_quest_array() {
+        let state = completion_from_json(
+            r#"[{"quest_id":"wolves_at_the_gate","state":"active","counts":[1]}]"#,
+        )
+        .unwrap();
+
+        assert_eq!(state.quests.len(), 1);
+        assert_eq!(state.zone_id, "eastbrook");
+        assert_eq!(state.talent_points, 0);
+        assert!(state.talents.is_empty());
+        assert!(state.bank.is_empty());
+        assert_eq!(state.honor, 0);
+        assert!(state.professions.is_empty());
+        assert!(!state.pvp_flagged);
+    }
+
+    #[test]
+    fn completion_json_roundtrips_r4_fields() {
+        let save = CharacterSave {
+            quests: vec![QuestProgressDto {
+                quest_id: "q1".into(),
+                state: "ready".into(),
+                counts: vec![2],
+            }],
+            zone_id: "eastfen".into(),
+            talent_points: 2,
+            talents: vec![TalentRankDto {
+                talent_id: "shield_mastery".into(),
+                rank: 3,
+            }],
+            bank: vec![Some(InvStackDto {
+                item_id: "silverleaf".into(),
+                count: 8,
+            })],
+            honor: 125,
+            professions: vec![ProfessionSkillDto {
+                id: "herbalism".into(),
+                skill: 42,
+            }],
+            pvp_flagged: true,
+            ..Default::default()
+        };
+
+        let state = completion_from_json(&completion_to_json(&save).unwrap()).unwrap();
+
+        assert_eq!(state, CharacterCompletionDto::from(&save));
+    }
 }
