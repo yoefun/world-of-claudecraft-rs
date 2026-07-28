@@ -3,6 +3,7 @@
 
 pub mod abilities;
 pub mod classes;
+pub mod delves;
 pub mod dungeons;
 pub mod gather_nodes;
 pub mod graveyards;
@@ -26,6 +27,7 @@ pub use classes::{
     class_ability_for_slot, class_def, known_abilities_at_level, ClassDef, ClassKitEntry,
     PlayerClass, ResourceType, CLASSES,
 };
+pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
 pub use gather_nodes::{
     gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES,
