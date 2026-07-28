@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub type EntityId = u32;
 
 /// Protocol revision for snapshot / WS envelopes (0.1 was implicit rev 1).
+/// Kept at 2: Wave 1 death/aura/party fields are additive with `#[serde(default)]`.
 pub const PROTOCOL_REV: u32 = 2;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
@@ -136,6 +137,21 @@ pub struct PlayerProgress {
     pub resource_type: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct AuraSnapshot {
+    pub id: String,
+    pub remaining: f32,
+    pub stacks: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CastSnapshot {
+    /// Ability currently being cast.
+    pub ability_id: String,
+    /// Cast progress in \[0, 1\].
+    pub progress: f32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TickSnapshot {
     pub tick: u64,
@@ -157,10 +173,60 @@ pub struct TickSnapshot {
     pub open_vendor: Option<VendorSnapshot>,
     #[serde(default)]
     pub ability_name: String,
+    /// Active auras on the local player (Wave 1).
+    #[serde(default)]
+    pub auras: Vec<AuraSnapshot>,
+    /// In-progress cast bar, if any.
+    #[serde(default)]
+    pub cast: Option<CastSnapshot>,
+    /// True when the local player is dead.
+    #[serde(default)]
+    pub is_dead: bool,
+    /// Party membership, if any.
+    #[serde(default)]
+    pub party_id: Option<u32>,
 }
 
 fn default_protocol_rev() -> u32 {
     PROTOCOL_REV
+}
+
+impl Default for PlayerProgress {
+    fn default() -> Self {
+        Self {
+            xp: 0,
+            xp_to_level: 0,
+            level: 1,
+            copper: 0,
+            bag_item: None,
+            class_id: String::new(),
+            resource_type: String::new(),
+        }
+    }
+}
+
+impl Default for TickSnapshot {
+    fn default() -> Self {
+        Self {
+            tick: 0,
+            player_id: 0,
+            entities: Vec::new(),
+            progress: PlayerProgress::default(),
+            target_id: None,
+            ability_ready: false,
+            ability_cooldown: 0.0,
+            protocol_rev: PROTOCOL_REV,
+            inventory: Vec::new(),
+            equipment: EquipmentSnapshot::default(),
+            quest_log: Vec::new(),
+            open_vendor: None,
+            ability_name: String::new(),
+            auras: Vec::new(),
+            cast: None,
+            is_dead: false,
+            party_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -228,6 +294,15 @@ pub enum SimEvent {
         player: EntityId,
         npc_id: EntityId,
         text: String,
+    },
+    PlayerDied {
+        player: EntityId,
+    },
+    AuraApplied {
+        player: EntityId,
+        id: String,
+        remaining: f32,
+        stacks: u32,
     },
 }
 
@@ -319,6 +394,100 @@ mod tests {
                 assert_eq!(class_id, "mage");
             }
             _ => panic!("expected Hello"),
+        }
+    }
+
+    fn minimal_tick_json() -> &'static str {
+        r#"{
+            "tick": 1,
+            "player_id": 1,
+            "entities": [],
+            "progress": {
+                "xp": 0,
+                "xp_to_level": 100,
+                "level": 1,
+                "copper": 0
+            },
+            "target_id": null,
+            "ability_ready": true,
+            "ability_cooldown": 0.0
+        }"#
+    }
+
+    #[test]
+    fn tick_snapshot_old_json_defaults_new_fields() {
+        let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
+        assert!(snap.auras.is_empty());
+        assert!(snap.cast.is_none());
+        assert!(!snap.is_dead);
+        assert!(snap.party_id.is_none());
+        assert_eq!(snap.protocol_rev, PROTOCOL_REV);
+    }
+
+    #[test]
+    fn tick_snapshot_death_aura_party_roundtrip() {
+        let snap = TickSnapshot {
+            tick: 42,
+            player_id: 7,
+            entities: vec![],
+            progress: PlayerProgress {
+                xp: 10,
+                xp_to_level: 100,
+                level: 2,
+                copper: 5,
+                bag_item: None,
+                class_id: "warrior".into(),
+                resource_type: "rage".into(),
+            },
+            target_id: None,
+            ability_ready: false,
+            ability_cooldown: 0.5,
+            protocol_rev: PROTOCOL_REV,
+            inventory: vec![],
+            equipment: EquipmentSnapshot::default(),
+            quest_log: vec![],
+            open_vendor: None,
+            ability_name: "Strike".into(),
+            auras: vec![AuraSnapshot {
+                id: "blessing".into(),
+                remaining: 12.5,
+                stacks: 2,
+            }],
+            cast: Some(CastSnapshot {
+                ability_id: "fireball".into(),
+                progress: 0.35,
+            }),
+            is_dead: true,
+            party_id: Some(3),
+        };
+        let s = serde_json::to_string(&snap).unwrap();
+        let back: TickSnapshot = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.auras.len(), 1);
+        assert_eq!(back.auras[0].id, "blessing");
+        assert!((back.auras[0].remaining - 12.5).abs() < f32::EPSILON);
+        assert_eq!(back.auras[0].stacks, 2);
+        let cast = back.cast.expect("cast present");
+        assert_eq!(cast.ability_id, "fireball");
+        assert!((cast.progress - 0.35).abs() < f32::EPSILON);
+        assert!(back.is_dead);
+        assert_eq!(back.party_id, Some(3));
+    }
+
+    #[test]
+    fn sim_event_player_died_aura_applied_roundtrip() {
+        let events = vec![
+            SimEvent::PlayerDied { player: 9 },
+            SimEvent::AuraApplied {
+                player: 9,
+                id: "regen".into(),
+                remaining: 8.0,
+                stacks: 1,
+            },
+        ];
+        for e in events {
+            let v = serde_json::to_value(&e).unwrap();
+            let back: SimEvent = serde_json::from_value(v).unwrap();
+            assert_eq!(back, e);
         }
     }
 }
