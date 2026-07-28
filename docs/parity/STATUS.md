@@ -41,13 +41,14 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Duel + PvP honor | done | |
 | World boss + deeds | done | mire_terror + deed honor |
 | Client economy/talent chrome | done | N/K/M/U panels |
-| Heightfield terrain | partial | not byte-identical |
+| Heightfield terrain | done | Continuous strip seed `20061`; golden ε≈1e-3 vs upstream pin; editor custom maps deferred |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 
 ### Explicit deferred / non-goals
 
 | Subsystem | Status |
 | --- | --- |
+| Map editor / `setActiveWorldContent` custom heightfields | deferred |
 | Browser Three.js / Electron / Capacitor | deferred |
 | Web3 / wallets / cosmetics shop | deferred |
 | Gymnasium RL / headless env | deferred |

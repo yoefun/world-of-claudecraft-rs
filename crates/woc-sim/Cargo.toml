@@ -8,3 +8,8 @@ description = "Deterministic game core for World of ClaudeCraft (Rust)"
 [dependencies]
 woc-protocol = { workspace = true }
 woc-content = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+

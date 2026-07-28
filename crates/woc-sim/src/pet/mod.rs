@@ -3,7 +3,7 @@
 use crate::combat::{deal_damage, dist2d, face_toward};
 use crate::entity::Entity;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
-use crate::world::{terrain_height, WORLD_SEED};
+use crate::world::{ground_height, WORLD_SEED};
 use woc_content::{pet_for_class, PetDef, PlayerClass};
 use woc_protocol::{EntityId, EntityKind, SimEvent, DT};
 
@@ -215,7 +215,7 @@ fn move_toward(pet: &mut Entity, tx: f32, tz: f32, speed: f32) {
     let step = speed * DT;
     pet.x += dx / d * step.min(d);
     pet.z += dz / d * step.min(d);
-    pet.y = terrain_height(pet.x, pet.z, WORLD_SEED);
+    pet.y = ground_height(pet.x, pet.z, WORLD_SEED);
     pet.yaw = dx.atan2(dz);
 }
 

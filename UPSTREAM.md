@@ -23,5 +23,6 @@ Machine-readable source of truth: [`VERSION.toml`](VERSION.toml).
 ## Relationship to upstream
 
 - We reimplement behavior inspired by the TypeScript `src/sim/` core.
-- Framework milestone aims for an Eastbrook quest/inventory loop, not byte-identical terrain or full content parity.
+- Heightfield (`terrainHeight` / `groundHeight` / noise) is contract-aligned to this pin with seed `20061`; golden samples tolerate ε≈1e-3 (`f32` vs JS `number`). Byte-identical floats remain a non-goal.
+- Map-editor custom worlds (`setActiveWorldContent`) stay deferred.
 - The client is a native Bevy host; the browser/Three.js stack remains out of scope.

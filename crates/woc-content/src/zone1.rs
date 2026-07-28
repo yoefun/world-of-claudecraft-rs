@@ -1,4 +1,4 @@
-//! Eastbrook Vale spawn layout (framework scaffold).
+//! Eastbrook Vale spawn layout — absolute strip coordinates (zone1).
 
 #[derive(Debug, Clone, Copy)]
 pub struct NpcSpot {
@@ -45,41 +45,41 @@ pub static EASTBROOK: ZoneLayout = ZoneLayout {
         },
     ],
     mobs: &[
-        // Wolf camp north.
+        // Wolf Run (upstream POI ~(-2, 70)).
+        MobSpot {
+            mob_id: "young_wolf",
+            x: -15.0,
+            z: 55.0,
+        },
         MobSpot {
             mob_id: "young_wolf",
             x: -8.0,
-            z: -22.0,
+            z: 62.0,
         },
         MobSpot {
             mob_id: "young_wolf",
-            x: -4.0,
-            z: -26.0,
-        },
-        MobSpot {
-            mob_id: "young_wolf",
-            x: 2.0,
-            z: -24.0,
+            x: 20.0,
+            z: 70.0,
         },
         MobSpot {
             mob_id: "scarred_wolf",
-            x: 6.0,
-            z: -28.0,
+            x: 0.0,
+            z: 95.0,
         },
-        // Boar meadow east.
+        // Boar Meadow (upstream ~(65, 0)).
         MobSpot {
             mob_id: "young_boar",
-            x: 22.0,
-            z: 4.0,
-        },
-        MobSpot {
-            mob_id: "young_boar",
-            x: 26.0,
-            z: 8.0,
+            x: 55.0,
+            z: 12.0,
         },
         MobSpot {
             mob_id: "young_boar",
-            x: 28.0,
+            x: 80.0,
+            z: -15.0,
+        },
+        MobSpot {
+            mob_id: "young_boar",
+            x: 65.0,
             z: 0.0,
         },
     ],

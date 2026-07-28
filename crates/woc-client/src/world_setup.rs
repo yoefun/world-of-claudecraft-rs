@@ -6,7 +6,10 @@ use woc_protocol::{
     EntityId, EntityKind, EntitySnapshot, PlayerIntent, SimEvent, TickSnapshot, WsClientMsg,
     WsServerMsg, DT,
 };
-use woc_sim::{terrain_height, Sim, WORLD_HALF, WORLD_SEED};
+use woc_sim::{
+    terrain_height, water_bodies, water_level, Sim, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z,
+    WORLD_SEED,
+};
 use woc_version::footer;
 
 use crate::char_create::{CharName, SelectedClass};
@@ -108,12 +111,17 @@ fn setup_world(
         perceptual_roughness: 0.95,
         ..default()
     });
-    let step = 4.0;
-    let half = WORLD_HALF;
-    let mut x = -half;
-    while x < half {
-        let mut z = -half;
-        while z < half {
+    let water_mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.15, 0.35, 0.55, 0.65),
+        perceptual_roughness: 0.2,
+        ..default()
+    });
+    // Chunked height samples across the continuous strip (step ~8 yd).
+    let step = 8.0;
+    let mut x = -WORLD_MAX_X;
+    while x < WORLD_MAX_X {
+        let mut z = WORLD_MIN_Z;
+        while z < WORLD_MAX_Z {
             let y00 = terrain_height(x, z, WORLD_SEED);
             let y10 = terrain_height(x + step, z, WORLD_SEED);
             let y01 = terrain_height(x, z + step, WORLD_SEED);
@@ -121,13 +129,22 @@ fn setup_world(
             let y = (y00 + y10 + y01 + y11) * 0.25;
             commands.spawn((
                 TerrainMarker,
-                Mesh3d(meshes.add(Cuboid::new(step * 0.98, 0.35, step * 0.98))),
+                Mesh3d(meshes.add(Cuboid::new(step * 0.98, 0.45, step * 0.98))),
                 MeshMaterial3d(terrain_mat.clone()),
-                Transform::from_xyz(x + step * 0.5, y - 0.15, z + step * 0.5),
+                Transform::from_xyz(x + step * 0.5, y - 0.2, z + step * 0.5),
             ));
             z += step;
         }
         x += step;
+    }
+    for (wx, wz, radius) in water_bodies() {
+        let y = water_level();
+        commands.spawn((
+            TerrainMarker,
+            Mesh3d(meshes.add(Cylinder::new(radius.max(1.0), 0.25))),
+            MeshMaterial3d(water_mat.clone()),
+            Transform::from_xyz(wx, y, wz),
+        ));
     }
 
     spawn_visuals_from_entities(

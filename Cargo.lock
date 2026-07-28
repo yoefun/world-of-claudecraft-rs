@@ -6591,6 +6591,8 @@ dependencies = [
 name = "woc-sim"
 version = "1.0.0-pre"
 dependencies = [
+ "serde",
+ "serde_json",
  "woc-content",
  "woc-protocol",
 ]
