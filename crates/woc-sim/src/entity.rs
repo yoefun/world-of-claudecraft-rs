@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::types::player_hp;
 use crate::world::{terrain_height, WORLD_SEED};
-use woc_content::{class_def, mob, npc, ItemKind, PlayerClass, ResourceType};
+use woc_content::{
+    class_def, known_abilities_at_level, mob, npc, ItemKind, PlayerClass, ResourceType,
+};
 use woc_protocol::{EntityId, EntityKind};
 
 /// Live aura instance (DoT/HoT/buff) on an entity.
@@ -89,6 +91,10 @@ pub struct Entity {
     pub class_id: Option<PlayerClass>,
     pub resource_type: Option<ResourceType>,
     pub primary_ability: Option<String>,
+    /// Ability ids unlocked from the class kit at the current level.
+    pub known_abilities: Vec<String>,
+    /// Per-ability cooldown remaining (seconds), keyed by ability id.
+    pub ability_cds: HashMap<String, f32>,
     pub inventory: Vec<Option<InvStack>>,
     pub equipment: Equipment,
     pub quest_log: Vec<QuestProgress>,
@@ -156,6 +162,8 @@ impl Entity {
             class_id: None,
             resource_type: None,
             primary_ability: None,
+            known_abilities: Vec::new(),
+            ability_cds: HashMap::new(),
             inventory: vec![None; crate::types::BACKPACK_SLOTS],
             equipment: Equipment::default(),
             quest_log: Vec::new(),
@@ -187,6 +195,7 @@ pub fn create_player(id: EntityId, name: &str, class: PlayerClass, x: f32, z: f3
     e.class_id = Some(class);
     e.resource_type = Some(def.resource_type);
     e.primary_ability = Some(def.primary_ability.to_string());
+    refresh_known_abilities(&mut e);
     e.attack_damage = def.attack_power;
     e.equipment.main_hand = Some(def.start_weapon.to_string());
     e.equipment.chest = Some(def.start_chest.to_string());
@@ -195,6 +204,18 @@ pub fn create_player(id: EntityId, name: &str, class: PlayerClass, x: f32, z: f3
     }
     crate::stats::recalc_player_stats(&mut e);
     e
+}
+
+/// Sync `known_abilities` from the class kit and current level.
+pub fn refresh_known_abilities(player: &mut Entity) {
+    let Some(class) = player.class_id else {
+        player.known_abilities.clear();
+        return;
+    };
+    player.known_abilities = known_abilities_at_level(class, player.level)
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
 }
 
 pub fn create_mob_from_template(id: EntityId, template_id: &str, x: f32, z: f32) -> Option<Entity> {

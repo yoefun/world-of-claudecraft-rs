@@ -1,5 +1,6 @@
-//! Player class definitions (framework starter kits).
+//! Player class definitions (multi-ability kits).
 
+use crate::abilities::{ability, AbilityDef};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -56,6 +57,14 @@ pub enum ResourceType {
     Energy,
 }
 
+/// One action-bar binding: key/slot `1..=5` → ability id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClassKitEntry {
+    /// Matches `AbilitySlot` discriminants: 1=Primary, 2=Slot2, … 5=Slot5.
+    pub slot: u8,
+    pub ability_id: &'static str,
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassDef {
     pub id: PlayerClass,
@@ -64,6 +73,8 @@ pub struct ClassDef {
     pub base_hp: f32,
     pub resource_max: f32,
     pub primary_ability: &'static str,
+    /// Action-bar kit (≥3 entries). Slot 1 must equal `primary_ability`.
+    pub kit: &'static [ClassKitEntry],
     pub start_weapon: &'static str,
     pub start_chest: &'static str,
     pub start_items: &'static [(&'static str, u32)],
@@ -73,6 +84,141 @@ pub struct ClassDef {
 const RATIONS: &[(&str, u32)] = &[("baked_bread", 5)];
 const RATIONS_MANA: &[(&str, u32)] = &[("baked_bread", 5), ("spring_water", 5)];
 
+const WARRIOR_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "heroic_strike",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "cleave",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "execute",
+    },
+];
+
+const PALADIN_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "crusader_strike",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "judgment",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "holy_shock",
+    },
+];
+
+const HUNTER_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "arcane_shot",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "serpent_sting",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "aimed_shot",
+    },
+];
+
+const ROGUE_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "sinister_strike",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "eviscerate",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "cheap_shot",
+    },
+];
+
+const PRIEST_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "smite",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "holy_fire",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "mind_blast",
+    },
+];
+
+const SHAMAN_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "lightning_bolt",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "earth_shock",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "lava_burst",
+    },
+];
+
+const MAGE_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "fireball",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "frostbolt",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "arcane_missiles",
+    },
+];
+
+const WARLOCK_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "shadow_bolt",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "corruption",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "incinerate",
+    },
+];
+
+const DRUID_KIT: &[ClassKitEntry] = &[
+    ClassKitEntry {
+        slot: 1,
+        ability_id: "wrath",
+    },
+    ClassKitEntry {
+        slot: 2,
+        ability_id: "moonfire",
+    },
+    ClassKitEntry {
+        slot: 3,
+        ability_id: "starfire",
+    },
+];
+
 pub static CLASSES: &[ClassDef] = &[
     ClassDef {
         id: PlayerClass::Warrior,
@@ -81,6 +227,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 120.0,
         resource_max: 100.0,
         primary_ability: "heroic_strike",
+        kit: WARRIOR_KIT,
         start_weapon: "worn_sword",
         start_chest: "recruit_tunic",
         start_items: RATIONS,
@@ -93,6 +240,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 115.0,
         resource_max: 100.0,
         primary_ability: "crusader_strike",
+        kit: PALADIN_KIT,
         start_weapon: "worn_mace",
         start_chest: "recruit_tunic",
         start_items: RATIONS_MANA,
@@ -105,6 +253,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 100.0,
         resource_max: 100.0,
         primary_ability: "arcane_shot",
+        kit: HUNTER_KIT,
         start_weapon: "worn_bow",
         start_chest: "recruit_tunic",
         start_items: RATIONS,
@@ -117,6 +266,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 95.0,
         resource_max: 100.0,
         primary_ability: "sinister_strike",
+        kit: ROGUE_KIT,
         start_weapon: "worn_dagger",
         start_chest: "recruit_tunic",
         start_items: RATIONS,
@@ -129,6 +279,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 90.0,
         resource_max: 120.0,
         primary_ability: "smite",
+        kit: PRIEST_KIT,
         start_weapon: "worn_staff",
         start_chest: "recruit_robe",
         start_items: RATIONS_MANA,
@@ -141,6 +292,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 105.0,
         resource_max: 110.0,
         primary_ability: "lightning_bolt",
+        kit: SHAMAN_KIT,
         start_weapon: "worn_mace",
         start_chest: "recruit_tunic",
         start_items: RATIONS_MANA,
@@ -153,6 +305,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 85.0,
         resource_max: 140.0,
         primary_ability: "fireball",
+        kit: MAGE_KIT,
         start_weapon: "worn_staff",
         start_chest: "recruit_robe",
         start_items: RATIONS_MANA,
@@ -165,6 +318,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 90.0,
         resource_max: 130.0,
         primary_ability: "shadow_bolt",
+        kit: WARLOCK_KIT,
         start_weapon: "worn_staff",
         start_chest: "recruit_robe",
         start_items: RATIONS_MANA,
@@ -177,6 +331,7 @@ pub static CLASSES: &[ClassDef] = &[
         base_hp: 100.0,
         resource_max: 120.0,
         primary_ability: "wrath",
+        kit: DRUID_KIT,
         start_weapon: "worn_staff",
         start_chest: "recruit_robe",
         start_items: RATIONS_MANA,
@@ -189,4 +344,22 @@ pub fn class_def(id: PlayerClass) -> &'static ClassDef {
         .iter()
         .find(|c| c.id == id)
         .expect("every PlayerClass has a ClassDef")
+}
+
+/// Resolve the ability bound to action-bar slot `1..=5` for a class.
+pub fn class_ability_for_slot(class: PlayerClass, slot: u8) -> Option<&'static AbilityDef> {
+    let entry = class_def(class).kit.iter().find(|e| e.slot == slot)?;
+    ability(entry.ability_id)
+}
+
+/// Ability ids from the class kit that are unlocked at `level`.
+pub fn known_abilities_at_level(class: PlayerClass, level: u32) -> Vec<&'static str> {
+    class_def(class)
+        .kit
+        .iter()
+        .filter_map(|e| {
+            let def = ability(e.ability_id)?;
+            (level >= def.min_level).then_some(e.ability_id)
+        })
+        .collect()
 }

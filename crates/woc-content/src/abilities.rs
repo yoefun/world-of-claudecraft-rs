@@ -1,4 +1,4 @@
-//! Ability definitions for framework starter kits.
+//! Ability definitions for class kits (slots 1–5).
 
 #[derive(Debug, Clone)]
 pub struct AbilityDef {
@@ -10,9 +10,12 @@ pub struct AbilityDef {
     pub range: f32,
     /// Seconds to finish a cast before the hit resolves. `0` = instant.
     pub cast_time: f32,
+    /// Minimum player level required to know / use this ability.
+    pub min_level: u32,
 }
 
 pub static ABILITIES: &[AbilityDef] = &[
+    // —— Warrior ——
     AbilityDef {
         id: "heroic_strike",
         name: "Heroic Strike",
@@ -21,7 +24,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 3.0,
         range: 3.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "cleave",
+        name: "Cleave",
+        damage: 22.0,
+        cost: 20.0,
+        cooldown: 4.0,
+        range: 3.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "execute",
+        name: "Execute",
+        damage: 48.0,
+        cost: 25.0,
+        cooldown: 6.0,
+        range: 3.0,
+        cast_time: 0.0,
+        min_level: 6,
+    },
+    // —— Paladin ——
     AbilityDef {
         id: "crusader_strike",
         name: "Crusader Strike",
@@ -30,7 +55,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 3.0,
         range: 3.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "judgment",
+        name: "Judgment",
+        damage: 32.0,
+        cost: 30.0,
+        cooldown: 4.5,
+        range: 12.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "holy_shock",
+        name: "Holy Shock",
+        damage: 40.0,
+        cost: 35.0,
+        cooldown: 5.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 6,
+    },
+    // —— Hunter ——
     AbilityDef {
         id: "arcane_shot",
         name: "Arcane Shot",
@@ -39,7 +86,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 2.5,
         range: 18.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "serpent_sting",
+        name: "Serpent Sting",
+        damage: 12.0,
+        cost: 20.0,
+        cooldown: 3.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "aimed_shot",
+        name: "Aimed Shot",
+        damage: 42.0,
+        cost: 35.0,
+        cooldown: 5.0,
+        range: 22.0,
+        cast_time: 1.5,
+        min_level: 6,
+    },
+    // —— Rogue ——
     AbilityDef {
         id: "sinister_strike",
         name: "Sinister Strike",
@@ -48,7 +117,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 1.5,
         range: 3.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "eviscerate",
+        name: "Eviscerate",
+        damage: 36.0,
+        cost: 35.0,
+        cooldown: 3.0,
+        range: 3.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "cheap_shot",
+        name: "Cheap Shot",
+        damage: 30.0,
+        cost: 40.0,
+        cooldown: 6.0,
+        range: 3.0,
+        cast_time: 0.0,
+        min_level: 6,
+    },
+    // —— Priest ——
     AbilityDef {
         id: "smite",
         name: "Smite",
@@ -57,7 +148,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 2.0,
         range: 18.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "holy_fire",
+        name: "Holy Fire",
+        damage: 20.0,
+        cost: 30.0,
+        cooldown: 4.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "mind_blast",
+        name: "Mind Blast",
+        damage: 38.0,
+        cost: 40.0,
+        cooldown: 5.0,
+        range: 18.0,
+        cast_time: 1.0,
+        min_level: 6,
+    },
+    // —— Shaman ——
     AbilityDef {
         id: "lightning_bolt",
         name: "Lightning Bolt",
@@ -66,7 +179,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 2.5,
         range: 18.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "earth_shock",
+        name: "Earth Shock",
+        damage: 24.0,
+        cost: 25.0,
+        cooldown: 3.0,
+        range: 14.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "lava_burst",
+        name: "Lava Burst",
+        damage: 44.0,
+        cost: 40.0,
+        cooldown: 5.5,
+        range: 18.0,
+        cast_time: 1.2,
+        min_level: 6,
+    },
+    // —— Mage ——
     AbilityDef {
         id: "fireball",
         name: "Fireball",
@@ -75,7 +210,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 2.5,
         range: 20.0,
         cast_time: 1.5,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "frostbolt",
+        name: "Frostbolt",
+        damage: 26.0,
+        cost: 30.0,
+        cooldown: 2.5,
+        range: 20.0,
+        cast_time: 1.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "arcane_missiles",
+        name: "Arcane Missiles",
+        damage: 36.0,
+        cost: 40.0,
+        cooldown: 4.0,
+        range: 20.0,
+        cast_time: 0.0,
+        min_level: 6,
+    },
+    // —— Warlock ——
     AbilityDef {
         id: "shadow_bolt",
         name: "Shadow Bolt",
@@ -84,7 +241,29 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 2.5,
         range: 18.0,
         cast_time: 0.0,
+        min_level: 1,
     },
+    AbilityDef {
+        id: "corruption",
+        name: "Corruption",
+        damage: 10.0,
+        cost: 25.0,
+        cooldown: 3.5,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "incinerate",
+        name: "Incinerate",
+        damage: 40.0,
+        cost: 40.0,
+        cooldown: 4.5,
+        range: 18.0,
+        cast_time: 1.2,
+        min_level: 6,
+    },
+    // —— Druid ——
     AbilityDef {
         id: "wrath",
         name: "Wrath",
@@ -93,6 +272,27 @@ pub static ABILITIES: &[AbilityDef] = &[
         cooldown: 2.0,
         range: 18.0,
         cast_time: 0.0,
+        min_level: 1,
+    },
+    AbilityDef {
+        id: "moonfire",
+        name: "Moonfire",
+        damage: 14.0,
+        cost: 25.0,
+        cooldown: 3.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 3,
+    },
+    AbilityDef {
+        id: "starfire",
+        name: "Starfire",
+        damage: 42.0,
+        cost: 40.0,
+        cooldown: 5.0,
+        range: 20.0,
+        cast_time: 1.5,
+        min_level: 6,
     },
 ];
 
