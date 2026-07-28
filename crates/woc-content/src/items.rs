@@ -1,6 +1,10 @@
 //! Item definitions for the framework slice.
 
+use std::sync::LazyLock;
+
 use serde::{Deserialize, Serialize};
+
+use crate::items_zone2::ZONE2_ITEMS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -131,7 +135,7 @@ const fn misc(
     }
 }
 
-pub static ITEMS: &[ItemDef] = &[
+pub static ZONE1_ITEMS: &[ItemDef] = &[
     weapon("worn_sword", "Worn Sword", 5, 8.0),
     weapon("worn_mace", "Worn Mace", 5, 7.0),
     weapon("worn_bow", "Worn Bow", 5, 7.0),
@@ -207,6 +211,14 @@ pub static ITEMS: &[ItemDef] = &[
         1,
     ),
 ];
+
+/// Zone1 + zone2 item definitions.
+pub static ITEMS: LazyLock<&'static [ItemDef]> = LazyLock::new(|| {
+    let mut all = Vec::with_capacity(ZONE1_ITEMS.len() + ZONE2_ITEMS.len());
+    all.extend_from_slice(ZONE1_ITEMS);
+    all.extend_from_slice(ZONE2_ITEMS);
+    Box::leak(all.into_boxed_slice())
+});
 
 pub fn item(id: &str) -> Option<&'static ItemDef> {
     ITEMS.iter().find(|i| i.id == id)
