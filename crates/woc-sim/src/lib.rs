@@ -8,6 +8,7 @@ pub mod corpse;
 pub mod death;
 pub mod entity;
 pub mod host;
+pub mod instances;
 pub mod interaction;
 pub mod inventory;
 pub mod mob;
@@ -23,6 +24,7 @@ pub mod stats;
 pub mod targeting;
 pub mod types;
 pub mod world;
+pub mod zones;
 
 pub use entity::QuestState;
 pub use sim::{Sim, MAX_REALM_PLAYERS};

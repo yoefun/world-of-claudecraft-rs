@@ -327,10 +327,11 @@ mod tests {
     }
 
     #[test]
-    fn empty_talent_and_dungeon_lookups_are_safe() {
+    fn talent_and_dungeon_lookups_are_safe() {
         assert!(TALENTS.is_empty());
-        assert!(DUNGEONS.is_empty());
+        assert!(!DUNGEONS.is_empty());
         assert!(talent("missing_talent").is_none());
+        assert!(dungeon("eastbrook_crypt").is_some());
         assert!(dungeon("missing_dungeon").is_none());
     }
 
