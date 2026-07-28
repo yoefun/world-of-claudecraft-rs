@@ -1,8 +1,8 @@
 //! Online login / register screen (REST against `/api/login` and `/api/register`).
 
 use bevy::prelude::*;
-use std::sync::Mutex;
 use std::sync::mpsc::Receiver;
+use std::sync::Mutex;
 
 use crate::api::{self, AuthResult};
 use crate::{cleanup_ui, AppState, AuthSession, UiRoot};

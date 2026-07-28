@@ -18,11 +18,7 @@ pub static DEEDS: &[DeedDef] = &[DeedDef {
 }];
 
 /// Credit a deed when a matching world boss template is killed.
-pub fn on_boss_killed(
-    player: &mut Entity,
-    template_id: &str,
-    events: &mut Vec<SimEvent>,
-) -> bool {
+pub fn on_boss_killed(player: &mut Entity, template_id: &str, events: &mut Vec<SimEvent>) -> bool {
     let Some(deed) = DEEDS.iter().find(|d| d.boss_template == template_id) else {
         return false;
     };

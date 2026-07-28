@@ -4,9 +4,7 @@
 //! ε ≈ 1e-3 covers f32 vs JS number drift without hiding structural bugs.
 
 use serde::Deserialize;
-use woc_sim::{
-    fbm2, ground_height, hash2, noise2, terrain_height, terrain_steepness,
-};
+use woc_sim::{fbm2, ground_height, hash2, noise2, terrain_height, terrain_steepness};
 
 #[derive(Debug, Deserialize)]
 struct Golden {

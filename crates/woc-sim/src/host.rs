@@ -2,8 +2,8 @@
 
 use crate::bank;
 use crate::delves::{enter_delve, try_advance_delve};
-use crate::interaction::handle_interact;
 use crate::instances::{enter_dungeon, leave_instance};
+use crate::interaction::handle_interact;
 use crate::pet::{dismiss_pet, summon_pet};
 use crate::professions;
 use crate::pvp::{accept_pending_duel, challenge_duel, toggle_pvp};
@@ -34,12 +34,7 @@ impl WorldHost for Sim {
                 let _ = dismiss_pet(&mut self.entities, player_id, &mut self.events);
             }
             InteractAction::LearnTalent { talent_id } => {
-                let _ = talents::learn(
-                    &mut self.entities,
-                    player_id,
-                    &talent_id,
-                    &mut self.events,
-                );
+                let _ = talents::learn(&mut self.entities, player_id, &talent_id, &mut self.events);
             }
             InteractAction::RespecTalents => {
                 let _ = talents::respec(&mut self.entities, player_id, &mut self.events);
@@ -99,55 +94,33 @@ impl WorldHost for Sim {
                 );
             }
             InteractAction::MarketBuy { listing_id } => {
-                let _ = self
-                    .market
-                    .buy(&mut self.entities, player_id, listing_id, &mut self.events);
+                let _ =
+                    self.market
+                        .buy(&mut self.entities, player_id, listing_id, &mut self.events);
             }
             InteractAction::MarketCancel { listing_id } => {
-                let _ = self.market.cancel(
-                    &mut self.entities,
-                    player_id,
-                    listing_id,
-                    &mut self.events,
-                );
+                let _ =
+                    self.market
+                        .cancel(&mut self.entities, player_id, listing_id, &mut self.events);
             }
             InteractAction::DuelChallenge => {
                 let _ = challenge_duel(&mut self.pvp, &self.entities, player_id, target_id);
             }
             InteractAction::DuelAccept => {
-                let _ = accept_pending_duel(
-                    &mut self.pvp,
-                    &self.entities,
-                    player_id,
-                    &mut self.events,
-                );
+                let _ =
+                    accept_pending_duel(&mut self.pvp, &self.entities, player_id, &mut self.events);
             }
             InteractAction::TogglePvp => {
                 let _ = toggle_pvp(&mut self.entities, player_id);
             }
             InteractAction::EnterPortal { zone_id } => {
-                let _ = enter_portal(
-                    &mut self.entities,
-                    player_id,
-                    &zone_id,
-                    &mut self.events,
-                );
+                let _ = enter_portal(&mut self.entities, player_id, &zone_id, &mut self.events);
             }
             InteractAction::EnterDungeon { dungeon_id } => {
-                let _ = enter_dungeon(
-                    &mut self.entities,
-                    player_id,
-                    &dungeon_id,
-                    &mut self.events,
-                );
+                let _ = enter_dungeon(&mut self.entities, player_id, &dungeon_id, &mut self.events);
             }
             InteractAction::EnterDelve { delve_id } => {
-                if enter_delve(
-                    &mut self.entities,
-                    player_id,
-                    &delve_id,
-                    &mut self.events,
-                ) {
+                if enter_delve(&mut self.entities, player_id, &delve_id, &mut self.events) {
                     self.next_id = self
                         .entities
                         .iter()

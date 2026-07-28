@@ -194,15 +194,7 @@ mod tests {
             .unwrap() as u8;
         let mut box_ = Mailbox::new();
         let mut events = Vec::new();
-        assert!(box_.send(
-            &mut entities,
-            1,
-            "Bob",
-            25,
-            Some(slot),
-            1,
-            &mut events
-        ));
+        assert!(box_.send(&mut entities, 1, "Bob", 25, Some(slot), 1, &mut events));
         assert_eq!(entities[0].copper, 75);
         assert!(box_.collect(&mut entities, 2, 1, &mut events));
         assert_eq!(entities[1].copper, 25);

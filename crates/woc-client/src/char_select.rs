@@ -1,8 +1,8 @@
 //! Online character select / create (REST list → enter → WS Hello).
 
 use bevy::prelude::*;
-use std::sync::Mutex;
 use std::sync::mpsc::Receiver;
+use std::sync::Mutex;
 use woc_content::PlayerClass;
 
 use crate::api::{self, CharacterResult, CharacterSummary, ListResult};
@@ -55,11 +55,7 @@ pub(crate) fn plugin(app: &mut App) {
         .add_systems(OnExit(AppState::CharSelect), cleanup_ui)
         .add_systems(
             Update,
-            (
-                char_select_input,
-                poll_list_result,
-                poll_char_result,
-            )
+            (char_select_input, poll_list_result, poll_char_result)
                 .chain()
                 .run_if(in_state(AppState::CharSelect)),
         );
