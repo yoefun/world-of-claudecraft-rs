@@ -3,6 +3,7 @@
 use std::sync::LazyLock;
 
 use crate::mobs_zone2::ZONE2_MOBS;
+use crate::mobs_zone3::ZONE3_MOBS;
 
 #[derive(Debug, Clone)]
 pub struct LootEntry {
@@ -73,11 +74,12 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
     },
 ];
 
-/// Zone1 + zone2 mob templates.
+/// Zone1 + zone2 + zone3 mob templates.
 pub static MOBS: LazyLock<&'static [MobTemplate]> = LazyLock::new(|| {
-    let mut all = Vec::with_capacity(ZONE1_MOBS.len() + ZONE2_MOBS.len());
+    let mut all = Vec::with_capacity(ZONE1_MOBS.len() + ZONE2_MOBS.len() + ZONE3_MOBS.len());
     all.extend_from_slice(ZONE1_MOBS);
     all.extend_from_slice(ZONE2_MOBS);
+    all.extend_from_slice(ZONE3_MOBS);
     Box::leak(all.into_boxed_slice())
 });
 

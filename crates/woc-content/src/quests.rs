@@ -3,6 +3,7 @@
 use std::sync::LazyLock;
 
 use crate::quests_zone2::ZONE2_QUESTS;
+use crate::quests_zone3::ZONE3_QUESTS;
 
 #[derive(Debug, Clone)]
 pub enum QuestObjective {
@@ -93,11 +94,12 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
     },
 ];
 
-/// Zone1 + zone2 quest definitions.
+/// Zone1 + zone2 + zone3 quest definitions.
 pub static QUESTS: LazyLock<&'static [QuestDef]> = LazyLock::new(|| {
-    let mut all = Vec::with_capacity(ZONE1_QUESTS.len() + ZONE2_QUESTS.len());
+    let mut all = Vec::with_capacity(ZONE1_QUESTS.len() + ZONE2_QUESTS.len() + ZONE3_QUESTS.len());
     all.extend_from_slice(ZONE1_QUESTS);
     all.extend_from_slice(ZONE2_QUESTS);
+    all.extend_from_slice(ZONE3_QUESTS);
     Box::leak(all.into_boxed_slice())
 });
 

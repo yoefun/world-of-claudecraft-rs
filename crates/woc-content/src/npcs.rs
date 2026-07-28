@@ -3,6 +3,7 @@
 use std::sync::LazyLock;
 
 use crate::npcs_zone2::ZONE2_NPCS;
+use crate::npcs_zone3::ZONE3_NPCS;
 
 #[derive(Debug, Clone)]
 pub struct VendorOffer {
@@ -60,11 +61,12 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
     },
 ];
 
-/// Zone1 + zone2 NPC definitions.
+/// Zone1 + zone2 + zone3 NPC definitions.
 pub static NPCS: LazyLock<&'static [NpcDef]> = LazyLock::new(|| {
-    let mut all = Vec::with_capacity(ZONE1_NPCS.len() + ZONE2_NPCS.len());
+    let mut all = Vec::with_capacity(ZONE1_NPCS.len() + ZONE2_NPCS.len() + ZONE3_NPCS.len());
     all.extend_from_slice(ZONE1_NPCS);
     all.extend_from_slice(ZONE2_NPCS);
+    all.extend_from_slice(ZONE3_NPCS);
     Box::leak(all.into_boxed_slice())
 });
 
