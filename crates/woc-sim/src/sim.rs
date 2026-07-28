@@ -176,6 +176,22 @@ impl Sim {
         woc_protocol::WorldHost::interact(self, self.player_id, target_id, action);
     }
 
+    /// Tab-cycle living hostile mobs for the primary player.
+    pub fn tab_target(&mut self) -> Option<EntityId> {
+        let id = crate::targeting::tab_target(self.player_id, &self.entities)?;
+        if let Some(p) = self.player_mut() {
+            p.target = Some(id);
+        }
+        Some(id)
+    }
+
+    /// Clear the primary player's current target (Esc).
+    pub fn clear_target(&mut self) {
+        if let Some(p) = self.player_mut() {
+            p.target = None;
+        }
+    }
+
     pub fn grant_item(
         &mut self,
         player_id: EntityId,
@@ -376,7 +392,10 @@ impl Sim {
             .map(|p| EquipmentSnapshot {
                 main_hand: p.equipment.main_hand.clone(),
                 off_hand: p.equipment.off_hand.clone(),
+                head: p.equipment.head.clone(),
                 chest: p.equipment.chest.clone(),
+                legs: p.equipment.legs.clone(),
+                feet: p.equipment.feet.clone(),
             })
             .unwrap_or_default();
 

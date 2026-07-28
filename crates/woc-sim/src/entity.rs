@@ -15,7 +15,10 @@ pub struct InvStack {
 pub struct Equipment {
     pub main_hand: Option<String>,
     pub off_hand: Option<String>,
+    pub head: Option<String>,
     pub chest: Option<String>,
+    pub legs: Option<String>,
+    pub feet: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

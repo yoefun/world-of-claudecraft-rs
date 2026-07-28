@@ -14,6 +14,7 @@ pub mod quests;
 pub mod rng;
 pub mod sim;
 pub mod stats;
+pub mod targeting;
 pub mod types;
 pub mod world;
 
