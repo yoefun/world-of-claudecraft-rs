@@ -1,6 +1,6 @@
 //! Entity factories and live entity state.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::types::player_hp;
 use crate::world::{ground_height, WORLD_SEED};
@@ -18,7 +18,10 @@ pub struct AuraInstance {
     /// Countdown to next damage/heal tick.
     pub tick_timer: f32,
     pub tick_interval: f32,
+    /// Positive = DoT damage per tick.
     pub tick_damage: f32,
+    /// Positive = HoT healing per tick.
+    pub tick_heal: f32,
     pub source: EntityId,
 }
 
@@ -31,13 +34,13 @@ pub struct CastState {
     pub target: EntityId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvStack {
     pub item_id: String,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Equipment {
     pub main_hand: Option<String>,
     pub off_hand: Option<String>,
@@ -54,7 +57,7 @@ pub enum QuestState {
     Completed,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuestProgress {
     pub quest_id: String,
     pub state: QuestState,
@@ -137,6 +140,10 @@ pub struct Entity {
     pub instance_id: Option<String>,
     /// Zero-based room index while inside a delve.
     pub delve_room: Option<u32>,
+    /// Durable character UUID string when bound to persistence (`None` offline).
+    pub durable_id: Option<String>,
+    /// Completed deed ids (one-shot honor awards).
+    pub completed_deeds: BTreeSet<String>,
 }
 
 impl Entity {
@@ -207,6 +214,8 @@ impl Entity {
             professions: HashMap::new(),
             instance_id: None,
             delve_room: None,
+            durable_id: None,
+            completed_deeds: BTreeSet::new(),
         }
     }
 }

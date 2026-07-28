@@ -239,11 +239,40 @@ impl PartyRoster {
     }
 }
 
-/// Stub: other party members share kill credit with the killer.
-pub fn kill_credit_share(roster: &PartyRoster, killer: EntityId) -> Vec<EntityId> {
+/// Party members within `range` yards of the killer share kill credit / XP.
+pub const PARTY_CREDIT_RANGE: f32 = 40.0;
+
+/// Other party members near the killer share kill credit.
+pub fn kill_credit_share(
+    roster: &PartyRoster,
+    entities: &[Entity],
+    killer: EntityId,
+) -> Vec<EntityId> {
+    let Some(killer_e) = entities
+        .iter()
+        .find(|e| e.id == killer && e.kind == EntityKind::Player)
+    else {
+        return Vec::new();
+    };
     roster
         .members_of(killer)
-        .map(|m| m.into_iter().filter(|id| *id != killer).collect())
+        .map(|m| {
+            m.into_iter()
+                .filter(|id| *id != killer)
+                .filter(|id| {
+                    entities
+                        .iter()
+                        .find(|e| e.id == *id && e.kind == EntityKind::Player && e.alive)
+                        .map(|mate| {
+                            let dx = mate.x - killer_e.x;
+                            let dz = mate.z - killer_e.z;
+                            (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
+                                && mate.instance_id == killer_e.instance_id
+                        })
+                        .unwrap_or(false)
+                })
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -378,9 +407,9 @@ mod tests {
         let entities = players();
         let mut roster = PartyRoster::new();
         form_party(&mut roster, &entities, 1, 2);
-        let share = kill_credit_share(&roster, 1);
+        let share = kill_credit_share(&roster, &entities, 1);
         assert_eq!(share, vec![2]);
-        assert!(kill_credit_share(&roster, 99).is_empty());
+        assert!(kill_credit_share(&roster, &entities, 99).is_empty());
     }
 
     #[test]

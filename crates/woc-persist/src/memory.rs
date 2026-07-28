@@ -14,6 +14,7 @@ struct Inner {
     accounts: HashMap<Uuid, (String, String)>, // id -> (username, hash)
     sessions: HashMap<String, Uuid>,
     characters: HashMap<Uuid, Character>,
+    economy: crate::economy::RealmEconomy,
 }
 
 #[derive(Debug, Default)]
@@ -124,6 +125,7 @@ impl MemoryStore {
             honor: 0,
             professions: Vec::new(),
             pvp_flagged: false,
+            completed_deeds: Vec::new(),
         };
         g.characters.insert(character.id, character.clone());
         Ok(character)
@@ -177,6 +179,43 @@ impl MemoryStore {
             .ok_or(PersistError::CharacterNotFound)?;
         c.apply_save(save);
         Ok(c.clone())
+    }
+
+    pub async fn save_character_for_account(
+        &self,
+        account_id: Uuid,
+        character_id: Uuid,
+        save: CharacterSave,
+    ) -> PersistResult<Character> {
+        let mut g = self.inner.lock().expect("memory store lock");
+        let c = g
+            .characters
+            .get_mut(&character_id)
+            .ok_or(PersistError::CharacterNotFound)?;
+        if c.account_id != account_id {
+            return Err(PersistError::Forbidden);
+        }
+        c.apply_save(save);
+        Ok(c.clone())
+    }
+
+    pub async fn load_economy(&self) -> PersistResult<crate::economy::RealmEconomy> {
+        let g = self.inner.lock().expect("memory store lock");
+        Ok(g.economy.clone())
+    }
+
+    pub async fn save_economy(&self, economy: crate::economy::RealmEconomy) -> PersistResult<()> {
+        let mut g = self.inner.lock().expect("memory store lock");
+        g.economy = economy;
+        Ok(())
+    }
+
+    pub async fn find_character_by_name(&self, name: &str) -> PersistResult<Option<Character>> {
+        let g = self.inner.lock().expect("memory store lock");
+        Ok(g.characters
+            .values()
+            .find(|c| c.name.eq_ignore_ascii_case(name))
+            .cloned())
     }
 }
 
@@ -242,6 +281,7 @@ mod tests {
                 skill: 42,
             }],
             pvp_flagged: true,
+            completed_deeds: vec!["eastfen_mire_terror".into()],
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();
         assert_eq!(saved.to_save(), save);

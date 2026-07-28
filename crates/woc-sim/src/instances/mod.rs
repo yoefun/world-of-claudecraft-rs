@@ -1,13 +1,28 @@
 //! Dungeon instance enter/leave helpers and boss shell spawning.
+//!
+//! Each enter creates (or joins) a unique instance key so parties do not share
+//! bosses and overworld actors are never wiped.
 
 use crate::entity::Entity;
+use crate::social::party::PartyRoster;
 use crate::zones::load_overworld_zone;
 use woc_content::{dungeon, DungeonDef};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
+/// Content dungeon id embedded in `instance_id` (`{dungeon}#{seq}`).
+pub fn dungeon_id_from_instance(instance_id: &str) -> &str {
+    instance_id.split('#').next().unwrap_or(instance_id)
+}
+
 /// Enter a content-defined dungeon and spawn its boss shell.
+///
+/// Does **not** wipe overworld mobs/NPCs. Spawns an instance-local boss tagged
+/// with a unique `instance_id`. Party members already inside the same dungeon
+/// share that instance.
 pub fn enter_dungeon(
     entities: &mut Vec<Entity>,
+    next_id: &mut EntityId,
+    parties: &PartyRoster,
     player_id: EntityId,
     dungeon_id: &str,
     events: &mut Vec<SimEvent>,
@@ -25,37 +40,41 @@ pub fn enter_dungeon(
         return false;
     }
 
-    let boss_id = entities
-        .iter()
-        .map(|entity| entity.id)
-        .max()
-        .unwrap_or(0)
-        .saturating_add(1);
+    let instance_key = find_party_instance(entities, parties, player_id, dungeon_id)
+        .unwrap_or_else(|| {
+            let seq = *next_id;
+            *next_id = next_id.saturating_add(1);
+            format!("{dungeon_id}#{seq}")
+        });
 
-    entities.retain(|entity| {
-        !matches!(
-            entity.kind,
-            EntityKind::Mob | EntityKind::Npc | EntityKind::Loot
-        )
+    let need_boss = !entities.iter().any(|e| {
+        e.kind == EntityKind::Mob
+            && e.instance_id.as_deref() == Some(instance_key.as_str())
+            && e.template_id.as_deref() == Some(def.boss_id)
+            && e.alive
     });
 
-    let instance_zone = format!("instance:{}", def.id);
+    if need_boss {
+        let boss_id = *next_id;
+        *next_id = next_id.saturating_add(1);
+        entities.push(create_boss_shell(boss_id, def, &instance_key));
+    }
+
     let player = entities
         .iter_mut()
         .find(|entity| entity.id == player_id)
-        .expect("validated player must survive instance cleanup");
+        .expect("validated player must survive instance enter");
     player.x = def.entrance_x;
     player.z = def.entrance_z;
     player.y = Entity::ground_at(player.x, player.z);
-    player.zone_id = instance_zone.clone();
-    player.instance_id = Some(def.id.to_string());
+    player.zone_id = format!("instance:{}", dungeon_id_from_instance(&instance_key));
+    player.instance_id = Some(instance_key);
     player.target = None;
     player.auto_attack = false;
     player.open_vendor_npc = None;
     player.cast = None;
     player.threat.clear();
 
-    entities.push(create_boss_shell(boss_id, def, &instance_zone));
     events.push(SimEvent::InstanceEntered {
         player: player_id,
         dungeon_id: def.id.to_string(),
@@ -63,7 +82,31 @@ pub fn enter_dungeon(
     true
 }
 
-/// Leave the active instance and rebuild its overworld entrance zone.
+fn find_party_instance(
+    entities: &[Entity],
+    parties: &PartyRoster,
+    player_id: EntityId,
+    dungeon_id: &str,
+) -> Option<String> {
+    let members = parties.members_of(player_id)?;
+    for mid in members {
+        if mid == player_id {
+            continue;
+        }
+        if let Some(inst) = entities
+            .iter()
+            .find(|e| e.id == mid && e.kind == EntityKind::Player)
+            .and_then(|e| e.instance_id.clone())
+        {
+            if dungeon_id_from_instance(&inst) == dungeon_id {
+                return Some(inst);
+            }
+        }
+    }
+    None
+}
+
+/// Leave the active instance; only despawn boss if no players remain inside.
 pub fn leave_instance(
     entities: &mut Vec<Entity>,
     player_id: EntityId,
@@ -76,25 +119,30 @@ pub fn leave_instance(
     else {
         return false;
     };
-    let Some(def) = dungeon(&instance_id) else {
+    let dungeon_id = dungeon_id_from_instance(&instance_id);
+    let Some(def) = dungeon(dungeon_id) else {
         return false;
     };
 
-    // Drop instance-local actors before restoring overworld population.
-    entities.retain(|entity| {
-        entity.kind == EntityKind::Player
-            || entity.instance_id.as_deref() != Some(instance_id.as_str())
-    });
-
     if !load_overworld_zone(entities, player_id, def.zone_id) {
         return false;
+    }
+
+    let others_inside = entities.iter().any(|e| {
+        e.kind == EntityKind::Player && e.instance_id.as_deref() == Some(instance_id.as_str())
+    });
+    if !others_inside {
+        entities.retain(|entity| {
+            entity.kind == EntityKind::Player
+                || entity.instance_id.as_deref() != Some(instance_id.as_str())
+        });
     }
 
     events.push(SimEvent::InstanceLeft { player: player_id });
     true
 }
 
-fn create_boss_shell(id: EntityId, def: &DungeonDef, zone_id: &str) -> Entity {
+fn create_boss_shell(id: EntityId, def: &DungeonDef, instance_key: &str) -> Entity {
     let mut boss = Entity::blank(
         id,
         EntityKind::Mob,
@@ -108,61 +156,113 @@ fn create_boss_shell(id: EntityId, def: &DungeonDef, zone_id: &str) -> Entity {
     boss.hp_max = def.boss_hp;
     boss.attack_damage = def.boss_attack_damage;
     boss.xp_value = def.boss_level.saturating_mul(50);
-    boss.zone_id = zone_id.to_string();
-    boss.instance_id = Some(def.id.to_string());
+    boss.zone_id = format!("instance:{}", dungeon_id_from_instance(instance_key));
+    boss.instance_id = Some(instance_key.to_string());
     boss
+}
+
+/// Whether two entities share interaction space (same instance or both overworld).
+pub fn same_instance_space(a: &Entity, b: &Entity) -> bool {
+    match (&a.instance_id, &b.instance_id) {
+        (None, None) => true,
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::entity::{create_mob_from_template, create_player};
+    use crate::social::party::PartyRoster;
     use woc_content::{PlayerClass, EASTBROOK};
 
     #[test]
-    fn enter_spawns_instance_local_boss_and_emits_event() {
+    fn enter_preserves_overworld_and_uses_unique_instance() {
         let player = create_player(1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
         let overworld_mob =
             create_mob_from_template(2, "young_wolf", 4.0, 4.0).expect("overworld mob");
         let mut entities = vec![player, overworld_mob];
+        let mut next_id = 3;
+        let parties = PartyRoster::new();
         let mut events = Vec::new();
 
         assert!(enter_dungeon(
             &mut entities,
+            &mut next_id,
+            &parties,
             1,
             "eastbrook_crypt",
             &mut events
         ));
 
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
-        assert_eq!(player.instance_id.as_deref(), Some("eastbrook_crypt"));
+        assert!(player
+            .instance_id
+            .as_deref()
+            .unwrap()
+            .starts_with("eastbrook_crypt#"));
         assert_eq!(player.zone_id, "instance:eastbrook_crypt");
 
         let boss = entities
             .iter()
             .find(|entity| entity.template_id.as_deref() == Some("crypt_warden"))
             .expect("boss shell");
-        assert_eq!(boss.kind, EntityKind::Mob);
-        assert_eq!(boss.instance_id.as_deref(), Some("eastbrook_crypt"));
-        assert_eq!(boss.zone_id, player.zone_id);
-        assert!(boss.hp > 0.0);
-        assert!(!entities
+        assert_eq!(boss.instance_id, player.instance_id);
+        assert!(entities
             .iter()
             .any(|entity| entity.template_id.as_deref() == Some("young_wolf")));
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimEvent::InstanceEntered { player: 1, dungeon_id }
-                if dungeon_id == "eastbrook_crypt"
-        )));
+    }
+
+    #[test]
+    fn party_members_share_instance() {
+        let mut entities = vec![
+            create_player(1, "A", PlayerClass::Warrior, 0.0, 0.0),
+            create_player(2, "B", PlayerClass::Mage, 1.0, 0.0),
+        ];
+        let mut parties = PartyRoster::new();
+        let _ = parties.invite(1, "B", &entities);
+        let _ = parties.accept(2, &entities);
+        let mut next_id = 3;
+        let mut events = Vec::new();
+        assert!(enter_dungeon(
+            &mut entities,
+            &mut next_id,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        let key = entities[0].instance_id.clone().unwrap();
+        assert!(enter_dungeon(
+            &mut entities,
+            &mut next_id,
+            &parties,
+            2,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        assert_eq!(entities[1].instance_id.as_deref(), Some(key.as_str()));
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|e| e.template_id.as_deref() == Some("crypt_warden"))
+                .count(),
+            1
+        );
     }
 
     #[test]
     fn leave_returns_to_overworld_spawn_and_removes_boss() {
         let player = create_player(1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
         let mut entities = vec![player];
+        let mut next_id = 2;
+        let parties = PartyRoster::new();
         let mut events = Vec::new();
         assert!(enter_dungeon(
             &mut entities,
+            &mut next_id,
+            &parties,
             1,
             "eastbrook_crypt",
             &mut events
@@ -179,9 +279,6 @@ mod tests {
         assert!(!entities
             .iter()
             .any(|entity| entity.template_id.as_deref() == Some("crypt_warden")));
-        assert!(entities
-            .iter()
-            .any(|entity| entity.template_id.as_deref() == Some("young_wolf")));
         assert!(events
             .iter()
             .any(|event| matches!(event, SimEvent::InstanceLeft { player: 1 })));

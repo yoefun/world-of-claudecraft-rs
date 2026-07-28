@@ -211,7 +211,7 @@ pub(crate) fn handle_interact_keys(
             host.interact(
                 player_id,
                 InteractAction::BankWithdraw {
-                    bank_slot: 0,
+                    bank_slot: stack.slot,
                     count: stack.count,
                 },
             );
@@ -352,10 +352,12 @@ mod tests {
     fn first_junk_stack_ignores_non_junk_inventory() {
         let mut snap = TickSnapshot::default();
         snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
             item_id: "baked_bread".into(),
             count: 2,
         });
         snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
             item_id: "wolf_fang".into(),
             count: 3,
         });

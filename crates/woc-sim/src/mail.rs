@@ -1,15 +1,17 @@
-//! Player mailbox (send / collect).
+//! Player mailbox (send / collect), keyed by durable character id when present.
 
 use std::collections::HashMap;
 
 use crate::entity::{grant_into, remove_item, Entity};
 use woc_protocol::{EntityId, EntityKind, MailSnapshot, SimEvent};
 
-#[derive(Debug, Clone)]
+/// Durable mailbox entry (survives reconnect / restart when persisted).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MailItem {
     pub id: u32,
     pub from: String,
-    pub to_player: EntityId,
+    /// Recipient durable character UUID, or `local:{entity_id}` offline.
+    pub to_durable: String,
     pub subject: String,
     pub copper: u32,
     pub item_id: Option<String>,
@@ -19,8 +21,8 @@ pub struct MailItem {
 #[derive(Debug, Default)]
 pub struct Mailbox {
     next_id: u32,
-    /// recipient → mails
-    inbox: HashMap<EntityId, Vec<MailItem>>,
+    /// durable recipient key → mails
+    inbox: HashMap<String, Vec<MailItem>>,
 }
 
 impl Mailbox {
@@ -31,9 +33,51 @@ impl Mailbox {
         }
     }
 
-    pub fn snapshot_for(&self, player_id: EntityId) -> Vec<MailSnapshot> {
+    pub fn next_id(&self) -> u32 {
+        self.next_id
+    }
+
+    pub fn set_next_id(&mut self, id: u32) {
+        self.next_id = id.max(1);
+    }
+
+    pub fn all_mails(&self) -> Vec<MailItem> {
+        let mut out: Vec<_> = self.inbox.values().flatten().cloned().collect();
+        out.sort_by_key(|m| m.id);
+        out
+    }
+
+    pub fn load_mails(&mut self, mails: Vec<MailItem>, next_id: u32) {
+        self.inbox.clear();
+        let mut max_id = 0u32;
+        for mail in mails {
+            max_id = max_id.max(mail.id);
+            self.inbox
+                .entry(mail.to_durable.clone())
+                .or_default()
+                .push(mail);
+        }
+        self.next_id = next_id.max(max_id.saturating_add(1)).max(1);
+    }
+
+    pub fn mailbox_key(player: &Entity) -> String {
+        player
+            .durable_id
+            .clone()
+            .unwrap_or_else(|| format!("local:{}", player.id))
+    }
+
+    pub fn snapshot_for_entity(
+        &self,
+        player_id: EntityId,
+        entities: &[Entity],
+    ) -> Vec<MailSnapshot> {
+        let Some(player) = entities.iter().find(|e| e.id == player_id) else {
+            return Vec::new();
+        };
+        let key = Self::mailbox_key(player);
         self.inbox
-            .get(&player_id)
+            .get(&key)
             .map(|mails| {
                 mails
                     .iter()
@@ -60,16 +104,17 @@ impl Mailbox {
         count: u32,
         events: &mut Vec<SimEvent>,
     ) -> bool {
-        let to_id = entities
+        let to = entities
             .iter()
-            .find(|e| e.kind == EntityKind::Player && e.name.eq_ignore_ascii_case(to_name))
-            .map(|e| e.id);
-        let Some(to_id) = to_id else {
+            .find(|e| e.kind == EntityKind::Player && e.name.eq_ignore_ascii_case(to_name));
+        let Some(to) = to else {
             events.push(SimEvent::Toast {
-                message: "Recipient not found.".into(),
+                message: "Recipient not found (must be online).".into(),
             });
             return false;
         };
+        let to_id = to.id;
+        let to_key = Self::mailbox_key(to);
         if to_id == from {
             events.push(SimEvent::Toast {
                 message: "Cannot mail yourself.".into(),
@@ -111,21 +156,51 @@ impl Mailbox {
         let from_name = sender.name.clone();
         let mail_id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
-        self.inbox.entry(to_id).or_default().push(MailItem {
-            id: mail_id,
-            from: from_name,
-            to_player: to_id,
-            subject: "Parcel".into(),
-            copper,
-            item_id,
-            item_count,
-        });
+        self.inbox
+            .entry(to_key.clone())
+            .or_default()
+            .push(MailItem {
+                id: mail_id,
+                from: from_name,
+                to_durable: to_key,
+                subject: "Parcel".into(),
+                copper,
+                item_id,
+                item_count,
+            });
         events.push(SimEvent::MailSent {
             from,
             to_name: to_name.to_string(),
             mail_id,
         });
         true
+    }
+
+    /// Deliver system mail (auction proceeds / returns) to a durable key.
+    pub fn deliver_system(
+        &mut self,
+        to_durable: &str,
+        from: &str,
+        subject: &str,
+        copper: u32,
+        item_id: Option<String>,
+        item_count: u32,
+    ) -> u32 {
+        let mail_id = self.next_id;
+        self.next_id = self.next_id.saturating_add(1);
+        self.inbox
+            .entry(to_durable.to_string())
+            .or_default()
+            .push(MailItem {
+                id: mail_id,
+                from: from.to_string(),
+                to_durable: to_durable.to_string(),
+                subject: subject.to_string(),
+                copper,
+                item_id,
+                item_count,
+            });
+        mail_id
     }
 
     pub fn collect(
@@ -135,7 +210,13 @@ impl Mailbox {
         mail_id: u32,
         events: &mut Vec<SimEvent>,
     ) -> bool {
-        let Some(mails) = self.inbox.get_mut(&player) else {
+        let key = {
+            let Some(p) = entities.iter().find(|e| e.id == player) else {
+                return false;
+            };
+            Self::mailbox_key(p)
+        };
+        let Some(mails) = self.inbox.get_mut(&key) else {
             return false;
         };
         let Some(idx) = mails.iter().position(|m| m.id == mail_id) else {
@@ -151,7 +232,7 @@ impl Mailbox {
         if let Some(ref item_id) = mail.item_id {
             if !grant_into(&mut recv.inventory, item_id, mail.item_count.max(1)) {
                 // Put mail back.
-                self.inbox.entry(player).or_default().insert(idx, mail);
+                self.inbox.entry(key).or_default().insert(idx, mail);
                 events.push(SimEvent::Toast {
                     message: "Bags are full.".into(),
                 });
@@ -181,6 +262,8 @@ mod tests {
             create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0),
             create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0),
         ];
+        entities[0].durable_id = Some("ada".into());
+        entities[1].durable_id = Some("bob".into());
         entities[0].copper = 100;
         assert!(grant_into(&mut entities[0].inventory, "silverleaf", 2));
         let slot = entities[0]
@@ -196,8 +279,32 @@ mod tests {
         let mut events = Vec::new();
         assert!(box_.send(&mut entities, 1, "Bob", 25, Some(slot), 1, &mut events));
         assert_eq!(entities[0].copper, 75);
-        assert!(box_.collect(&mut entities, 2, 1, &mut events));
+        // Reconnect Bob under new entity id — mail still addressable by durable key.
+        entities[1].id = 99;
+        assert!(box_.collect(&mut entities, 99, 1, &mut events));
         assert_eq!(entities[1].copper, 25);
         assert!(crate::entity::count_item(&entities[1].inventory, "silverleaf") >= 1);
+    }
+
+    #[test]
+    fn load_mails_roundtrip() {
+        let mut box_ = Mailbox::new();
+        box_.deliver_system("ada", "AH", "Sold", 40, None, 0);
+        let all = box_.all_mails();
+        let next = box_.next_id();
+        let mut box2 = Mailbox::new();
+        box2.load_mails(all, next);
+        assert_eq!(
+            box2.snapshot_for_entity(
+                1,
+                &[{
+                    let mut p = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+                    p.durable_id = Some("ada".into());
+                    p
+                }]
+            )
+            .len(),
+            1
+        );
     }
 }

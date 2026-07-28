@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 pub type EntityId = u32;
 
 /// Protocol revision for snapshot / WS envelopes (0.1 was implicit rev 1).
-/// Kept at 2: Wave 1 death/aura/party fields are additive with `#[serde(default)]`.
-pub const PROTOCOL_REV: u32 = 2;
+/// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
+pub const PROTOCOL_REV: u32 = 3;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -215,6 +215,9 @@ pub struct EntitySnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvSlotSnapshot {
+    /// Absolute bag/bank slot index (holes allowed). Defaults to 0 for old peers.
+    #[serde(default)]
+    pub slot: u8,
     pub item_id: String,
     pub count: u32,
 }
@@ -603,9 +606,19 @@ pub trait WorldHost {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsClientMsg {
+    /// Join the realm. Online clients MUST send `token` + `character_id`;
+    /// name/class are ignored when those are present (loaded from persist).
     Hello {
+        #[serde(default)]
         name: String,
+        #[serde(default)]
         class_id: String,
+        /// Bearer session token from REST login/register.
+        #[serde(default)]
+        token: Option<String>,
+        /// Durable character UUID (string form).
+        #[serde(default)]
+        character_id: Option<String>,
     },
     Intent(PlayerIntent),
     Interact {
@@ -689,13 +702,25 @@ mod tests {
         let msg = WsClientMsg::Hello {
             name: "Ada".into(),
             class_id: "mage".into(),
+            token: Some("tok".into()),
+            character_id: Some("11111111-1111-1111-1111-111111111111".into()),
         };
         let s = serde_json::to_string(&msg).unwrap();
         let back: WsClientMsg = serde_json::from_str(&s).unwrap();
         match back {
-            WsClientMsg::Hello { name, class_id } => {
+            WsClientMsg::Hello {
+                name,
+                class_id,
+                token,
+                character_id,
+            } => {
                 assert_eq!(name, "Ada");
                 assert_eq!(class_id, "mage");
+                assert_eq!(token.as_deref(), Some("tok"));
+                assert_eq!(
+                    character_id.as_deref(),
+                    Some("11111111-1111-1111-1111-111111111111")
+                );
             }
             _ => panic!("expected Hello"),
         }
@@ -964,9 +989,16 @@ mod tests {
         let json = r#"{"type":"hello","name":"Ada","class_id":"mage"}"#;
         let msg: WsClientMsg = serde_json::from_str(json).unwrap();
         match msg {
-            WsClientMsg::Hello { name, class_id } => {
+            WsClientMsg::Hello {
+                name,
+                class_id,
+                token,
+                character_id,
+            } => {
                 assert_eq!(name, "Ada");
                 assert_eq!(class_id, "mage");
+                assert!(token.is_none());
+                assert!(character_id.is_none());
             }
             _ => panic!("expected Hello"),
         }

@@ -16,6 +16,7 @@
 //! Unit tests for hashing / JSON serialize always run. Postgres integration tests
 //! skip automatically when `DATABASE_URL` is absent.
 
+mod economy;
 mod error;
 mod memory;
 mod models;
@@ -24,6 +25,7 @@ mod password;
 pub mod postgres;
 mod store;
 
+pub use economy::{MailDto, MarketListingDto, RealmEconomy};
 pub use error::{PersistError, PersistResult};
 pub use memory::MemoryStore;
 pub use models::{
@@ -152,8 +154,43 @@ impl Persist {
         }
     }
 
+    pub async fn save_character_for_account(
+        &self,
+        account_id: Uuid,
+        character_id: Uuid,
+        save: Save,
+    ) -> PersistResult<Character> {
+        match self {
+            Self::Memory(s) => {
+                s.save_character_for_account(account_id, character_id, save)
+                    .await
+            }
+            #[cfg(feature = "postgres")]
+            Self::Postgres(s) => {
+                s.save_character_for_account(account_id, character_id, save)
+                    .await
+            }
+        }
+    }
+
     pub async fn load_character(&self, character_id: Uuid) -> PersistResult<Character> {
         self.get_character(character_id).await
+    }
+
+    pub async fn load_economy(&self) -> PersistResult<RealmEconomy> {
+        match self {
+            Self::Memory(s) => s.load_economy().await,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(s) => s.load_economy().await,
+        }
+    }
+
+    pub async fn save_economy(&self, economy: RealmEconomy) -> PersistResult<()> {
+        match self {
+            Self::Memory(s) => s.save_economy(economy).await,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(s) => s.save_economy(economy).await,
+        }
     }
 }
 

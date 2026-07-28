@@ -16,6 +16,7 @@ pub mod inventory;
 pub mod mail;
 pub mod market;
 pub mod mob;
+pub mod persist_state;
 pub mod pet;
 pub mod physics;
 pub mod player_motion;
@@ -35,6 +36,9 @@ pub mod worldboss;
 pub mod zones;
 
 pub use entity::QuestState;
+pub use persist_state::{
+    apply_player_state, create_player_from_state, export_player_state, PlayerPersistentState,
+};
 pub use rng::{fbm2, hash2, noise2, Rng};
 pub use sim::{Sim, MAX_REALM_PLAYERS};
 pub use woc_content::PlayerClass;

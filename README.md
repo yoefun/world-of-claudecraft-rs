@@ -15,14 +15,14 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
-- Walk Eastbrook Vale, Eastfen, and Mirefen; dungeon crypt + 3-room delve
+- Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; dungeon crypt + 3-room delve
 - Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot
-- Bank, mail, auction house; herbalism → alchemy craft loop
-- Duels, PvP flag, honor; Mire Terror deed
+- Bank, mail, auction house (durable across server restart); herbalism → alchemy craft loop
+- Duels, PvP flag, honor; Mire Terror deed (one-shot)
 - Client panels: talents / bank / mail / market
 - Version footer: `WoC-rs 1.0.0-pre · upstream 0.31.0`
-- `woc-server` sticky multi-player realm over WebSocket (`/ws/game`)
-- Persist auth + character CRUD including talents/bank/honor/zone (memory default; Postgres optional)
+- `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello
+- Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; Postgres optional)
 
 ## Crates
 
@@ -81,7 +81,8 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Current:** `1.0.0-pre` / `completion`. Remaining polish: dedicated delve loop, denser zone3, Bevy UI for new systems.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Current:** `1.0.0-pre` / `completion`.
+Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction.
 
 ## License
 
