@@ -3,19 +3,30 @@
 
 pub mod abilities;
 pub mod classes;
+pub mod dungeons;
+pub mod graveyards;
 pub mod items;
 pub mod mobs;
 pub mod npcs;
 pub mod quests;
+pub mod talents;
 pub mod zone1;
+pub mod zone2;
 
 pub use abilities::{ability, AbilityDef, ABILITIES};
 pub use classes::{class_def, ClassDef, PlayerClass, ResourceType, CLASSES};
+pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
+pub use graveyards::{graveyard, GraveyardDef, GRAVEYARDS};
 pub use items::{item, ItemDef, ItemKind, ITEMS};
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
 pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
+pub use talents::{talent, TalentDef, TALENTS};
 pub use zone1::{MobSpot, NpcSpot, ZoneLayout, EASTBROOK};
+pub use zone2::{EASTFEN, MIREFEN};
+
+/// Known zone id strings referenced by graveyards and future zone tables.
+pub const KNOWN_ZONE_IDS: &[&str] = &["eastbrook", "eastfen", "mirefen"];
 
 #[cfg(test)]
 mod tests {
@@ -96,5 +107,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn graveyards_reference_known_zone_ids() {
+        assert!(!GRAVEYARDS.is_empty());
+        assert!(
+            GRAVEYARDS.iter().any(|g| g.zone_id == "eastbrook"),
+            "expected an Eastbrook graveyard entry"
+        );
+        for g in GRAVEYARDS {
+            assert!(
+                KNOWN_ZONE_IDS.contains(&g.zone_id),
+                "graveyard {} references unknown zone_id {}",
+                g.id,
+                g.zone_id
+            );
+        }
+    }
+
+    #[test]
+    fn empty_talent_and_dungeon_lookups_are_safe() {
+        assert!(TALENTS.is_empty());
+        assert!(DUNGEONS.is_empty());
+        assert!(talent("missing_talent").is_none());
+        assert!(dungeon("missing_dungeon").is_none());
+    }
+
+    #[test]
+    fn zone2_placeholders_have_empty_spots() {
+        assert!(EASTFEN.npcs.is_empty());
+        assert!(EASTFEN.mobs.is_empty());
+        assert!(MIREFEN.npcs.is_empty());
+        assert!(MIREFEN.mobs.is_empty());
     }
 }
