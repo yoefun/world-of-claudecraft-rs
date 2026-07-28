@@ -1,5 +1,10 @@
 # Rust rewrite 0.2 — basic framework implementation plan
 
+
+> **Superseded for remaining work:** After 0.2.0 framework, continue with
+> [`2026-07-28-rust-rewrite-completion.md`](2026-07-28-rust-rewrite-completion.md)
+> and [`../specs/2026-07-28-rust-rewrite-completion-design.md`](../specs/2026-07-28-rust-rewrite-completion-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring rewrite `0.2.0` to **framework complete** — data-driven Eastbrook loop (9 classes, inventory, quests, NPC/vendor, WorldHost, WS server) on top of the existing 0.1 combat slice.

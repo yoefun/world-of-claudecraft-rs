@@ -58,7 +58,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). Next after framework: persistence / richer online client.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Next:** completion program — online, persist, class depth, zones, group PvE, economy, professions, light PvP (`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`).
 
 ## License
 

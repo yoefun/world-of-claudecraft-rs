@@ -2,16 +2,24 @@
 
 | Rewrite | Parity target | Intent |
 | --- | --- | --- |
-| **0.1.0** (shipped on branch) | `combat-slice` | Bevy offline Warrior combat: wolves, XP/loot, thin server health |
-| **0.2.0** (next) | `framework` | Basic framework complete — see below |
-| 0.3.x (later) | `online-persist` (tentative) | Postgres characters/auth, durable realm |
-| 0.4.x+ (later) | content systems | Talents, multi-zone, dungeons, social, market, … |
+| **0.1.0** (shipped) | `combat-slice` | Bevy offline Warrior combat: wolves, XP/loot, thin server health |
+| **0.2.0** (shipped on `develop`) | `framework` | Content tables, 9 classes, inventory, quests, vendor, WS host |
+| **0.2.x → 0.3.0** (next) | `framework-polish` → `online-alive` | SimContext + multi-player Entity; online client; death; combat/motion/bags core |
+| **0.4.0** | `online-persist` | Postgres `woc-persist`, auth, character CRUD |
+| **0.5.0** | `class-depth` | Multi-ability kits, talents, pets |
+| **0.6.0** | `open-world` | Zone2/3, graveyards, denser quests |
+| **0.7.0** | `group-pve` | Party/chat, loot rules, dungeon (+ delve) |
+| **0.8.0** | `economy` | Bank, mail, market |
+| **0.9.0** | `professions-pvp` | Gather/craft, duel/honor |
+| **1.0.0-pre** | `completion` | Light world boss/deeds + STATUS core rows green |
 
-## 0.2.0 — framework complete
+## Completion program
 
-**Definition of done:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-framework-design.md`](superpowers/specs/2026-07-28-rust-rewrite-framework-design.md) §3  
-**Implementation plan:** [`docs/superpowers/plans/2026-07-28-rust-rewrite-framework.md`](superpowers/plans/2026-07-28-rust-rewrite-framework.md)
+**Definition of done:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](superpowers/specs/2026-07-28-rust-rewrite-completion-design.md)  
+**Implementation + parallel dispatch:** [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`](superpowers/plans/2026-07-28-rust-rewrite-completion.md)
 
-Phases: **A** content + SimContext + WorldHost → **B** inventory/equip → **C** 9 classes → **D** quests/NPC → **E** vendor/camps → **F** WebSocket host + release.
+Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n are non-goals.
 
-Upstream pin remains **0.31.0** unless explicitly bumped. Full MMO parity is not the 0.2 goal.
+## Parallel execution
+
+Main agent freezes protocol/sim contracts per wave, dispatches subagents on isolated branches with exclusive path ownership, then merges by dependency and runs workspace tests. See plan §“Main-agent merge playbook”.
