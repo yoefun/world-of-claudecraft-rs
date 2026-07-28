@@ -25,21 +25,22 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Tab targeting | done | |
 | Player motion / colliders | done | |
 | Mob respawn / social aggro | done | |
-| `woc-persist` + auth API | done | memory default; Postgres optional |
+| `woc-persist` + auth API | done | R4 fields: talents/bank/honor/zone/professions |
 | Client login / char select | done | |
 | Multi-ability kits | done | |
-| Talents / loadouts | done | spend/respec + damage_pct |
+| Talents / loadouts | done | spend/respec + damage_pct; client panel N |
 | Pets | done | hunter/warlock |
-| Zone2 + zone transition | done | Eastfen; mirefen placeholder |
+| Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen content + portals |
 | Party + chat | done | |
 | Group loot rules | done | FFA + Need/Greed |
 | Dungeons / instances | done | eastbrook_crypt boss shell |
-| Delves | partial | same instance shell; dedicated delve loop deferred |
-| Bank + mail | done | |
-| Auction market | done | list/buy/cancel/expire |
+| Delves | done | eastbrook_hollow 3-room loop + reward |
+| Bank + mail | done | sim + client panels K/M |
+| Auction market | done | sim + client panel U |
 | Professions gather/craft | done | herbalism → alchemy salve |
 | Duel + PvP honor | done | |
-| World boss + deeds | done | deed stub + honor credit |
+| World boss + deeds | done | mire_terror + deed honor |
+| Client economy/talent chrome | done | N/K/M/U panels |
 | Heightfield terrain | partial | not byte-identical |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 
