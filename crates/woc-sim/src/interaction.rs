@@ -386,7 +386,9 @@ mod tests {
             crate::entity::count_item(&player.inventory, "baked_bread"),
             before_count - 1
         );
-        assert!(events.iter().any(|e| matches!(e, SimEvent::ItemLost { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, SimEvent::ItemLost { .. })));
     }
 
     #[test]
@@ -410,7 +412,10 @@ mod tests {
         let mut events = Vec::new();
         equip_from_bag(&mut player, slot, &mut events);
         assert!(player.equipment.head.is_none());
-        assert_eq!(crate::entity::count_item(&player.inventory, "veteran_helm"), 1);
+        assert_eq!(
+            crate::entity::count_item(&player.inventory, "veteran_helm"),
+            1
+        );
         assert!(events.iter().any(|e| matches!(
             e,
             SimEvent::Toast { message } if message.contains("Requires level")

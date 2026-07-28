@@ -3,15 +3,10 @@
 | Rewrite | Parity target | Intent |
 | --- | --- | --- |
 | **0.1.0** (shipped) | `combat-slice` | Bevy offline Warrior combat: wolves, XP/loot, thin server health |
-| **0.2.0** (shipped on `develop`) | `framework` | Content tables, 9 classes, inventory, quests, vendor, WS host |
-| **0.3.0** (shipped on branch) | `online-alive` | SimContext + multi-player Entity; online client; death; combat/motion/bags core |
-| **0.4.0** (next) | `online-persist` | Postgres `woc-persist`, auth, character CRUD |
-| **0.5.0** | `class-depth` | Multi-ability kits, talents, pets |
-| **0.6.0** | `open-world` | Zone2/3, graveyards, denser quests |
-| **0.7.0** | `group-pve` | Party/chat, loot rules, dungeon (+ delve) |
-| **0.8.0** | `economy` | Bank, mail, market |
-| **0.9.0** | `professions-pvp` | Gather/craft, duel/honor |
-| **1.0.0-pre** | `completion` | Light world boss/deeds + STATUS core rows green |
+| **0.2.0** (shipped) | `framework` | Content tables, 9 classes, inventory, quests, vendor, WS host |
+| **0.3.0** (shipped) | `online-alive` | SimContext + multi-player Entity; online client; death; combat/motion/bags core |
+| **0.4–0.9** (folded into 1.0-pre) | persist → professions-pvp | Landed via R1–R3 parallel batches on `develop` |
+| **1.0.0-pre** (current) | `completion` | Talents, loot rules, bank/mail/market, professions, zones, dungeon, PvP, deed stub |
 
 ## Completion program
 

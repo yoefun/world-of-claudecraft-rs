@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.0-pre — 2026-07-28
+
+### Added
+
+- Talents: class trees, spend/respec, damage_pct multipliers on combat.
+- Party loot rules: FFA + Need/Greed rolls via sim RNG.
+- Economy: personal bank deposit/withdraw; mail send/collect; auction list/buy/cancel/expire.
+- Professions sim: train herbalism/alchemy → gather nodes → craft recipes.
+- Zone transition Eastbrook ↔ Eastfen without wiping player progression.
+- Dungeon instance shell (`eastbrook_crypt`) with boss spawn + leave.
+- Light PvP: duel challenge/accept, open-world PvP flag, honor currency.
+- World boss deed stub (`eastfen_mire_terror`) granting honor on template kill.
+- Protocol additive interact/events/snapshot fields for the above (rev still 2).
+
+### Changed
+
+- Parity target `online-alive` → `completion`.
+- Rewrite version `0.3.0` → `1.0.0-pre`.
+
 ## 0.3.0 — 2026-07-28
 
 ### Added

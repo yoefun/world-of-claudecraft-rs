@@ -65,14 +65,55 @@ pub enum InteractAction {
     TrainProfession { id: String },
     /// Gather from a world node (stub).
     Gather { node_id: EntityId },
-    /// Deposit bag items into the bank (stub).
+    /// Deposit bag items into the bank.
     BankDeposit { bag_slot: u8, count: u32 },
-    /// Withdraw bank items into the bag (stub).
+    /// Withdraw bank items into the bag.
     BankWithdraw { bank_slot: u8, count: u32 },
     /// Summon the class pet (hunter / warlock).
     SummonPet,
     /// Dismiss the active pet.
     DismissPet,
+    /// Spend one talent point into a talent id.
+    LearnTalent { talent_id: String },
+    /// Refund talent points (respec).
+    RespecTalents,
+    /// Craft a recipe by content id.
+    Craft { recipe_id: String },
+    /// Send mail (copper and/or one bag stack) to a player name.
+    MailSend {
+        to_name: String,
+        copper: u32,
+        bag_slot: Option<u8>,
+        count: u32,
+    },
+    /// Collect a mail by id into bag/copper.
+    MailCollect { mail_id: u32 },
+    /// List a bag stack on the auction house.
+    MarketList { bag_slot: u8, count: u32, price: u32 },
+    /// Buy an auction listing by id.
+    MarketBuy { listing_id: u32 },
+    /// Cancel own listing.
+    MarketCancel { listing_id: u32 },
+    /// Challenge target player to a duel.
+    DuelChallenge,
+    /// Accept a pending duel.
+    DuelAccept,
+    /// Toggle open-world PvP flag.
+    TogglePvp,
+    /// Travel through a portal / zone transition.
+    EnterPortal { zone_id: String },
+    /// Enter a dungeon instance (party-aware).
+    EnterDungeon { dungeon_id: String },
+    /// Leave the current instance back to the overworld zone.
+    LeaveInstance,
+    /// Need roll on pending party loot.
+    LootNeed { loot_id: EntityId },
+    /// Greed roll on pending party loot.
+    LootGreed { loot_id: EntityId },
+    /// Pass on pending party loot.
+    LootPass { loot_id: EntityId },
+    /// Party leader sets loot mode (`ffa` | `need_greed`).
+    SetLootMode { mode: String },
 }
 
 /// Per-tick intent from a local or remote player.
@@ -216,6 +257,67 @@ pub struct TickSnapshot {
     /// Party membership, if any.
     #[serde(default)]
     pub party_id: Option<u32>,
+    /// Current overworld / instance zone id.
+    #[serde(default)]
+    pub zone_id: String,
+    /// Unspent talent points.
+    #[serde(default)]
+    pub talent_points: u32,
+    /// Learned talents (id → rank).
+    #[serde(default)]
+    pub talents: Vec<TalentRankSnapshot>,
+    /// Bank slots (empty slots omitted or zero-count).
+    #[serde(default)]
+    pub bank: Vec<InvSlotSnapshot>,
+    /// Waiting mail headers.
+    #[serde(default)]
+    pub mail: Vec<MailSnapshot>,
+    /// Auction listings visible to this player (own + public).
+    #[serde(default)]
+    pub market: Vec<MarketListingSnapshot>,
+    /// PvP honor currency.
+    #[serde(default)]
+    pub honor: u32,
+    /// Open-world PvP flag.
+    #[serde(default)]
+    pub pvp_flagged: bool,
+    /// Profession skill ranks (id → skill).
+    #[serde(default)]
+    pub professions: Vec<ProfessionSkillSnapshot>,
+    /// Party loot mode when in a party (`ffa` | `need_greed`).
+    #[serde(default)]
+    pub loot_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct TalentRankSnapshot {
+    pub talent_id: String,
+    pub rank: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct MailSnapshot {
+    pub id: u32,
+    pub from: String,
+    pub subject: String,
+    pub copper: u32,
+    pub item_id: Option<String>,
+    pub item_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct MarketListingSnapshot {
+    pub id: u32,
+    pub seller: String,
+    pub item_id: String,
+    pub count: u32,
+    pub price: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ProfessionSkillSnapshot {
+    pub id: String,
+    pub skill: u32,
 }
 
 fn default_protocol_rev() -> u32 {
@@ -256,6 +358,16 @@ impl Default for TickSnapshot {
             cast: None,
             is_dead: false,
             party_id: None,
+            zone_id: String::new(),
+            talent_points: 0,
+            talents: Vec::new(),
+            bank: Vec::new(),
+            mail: Vec::new(),
+            market: Vec::new(),
+            honor: 0,
+            pvp_flagged: false,
+            professions: Vec::new(),
+            loot_mode: None,
         }
     }
 }
@@ -334,6 +446,78 @@ pub enum SimEvent {
         id: String,
         remaining: f32,
         stacks: u32,
+    },
+    TalentLearned {
+        player: EntityId,
+        talent_id: String,
+        rank: u32,
+    },
+    TalentRespec {
+        player: EntityId,
+    },
+    LootRoll {
+        loot_id: EntityId,
+        player: EntityId,
+        choice: String,
+        roll: u32,
+    },
+    LootAwarded {
+        loot_id: EntityId,
+        winner: EntityId,
+        item_id: String,
+    },
+    MailSent {
+        from: EntityId,
+        to_name: String,
+        mail_id: u32,
+    },
+    MailCollected {
+        player: EntityId,
+        mail_id: u32,
+    },
+    Crafted {
+        player: EntityId,
+        recipe_id: String,
+        item_id: String,
+        count: u32,
+    },
+    Gathered {
+        player: EntityId,
+        node_id: String,
+        item_id: String,
+        count: u32,
+    },
+    MarketListed {
+        player: EntityId,
+        listing_id: u32,
+    },
+    MarketSold {
+        listing_id: u32,
+        buyer: EntityId,
+        seller_name: String,
+    },
+    DuelStarted {
+        a: EntityId,
+        b: EntityId,
+    },
+    DuelEnded {
+        winner: EntityId,
+        loser: EntityId,
+    },
+    HonorGained {
+        player: EntityId,
+        amount: u32,
+    },
+    ZoneChanged {
+        player: EntityId,
+        zone_id: String,
+    },
+    InstanceEntered {
+        player: EntityId,
+        dungeon_id: String,
+    },
+    InstanceLeft {
+        player: EntityId,
     },
 }
 
@@ -508,6 +692,19 @@ mod tests {
             }),
             is_dead: true,
             party_id: Some(3),
+            zone_id: "eastbrook".into(),
+            talent_points: 2,
+            talents: vec![TalentRankSnapshot {
+                talent_id: "warrior_fury".into(),
+                rank: 1,
+            }],
+            bank: vec![],
+            mail: vec![],
+            market: vec![],
+            honor: 10,
+            pvp_flagged: false,
+            professions: vec![],
+            loot_mode: Some("need_greed".into()),
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -520,6 +717,10 @@ mod tests {
         assert!((cast.progress - 0.35).abs() < f32::EPSILON);
         assert!(back.is_dead);
         assert_eq!(back.party_id, Some(3));
+        assert_eq!(back.zone_id, "eastbrook");
+        assert_eq!(back.talent_points, 2);
+        assert_eq!(back.honor, 10);
+        assert_eq!(back.loot_mode.as_deref(), Some("need_greed"));
     }
 
     #[test]
@@ -617,6 +818,43 @@ mod tests {
             },
             InteractAction::SummonPet,
             InteractAction::DismissPet,
+            InteractAction::LearnTalent {
+                talent_id: "warrior_fury".into(),
+            },
+            InteractAction::RespecTalents,
+            InteractAction::Craft {
+                recipe_id: "minor_healing_salve".into(),
+            },
+            InteractAction::MailSend {
+                to_name: "Bob".into(),
+                copper: 50,
+                bag_slot: Some(1),
+                count: 1,
+            },
+            InteractAction::MailCollect { mail_id: 7 },
+            InteractAction::MarketList {
+                bag_slot: 0,
+                count: 1,
+                price: 100,
+            },
+            InteractAction::MarketBuy { listing_id: 3 },
+            InteractAction::MarketCancel { listing_id: 3 },
+            InteractAction::DuelChallenge,
+            InteractAction::DuelAccept,
+            InteractAction::TogglePvp,
+            InteractAction::EnterPortal {
+                zone_id: "eastfen".into(),
+            },
+            InteractAction::EnterDungeon {
+                dungeon_id: "eastbrook_crypt".into(),
+            },
+            InteractAction::LeaveInstance,
+            InteractAction::LootNeed { loot_id: 9 },
+            InteractAction::LootGreed { loot_id: 9 },
+            InteractAction::LootPass { loot_id: 9 },
+            InteractAction::SetLootMode {
+                mode: "need_greed".into(),
+            },
         ];
         for a in actions {
             let v = serde_json::to_value(&a).unwrap();

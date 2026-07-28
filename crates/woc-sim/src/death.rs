@@ -67,11 +67,9 @@ mod tests {
         on_player_death_check(&mut entities, &mut events);
         assert!(!entities[0].alive);
         assert!(has_corpse_marker(&entities[0]));
-        assert!(
-            events
-                .iter()
-                .any(|e| matches!(e, SimEvent::PlayerDied { player: 1 }))
-        );
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, SimEvent::PlayerDied { player: 1 })));
         // Idempotent: no second PlayerDied.
         let before = events.len();
         on_player_death_check(&mut entities, &mut events);

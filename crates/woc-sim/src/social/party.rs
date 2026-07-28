@@ -26,15 +26,23 @@ pub struct PartyRoster {
     membership: HashMap<EntityId, u32>,
     /// invitee → inviter
     pending: HashMap<EntityId, EntityId>,
+    /// party_id → loot mode
+    loot_modes: HashMap<u32, super::loot::LootMode>,
 }
 
 /// Side-effects from a party action (mapped to WsServerMsg by the host).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartyEffect {
-    Update { members: Vec<EntityId> },
-    Error { message: String },
+    Update {
+        members: Vec<EntityId>,
+    },
+    Error {
+        message: String,
+    },
     /// Soft notice (toast) for invitee / inviter.
-    Notice { message: String },
+    Notice {
+        message: String,
+    },
 }
 
 impl PartyRoster {
@@ -47,6 +55,33 @@ impl PartyRoster {
 
     pub fn party_id(&self, player: EntityId) -> Option<u32> {
         self.membership.get(&player).copied()
+    }
+
+    /// Party loot mode string for snapshots (`ffa` | `need_greed`).
+    pub fn loot_mode(&self, player: EntityId) -> Option<String> {
+        let pid = self.party_id(player)?;
+        Some(
+            self.loot_modes
+                .get(&pid)
+                .copied()
+                .unwrap_or(super::loot::LootMode::Ffa)
+                .as_str()
+                .to_string(),
+        )
+    }
+
+    pub fn set_loot_mode(&mut self, player: EntityId, mode: super::loot::LootMode) -> bool {
+        let Some(pid) = self.party_id(player) else {
+            return false;
+        };
+        let Some(party) = self.parties.get(&pid) else {
+            return false;
+        };
+        if party.leader != player {
+            return false;
+        }
+        self.loot_modes.insert(pid, mode);
+        true
     }
 
     pub fn members_of(&self, player: EntityId) -> Option<Vec<EntityId>> {
@@ -257,7 +292,9 @@ mod tests {
             .unwrap();
         let effects = roster.invite(a, &name, entities);
         assert!(
-            effects.iter().any(|e| matches!(e, PartyEffect::Notice { .. })),
+            effects
+                .iter()
+                .any(|e| matches!(e, PartyEffect::Notice { .. })),
             "invite should notify: {effects:?}"
         );
         let effects = roster.accept(b, entities);
@@ -319,14 +356,18 @@ mod tests {
             roster.invite(1, &name, &entities);
             let effects = roster.accept(invitee, &entities);
             assert!(
-                effects.iter().any(|e| matches!(e, PartyEffect::Update { .. })),
+                effects
+                    .iter()
+                    .any(|e| matches!(e, PartyEffect::Update { .. })),
                 "join {invitee}: {effects:?}"
             );
         }
         assert_eq!(roster.members_of(1).unwrap().len(), MAX_PARTY_SIZE);
         let effects = roster.invite(1, "Frank", &entities);
         assert!(
-            effects.iter().any(|e| matches!(e, PartyEffect::Error { .. })),
+            effects
+                .iter()
+                .any(|e| matches!(e, PartyEffect::Error { .. })),
             "sixth invite should fail: {effects:?}"
         );
         assert_eq!(roster.members_of(1).unwrap().len(), MAX_PARTY_SIZE);

@@ -148,14 +148,16 @@ fn tick_one_pet(pet_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimE
 
     // Resolve attack target: owner's living mob/player target (not the pet itself).
     let attack_tid = owner_target.and_then(|tid| {
-        entities.iter().find(|e| {
-            e.id == tid
-                && e.alive
-                && e.id != pet_id
-                && e.id != owner_id
-                && matches!(e.kind, EntityKind::Mob | EntityKind::Player)
-        })
-        .map(|e| e.id)
+        entities
+            .iter()
+            .find(|e| {
+                e.id == tid
+                    && e.alive
+                    && e.id != pet_id
+                    && e.id != owner_id
+                    && matches!(e.kind, EntityKind::Mob | EntityKind::Player)
+            })
+            .map(|e| e.id)
     });
 
     entities[pi].target = attack_tid;
@@ -322,7 +324,10 @@ mod tests {
         let second = find_pet(&entities, 1).unwrap();
         assert_ne!(first, second);
         assert_eq!(
-            entities.iter().filter(|e| e.kind == EntityKind::Pet).count(),
+            entities
+                .iter()
+                .filter(|e| e.kind == EntityKind::Pet)
+                .count(),
             1
         );
     }
