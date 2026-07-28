@@ -1,7 +1,7 @@
 //! Overworld zone transitions and content-table population.
 
 use crate::entity::{create_mob_from_template, create_npc_from_template, Entity};
-use woc_content::{ZoneLayout, EASTBROOK, EASTFEN};
+use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, MIREFEN};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Resolve a supported overworld zone to its spawn layout.
@@ -9,6 +9,7 @@ pub fn zone_layout(zone_id: &str) -> Option<&'static ZoneLayout> {
     match zone_id {
         "eastbrook" => Some(&EASTBROOK),
         "eastfen" => Some(&EASTFEN),
+        "mirefen" => Some(&MIREFEN),
         _ => None,
     }
 }
@@ -157,6 +158,55 @@ mod tests {
         assert!(events.iter().any(|event| matches!(
             event,
             SimEvent::ZoneChanged { player: 1, zone_id } if zone_id == "eastfen"
+        )));
+    }
+
+    #[test]
+    fn eastfen_to_mirefen_preserves_player_progression() {
+        let mut player = create_player(1, "Fenwalker", PlayerClass::Druid, 8.0, -6.0);
+        player.zone_id = "eastfen".into();
+        player.xp = 241;
+        player.level = 5;
+        player.talent_points = 3;
+        player.talents.insert("natures_grace".into(), 2);
+        assert!(grant_into(&mut player.inventory, "toad_bile", 3));
+
+        let old_mob = create_mob_from_template(2, "mire_toad", 0.0, 0.0).expect("eastfen mob");
+        let old_npc = create_npc_from_template(3, "warden_selene", 0.0, 0.0).expect("eastfen npc");
+        let mut entities = vec![player, old_mob, old_npc];
+        let mut events = Vec::new();
+
+        assert!(enter_portal(&mut entities, 1, "mirefen", &mut events));
+
+        let player = entities.iter().find(|entity| entity.id == 1).unwrap();
+        assert_eq!(player.zone_id, "mirefen");
+        assert_eq!(player.xp, 241);
+        assert_eq!(player.level, 5);
+        assert_eq!(player.talent_points, 3);
+        assert_eq!(player.talents.get("natures_grace"), Some(&2));
+        assert_eq!(count_item(&player.inventory, "toad_bile"), 3);
+        assert_eq!(player.x, woc_content::MIREFEN.player_spawn_x);
+        assert_eq!(player.z, woc_content::MIREFEN.player_spawn_z);
+
+        assert!(!entities.iter().any(|entity| {
+            matches!(
+                entity.template_id.as_deref(),
+                Some("mire_toad" | "warden_selene")
+            )
+        }));
+        assert!(entities
+            .iter()
+            .any(|entity| entity.template_id.as_deref() == Some("mire_leech")));
+        assert!(entities
+            .iter()
+            .any(|entity| entity.template_id.as_deref() == Some("keeper_orla")));
+        assert!(entities
+            .iter()
+            .filter(|entity| matches!(entity.kind, EntityKind::Mob | EntityKind::Npc))
+            .all(|entity| entity.zone_id == "mirefen"));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            SimEvent::ZoneChanged { player: 1, zone_id } if zone_id == "mirefen"
         )));
     }
 
