@@ -226,6 +226,31 @@ pub fn spawn_enter_character(token: String, id: Uuid) -> Receiver<CharacterResul
     rx
 }
 
+fn delete_character_blocking(token: &str, id: Uuid) -> Result<(), String> {
+    let url = format!("{API_BASE}/api/characters/{id}");
+    match agent()
+        .delete(&url)
+        .set("Authorization", &format!("Bearer {token}"))
+        .call()
+    {
+        Ok(_) => Ok(()),
+        Err(ureq::Error::Status(_, resp)) => Err(read_error(resp)),
+        Err(e) => Err(format!("request failed: {e}")),
+    }
+}
+
+/// Spawn a thread that deletes a character.
+pub fn spawn_delete_character(token: String, id: Uuid) -> Receiver<Result<(), String>> {
+    let (tx, rx) = mpsc::channel();
+    thread::Builder::new()
+        .name("woc-api-delete".into())
+        .spawn(move || {
+            let _ = tx.send(delete_character_blocking(&token, id));
+        })
+        .expect("spawn api delete");
+    rx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

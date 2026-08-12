@@ -2,7 +2,7 @@
 
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -35,6 +35,7 @@ pub fn router() -> Router<Arc<AppState>> {
             get(list_characters).post(create_character),
         )
         .route("/api/characters/{id}/enter", post(enter_character))
+        .route("/api/characters/{id}", delete(delete_character))
 }
 
 async fn list_characters(
@@ -69,4 +70,14 @@ async fn enter_character(
     let account_id = account_from_headers(&state.persist, &headers).await?;
     let character = state.persist.enter_character(account_id, id).await?;
     Ok(Json(EnterResponse { character }))
+}
+
+async fn delete_character(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let account_id = account_from_headers(&state.persist, &headers).await?;
+    state.persist.delete_character(account_id, id).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }

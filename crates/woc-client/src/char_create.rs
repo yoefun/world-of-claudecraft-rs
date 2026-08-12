@@ -1,9 +1,13 @@
-//! Character create / class select.
+//! Character create / class select (offline path + shared class grid).
 
 use bevy::prelude::*;
 use woc_content::PlayerClass;
 
-use crate::{cleanup_ui, AppState, PlayMode, UiRoot};
+use crate::menu_ui::{
+    self, button_bundle, class_detail_line, panel_node, spawn_class_grid, spawn_screen_root,
+    ClassPickButton, MenuBtnKind, BODY, FIELD_FOCUS, GOLD, MUTED,
+};
+use crate::{cleanup_ui, AppState, PlayMode};
 
 #[derive(Resource)]
 pub(crate) struct CharName(pub(crate) String);
@@ -15,7 +19,13 @@ pub(crate) struct SelectedClass(pub(crate) PlayerClass);
 struct NameInputDisplay;
 
 #[derive(Component)]
-struct ClassLabel;
+struct ClassDetailLabel;
+
+#[derive(Component)]
+struct CreateEnterBtn;
+
+#[derive(Component)]
+struct CreateBackBtn;
 
 pub(crate) fn plugin(app: &mut App) {
     app.insert_resource(CharName("Aldric".into()))
@@ -24,7 +34,14 @@ pub(crate) fn plugin(app: &mut App) {
         .add_systems(OnExit(AppState::CharCreate), cleanup_ui)
         .add_systems(
             Update,
-            char_create_input.run_if(in_state(AppState::CharCreate)),
+            (
+                menu_ui::menu_button_visuals,
+                char_create_clicks,
+                char_create_input,
+                refresh_char_create,
+            )
+                .chain()
+                .run_if(in_state(AppState::CharCreate)),
         );
 }
 
@@ -34,58 +51,140 @@ fn setup_char_create(
     class: Res<SelectedClass>,
     mode: Res<PlayMode>,
 ) {
-    let label = format!("Name: {}", name.0);
-    let class_label = format!(
-        "Class: {}  (Left/Right to change)",
-        woc_content::class_def(class.0).name
-    );
     let mode_hint = match *mode {
-        PlayMode::Offline => "Entering Offline Eastbrook (local sim)".to_string(),
-        PlayMode::Online => format!("Entering Online → {}", crate::online::ONLINE_WS_URL),
+        PlayMode::Offline => "Offline · local Eastbrook sim".to_string(),
+        PlayMode::Online => format!("Online · {}", crate::online::ONLINE_WS_URL),
     };
-    commands
-        .spawn((
-            UiRoot,
+
+    let root = spawn_screen_root(&mut commands);
+    let (panel_n, panel_bg, panel_bd) = panel_node(520.0);
+    let panel = commands.spawn((panel_n, panel_bg, panel_bd)).id();
+    commands.entity(root).add_child(panel);
+
+    commands.entity(panel).with_children(|p| {
+        p.spawn((
+            Text::new("Create Character"),
+            TextFont::from_font_size(34.0),
+            TextColor(GOLD),
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(12.0),
+                align_self: AlignSelf::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.04, 0.07, 0.1, 0.8)),
+        ));
+        p.spawn((
+            Text::new(mode_hint),
+            TextFont::from_font_size(14.0),
+            TextColor(MUTED),
+            Node {
+                align_self: AlignSelf::Center,
+                ..default()
+            },
+        ));
+
+        p.spawn((
+            Button,
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(40.0),
+                padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(FIELD_FOCUS),
+            BorderColor(Color::srgba(0.45, 0.55, 0.7, 0.55)),
         ))
-        .with_children(|p| {
-            p.spawn((
-                Text::new("Create Character"),
-                TextFont::from_font_size(36.0),
-                TextColor(Color::srgb(0.95, 0.86, 0.55)),
-            ));
-            p.spawn((
+        .with_children(|f| {
+            f.spawn((
                 NameInputDisplay,
-                Text::new(label),
-                TextFont::from_font_size(22.0),
-                TextColor(Color::srgb(0.85, 0.95, 0.85)),
-            ));
-            p.spawn((
-                ClassLabel,
-                Text::new(class_label),
+                Text::new(format!("Name  {}_", name.0)),
                 TextFont::from_font_size(18.0),
-                TextColor(Color::WHITE),
-            ));
-            p.spawn((
-                Text::new(mode_hint),
-                TextFont::from_font_size(15.0),
-                TextColor(Color::srgb(0.7, 0.85, 0.95)),
-            ));
-            p.spawn((
-                Text::new("Type a name · ←/→ class · Enter to enter Eastbrook"),
-                TextFont::from_font_size(16.0),
-                TextColor(Color::srgb(0.75, 0.8, 0.85)),
+                TextColor(BODY),
             ));
         });
+    });
+
+    spawn_class_grid(&mut commands, panel, class.0);
+
+    commands.entity(panel).with_children(|p| {
+        p.spawn((
+            ClassDetailLabel,
+            Text::new(class_detail_line(class.0)),
+            TextFont::from_font_size(14.0),
+            TextColor(MUTED),
+            Node {
+                align_self: AlignSelf::Center,
+                ..default()
+            },
+        ));
+
+        p.spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(8.0),
+            margin: UiRect::top(Val::Px(4.0)),
+            ..default()
+        })
+        .with_children(|row| {
+            let (b, k, n, bg, bd) = button_bundle(MenuBtnKind::Primary);
+            row.spawn((b, k, n, bg, bd, CreateEnterBtn))
+                .with_children(|btn| {
+                    btn.spawn((
+                        Text::new("Enter Eastbrook"),
+                        TextFont::from_font_size(16.0),
+                        TextColor(BODY),
+                    ));
+                });
+            let (b, k, n, bg, bd) = button_bundle(MenuBtnKind::Secondary);
+            row.spawn((b, k, n, bg, bd, CreateBackBtn))
+                .with_children(|btn| {
+                    btn.spawn((
+                        Text::new("Back"),
+                        TextFont::from_font_size(16.0),
+                        TextColor(BODY),
+                    ));
+                });
+        });
+
+        p.spawn((
+            Text::new("Type a name · click class or ←/→ · Enter to play · Esc back"),
+            TextFont::from_font_size(13.0),
+            TextColor(MUTED),
+            Node {
+                align_self: AlignSelf::Center,
+                ..default()
+            },
+        ));
+    });
+}
+
+fn char_create_clicks(
+    mut class: ResMut<SelectedClass>,
+    mut next: ResMut<NextState<AppState>>,
+    mut name: ResMut<CharName>,
+    class_btns: Query<(&Interaction, &ClassPickButton), Changed<Interaction>>,
+    enter_btn: Query<&Interaction, (Changed<Interaction>, With<CreateEnterBtn>)>,
+    back_btn: Query<&Interaction, (Changed<Interaction>, With<CreateBackBtn>)>,
+) {
+    for (interaction, pick) in &class_btns {
+        if *interaction == Interaction::Pressed {
+            class.0 = pick.0;
+        }
+    }
+    for interaction in &back_btn {
+        if *interaction == Interaction::Pressed {
+            next.set(AppState::Title);
+            return;
+        }
+    }
+    for interaction in &enter_btn {
+        if *interaction == Interaction::Pressed {
+            if name.0.trim().is_empty() {
+                name.0 = "Aldric".into();
+            }
+            next.set(AppState::InWorld);
+        }
+    }
 }
 
 fn char_create_input(
@@ -93,10 +192,14 @@ fn char_create_input(
     mut name: ResMut<CharName>,
     mut class: ResMut<SelectedClass>,
     mut next: ResMut<NextState<AppState>>,
-    mut q: Query<&mut Text, With<NameInputDisplay>>,
-    mut cq: Query<&mut Text, (With<ClassLabel>, Without<NameInputDisplay>)>,
     mut events: EventReader<bevy::input::keyboard::KeyboardInput>,
 ) {
+    if keys.just_pressed(KeyCode::Escape) {
+        next.set(AppState::Title);
+        keys.clear();
+        return;
+    }
+
     use bevy::input::ButtonState;
     for ev in events.read() {
         if ev.state != ButtonState::Pressed {
@@ -134,13 +237,21 @@ fn char_create_input(
         next.set(AppState::InWorld);
         keys.clear();
     }
-    if let Ok(mut text) = q.single_mut() {
-        **text = format!("Name: {}", name.0);
+}
+
+fn refresh_char_create(
+    name: Res<CharName>,
+    class: Res<SelectedClass>,
+    mut name_q: Query<&mut Text, With<NameInputDisplay>>,
+    mut detail_q: Query<&mut Text, (With<ClassDetailLabel>, Without<NameInputDisplay>)>,
+    class_btns: Query<(&ClassPickButton, &mut BackgroundColor, &Children)>,
+    texts: Query<&mut TextColor, With<menu_ui::ClassPickLabel>>,
+) {
+    if let Ok(mut text) = name_q.single_mut() {
+        **text = format!("Name  {}_", name.0);
     }
-    if let Ok(mut text) = cq.single_mut() {
-        **text = format!(
-            "Class: {}  (Left/Right to change)",
-            woc_content::class_def(class.0).name
-        );
+    if let Ok(mut text) = detail_q.single_mut() {
+        **text = class_detail_line(class.0);
     }
+    menu_ui::sync_class_pick_chrome(class.0, class_btns, texts);
 }

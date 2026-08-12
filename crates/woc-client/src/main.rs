@@ -6,6 +6,7 @@ mod char_select;
 mod hud;
 mod input;
 mod login;
+mod menu_ui;
 mod online;
 mod title;
 mod world_setup;

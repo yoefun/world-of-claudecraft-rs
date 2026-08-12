@@ -65,10 +65,11 @@ cargo run -p woc-client
 ```
 
 REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` on a worker thread).  
+`DELETE /api/characters/{id}` removes a character (confirm in the client UI).  
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **M** mail (P collect), **U** market (O buy), **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **M** mail (P collect), **U** market (O buy), **Esc** release cursor. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
 
 ## Architecture
 
