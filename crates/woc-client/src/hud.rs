@@ -88,6 +88,7 @@ pub(crate) struct UiFlags {
     pub(crate) show_bank: bool,
     pub(crate) show_mail: bool,
     pub(crate) show_market: bool,
+    pub(crate) show_map: bool,
 }
 
 #[derive(Resource, Default)]
@@ -104,6 +105,7 @@ pub(crate) fn plugin(app: &mut App) {
         show_bank: false,
         show_mail: false,
         show_market: false,
+        show_map: false,
     })
     .init_resource::<VendorUiCache>();
 }
@@ -209,7 +211,7 @@ fn bank_panel_text(snap: &TickSnapshot) -> String {
 }
 
 fn mail_panel_text(snap: &TickSnapshot) -> String {
-    let mut lines = vec!["Mail [M]".to_string(), format!("Zone: {}", zone_name(snap))];
+    let mut lines = vec!["Mail [I]".to_string(), format!("Zone: {}", zone_name(snap))];
     if snap.mail.is_empty() {
         lines.push("  (inbox empty)".into());
     } else {

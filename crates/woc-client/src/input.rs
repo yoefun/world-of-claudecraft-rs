@@ -146,31 +146,49 @@ pub(crate) fn handle_interact_keys(
             ui.show_bank = false;
             ui.show_mail = false;
             ui.show_market = false;
+            ui.show_map = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyN) {
         ui.show_talents = !ui.show_talents;
         if ui.show_talents {
             ui.show_character = false;
+            ui.show_map = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyK) {
         ui.show_bank = !ui.show_bank;
         if ui.show_bank {
             ui.show_character = false;
+            ui.show_map = false;
         }
     }
-    if keys.just_pressed(KeyCode::KeyM) {
+    if keys.just_pressed(KeyCode::KeyI) {
         ui.show_mail = !ui.show_mail;
         if ui.show_mail {
             ui.show_character = false;
+            ui.show_map = false;
+        }
+    }
+    if keys.just_pressed(KeyCode::KeyM) {
+        ui.show_map = !ui.show_map;
+        if ui.show_map {
+            ui.show_character = false;
+            ui.show_talents = false;
+            ui.show_bank = false;
+            ui.show_mail = false;
+            ui.show_market = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyU) {
         ui.show_market = !ui.show_market;
         if ui.show_market {
             ui.show_character = false;
+            ui.show_map = false;
         }
+    }
+    if keys.just_pressed(KeyCode::Escape) && ui.show_map {
+        ui.show_map = false;
     }
 
     let player_id = host.snapshot.player_id;

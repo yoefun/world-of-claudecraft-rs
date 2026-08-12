@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Bevy **minimap** (top-right disc: zone label, coords, terrain, hubs/portals/quests/mobs/allies, facing arrow).
+- Bevy **world map** window (**M**, Esc closes): current zone band terrain, POI legend, player arrow.
+- Pure `woc-sim::map_view` projection + terrain paint (upstream +X-left / +Z-up canvas convention) with unit tests.
+
+### Changed
+
+- Mail panel keybind **M → I** (inbox) so **M** matches upstream World Map.
+- Clippy `too_many_arguments` allows on `Mailbox::send` / `AuctionHouse::list_item` for current nightly.
+
 ## 1.0.0-pre — 2026-07-28
 
 ### Added

@@ -14,6 +14,7 @@ pub mod instances;
 pub mod interaction;
 pub mod inventory;
 pub mod mail;
+pub mod map_view;
 pub mod market;
 pub mod mob;
 pub mod persist_state;
@@ -36,6 +37,10 @@ pub mod worldboss;
 pub mod zones;
 
 pub use entity::QuestState;
+pub use map_view::{
+    paint_map_frame, paint_player_arrow, paint_terrain_rgba, pixel_to_world, region_for_zone,
+    static_markers_for_region, world_to_pixel, MapMarker, MapMarkerKind, MapRegion,
+};
 pub use persist_state::{
     apply_player_state, create_player_from_state, export_player_state, PlayerPersistentState,
 };

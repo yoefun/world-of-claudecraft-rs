@@ -19,7 +19,7 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 - Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot
 - Bank, mail, auction house (durable across server restart); herbalism → alchemy craft loop
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
-- Client panels: talents / bank / mail / market
+- Client panels: talents / bank / mail / market; **minimap** + **world map** (M)
 - Version footer: `WoC-rs 1.0.0-pre · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; Postgres optional)
@@ -68,7 +68,7 @@ REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` o
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **M** mail (P collect), **U** market (O buy), **Esc** release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **I** mail (P collect), **M** world map, **U** market (O buy), **Esc** close map / release cursor. Title: **1/2** Offline|Online. Offline create: **←/→** class. Online login: **Tab** field, **F2** login/register, **Enter** submit. Char select: **↑/↓**, **N** create, **Enter** enter world.
 
 ## Architecture
 
