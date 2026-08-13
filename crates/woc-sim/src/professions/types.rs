@@ -74,6 +74,56 @@ pub enum DenyReason {
     NotInstanced,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum StationType {
+    Forge,
+    Tannery,
+    Loom,
+    JewelersBench,
+    Apothecary,
+    Toolworks,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum RecipeId {
+    SmeltCopper,
+    CopperShortsword,
+    CopperChainVest,
+    CopperPick,
+    CureLightLeather,
+    LightLeatherJerkin,
+    LightLeatherBelt,
+    BoltOfLinen,
+    LinenTrousers,
+    LinenVestments,
+    ProspectCopper,
+    CopperSetting,
+    TigerseyeBand,
+    MinorHealingPotion,
+    ElixirOfMinorStrength,
+    RoughBlastingPowder,
+    CopperBolt,
+    CopperGrenade,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Reagent {
+    pub item: crate::item::ItemId,
+    pub count: u16,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RecipeDef {
+    pub id: RecipeId,
+    pub profession: ProfessionId,
+    pub result: crate::item::ItemId,
+    pub result_count: u16,
+    pub reagents: &'static [Reagent],
+    pub skill_req: u16,
+    pub item_level_budget: u16,
+    pub station: Option<StationType>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct NodeId(pub u16);
 
