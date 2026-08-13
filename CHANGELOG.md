@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `parcel-bank`:** Slot-accurate `take_from_slot` / `put_stack` for bank, mail, and AH moves — worn gear and main-hand enchants survive deposit, withdraw, parcel, and listing.
+- Client **K** **G** banks any non-quest stack (not junk-only); **I** **S**/**Y** send item or wallet copper, **1–9** numbered collect, **X** return; compose field for offline recipient names.
+- `CharacterDirectory` on `Sim` plus persist `list_mailbox_directory` — mail to parked or offline characters by name.
+- `RepairAll` includes banked gear; postage 1c, player inbox cap 20, 24h tick expiry with return to sender; AH listings carry durability/enchant on persist and expire/cancel as the same instance.
+- Protocol rev stays **8** (`mail_postage`, mail/listing instance fields, `MailReturn` are additive).
+
 ## 1.13.0 — 2026-08-13
 
 ### Added

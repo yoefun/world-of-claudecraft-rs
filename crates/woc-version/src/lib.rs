@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Rewrite crate / product version (semver).
-pub const REWRITE_VERSION: &str = "1.13.0";
+pub const REWRITE_VERSION: &str = "1.14.0";
 
 /// Upstream TypeScript World of ClaudeCraft version this rewrite tracks.
 pub const UPSTREAM_VERSION: &str = "0.31.0";
@@ -17,7 +17,7 @@ pub const UPSTREAM_COMMIT: &str = "a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9";
 pub const UPSTREAM_REPO: &str = "https://github.com/levy-street/world-of-claudecraft";
 
 /// Current parity milestone name.
-pub const PARITY_TARGET: &str = "gear-slots";
+pub const PARITY_TARGET: &str = "parcel-bank";
 
 /// Short footer string for HUD / window titles.
 pub fn footer() -> String {
