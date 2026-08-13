@@ -230,12 +230,24 @@ mod tests {
             crate::ecs::components::Bags {
                 inventory: vec![None; crate::types::BACKPACK_SLOTS],
                 equipment: crate::ecs::components::Equipment::default(),
+                equipment_wear: crate::ecs::components::EquipmentWear::default(),
                 open_vendor_npc: None,
+                buyback: Vec::new(),
+            },
+        );
+        w.insert(
+            id,
+            crate::ecs::components::Hearth {
+                zone_id: "eastbrook".into(),
+                x: 2.0,
+                z: 4.0,
+                ready_tick: 0,
             },
         );
         assert!(w.despawn(id));
         assert!(w.ids::<crate::ecs::components::LootPile>().is_empty());
         assert!(w.ids::<crate::ecs::components::Bags>().is_empty());
+        assert!(w.ids::<crate::ecs::components::Hearth>().is_empty());
         assert!(!w.contains(id));
     }
 

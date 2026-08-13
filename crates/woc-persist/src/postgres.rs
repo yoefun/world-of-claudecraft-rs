@@ -326,6 +326,10 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         professions: completion.professions,
         pvp_flagged: completion.pvp_flagged,
         completed_deeds: completion.completed_deeds,
+        hearth_zone_id: completion.hearth_zone_id,
+        hearth_x: completion.hearth_x,
+        hearth_z: completion.hearth_z,
+        hearth_ready_tick: completion.hearth_ready_tick,
         stance_id: completion.stance_id,
     })
 }
@@ -387,6 +391,7 @@ mod tests {
             bank: vec![Some(InvStackDto {
                 item_id: "silverleaf".into(),
                 count: 8,
+                durability: None,
             })],
             bank_copper: 0,
             honor: 125,

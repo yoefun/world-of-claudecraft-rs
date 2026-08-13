@@ -36,6 +36,14 @@ pub struct Character {
     pub pvp_flagged: bool,
     #[serde(default)]
     pub completed_deeds: Vec<String>,
+    #[serde(default = "default_hearth_zone_id")]
+    pub hearth_zone_id: String,
+    #[serde(default = "default_hearth_x")]
+    pub hearth_x: f32,
+    #[serde(default = "default_hearth_z")]
+    pub hearth_z: f32,
+    #[serde(default)]
+    pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
 }
@@ -69,6 +77,14 @@ pub struct CharacterSave {
     pub pvp_flagged: bool,
     #[serde(default)]
     pub completed_deeds: Vec<String>,
+    #[serde(default = "default_hearth_zone_id")]
+    pub hearth_zone_id: String,
+    #[serde(default = "default_hearth_x")]
+    pub hearth_x: f32,
+    #[serde(default = "default_hearth_z")]
+    pub hearth_z: f32,
+    #[serde(default)]
+    pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
 }
@@ -93,6 +109,10 @@ impl Default for CharacterSave {
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            hearth_zone_id: default_hearth_zone_id(),
+            hearth_x: default_hearth_x(),
+            hearth_z: default_hearth_z(),
+            hearth_ready_tick: 0,
             stance_id: String::new(),
         }
     }
@@ -123,6 +143,14 @@ pub(crate) struct CharacterCompletionDto {
     pub pvp_flagged: bool,
     #[serde(default)]
     pub completed_deeds: Vec<String>,
+    #[serde(default = "default_hearth_zone_id")]
+    pub hearth_zone_id: String,
+    #[serde(default = "default_hearth_x")]
+    pub hearth_x: f32,
+    #[serde(default = "default_hearth_z")]
+    pub hearth_z: f32,
+    #[serde(default)]
+    pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
 }
@@ -140,6 +168,10 @@ impl From<&CharacterSave> for CharacterCompletionDto {
             professions: save.professions.clone(),
             pvp_flagged: save.pvp_flagged,
             completed_deeds: save.completed_deeds.clone(),
+            hearth_zone_id: save.hearth_zone_id.clone(),
+            hearth_x: save.hearth_x,
+            hearth_z: save.hearth_z,
+            hearth_ready_tick: save.hearth_ready_tick,
             stance_id: save.stance_id.clone(),
         }
     }
@@ -172,6 +204,10 @@ impl Character {
             professions: self.professions.clone(),
             pvp_flagged: self.pvp_flagged,
             completed_deeds: self.completed_deeds.clone(),
+            hearth_zone_id: self.hearth_zone_id.clone(),
+            hearth_x: self.hearth_x,
+            hearth_z: self.hearth_z,
+            hearth_ready_tick: self.hearth_ready_tick,
             stance_id: self.stance_id.clone(),
         }
     }
@@ -194,6 +230,10 @@ impl Character {
         self.professions = save.professions;
         self.pvp_flagged = save.pvp_flagged;
         self.completed_deeds = save.completed_deeds;
+        self.hearth_zone_id = save.hearth_zone_id;
+        self.hearth_x = save.hearth_x;
+        self.hearth_z = save.hearth_z;
+        self.hearth_ready_tick = save.hearth_ready_tick;
         self.stance_id = save.stance_id;
     }
 }
@@ -202,10 +242,24 @@ fn default_zone_id() -> String {
     "eastbrook".into()
 }
 
+fn default_hearth_zone_id() -> String {
+    "eastbrook".into()
+}
+
+fn default_hearth_x() -> f32 {
+    2.0
+}
+
+fn default_hearth_z() -> f32 {
+    4.0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InvStackDto {
     pub item_id: String,
     pub count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durability: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -238,6 +292,18 @@ pub struct EquipmentDto {
     pub neck: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finger: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main_hand_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub off_hand_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chest_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legs_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feet_durability: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -246,6 +312,8 @@ pub struct QuestProgressDto {
     pub state: String,
     #[serde(default)]
     pub counts: Vec<u32>,
+    #[serde(default)]
+    pub completed_tick: u64,
 }
 
 /// Public character summary for list endpoints.
@@ -311,6 +379,10 @@ pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, se
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            hearth_zone_id: default_hearth_zone_id(),
+            hearth_x: default_hearth_x(),
+            hearth_z: default_hearth_z(),
+            hearth_ready_tick: 0,
             stance_id: String::new(),
         },
     })
@@ -347,6 +419,10 @@ mod tests {
         assert!(character.professions.is_empty());
         assert!(!character.pvp_flagged);
         assert!(character.completed_deeds.is_empty());
+        assert_eq!(character.hearth_zone_id, "eastbrook");
+        assert_eq!(character.hearth_x, 2.0);
+        assert_eq!(character.hearth_z, 4.0);
+        assert_eq!(character.hearth_ready_tick, 0);
         assert!(character.stance_id.is_empty());
     }
 
@@ -372,6 +448,10 @@ mod tests {
         assert!(save.professions.is_empty());
         assert!(!save.pvp_flagged);
         assert!(save.completed_deeds.is_empty());
+        assert_eq!(save.hearth_zone_id, "eastbrook");
+        assert_eq!(save.hearth_x, 2.0);
+        assert_eq!(save.hearth_z, 4.0);
+        assert_eq!(save.hearth_ready_tick, 0);
         assert!(save.stance_id.is_empty());
     }
 
@@ -399,6 +479,10 @@ mod tests {
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            hearth_zone_id: "eastbrook".into(),
+            hearth_x: 2.0,
+            hearth_z: 4.0,
+            hearth_ready_tick: 0,
             stance_id: String::new(),
         };
         let save = CharacterSave {
@@ -411,6 +495,7 @@ mod tests {
             bank: vec![Some(InvStackDto {
                 item_id: "silverleaf".into(),
                 count: 8,
+                durability: None,
             })],
             bank_copper: 0,
             honor: 125,
@@ -419,6 +504,10 @@ mod tests {
                 skill: 42,
             }],
             pvp_flagged: true,
+            hearth_zone_id: "eastfen".into(),
+            hearth_x: 12.0,
+            hearth_z: 34.0,
+            hearth_ready_tick: 77,
             ..Default::default()
         };
 
@@ -442,6 +531,10 @@ mod tests {
         assert_eq!(state.honor, 0);
         assert!(state.professions.is_empty());
         assert!(!state.pvp_flagged);
+        assert_eq!(state.hearth_zone_id, "eastbrook");
+        assert_eq!(state.hearth_x, 2.0);
+        assert_eq!(state.hearth_z, 4.0);
+        assert_eq!(state.hearth_ready_tick, 0);
     }
 
     #[test]
@@ -451,6 +544,7 @@ mod tests {
                 quest_id: "q1".into(),
                 state: "ready".into(),
                 counts: vec![2],
+                completed_tick: 0,
             }],
             zone_id: "eastfen".into(),
             talent_points: 2,
@@ -461,6 +555,7 @@ mod tests {
             bank: vec![Some(InvStackDto {
                 item_id: "silverleaf".into(),
                 count: 8,
+                durability: None,
             })],
             bank_copper: 0,
             honor: 125,
@@ -469,6 +564,10 @@ mod tests {
                 skill: 42,
             }],
             pvp_flagged: true,
+            hearth_zone_id: "eastfen".into(),
+            hearth_x: 12.0,
+            hearth_z: 34.0,
+            hearth_ready_tick: 77,
             ..Default::default()
         };
 

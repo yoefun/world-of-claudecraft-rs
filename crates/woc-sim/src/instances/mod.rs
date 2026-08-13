@@ -87,6 +87,7 @@ pub fn enter_dungeon(
     }
     if let Some(bags) = world.get_mut::<Bags>(player_id) {
         bags.open_vendor_npc = None;
+        bags.buyback.clear();
     }
     if let Some(threat) = world.get_mut::<Threat>(player_id) {
         threat.threat.clear();

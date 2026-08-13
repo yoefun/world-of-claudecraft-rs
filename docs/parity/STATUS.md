@@ -1,10 +1,10 @@
 # Parity status
 
-**Current rewrite:** `1.9.0` / `gear-depth`.  
+**Current rewrite:** `1.12.0` / `gear-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; gear depth is `1.9.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth shipped as `1.12.0`.
 
-## Gear depth (`gear-depth`)
+## Gear depth (`gear-depth`) — done
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
@@ -15,8 +15,22 @@
 | Independent loot | done | One pile per successful `LootEntry` |
 | Crypt / hag gear | done | `crypt_cleaver` / `hag_focus` |
 | Client sheet | done | AP/Armor/SP; 1–9 bags; 1–8 unequip |
-| Durability / repair | n/a | NPC-services draft |
+| Durability / repair | done | Shipped in `1.11.0` NPC services |
 | Quality / enchants / sockets | n/a | Manufacturing draft / non-goal |
+
+## NPC services (`npc-services`) — done
+
+Design: [`../superpowers/specs/2026-08-13-npc-services-design.md`](../superpowers/specs/2026-08-13-npc-services-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-npc-services.md`](../superpowers/plans/2026-08-13-npc-services.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `NpcService` roster | done | Smith, herbalist, innkeeper; vex trains; Bren repairs |
+| Quest-item sell block + buyback | done | Cap 6; session-only |
+| Durability + RepairAll | done | 40/30; 1c per point at smith/Bren |
+| Profession trainer gate | done | Client Train buttons; `train_profession()` helper unchanged |
+| Class trainer | done | Kit refresh toast; talents stay on N-panel |
+| Hearth | done | Bind at Mara; 18_000 tick cooldown |
 
 ## Client version gate (`client-compat`)
 
@@ -71,6 +85,28 @@
 | Warlock | Life Tap; Fear (stun, breaks on damage) |
 | Druid | **F** Travel Form (1.4 move, breaks on hit) |
 
+## Quest loop (`1.9.0`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Giver / turn-in NPC checks | done | Accept/turn-in fail unless the target template matches the table |
+| `QuestDef.requires` chains | done | Breadcrumb → hub sequences; integrity + acyclic tests |
+| Talk / collect coverage | done | Sim tests beyond the wolf kill path; ready toast |
+| Generic **E** accept/turn-in | done | Drop Captain Alden hardcoded ids |
+| Named log + objective counts | done | HUD uses `woc-content` `QuestDef` |
+| Offer-aware map markers | done | Yellow/green from `npc_quest_offers`, not raw table membership |
+
+## Quest depth (`1.10.0`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Abandon | done | **L** then **X**; cannot abandon completed |
+| Party share | done | **L** then **Y**; 40 yd; skips standing at giver |
+| Daily | done | `QuestRepeat::Daily`; `DAILY_PERIOD_TICKS` (12_000); persist `completed_tick` |
+| Explore / escort | done | `QuestObjective::{Explore,Escort}`; `Escort` column (not `Owner`) |
+| Choice rewards | done | `TurnInQuest.reward_choice`; **1/2/3** at turn-in NPC; **E** does not auto-pick |
+| Protocol rev 8 | done | `AbandonQuest` / `ShareQuest` / optional choice index |
+
 ## Post-completion (`stable` → `online-hard`)
 
 Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
@@ -106,7 +142,8 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.9.0` / gear-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.12.0` / gear-depth (upstream still 0.31.0) |
+| Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |

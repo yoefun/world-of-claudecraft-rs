@@ -67,7 +67,7 @@ fn main() {
                 hud::update_hud,
                 hud::update_chrome_panels,
                 hud::sync_vendor_panel,
-                hud::vendor_buy_clicks,
+                hud::npc_session_clicks,
                 hud::vendor_ungrab_cursor,
                 hud::toast_fade,
             )

@@ -8,14 +8,15 @@
 //! | `Home`, `Threat`, `LootTable`, `Respawn` | mob |
 //! | `LootPile` | loot |
 //! | `Owner` | pet |
-//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable` | player |
+//! | `Escort` | escort NPC (quest follower; not Owner) |
+//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth` | player |
 //!
 //! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
 
 use std::collections::{BTreeSet, HashMap};
 
 use crate::ecs::{SparseSet, World};
-use woc_content::{PlayerClass, ResourceType};
+use woc_content::{item, PlayerClass, ResourceType};
 use woc_protocol::{EntityId, EntityKind};
 
 pub trait Component: Sized + 'static {
@@ -78,6 +79,20 @@ pub struct CastState {
 pub struct InvStack {
     pub item_id: String,
     pub count: u32,
+    pub durability: Option<u32>,
+}
+
+impl InvStack {
+    pub fn new(item_id: impl Into<String>, count: u32) -> Self {
+        let item_id = item_id.into();
+        let durability =
+            item(&item_id).and_then(|d| (d.max_durability > 0).then_some(d.max_durability));
+        Self {
+            item_id,
+            count,
+            durability,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -92,6 +107,41 @@ pub struct Equipment {
     pub finger: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EquipmentWear {
+    pub main_hand: Option<u32>,
+    pub off_hand: Option<u32>,
+    pub head: Option<u32>,
+    pub chest: Option<u32>,
+    pub legs: Option<u32>,
+    pub feet: Option<u32>,
+}
+
+impl EquipmentWear {
+    pub fn max_for_item(item_id: &str) -> Option<u32> {
+        item(item_id).and_then(|d| (d.max_durability > 0).then_some(d.max_durability))
+    }
+
+    pub fn full_for_equipment(equipment: &Equipment) -> Self {
+        Self {
+            main_hand: equipment.main_hand.as_deref().and_then(Self::max_for_item),
+            off_hand: equipment.off_hand.as_deref().and_then(Self::max_for_item),
+            head: equipment.head.as_deref().and_then(Self::max_for_item),
+            chest: equipment.chest.as_deref().and_then(Self::max_for_item),
+            legs: equipment.legs.as_deref().and_then(Self::max_for_item),
+            feet: equipment.feet.as_deref().and_then(Self::max_for_item),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BuybackEntry {
+    pub item_id: String,
+    pub count: u32,
+    pub durability: Option<u32>,
+    pub copper: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuestState {
     Active,
@@ -104,6 +154,7 @@ pub struct QuestProgress {
     pub quest_id: String,
     pub state: QuestState,
     pub counts: Vec<u32>,
+    pub completed_tick: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +235,16 @@ pub struct Owner {
     pub owner_id: EntityId,
 }
 
+/// NPC following a player for an escort objective. Not a pet (`Owner`).
+#[derive(Debug, Clone)]
+pub struct Escort {
+    pub player_id: EntityId,
+    pub quest_id: String,
+    pub dest_x: f32,
+    pub dest_z: f32,
+    pub radius: f32,
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassKit {
     pub class_id: Option<PlayerClass>,
@@ -204,7 +265,17 @@ pub struct ClassKit {
 pub struct Bags {
     pub inventory: Vec<Option<InvStack>>,
     pub equipment: Equipment,
+    pub equipment_wear: EquipmentWear,
     pub open_vendor_npc: Option<EntityId>,
+    pub buyback: Vec<BuybackEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Hearth {
+    pub zone_id: String,
+    pub x: f32,
+    pub z: f32,
+    pub ready_tick: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -270,8 +341,10 @@ impl_component!(LootTable, loot_table);
 impl_component!(Respawn, respawn);
 impl_component!(LootPile, loot_pile);
 impl_component!(Owner, owner);
+impl_component!(Escort, escort);
 impl_component!(ClassKit, class_kit);
 impl_component!(Bags, bags);
+impl_component!(Hearth, hearth);
 impl_component!(QuestLog, quest_log);
 impl_component!(Progress, progress);
 impl_component!(Bank, bank);

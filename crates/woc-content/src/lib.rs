@@ -46,12 +46,14 @@ pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
 pub use mobs_zone3::ZONE3_MOBS;
-pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
+pub use npcs::{npc, NpcDef, NpcService, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
 pub use pets::{pet, pet_for_class, PetDef, PETS};
 pub use professions::{profession, ProfessionDef, ProfessionKind, PROFESSIONS};
-pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
+pub use quests::{
+    quest, QuestDef, QuestObjective, QuestRepeat, QuestReward, DAILY_PERIOD_TICKS, QUESTS,
+};
 pub use quests_zone2::ZONE2_QUESTS;
 pub use quests_zone3::ZONE3_QUESTS;
 pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
@@ -150,6 +152,14 @@ mod tests {
     }
 
     #[test]
+    fn gear_has_max_durability() {
+        assert_eq!(item("worn_sword").unwrap().max_durability, 40);
+        assert_eq!(item("recruit_tunic").unwrap().max_durability, 30);
+        assert_eq!(item("baked_bread").unwrap().max_durability, 0);
+        assert_eq!(item("boar_tusk").unwrap().max_durability, 0);
+    }
+
+    #[test]
     fn every_class_has_multi_ability_kit() {
         assert_eq!(CLASSES.len(), 9);
         for class in CLASSES {
@@ -236,6 +246,67 @@ mod tests {
     }
 
     #[test]
+    fn every_quest_giver_and_turn_in_npc_is_marked_quest_giver() {
+        for q in QUESTS.iter() {
+            let giver = npc(q.giver_npc).unwrap_or_else(|| panic!("missing giver {}", q.giver_npc));
+            assert!(
+                giver.is_quest_giver(),
+                "quest {} giver {} must have is_quest_giver",
+                q.id,
+                q.giver_npc
+            );
+            let turn_in = q.turn_in_npc.unwrap_or(q.giver_npc);
+            if turn_in != q.giver_npc {
+                let npc_def = npc(turn_in).unwrap_or_else(|| panic!("missing turn-in {turn_in}"));
+                assert!(
+                    npc_def.is_quest_giver(),
+                    "quest {} turn-in {} must have is_quest_giver",
+                    q.id,
+                    turn_in
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_quest_requires_exists_and_is_acyclic() {
+        for q in QUESTS.iter() {
+            let Some(req) = q.requires else {
+                continue;
+            };
+            assert!(
+                QUESTS.iter().any(|o| o.id == req),
+                "quest {} requires missing {req}",
+                q.id
+            );
+            let mut seen = vec![q.id];
+            let mut cursor = q.requires;
+            while let Some(id) = cursor {
+                assert!(
+                    !seen.contains(&id),
+                    "quest {} has a requires cycle at {id}",
+                    q.id
+                );
+                seen.push(id);
+                cursor = quest(id).and_then(|d| d.requires);
+            }
+        }
+    }
+
+    #[test]
+    fn eastbrook_quest_chain_is_report_wolves_tusks() {
+        assert_eq!(quest("report_to_alden").unwrap().requires, None);
+        assert_eq!(
+            quest("wolves_at_the_gate").unwrap().requires,
+            Some("report_to_alden")
+        );
+        assert_eq!(
+            quest("boar_tusks").unwrap().requires,
+            Some("wolves_at_the_gate")
+        );
+    }
+
+    #[test]
     fn every_quest_objective_refs_exist() {
         for q in QUESTS.iter() {
             for obj in q.objectives {
@@ -261,6 +332,43 @@ mod tests {
                             q.id
                         );
                     }
+                    QuestObjective::Explore { x, z, radius, .. } => {
+                        assert!(
+                            *radius > 0.0,
+                            "quest {} explore radius must be positive",
+                            q.id
+                        );
+                        assert!(
+                            x.abs() <= WORLD_MAX_X && *z >= WORLD_MIN_Z && *z <= WORLD_MAX_Z,
+                            "quest {} explore point ({x},{z}) out of world",
+                            q.id
+                        );
+                    }
+                    QuestObjective::Escort {
+                        npc_id,
+                        dest_x,
+                        dest_z,
+                        radius,
+                        ..
+                    } => {
+                        assert!(
+                            NPCS.iter().any(|n| n.id == *npc_id),
+                            "quest {} missing escort npc {npc_id}",
+                            q.id
+                        );
+                        assert!(
+                            *radius > 0.0,
+                            "quest {} escort radius must be positive",
+                            q.id
+                        );
+                        assert!(
+                            dest_x.abs() <= WORLD_MAX_X
+                                && *dest_z >= WORLD_MIN_Z
+                                && *dest_z <= WORLD_MAX_Z,
+                            "quest {} escort dest ({dest_x},{dest_z}) out of world",
+                            q.id
+                        );
+                    }
                 }
             }
             if let Some(item_id) = q.reward.item_id {
@@ -270,7 +378,33 @@ mod tests {
                     q.id
                 );
             }
+            for item_id in q.reward.choices {
+                assert!(
+                    ITEMS.iter().any(|i| i.id == *item_id),
+                    "quest {} missing choice item {item_id}",
+                    q.id
+                );
+            }
         }
+    }
+
+    #[test]
+    fn quest_depth_demo_rows_exist() {
+        assert_eq!(quest("scout_north_road").unwrap().repeat, QuestRepeat::Once);
+        assert_eq!(quest("wolf_patrol").unwrap().repeat, QuestRepeat::Daily);
+        assert!(matches!(
+            quest("courier_to_the_gate").unwrap().objectives[0],
+            QuestObjective::Escort {
+                npc_id: "eastbrook_courier",
+                ..
+            }
+        ));
+        assert_eq!(
+            quest("arms_of_the_watch").unwrap().reward.choices,
+            &["travelers_ration", "spring_water", "baked_bread"]
+        );
+        assert!(npc("trader_wilkes").unwrap().is_quest_giver());
+        assert!(npc("eastbrook_courier").is_some());
     }
 
     #[test]
@@ -381,6 +515,73 @@ mod tests {
                     "vendor {} missing item {}",
                     n.id,
                     offer.item_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn npc_services_roster_locked() {
+        let alden = npc("captain_alden").unwrap();
+        assert!(alden.is_quest_giver());
+        assert!(alden.is_class_trainer());
+        assert!(!alden.is_vendor());
+
+        let smith = npc("smith_brann").unwrap();
+        assert!(smith.is_vendor());
+        assert!(smith.can_repair());
+        assert!(smith.trains_profession("mining"));
+        assert!(smith.trains_profession("blacksmithing"));
+        assert!(!smith.trains_profession("herbalism"));
+        assert!(smith
+            .vendor_stock
+            .iter()
+            .any(|o| o.item_id == "copper_shortsword"));
+
+        let wren = npc("herbalist_wren").unwrap();
+        assert!(wren.trains_profession("herbalism"));
+        assert!(wren.trains_profession("alchemy"));
+        assert!(!wren.is_vendor());
+
+        assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
+        assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
+        assert!(npc("quartermaster_bren").unwrap().can_repair());
+    }
+
+    #[test]
+    fn profession_trainers_reference_known_professions() {
+        use crate::NpcService;
+
+        for n in NPCS.iter() {
+            if n.services.contains(&NpcService::ProfessionTrainer) {
+                assert!(!n.trains.is_empty(), "{} trains nothing", n.id);
+            }
+            for id in n.trains {
+                assert!(profession(id).is_some(), "{} trains unknown {id}", n.id);
+            }
+        }
+    }
+
+    #[test]
+    fn vendors_have_stock_and_buyable_prices() {
+        use crate::NpcService;
+
+        for n in NPCS.iter() {
+            if !n.services.contains(&NpcService::Vendor) {
+                continue;
+            }
+            assert!(
+                !n.vendor_stock.is_empty(),
+                "vendor {} has empty stock",
+                n.id
+            );
+            for o in n.vendor_stock {
+                let def = item(o.item_id).expect(o.item_id);
+                assert!(
+                    def.vendor_buy > 0,
+                    "{} sells {} at vendor_buy 0",
+                    n.id,
+                    o.item_id
                 );
             }
         }

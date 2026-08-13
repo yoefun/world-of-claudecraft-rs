@@ -1,6 +1,6 @@
 //! Zone 2 (Eastfen Marsh and Mirefen) quest definitions.
 
-use crate::quests::{QuestDef, QuestObjective, QuestReward};
+use crate::quests::{QuestDef, QuestObjective, QuestRepeat, QuestReward};
 
 pub static ZONE2_QUESTS: &[QuestDef] = &[
     QuestDef {
@@ -8,6 +8,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Report to Selene",
         giver_npc: "scout_darian",
         turn_in_npc: Some("warden_selene"),
+        requires: None,
+        repeat: QuestRepeat::Once,
         blurb: "Find Warden Selene at the Eastfen boardwalk outpost.",
         objectives: &[QuestObjective::Talk {
             npc_id: "warden_selene",
@@ -17,6 +19,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 35,
             copper: 10,
             item_id: Some("fen_tonic"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -24,6 +27,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Crawler Cull",
         giver_npc: "warden_selene",
         turn_in_npc: Some("warden_selene"),
+        requires: Some("report_to_selene"),
+        repeat: QuestRepeat::Once,
         blurb: "Thin the fen crawlers nesting west of the boardwalk.",
         objectives: &[QuestObjective::Kill {
             mob_id: "fen_crawler",
@@ -34,6 +39,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 120,
             copper: 40,
             item_id: Some("reedwalk_boots"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -41,6 +47,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Toad Bile Harvest",
         giver_npc: "apothecary_vex",
         turn_in_npc: Some("apothecary_vex"),
+        requires: None,
+        repeat: QuestRepeat::Once,
         blurb: "Gather bile from mire toads along the south pools.",
         objectives: &[QuestObjective::Collect {
             item_id: "toad_bile",
@@ -51,6 +59,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 100,
             copper: 35,
             item_id: Some("fen_tonic"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -58,6 +67,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Wisps in the Mist",
         giver_npc: "warden_selene",
         turn_in_npc: Some("warden_selene"),
+        requires: Some("crawler_cull"),
+        repeat: QuestRepeat::Once,
         blurb: "Drive off bog wisps haunting the northeast reeds.",
         objectives: &[QuestObjective::Kill {
             mob_id: "bog_wisp",
@@ -68,6 +79,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 140,
             copper: 50,
             item_id: Some("marsh_wraps"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -75,6 +87,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Silk for Bandages",
         giver_npc: "apothecary_vex",
         turn_in_npc: Some("apothecary_vex"),
+        requires: None,
+        repeat: QuestRepeat::Once,
         blurb: "Collect fen silk from crawlers for marsh dressings.",
         objectives: &[QuestObjective::Collect {
             item_id: "fen_silk",
@@ -85,6 +99,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 110,
             copper: 30,
             item_id: None,
+            choices: &[],
         },
     },
     QuestDef {
@@ -92,6 +107,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Ember Offering",
         giver_npc: "scout_darian",
         turn_in_npc: Some("apothecary_vex"),
+        requires: None,
+        repeat: QuestRepeat::Once,
         blurb: "Recover wisp embers and deliver them to Apothecary Vex.",
         objectives: &[QuestObjective::Collect {
             item_id: "wisp_ember",
@@ -102,6 +119,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 125,
             copper: 45,
             item_id: Some("fen_tonic"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -109,6 +127,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Into Mirefen",
         giver_npc: "warden_selene",
         turn_in_npc: Some("keeper_orla"),
+        requires: Some("wisps_in_the_mist"),
+        repeat: QuestRepeat::Once,
         blurb: "Carry Selene's warning to Keeper Orla at the Mirefen lantern camp.",
         objectives: &[QuestObjective::Talk {
             npc_id: "keeper_orla",
@@ -118,6 +138,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 90,
             copper: 30,
             item_id: Some("deepfen_draught"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -125,6 +146,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Leeches at the Landing",
         giver_npc: "keeper_orla",
         turn_in_npc: Some("keeper_orla"),
+        requires: Some("into_mirefen"),
+        repeat: QuestRepeat::Once,
         blurb: "Clear the mire leeches clustering around the western landing.",
         objectives: &[QuestObjective::Kill {
             mob_id: "mire_leech",
@@ -135,6 +158,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 190,
             copper: 65,
             item_id: Some("mireguard_hood"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -142,6 +166,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Spores for the Ferryman",
         giver_npc: "ferryman_noll",
         turn_in_npc: Some("ferryman_noll"),
+        requires: None,
+        repeat: QuestRepeat::Once,
         blurb: "Gather rotcap spores to keep Noll's signal brazier burning through the fog.",
         objectives: &[QuestObjective::Collect {
             item_id: "rotcap_spore",
@@ -152,6 +178,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 210,
             copper: 70,
             item_id: Some("deepfen_draught"),
+            choices: &[],
         },
     },
     QuestDef {
@@ -159,6 +186,8 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
         name: "Terror Beneath the Reeds",
         giver_npc: "keeper_orla",
         turn_in_npc: Some("keeper_orla"),
+        requires: Some("leeches_at_the_landing"),
+        repeat: QuestRepeat::Once,
         blurb: "Slay the Mire Terror in the eastern sinkhole before it reaches the lantern camp.",
         objectives: &[QuestObjective::Kill {
             mob_id: "mire_terror",
@@ -169,6 +198,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             xp: 500,
             copper: 150,
             item_id: Some("deepfen_draught"),
+            choices: &[],
         },
     },
 ];

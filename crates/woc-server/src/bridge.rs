@@ -4,7 +4,7 @@ use woc_persist::{
     Character, CharacterSave, EquipmentDto, InvStackDto, MailDto, MarketListingDto,
     ProfessionSkillDto, QuestProgressDto, RealmEconomy, TalentRankDto,
 };
-use woc_sim::ecs::components::{Equipment, InvStack, QuestProgress};
+use woc_sim::ecs::components::{Equipment, EquipmentWear, InvStack, QuestProgress};
 use woc_sim::mail::MailItem;
 use woc_sim::market::Listing;
 use woc_sim::persist_state::{quest_state_from_str, quest_state_to_str, PlayerPersistentState};
@@ -20,6 +20,7 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
         pos_z: character.pos_z,
         inventory: inv_from_dto(&character.inventory),
         equipment: equip_from_dto(&character.equipment),
+        equipment_wear: wear_from_dto(&character.equipment),
         quests: quests_from_dto(&character.quests),
         zone_id: character.zone_id.clone(),
         talent_points: character.talent_points,
@@ -38,6 +39,10 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
             .collect(),
         pvp_flagged: character.pvp_flagged,
         completed_deeds: character.completed_deeds.iter().cloned().collect(),
+        hearth_zone_id: character.hearth_zone_id.clone(),
+        hearth_x: character.hearth_x,
+        hearth_z: character.hearth_z,
+        hearth_ready_tick: character.hearth_ready_tick,
         stance_id: character.stance_id.clone(),
     }
 }
@@ -50,7 +55,7 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
         pos_x: state.pos_x,
         pos_z: state.pos_z,
         inventory: inv_to_dto(&state.inventory),
-        equipment: equip_to_dto(&state.equipment),
+        equipment: equip_to_dto(&state.equipment, &state.equipment_wear),
         quests: quests_to_dto(&state.quests),
         zone_id: state.zone_id.clone(),
         talent_points: state.talent_points,
@@ -75,6 +80,10 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
             .collect(),
         pvp_flagged: state.pvp_flagged,
         completed_deeds: state.completed_deeds.iter().cloned().collect(),
+        hearth_zone_id: state.hearth_zone_id.clone(),
+        hearth_x: state.hearth_x,
+        hearth_z: state.hearth_z,
+        hearth_ready_tick: state.hearth_ready_tick,
         stance_id: state.stance_id.clone(),
     }
 }
@@ -154,6 +163,7 @@ fn inv_from_dto(slots: &[Option<InvStackDto>]) -> Vec<Option<InvStack>> {
             s.as_ref().map(|st| InvStack {
                 item_id: st.item_id.clone(),
                 count: st.count,
+                durability: st.durability,
             })
         })
         .collect()
@@ -166,6 +176,7 @@ fn inv_to_dto(slots: &[Option<InvStack>]) -> Vec<Option<InvStackDto>> {
             s.as_ref().map(|st| InvStackDto {
                 item_id: st.item_id.clone(),
                 count: st.count,
+                durability: st.durability,
             })
         })
         .collect()
@@ -184,7 +195,18 @@ fn equip_from_dto(e: &EquipmentDto) -> Equipment {
     }
 }
 
-fn equip_to_dto(e: &Equipment) -> EquipmentDto {
+fn wear_from_dto(e: &EquipmentDto) -> EquipmentWear {
+    EquipmentWear {
+        main_hand: e.main_hand_durability,
+        off_hand: e.off_hand_durability,
+        head: e.head_durability,
+        chest: e.chest_durability,
+        legs: e.legs_durability,
+        feet: e.feet_durability,
+    }
+}
+
+fn equip_to_dto(e: &Equipment, wear: &EquipmentWear) -> EquipmentDto {
     EquipmentDto {
         main_hand: e.main_hand.clone(),
         off_hand: e.off_hand.clone(),
@@ -194,6 +216,12 @@ fn equip_to_dto(e: &Equipment) -> EquipmentDto {
         feet: e.feet.clone(),
         neck: e.neck.clone(),
         finger: e.finger.clone(),
+        main_hand_durability: wear.main_hand,
+        off_hand_durability: wear.off_hand,
+        head_durability: wear.head,
+        chest_durability: wear.chest,
+        legs_durability: wear.legs,
+        feet_durability: wear.feet,
     }
 }
 
@@ -204,6 +232,7 @@ fn quests_from_dto(quests: &[QuestProgressDto]) -> Vec<QuestProgress> {
             quest_id: q.quest_id.clone(),
             state: quest_state_from_str(&q.state),
             counts: q.counts.clone(),
+            completed_tick: q.completed_tick,
         })
         .collect()
 }
@@ -215,6 +244,7 @@ fn quests_to_dto(quests: &[QuestProgress]) -> Vec<QuestProgressDto> {
             quest_id: q.quest_id.clone(),
             state: quest_state_to_str(q.state).to_string(),
             counts: q.counts.clone(),
+            completed_tick: q.completed_tick,
         })
         .collect()
 }

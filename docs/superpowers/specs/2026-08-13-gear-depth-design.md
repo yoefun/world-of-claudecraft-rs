@@ -1,6 +1,6 @@
-# Gear-depth design — `1.9.0` / `gear-depth`
+# Gear-depth design — `1.12.0` / `gear-depth`
 
-**Status:** Shipped (rewrite `1.9.0` / `gear-depth`).  
+**Status:** Shipped (rewrite `1.12.0` / `gear-depth`; originally planned for `1.9.0`, which shipped as quest-loop).  
 **Baseline:** rewrite `1.8.0` / `class-forms` on `develop` (ECS `World` actor store).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `gear-depth`.
@@ -55,9 +55,9 @@ Honest remaining gear debt:
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
 | **1.8.0** | `class-forms` | Class signatures (shipped) |
-| **1.9.0** | `gear-depth` | Equip rules, jewelry, secondary stats, upgrade ladder, sheet |
+| **1.12.0** | `gear-depth` | Equip rules, jewelry, secondary stats, upgrade ladder, sheet |
 
-`PROTOCOL_REV` stays **7** (additive snapshot fields with `#[serde(default)]`; new `EquipSlot` variants are only sent by this client). Upstream pin stays **0.31.0**. This planning change does **not** bump `VERSION.toml`; the implementation wave tags `1.9.0`.
+`PROTOCOL_REV` stays **8** after quest-depth; gear sheet/jewelry fields remain additive with `#[serde(default)]`. Upstream pin stays **0.31.0**. Gear-depth ships as `1.12.0` because `1.9.0` was taken by quest-loop.
 
 ## 5. Architecture
 
@@ -268,7 +268,7 @@ Old JSON without `neck` / `finger` loads as `None`. Virgin detection treats empt
 6. `scarred_wolf` can drop fang **and** pendant in one kill (independent rolls; seeded test forces both).
 7. Killing a `crypt_warden` identity drops `crypt_cleaver`; `barrow_hag` can drop `hag_claw` and `hag_focus`.
 8. Bevy: C-sheet shows AP/armor/SP and eight slots; bags 1–9 equip/use. `cargo check -p woc-client` green.
-9. `TICK_PHASES` fingerprint unchanged. `PROTOCOL_REV` remains **7**. Old equipment JSON without `neck` still deserializes.
+9. `TICK_PHASES` fingerprint unchanged. `PROTOCOL_REV` remains **8**. Old equipment JSON without `neck` still deserializes.
 10. `docs/parity/STATUS.md` + `ROADMAP.md` + demo step updated when the implementation wave lands.
 
 ## 7. Explicit non-goals
@@ -307,4 +307,4 @@ Old JSON without `neck` / `finger` loads as `None`. Virgin detection treats empt
 5. Priest with `hag_focus` (or `fen_staff`) heals for more than a naked priest at the same level.
 6. Crypt Warden drops `crypt_cleaver`; Barrow Hag can drop `hag_focus`.
 
-When §6 is green, tag `1.9.0`.
+When §6 is green, tag `1.12.0`.

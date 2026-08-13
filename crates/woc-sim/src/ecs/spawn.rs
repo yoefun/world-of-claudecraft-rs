@@ -3,15 +3,16 @@
 use std::collections::HashMap;
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, Health, Home, Identity, InstanceAt,
-    LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit, Threat, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, Health, Hearth, Home,
+    Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit,
+    Threat, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::grant_into;
 use crate::types::{player_hp, BACKPACK_SLOTS, BANK_SLOTS};
 use crate::world::{ground_height, WORLD_SEED};
 use woc_content::{
-    class_def, known_abilities_at_level, mob, npc, PetDef, PlayerClass, ResourceType,
+    class_def, known_abilities_at_level, mob, npc, PetDef, PlayerClass, ResourceType, EASTBROOK,
 };
 use woc_protocol::{EntityId, EntityKind};
 
@@ -152,19 +153,23 @@ pub fn create_player(
     for (item_id, count) in def.start_items {
         let _ = grant_into(&mut inventory, item_id, *count);
     }
+    let equipment = Equipment {
+        main_hand: Some(def.start_weapon.to_string()),
+        chest: Some(def.start_chest.to_string()),
+        head: Some("recruit_cap".into()),
+        legs: Some("recruit_pants".into()),
+        feet: Some("recruit_boots".into()),
+        ..Default::default()
+    };
+    let equipment_wear = EquipmentWear::full_for_equipment(&equipment);
     world.insert(
         id,
         Bags {
             inventory,
-            equipment: Equipment {
-                main_hand: Some(def.start_weapon.to_string()),
-                chest: Some(def.start_chest.to_string()),
-                head: Some("recruit_cap".into()),
-                legs: Some("recruit_pants".into()),
-                feet: Some("recruit_boots".into()),
-                ..Default::default()
-            },
+            equipment,
+            equipment_wear,
             open_vendor_npc: None,
+            buyback: Vec::new(),
         },
     );
     world.insert(id, QuestLog::default());
@@ -192,6 +197,15 @@ pub fn create_player(
     world.insert(id, Spirit::default());
     world.insert(id, InstanceAt::default());
     world.insert(id, Durable::default());
+    world.insert(
+        id,
+        Hearth {
+            zone_id: "eastbrook".into(),
+            x: EASTBROOK.player_spawn_x,
+            z: EASTBROOK.player_spawn_z,
+            ready_tick: 0,
+        },
+    );
     refresh_known_abilities(world, id);
     crate::stats::recalc_player_stats(world, id);
     crate::combat::apply_spawn_identity(world, id);

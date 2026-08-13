@@ -13,7 +13,8 @@ pub type EntityId = u32;
 /// `protocol_rev` / `rewrite_version` identity; omitting them is valid JSON and
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
-pub const PROTOCOL_REV: u32 = 7;
+/// Rev 8: quest abandon/share, optional turn-in reward choice.
+pub const PROTOCOL_REV: u32 = 8;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -62,6 +63,14 @@ pub enum InteractAction {
     },
     TurnInQuest {
         quest_id: String,
+        #[serde(default)]
+        reward_choice: Option<u32>,
+    },
+    AbandonQuest {
+        quest_id: String,
+    },
+    ShareQuest {
+        quest_id: String,
     },
     Buy {
         item_id: String,
@@ -85,6 +94,13 @@ pub enum InteractAction {
         target_id: EntityId,
     },
     CloseVendor,
+    RepairAll,
+    Buyback {
+        slot: u8,
+    },
+    TrainClass,
+    BindHearth,
+    UseHearthstone,
     /// Release spirit while dead and begin the corpse run.
     ReleaseSpirit,
     /// Train a profession by content id.
@@ -267,6 +283,8 @@ pub struct InvSlotSnapshot {
     pub slot: u8,
     pub item_id: String,
     pub count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -284,6 +302,18 @@ pub struct EquipmentSnapshot {
     pub neck: Option<String>,
     #[serde(default)]
     pub finger: Option<String>,
+    #[serde(default)]
+    pub main_hand_durability: Option<u32>,
+    #[serde(default)]
+    pub off_hand_durability: Option<u32>,
+    #[serde(default)]
+    pub head_durability: Option<u32>,
+    #[serde(default)]
+    pub chest_durability: Option<u32>,
+    #[serde(default)]
+    pub legs_durability: Option<u32>,
+    #[serde(default)]
+    pub feet_durability: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -294,7 +324,7 @@ pub struct QuestLogEntry {
     pub counts: Vec<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VendorOfferSnapshot {
     pub item_id: String,
     pub count: u32,
@@ -306,6 +336,36 @@ pub struct VendorSnapshot {
     pub npc_id: EntityId,
     pub npc_name: String,
     pub stock: Vec<VendorOfferSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BuybackSnapshot {
+    pub slot: u8,
+    pub item_id: String,
+    pub count: u32,
+    pub price: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NpcSessionSnapshot {
+    pub npc_id: EntityId,
+    pub npc_name: String,
+    #[serde(default)]
+    pub greeting: String,
+    #[serde(default)]
+    pub services: Vec<String>,
+    #[serde(default)]
+    pub stock: Vec<VendorOfferSnapshot>,
+    #[serde(default)]
+    pub train_professions: Vec<String>,
+    #[serde(default)]
+    pub can_repair: bool,
+    #[serde(default)]
+    pub repair_cost: u32,
+    #[serde(default)]
+    pub can_bind: bool,
+    #[serde(default)]
+    pub buyback: Vec<BuybackSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -359,8 +419,11 @@ pub struct TickSnapshot {
     pub player_id: EntityId,
     pub entities: Vec<EntitySnapshot>,
     pub progress: PlayerProgress,
+    #[serde(default)]
     pub target_id: Option<EntityId>,
+    #[serde(default)]
     pub ability_ready: bool,
+    #[serde(default)]
     pub ability_cooldown: f32,
     #[serde(default = "default_protocol_rev")]
     pub protocol_rev: u32,
@@ -372,6 +435,8 @@ pub struct TickSnapshot {
     pub quest_log: Vec<QuestLogEntry>,
     #[serde(default)]
     pub open_vendor: Option<VendorSnapshot>,
+    #[serde(default)]
+    pub open_npc: Option<NpcSessionSnapshot>,
     #[serde(default)]
     pub ability_name: String,
     /// Active auras on the local player (Wave 1).
@@ -398,6 +463,12 @@ pub struct TickSnapshot {
     /// Current overworld / instance zone id.
     #[serde(default)]
     pub zone_id: String,
+    /// Tick when hearthstone becomes usable again.
+    #[serde(default)]
+    pub hearth_ready_tick: u64,
+    /// Bound hearth destination zone id.
+    #[serde(default)]
+    pub hearth_zone_id: String,
     /// Unspent talent points.
     #[serde(default)]
     pub talent_points: u32,
@@ -532,6 +603,7 @@ impl Default for TickSnapshot {
             equipment: EquipmentSnapshot::default(),
             quest_log: Vec::new(),
             open_vendor: None,
+            open_npc: None,
             ability_name: String::new(),
             auras: Vec::new(),
             cast: None,
@@ -541,6 +613,8 @@ impl Default for TickSnapshot {
             is_dead: false,
             party_id: None,
             zone_id: String::new(),
+            hearth_ready_tick: 0,
+            hearth_zone_id: String::new(),
             talent_points: 0,
             talents: Vec::new(),
             bank: Vec::new(),
@@ -602,6 +676,10 @@ pub enum SimEvent {
         text: String,
     },
     QuestCompleted {
+        player: EntityId,
+        quest_id: String,
+    },
+    QuestAbandoned {
         player: EntityId,
         quest_id: String,
     },
@@ -807,6 +885,13 @@ mod tests {
             },
             InteractAction::TurnInQuest {
                 quest_id: "wolves_at_the_gate".into(),
+                reward_choice: None,
+            },
+            InteractAction::AbandonQuest {
+                quest_id: "wolves_at_the_gate".into(),
+            },
+            InteractAction::ShareQuest {
+                quest_id: "wolves_at_the_gate".into(),
             },
             InteractAction::Buy {
                 item_id: "travelers_ration".into(),
@@ -825,6 +910,37 @@ mod tests {
             InteractAction::CloseVendor,
         ];
         for a in actions {
+            let v = serde_json::to_value(&a).unwrap();
+            let back: InteractAction = serde_json::from_value(v).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{a:?}"));
+        }
+    }
+
+    #[test]
+    fn npc_session_snapshot_defaults_when_omitted() {
+        let json = serde_json::json!({
+            "tick": 1,
+            "player_id": 1,
+            "entities": [],
+            "progress": {
+                "xp": 0, "xp_to_level": 100, "level": 1, "copper": 0
+            }
+        });
+        let snap: TickSnapshot = serde_json::from_value(json).unwrap();
+        assert!(snap.open_npc.is_none());
+        assert_eq!(snap.hearth_ready_tick, 0);
+        assert_eq!(snap.hearth_zone_id, "");
+    }
+
+    #[test]
+    fn repair_and_hearth_actions_roundtrip() {
+        for a in [
+            InteractAction::RepairAll,
+            InteractAction::Buyback { slot: 0 },
+            InteractAction::TrainClass,
+            InteractAction::BindHearth,
+            InteractAction::UseHearthstone,
+        ] {
             let v = serde_json::to_value(&a).unwrap();
             let back: InteractAction = serde_json::from_value(v).unwrap();
             assert_eq!(format!("{back:?}"), format!("{a:?}"));
@@ -952,6 +1068,7 @@ mod tests {
             equipment: EquipmentSnapshot::default(),
             quest_log: vec![],
             open_vendor: None,
+            open_npc: None,
             ability_name: "Strike".into(),
             auras: vec![AuraSnapshot {
                 id: "blessing".into(),
@@ -975,6 +1092,8 @@ mod tests {
             is_dead: true,
             party_id: Some(3),
             zone_id: "eastbrook".into(),
+            hearth_ready_tick: 0,
+            hearth_zone_id: String::new(),
             talent_points: 2,
             talents: vec![TalentRankSnapshot {
                 talent_id: "warrior_fury".into(),
@@ -1184,12 +1303,31 @@ mod tests {
             InteractAction::ToggleStealth,
             InteractAction::CycleStance,
             InteractAction::ToggleForm,
+            InteractAction::AbandonQuest {
+                quest_id: "wolf_patrol".into(),
+            },
+            InteractAction::ShareQuest {
+                quest_id: "wolf_patrol".into(),
+            },
         ];
         for a in actions {
             let v = serde_json::to_value(&a).unwrap();
             let back: InteractAction = serde_json::from_value(v).unwrap();
             assert_eq!(format!("{back:?}"), format!("{a:?}"));
         }
+    }
+
+    #[test]
+    fn turn_in_quest_reward_choice_defaults_none() {
+        let v: InteractAction =
+            serde_json::from_str(r#"{"type":"turn_in_quest","quest_id":"x"}"#).unwrap();
+        assert_eq!(
+            v,
+            InteractAction::TurnInQuest {
+                quest_id: "x".into(),
+                reward_choice: None,
+            }
+        );
     }
 
     #[test]
@@ -1260,7 +1398,7 @@ mod tests {
         assert_eq!(snap.armor, 0.0);
         assert_eq!(snap.spell_power, 0.0);
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
-        assert_eq!(PROTOCOL_REV, 7);
+        assert_eq!(PROTOCOL_REV, 8);
     }
 
     #[test]

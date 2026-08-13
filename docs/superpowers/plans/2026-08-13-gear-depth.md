@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship rewrite `1.9.0` / `gear-depth`: class/armor equip rules, two-hand occupancy, Neck/Finger, stamina + spell power, independent loot rolls, and a character sheet that displays sim stats.
+**Goal:** Ship rewrite `1.12.0` / `gear-depth`: class/armor equip rules, two-hand occupancy, Neck/Finger, stamina + spell power, independent loot rolls, and a character sheet that displays sim stats. This was originally planned for `1.9.0`, which shipped as quest-loop on develop.
 
-**Architecture:** Keep equipment on `Bags` (player column). `woc-content::can_equip` is the single rule function. `recalc_player_stats` writes `Combat.attack_damage` / `armor` / `spell_power`. Protocol stays rev 7 with additive serde defaults. Do not add durability, quality, or a fat `Entity`.
+**Architecture:** Keep equipment on `Bags` (player column). `woc-content::can_equip` is the single rule function. `recalc_player_stats` writes `Combat.attack_damage` / `armor` / `spell_power`. Protocol stays rev 8 with additive serde defaults. Do not add durability, quality, or a fat `Entity`.
 
-**Tech Stack:** Rust edition 2021, existing crates (`woc-content`, `woc-protocol`, `woc-sim`, `woc-persist`, `woc-server`, `woc-client`), Bevy 0.16 client presentation, protocol rev 7, upstream pin 0.31.0.
+**Tech Stack:** Rust edition 2021, existing crates (`woc-content`, `woc-protocol`, `woc-sim`, `woc-persist`, `woc-server`, `woc-client`), Bevy 0.16 client presentation, protocol rev 8, upstream pin 0.31.0.
 
 ## Global Constraints
 
 - Upstream pin remains `0.31.0` / `a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`.
-- `PROTOCOL_REV` remains **7**. New snapshot fields use `#[serde(default)]`.
+- `PROTOCOL_REV` remains **8**. New snapshot fields use `#[serde(default)]`.
 - `woc-sim` and `woc-content` must not depend on Bevy, wgpu, axum, or tokio.
 - All sim RNG via mulberry32 on `Sim` only.
 - Client never decides equip/combat/loot outcomes.
@@ -44,7 +44,7 @@
 | Modify `crates/woc-persist/src/models.rs` | `EquipmentDto` neck/finger |
 | Modify `crates/woc-server/src/bridge.rs` | DTO mapping |
 | Modify `crates/woc-client/src/hud.rs` / `input.rs` | Sheet + numbered equip/use/unequip |
-| Modify `docs/ROADMAP.md`, `docs/parity/STATUS.md`, `docs/parity/DEMO.md`, `CHANGELOG.md`, `VERSION.toml` | Tag `1.9.0` in the **implementation** wave, not this planning PR |
+| Modify `docs/ROADMAP.md`, `docs/parity/STATUS.md`, `docs/parity/DEMO.md`, `CHANGELOG.md`, `VERSION.toml` | Tag `1.12.0` in the **implementation** wave, not this planning PR |
 
 ---
 
@@ -1032,14 +1032,14 @@ git commit -m "feat(client): gear sheet stats and numbered equip"
 ### Task 10: Version, docs, demo
 
 **Files:**
-- Modify: `VERSION.toml` (`rewrite_version = "1.9.0"`, `parity_target = "gear-depth"`)
+- Modify: `VERSION.toml` (`rewrite_version = "1.12.0"`, `parity_target = "gear-depth"`)
 - Modify: workspace `Cargo.toml` version if it tracks rewrite
 - Modify: `crates/woc-version/src/lib.rs` if constants are duplicated
 - Modify: `docs/ROADMAP.md`, `docs/parity/STATUS.md`, `docs/parity/DEMO.md`, `README.md`, `UPSTREAM.md`, `CHANGELOG.md`
 
 **Interfaces:**
 - Consumes: shipped Tasks 1–9
-- Produces: tag-ready 1.9.0 docs; demo step 8 for gear
+- Produces: tag-ready 1.12.0 docs; demo step 8 for gear
 
 - [ ] **Step 1: STATUS table**
 
@@ -1057,17 +1057,17 @@ Add under a `## Gear depth (\`gear-depth\`)` heading:
 
 - [ ] **Step 2: ROADMAP row**
 
-`**1.9.0** (this branch) | \`gear-depth\` | Class gear rules, jewelry, secondary stats, upgrade drops`
+`**1.12.0** (this branch) | \`gear-depth\` | Class gear rules, jewelry, secondary stats, upgrade drops`
 
 - [ ] **Step 3: DEMO**
 
 Append: `8. Warrior spawn shows a full cloth extra set; mage cannot equip a sword; crypt warden drops crypt_cleaver; C-sheet AP/Armor/SP update on equip.`
 
-Footer version `1.9.0`.
+Footer version `1.12.0`.
 
 - [ ] **Step 4: CHANGELOG**
 
-Under `## 1.9.0`, summarize rules, slots, stats, loot, client.
+Under `## 1.12.0`, summarize rules, slots, stats, loot, client.
 
 - [ ] **Step 5: Full gate + commit**
 
@@ -1078,7 +1078,7 @@ Expected: success.
 
 ```bash
 git add VERSION.toml Cargo.toml crates/woc-version docs CHANGELOG.md README.md UPSTREAM.md
-git commit -m "docs: mark 1.9.0 gear-depth shipped"
+git commit -m "docs: mark 1.12.0 gear-depth shipped"
 ```
 
 ---
@@ -1110,5 +1110,5 @@ After each wave: `cargo test --workspace --exclude woc-client`. After wave 5: `c
 | 5.6 protocol | 3 |
 | 5.7 client | 9 |
 | 5.8 persist | 4 |
-| DoD / demo / 1.9.0 | 10 |
+| DoD / demo / 1.12.0 | 10 |
 | Non-goals (durability, quality, dual-wield, extra slots) | none — skipped |

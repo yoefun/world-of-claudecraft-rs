@@ -518,6 +518,7 @@ mod tests {
                 chest: Some("recruit_tunic".into()),
                 ..Default::default()
             },
+            equipment_wear: woc_sim::ecs::components::EquipmentWear::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 1,
@@ -528,6 +529,10 @@ mod tests {
             professions: Default::default(),
             pvp_flagged: false,
             completed_deeds: Default::default(),
+            hearth_zone_id: "eastbrook".into(),
+            hearth_x: 2.0,
+            hearth_z: 4.0,
+            hearth_ready_tick: 0,
             stance_id: String::new(),
         };
         // Force non-virgin by setting copper.

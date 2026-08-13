@@ -174,7 +174,7 @@ fn tick_one_pet(pet_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>)
                 }
             }
             if swing {
-                deal_damage(world, owner_id, tid, dmg, Some("pet"), events);
+                deal_damage(world, owner_id, tid, dmg, Some("pet"), true, events);
             }
         }
     } else {

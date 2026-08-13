@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::ecs::components::{Bags, ClassKit, Combat, Health, Progress};
+use crate::ecs::components::{Bags, ClassKit, Combat, Equipment, EquipmentWear, Health, Progress};
 use crate::ecs::World;
 use woc_content::{class_def, item, talent};
 use woc_protocol::EntityId;
@@ -21,6 +21,10 @@ fn add_gear_stats(
         *sta += it.stamina;
         *sp += it.spell_power;
     }
+}
+
+fn slot_broken(wear: Option<u32>) -> bool {
+    wear == Some(0)
 }
 
 fn talent_sums(talents: &HashMap<String, u32>) -> (f32, f32, f32, f32) {
@@ -49,10 +53,10 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
         return;
     };
     let def = class_def(class);
-    let equipment = world
+    let (equipment, wear) = world
         .get::<Bags>(player_id)
-        .map(|b| b.equipment.clone())
-        .unwrap_or_default();
+        .map(|b| (b.equipment.clone(), b.equipment_wear.clone()))
+        .unwrap_or_else(|| (Equipment::default(), EquipmentWear::default()));
     let talents = world
         .get::<Progress>(player_id)
         .map(|p| p.talents.clone())
@@ -64,24 +68,37 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
     let mut sta = 0.0_f32;
     let mut sp = 0.0_f32;
 
-    if let Some(ref wid) = equipment.main_hand {
-        add_gear_stats(wid, &mut ap, &mut armor, &mut sta, &mut sp, 1.0);
+    if !slot_broken(wear.main_hand) {
+        if let Some(ref wid) = equipment.main_hand {
+            add_gear_stats(wid, &mut ap, &mut armor, &mut sta, &mut sp, 1.0);
+        }
     }
-    if let Some(ref oid) = equipment.off_hand {
-        add_gear_stats(oid, &mut ap, &mut armor, &mut sta, &mut sp, 0.25);
+    if !slot_broken(wear.off_hand) {
+        if let Some(ref oid) = equipment.off_hand {
+            add_gear_stats(oid, &mut ap, &mut armor, &mut sta, &mut sp, 0.25);
+        }
     }
-    if let Some(ref hid) = equipment.head {
-        add_gear_stats(hid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+    if !slot_broken(wear.head) {
+        if let Some(ref hid) = equipment.head {
+            add_gear_stats(hid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        }
     }
-    if let Some(ref cid) = equipment.chest {
-        add_gear_stats(cid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+    if !slot_broken(wear.chest) {
+        if let Some(ref cid) = equipment.chest {
+            add_gear_stats(cid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        }
     }
-    if let Some(ref lid) = equipment.legs {
-        add_gear_stats(lid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+    if !slot_broken(wear.legs) {
+        if let Some(ref lid) = equipment.legs {
+            add_gear_stats(lid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        }
     }
-    if let Some(ref fid) = equipment.feet {
-        add_gear_stats(fid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+    if !slot_broken(wear.feet) {
+        if let Some(ref fid) = equipment.feet {
+            add_gear_stats(fid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        }
     }
+    // Jewelry: no durability wear columns; always apply when equipped.
     if let Some(ref nid) = equipment.neck {
         add_gear_stats(nid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
     }
@@ -180,5 +197,25 @@ mod tests {
             (with_focus - base_sp - 8.0).abs() < 0.01,
             "expected +8 spell_power from hag_focus, got base {base_sp} with {with_focus}"
         );
+    }
+
+    #[test]
+    fn broken_weapon_adds_no_attack_power() {
+        let mut world = World::new();
+        create_player(&mut world, 1, "Worn", PlayerClass::Warrior, 0.0, 0.0);
+        recalc_player_stats(&mut world, 1);
+        let healthy = world
+            .get::<crate::ecs::components::Combat>(1)
+            .unwrap()
+            .attack_damage;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_wear.main_hand = Some(0);
+        }
+        recalc_player_stats(&mut world, 1);
+        let broken = world
+            .get::<crate::ecs::components::Combat>(1)
+            .unwrap()
+            .attack_damage;
+        assert!(broken < healthy);
     }
 }

@@ -1,8 +1,9 @@
 //! Typed sparse-column world. Entity ids are monotonic and never reused.
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Health, Home, Identity, InstanceAt,
-    LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit, Threat, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Escort, Health, Hearth, Home,
+    Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit,
+    Threat, Transform,
 };
 use crate::ecs::SparseSet;
 use woc_protocol::EntityId;
@@ -23,6 +24,7 @@ pub struct World {
     pub respawn: SparseSet<Respawn>,
     pub loot_pile: SparseSet<LootPile>,
     pub owner: SparseSet<Owner>,
+    pub escort: SparseSet<Escort>,
     pub class_kit: SparseSet<ClassKit>,
     pub bags: SparseSet<Bags>,
     pub quest_log: SparseSet<QuestLog>,
@@ -32,6 +34,7 @@ pub struct World {
     pub spirit: SparseSet<Spirit>,
     pub instance_at: SparseSet<InstanceAt>,
     pub durable: SparseSet<Durable>,
+    pub hearth: SparseSet<Hearth>,
 }
 
 impl World {
@@ -151,6 +154,7 @@ impl World {
         self.respawn.remove(id);
         self.loot_pile.remove(id);
         self.owner.remove(id);
+        self.escort.remove(id);
         self.class_kit.remove(id);
         self.bags.remove(id);
         self.quest_log.remove(id);
@@ -160,5 +164,6 @@ impl World {
         self.spirit.remove(id);
         self.instance_at.remove(id);
         self.durable.remove(id);
+        self.hearth.remove(id);
     }
 }

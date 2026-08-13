@@ -2,8 +2,10 @@
 
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use woc_content::{can_equip, item, talents::talents_for_class, ItemKind, PlayerClass};
-use woc_protocol::{EntityId, InteractAction, TickSnapshot, VendorSnapshot};
+use woc_content::{
+    can_equip, item, quest, talents::talents_for_class, ItemKind, PlayerClass, QuestObjective,
+};
+use woc_protocol::{EntityId, InteractAction, QuestLogEntry, TickSnapshot, VendorOfferSnapshot};
 
 use crate::{GameHost, NetStatus, PlayMode};
 
@@ -47,10 +49,10 @@ pub(crate) struct HudVendorTitle;
 pub(crate) struct HudVendorOffers;
 
 #[derive(Component)]
-pub(crate) struct VendorBuyButton {
+pub(crate) struct NpcSessionButton {
     pub(crate) npc_id: EntityId,
-    pub(crate) item_id: String,
-    pub(crate) count: u32,
+    pub(crate) action: InteractAction,
+    pub(crate) toast: String,
 }
 
 #[derive(Component)]
@@ -110,12 +112,48 @@ pub(crate) fn plugin(app: &mut App) {
     .init_resource::<VendorUiCache>();
 }
 
-fn vendor_cache_key(v: &VendorSnapshot) -> String {
-    let mut key = format!("{}|{}", v.npc_id, v.npc_name);
-    for o in &v.stock {
+fn npc_session_stock(snap: &TickSnapshot) -> Vec<VendorOfferSnapshot> {
+    if let Some(npc) = &snap.open_npc {
+        if !npc.stock.is_empty() {
+            return npc.stock.clone();
+        }
+    }
+    snap.open_vendor
+        .as_ref()
+        .map(|v| v.stock.clone())
+        .unwrap_or_default()
+}
+
+fn npc_session_cache_key(snap: &TickSnapshot) -> Option<String> {
+    let Some(npc) = &snap.open_npc else {
+        let vendor = snap.open_vendor.as_ref()?;
+        let mut key = format!("vendor|{}|{}", vendor.npc_id, vendor.npc_name);
+        for o in &vendor.stock {
+            key.push_str(&format!("|{}:{}:{}", o.item_id, o.count, o.price));
+        }
+        return Some(key);
+    };
+
+    let mut key = format!(
+        "npc|{}|{}|{}|{}|{}",
+        npc.npc_id, npc.npc_name, npc.can_repair, npc.repair_cost, npc.can_bind
+    );
+    for service in &npc.services {
+        key.push_str(&format!("|svc:{service}"));
+    }
+    for profession in &npc.train_professions {
+        key.push_str(&format!("|train:{profession}"));
+    }
+    for o in npc_session_stock(snap) {
         key.push_str(&format!("|{}:{}:{}", o.item_id, o.count, o.price));
     }
-    key
+    for row in &npc.buyback {
+        key.push_str(&format!(
+            "|buyback:{}:{}:{}:{}",
+            row.slot, row.item_id, row.count, row.price
+        ));
+    }
+    Some(key)
 }
 
 pub(crate) fn first_junk_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String)> {
@@ -181,6 +219,52 @@ fn pending_loot_line(snap: &TickSnapshot) -> Option<String> {
         "Loot roll: {item} (+{}c)  [1] Need  [2] Greed  [3] Pass",
         pending.copper
     ))
+}
+
+pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
+    let mut parts = Vec::new();
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_repair)
+        .unwrap_or(false)
+    {
+        parts.push("[R] Repair");
+    }
+    parts.push("[H] Hearthstone");
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| !npc.train_professions.is_empty())
+        .unwrap_or(false)
+    {
+        parts.push("[T] Train");
+    }
+    parts.join("   ")
+}
+
+fn gear_durability_text(item_id: &str, durability: Option<u32>) -> Option<String> {
+    let def = item(item_id)?;
+    if def.max_durability == 0 {
+        return None;
+    }
+    let dur = durability.unwrap_or(def.max_durability);
+    let broken = if dur == 0 { " BROKEN" } else { "" };
+    Some(format!("{} {dur}/{}{broken}", def.name, def.max_durability))
+}
+
+fn bag_stack_label(item_id: &str, count: u32, durability: Option<u32>) -> String {
+    if let Some(label) = gear_durability_text(item_id, durability) {
+        return label;
+    }
+    format!("{count}×{item_id}")
+}
+
+fn equipment_label(item_id: Option<&str>, durability: Option<u32>) -> String {
+    match item_id {
+        Some(id) => gear_durability_text(id, durability).unwrap_or_else(|| id.to_string()),
+        None => "—".into(),
+    }
 }
 
 fn talent_panel_text(snap: &TickSnapshot) -> String {
@@ -446,6 +530,29 @@ pub(crate) fn update_chrome_panels(
     }
 }
 
+pub(crate) fn format_quest_log_line(entry: &QuestLogEntry) -> String {
+    let Some(def) = quest(&entry.quest_id) else {
+        return format!("{} [{}]", entry.quest_id, entry.state);
+    };
+    let objs: Vec<String> = def
+        .objectives
+        .iter()
+        .enumerate()
+        .map(|(i, obj)| {
+            let (label, need) = match obj {
+                QuestObjective::Kill { label, count, .. } => (*label, *count),
+                QuestObjective::Collect { label, count, .. } => (*label, *count),
+                QuestObjective::Talk { label, .. }
+                | QuestObjective::Explore { label, .. }
+                | QuestObjective::Escort { label, .. } => (*label, 1u32),
+            };
+            let have = entry.counts.get(i).copied().unwrap_or(0);
+            format!("{label} {have}/{need}")
+        })
+        .collect();
+    format!("{} [{}] — {}", def.name, entry.state, objs.join("; "))
+}
+
 pub(crate) fn update_hud(
     host: Res<GameHost>,
     ui: Res<UiFlags>,
@@ -608,24 +715,35 @@ pub(crate) fn update_hud(
     if let Ok(mut t) = quest.single_mut() {
         if ui.show_quests {
             if snap.quest_log.is_empty() {
-                **t = "Quests: (none — talk to Captain Alden with E)".into();
+                **t = "Quests: (none — talk to a quest giver with E)".into();
             } else {
-                let lines: Vec<String> = snap
-                    .quest_log
-                    .iter()
-                    .map(|q| format!("{} [{}]", q.quest_id, q.state))
-                    .collect();
-                **t = format!("Quests: {}", lines.join(" · "));
+                let lines: Vec<String> = snap.quest_log.iter().map(format_quest_log_line).collect();
+                **t = format!("Quests: {}  [X] abandon [Y] share", lines.join(" · "));
             }
         } else {
             let active = snap
                 .quest_log
                 .iter()
                 .find(|q| q.state == "active" || q.state == "ready");
-            **t = match active {
-                Some(q) => format!("Quest: {} [{}] (L list)", q.quest_id, q.state),
+            let mut line = match active {
+                Some(q) => format!("{} (L list)", format_quest_log_line(q)),
                 None => "Quest: — (E talk · L list)".into(),
             };
+            if let Some(ready) = snap.quest_log.iter().find(|q| q.state == "ready") {
+                if let Some(def) = woc_content::quest(&ready.quest_id) {
+                    if !def.reward.choices.is_empty() {
+                        let picks: Vec<String> = def
+                            .reward
+                            .choices
+                            .iter()
+                            .enumerate()
+                            .map(|(i, id)| format!("{} {id}", i + 1))
+                            .collect();
+                        line.push_str(&format!(" · choose {}", picks.join(" · ")));
+                    }
+                }
+            }
+            **t = line;
         }
     }
     if let Ok(mut t) = bags.single_mut() {
@@ -640,15 +758,19 @@ pub(crate) fn update_hud(
                         .map(|d| format!("{:?}", d.kind))
                         .unwrap_or_else(|| "?".into());
                     lines.push(format!(
-                        "  [{}] {}×{} ({kind})",
+                        "  [{}] {} ({kind})",
                         s.slot + 1,
-                        s.count,
-                        s.item_id
+                        bag_stack_label(&s.item_id, s.count, s.durability)
                     ));
                 }
                 lines.push("[1-9] Equip/Use slot · [Q] first legal gear".into());
                 lines.push("[F] Use first consumable".into());
-                if snap.open_vendor.is_some() {
+                if snap.open_vendor.is_some()
+                    || snap
+                        .open_npc
+                        .as_ref()
+                        .is_some_and(|npc| npc.services.iter().any(|service| service == "vendor"))
+                {
                     lines.push("[V] Sell first junk to vendor".into());
                 }
                 **t = lines.join("\n");
@@ -709,14 +831,14 @@ pub(crate) fn update_hud(
             snap.progress.copper,
             snap.talent_points,
             talent_bonus_summary(snap),
-            eq.main_hand.as_deref().unwrap_or("—"),
-            eq.off_hand.as_deref().unwrap_or("—"),
-            eq.head.as_deref().unwrap_or("—"),
-            eq.chest.as_deref().unwrap_or("—"),
-            eq.legs.as_deref().unwrap_or("—"),
-            eq.feet.as_deref().unwrap_or("—"),
-            eq.neck.as_deref().unwrap_or("—"),
-            eq.finger.as_deref().unwrap_or("—"),
+            equipment_label(eq.main_hand.as_deref(), eq.main_hand_durability),
+            equipment_label(eq.off_hand.as_deref(), eq.off_hand_durability),
+            equipment_label(eq.head.as_deref(), eq.head_durability),
+            equipment_label(eq.chest.as_deref(), eq.chest_durability),
+            equipment_label(eq.legs.as_deref(), eq.legs_durability),
+            equipment_label(eq.feet.as_deref(), eq.feet_durability),
+            equipment_label(eq.neck.as_deref(), None),
+            equipment_label(eq.finger.as_deref(), None),
             snap.attack_power,
             snap.armor,
             snap.spell_power,
@@ -823,7 +945,40 @@ fn class_interact_hint(snap: &TickSnapshot) -> &'static str {
     }
 }
 
-/// Show vendor panel when `open_vendor` is set; rebuild buy buttons as stock changes.
+fn spawn_session_button(
+    parent: &mut ChildSpawnerCommands<'_>,
+    npc_id: EntityId,
+    label: String,
+    action: InteractAction,
+    toast: String,
+) {
+    parent
+        .spawn((
+            Button,
+            NpcSessionButton {
+                npc_id,
+                action,
+                toast,
+            },
+            Node {
+                width: Val::Percent(100.0),
+                padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.12, 0.22, 0.16, 0.92)),
+        ))
+        .with_children(|btn| {
+            btn.spawn((
+                Text::new(label),
+                TextFont::from_font_size(15.0),
+                TextColor(Color::srgb(0.9, 0.95, 0.85)),
+            ));
+        });
+}
+
+/// Show the NPC session panel when `open_npc` or legacy `open_vendor` is set.
 pub(crate) fn sync_vendor_panel(
     mut commands: Commands,
     host: Res<GameHost>,
@@ -832,15 +987,24 @@ pub(crate) fn sync_vendor_panel(
     mut title: Query<&mut Text, With<HudVendorTitle>>,
     offers_root: Query<Entity, With<HudVendorOffers>>,
 ) {
-    match &host.snapshot.open_vendor {
-        Some(vendor) => {
+    let snap = &host.snapshot;
+    match npc_session_cache_key(snap) {
+        Some(key) => {
             if let Ok(mut vis) = panel.single_mut() {
                 *vis = Visibility::Visible;
             }
             if let Ok(mut t) = title.single_mut() {
-                **t = format!("Vendor: {}", vendor.npc_name);
+                **t = snap
+                    .open_npc
+                    .as_ref()
+                    .map(|npc| npc.npc_name.clone())
+                    .or_else(|| {
+                        snap.open_vendor
+                            .as_ref()
+                            .map(|vendor| vendor.npc_name.clone())
+                    })
+                    .unwrap_or_else(|| "NPC".into());
             }
-            let key = vendor_cache_key(vendor);
             if cache.key.as_ref() == Some(&key) {
                 return;
             }
@@ -849,39 +1013,93 @@ pub(crate) fn sync_vendor_panel(
                 return;
             };
             commands.entity(offers_e).despawn_related::<Children>();
-            let npc_id = vendor.npc_id;
-            let stock = vendor.stock.clone();
-            let empty = stock.is_empty();
+            let npc_id = snap
+                .open_npc
+                .as_ref()
+                .map(|npc| npc.npc_id)
+                .or_else(|| snap.open_vendor.as_ref().map(|vendor| vendor.npc_id))
+                .unwrap_or_default();
+            let stock = npc_session_stock(snap);
+            let stock_empty = stock.is_empty();
+            let open_npc = snap.open_npc.clone();
+            let help = npc_session_help(snap);
             commands.entity(offers_e).with_children(|parent| {
+                if !help.is_empty() {
+                    parent.spawn((
+                        Text::new(help),
+                        TextFont::from_font_size(14.0),
+                        TextColor(Color::srgb(0.78, 0.86, 0.72)),
+                    ));
+                }
                 for offer in stock {
                     let label =
                         format!("Buy {} ×{} — {}c", offer.item_id, offer.count, offer.price);
-                    parent
-                        .spawn((
-                            Button,
-                            VendorBuyButton {
-                                npc_id,
-                                item_id: offer.item_id,
-                                count: offer.count.max(1),
-                            },
-                            Node {
-                                width: Val::Percent(100.0),
-                                padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
-                                justify_content: JustifyContent::FlexStart,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgba(0.12, 0.22, 0.16, 0.92)),
-                        ))
-                        .with_children(|btn| {
-                            btn.spawn((
-                                Text::new(label),
-                                TextFont::from_font_size(15.0),
-                                TextColor(Color::srgb(0.9, 0.95, 0.85)),
-                            ));
-                        });
+                    let toast = format!("Buying {} ×{}", offer.item_id, offer.count.max(1));
+                    spawn_session_button(
+                        parent,
+                        npc_id,
+                        label,
+                        InteractAction::Buy {
+                            item_id: offer.item_id,
+                            count: offer.count.max(1),
+                        },
+                        toast,
+                    );
                 }
-                if empty {
+                if let Some(npc) = open_npc {
+                    if npc.can_repair {
+                        spawn_session_button(
+                            parent,
+                            npc.npc_id,
+                            format!("Repair — {}c", npc.repair_cost),
+                            InteractAction::RepairAll,
+                            "Repairing gear.".into(),
+                        );
+                    }
+                    for profession in npc.train_professions {
+                        spawn_session_button(
+                            parent,
+                            npc.npc_id,
+                            format!("Train {profession}"),
+                            InteractAction::TrainProfession {
+                                id: profession.clone(),
+                            },
+                            format!("Training {profession}."),
+                        );
+                    }
+                    if npc
+                        .services
+                        .iter()
+                        .any(|service| service == "class_trainer")
+                    {
+                        spawn_session_button(
+                            parent,
+                            npc.npc_id,
+                            "Train class".into(),
+                            InteractAction::TrainClass,
+                            "Training class.".into(),
+                        );
+                    }
+                    if npc.can_bind {
+                        spawn_session_button(
+                            parent,
+                            npc.npc_id,
+                            "Bind hearth".into(),
+                            InteractAction::BindHearth,
+                            "Binding hearth.".into(),
+                        );
+                    }
+                    for row in npc.buyback {
+                        spawn_session_button(
+                            parent,
+                            npc.npc_id,
+                            format!("Buyback {} ×{} — {}c", row.item_id, row.count, row.price),
+                            InteractAction::Buyback { slot: row.slot },
+                            format!("Buying back {} ×{}.", row.item_id, row.count),
+                        );
+                    }
+                }
+                if stock_empty && snap.open_npc.is_none() {
                     parent.spawn((
                         Text::new("(no stock)"),
                         TextFont::from_font_size(14.0),
@@ -902,32 +1120,27 @@ pub(crate) fn sync_vendor_panel(
     }
 }
 
-pub(crate) fn vendor_buy_clicks(
-    interactions: Query<(&Interaction, &VendorBuyButton), Changed<Interaction>>,
+pub(crate) fn npc_session_clicks(
+    interactions: Query<(&Interaction, &NpcSessionButton), Changed<Interaction>>,
     mut host: ResMut<GameHost>,
 ) {
     for (interaction, btn) in &interactions {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        host.interact(
-            btn.npc_id,
-            InteractAction::Buy {
-                item_id: btn.item_id.clone(),
-                count: btn.count,
-            },
-        );
-        host.recent_toasts
-            .push((format!("Buying {} ×{}", btn.item_id, btn.count), 1.5));
+        host.interact(btn.npc_id, btn.action.clone());
+        host.recent_toasts.push((btn.toast.clone(), 1.5));
     }
 }
 
-/// Release look-grab while a vendor is open so Buy buttons are clickable.
+/// Release look-grab while an NPC session is open so panel buttons are clickable.
 pub(crate) fn vendor_ungrab_cursor(
     mut host: ResMut<GameHost>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    if host.snapshot.open_vendor.is_none() || !host.cursor_grabbed {
+    if (host.snapshot.open_vendor.is_none() && host.snapshot.open_npc.is_none())
+        || !host.cursor_grabbed
+    {
         return;
     }
     host.cursor_grabbed = false;
@@ -949,8 +1162,8 @@ pub(crate) fn toast_fade(time: Res<Time>, mut host: ResMut<GameHost>) {
 mod tests {
     use super::*;
     use woc_protocol::{
-        InvSlotSnapshot, MailSnapshot, MarketListingSnapshot, ProfessionSkillSnapshot,
-        TalentRankSnapshot, TickSnapshot,
+        InvSlotSnapshot, MailSnapshot, MarketListingSnapshot, NpcSessionSnapshot,
+        ProfessionSkillSnapshot, TalentRankSnapshot, TickSnapshot,
     };
 
     fn chrome_snapshot() -> TickSnapshot {
@@ -972,11 +1185,13 @@ mod tests {
             slot: 0,
             item_id: "wolf_fang".into(),
             count: 3,
+            durability: None,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
             item_id: "silverleaf".into(),
             count: 4,
+            durability: None,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1042,6 +1257,58 @@ mod tests {
         assert!(text.contains("[O] Buy first affordable listing"));
         assert!(text.contains("[L] List"));
         assert!(text.contains("[X] Cancel"));
+    }
+
+    #[test]
+    fn npc_session_help_mentions_repair_when_session_can_repair() {
+        let mut snap = TickSnapshot::default();
+        snap.open_npc = Some(NpcSessionSnapshot {
+            npc_id: 42,
+            npc_name: "Smith Brann".into(),
+            greeting: String::new(),
+            services: vec![],
+            stock: vec![],
+            train_professions: vec![],
+            can_repair: true,
+            repair_cost: 12,
+            can_bind: false,
+            buyback: vec![],
+        });
+
+        let text = npc_session_help(&snap);
+
+        assert!(text.contains("[R] Repair"));
+    }
+
+    #[test]
+    fn quest_log_line_uses_name_and_counts() {
+        use super::format_quest_log_line;
+        use woc_protocol::QuestLogEntry;
+
+        let line = format_quest_log_line(&QuestLogEntry {
+            quest_id: "wolves_at_the_gate".into(),
+            state: "active".into(),
+            counts: vec![1],
+        });
+        assert!(line.contains("Wolves at the Gate"));
+        assert!(line.contains("active"));
+        assert!(line.contains("1/3"));
+        assert!(line.contains("Young Wolves slain"));
+        assert!(!line.starts_with("wolves_at_the_gate"));
+    }
+
+    #[test]
+    fn quest_log_line_covers_explore() {
+        use super::format_quest_log_line;
+        use woc_protocol::QuestLogEntry;
+
+        let line = format_quest_log_line(&QuestLogEntry {
+            quest_id: "scout_north_road".into(),
+            state: "active".into(),
+            counts: vec![0],
+        });
+        assert!(line.contains("Scout the North Road"));
+        assert!(line.contains("North road scouted 0/1"));
     }
 
     #[test]

@@ -21,15 +21,17 @@ use crate::combat::{
 };
 use crate::context::SimContext;
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootPile, LootTable, Motion,
-    Owner, Progress, QuestLog, QuestState, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Health, Hearth, Identity, InstanceAt, LootPile, LootTable,
+    Motion, Owner, Progress, Transform,
 };
 use crate::ecs::World;
-use crate::interaction::vendor_snapshot;
+use crate::interaction::{npc_session_snapshot, vendor_snapshot};
 use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
 use crate::player_motion::step_player_motion;
-use crate::quests::on_mob_killed;
+use crate::quests::{
+    credit_explore, on_mob_killed, quest_log_entries, refresh_daily_quests, tick_escorts,
+};
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
@@ -39,8 +41,8 @@ use crate::zones::populate_all_overworld;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
     AbilityBarSlot, AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot,
-    EquipmentSnapshot, InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress,
-    QuestLogEntry, SimEvent, TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
+    EquipmentSnapshot, InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress, SimEvent,
+    TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
@@ -389,6 +391,9 @@ impl Sim {
         self.tick += 1;
 
         let player_ids = self.player_ids();
+        for &pid in &player_ids {
+            refresh_daily_quests(&mut self.world, pid, self.tick);
+        }
 
         // Phase 1: apply intents + motion
         for &pid in &player_ids {
@@ -461,6 +466,7 @@ impl Sim {
                     }
                 }
             }
+            credit_explore(&mut self.world, pid, &mut self.events);
         }
         // Phase 2: player_combat
         for &pid in &player_ids {
@@ -476,6 +482,7 @@ impl Sim {
 
         // Phase 3: pet_ai
         let _dropped = tick_pets(&mut self.world, &mut self.events);
+        tick_escorts(&mut self.world, &mut self.events);
 
         // Phase 4: mob_ai_combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
@@ -641,6 +648,7 @@ impl Sim {
                             slot: i as u8,
                             item_id: st.item_id.clone(),
                             count: st.count,
+                            durability: st.durability,
                         })
                     })
                     .collect()
@@ -658,29 +666,35 @@ impl Sim {
                 feet: bags.equipment.feet.clone(),
                 neck: bags.equipment.neck.clone(),
                 finger: bags.equipment.finger.clone(),
+                main_hand_durability: bags
+                    .equipment
+                    .main_hand
+                    .as_ref()
+                    .and(bags.equipment_wear.main_hand),
+                off_hand_durability: bags
+                    .equipment
+                    .off_hand
+                    .as_ref()
+                    .and(bags.equipment_wear.off_hand),
+                head_durability: bags.equipment.head.as_ref().and(bags.equipment_wear.head),
+                chest_durability: bags.equipment.chest.as_ref().and(bags.equipment_wear.chest),
+                legs_durability: bags.equipment.legs.as_ref().and(bags.equipment_wear.legs),
+                feet_durability: bags.equipment.feet.as_ref().and(bags.equipment_wear.feet),
             })
             .unwrap_or_default();
 
-        let quest_log = world
-            .get::<QuestLog>(player_id)
-            .map(|q| {
-                q.quest_log
-                    .iter()
-                    .map(|quest| QuestLogEntry {
-                        quest_id: quest.quest_id.clone(),
-                        state: match quest.state {
-                            QuestState::Active => "active",
-                            QuestState::Ready => "ready",
-                            QuestState::Completed => "completed",
-                        }
-                        .to_string(),
-                        counts: quest.counts.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let quest_log = quest_log_entries(world, player_id);
 
         let open_vendor = vendor_snapshot(world, player_id);
+        let open_npc = npc_session_snapshot(world, player_id);
+        let hearth_ready_tick = world
+            .get::<Hearth>(player_id)
+            .map(|h| h.ready_tick)
+            .unwrap_or(0);
+        let hearth_zone_id = world
+            .get::<Hearth>(player_id)
+            .map(|h| h.zone_id.clone())
+            .unwrap_or_default();
 
         let auras = world
             .get::<Auras>(player_id)
@@ -755,6 +769,7 @@ impl Sim {
             equipment,
             quest_log,
             open_vendor,
+            open_npc,
             ability_name,
             auras,
             cast,
@@ -770,6 +785,8 @@ impl Sim {
                 .get::<Identity>(player_id)
                 .map(|i| i.zone_id.clone())
                 .unwrap_or_else(|| "eastbrook".into()),
+            hearth_ready_tick,
+            hearth_zone_id,
             talent_points: world
                 .get::<Progress>(player_id)
                 .map(|p| p.talent_points)
@@ -797,6 +814,7 @@ impl Sim {
                                 slot: i as u8,
                                 item_id: st.item_id.clone(),
                                 count: st.count,
+                                durability: st.durability,
                             })
                         })
                         .collect()
@@ -1103,7 +1121,9 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
 mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
-    use crate::ecs::components::{Bags, Bank, ClassKit, LootPile, Owner, Threat, Transform};
+    use crate::ecs::components::{
+        Bags, Bank, ClassKit, Health, LootPile, Owner, QuestLog, QuestState, Threat, Transform,
+    };
     use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
 
@@ -1354,6 +1374,31 @@ mod tests {
     fn wolf_quest_accept_kill_turnin() {
         let mut sim = Sim::new_eastbrook("Q", PlayerClass::Warrior);
         let giver = find_template(&sim, "captain_alden").unwrap();
+        let crier = find_template(&sim, "town_crier").unwrap();
+        let (cx, cz) = {
+            let t = sim.world.get::<Transform>(crier).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, cx, cz);
+        sim.interact(
+            crier,
+            InteractAction::AcceptQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
+        let (gx, gz) = {
+            let t = sim.world.get::<Transform>(giver).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, gx, gz);
+        sim.interact(giver, InteractAction::Talk);
+        sim.interact(
+            giver,
+            InteractAction::TurnInQuest {
+                quest_id: "report_to_alden".into(),
+                reward_choice: None,
+            },
+        );
         sim.interact(
             giver,
             InteractAction::AcceptQuest {
@@ -1427,12 +1472,224 @@ mod tests {
             giver,
             InteractAction::TurnInQuest {
                 quest_id: "wolves_at_the_gate".into(),
+                reward_choice: None,
             },
         );
         let log = WorldHost::snapshot_for(&sim, sim.player_id).quest_log;
         assert!(log
             .iter()
             .any(|q| q.quest_id == "wolves_at_the_gate" && q.state == "completed"));
+    }
+
+    #[test]
+    fn talk_to_trainer_opens_npc_session_without_vendor() {
+        let mut sim = Sim::new_eastbrook("T", PlayerClass::Warrior);
+        let wren = find_template(&sim, "herbalist_wren").expect("herbalist_wren");
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(wren).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        sim.interact(wren, InteractAction::Talk);
+        let snap = sim.snapshot_for_player(sim.player_id);
+        assert!(snap.open_vendor.is_none());
+        let session = snap.open_npc.expect("session");
+        assert_eq!(session.npc_id, wren);
+        assert!(session.train_professions.contains(&"herbalism".to_string()));
+        assert!(!session.can_repair);
+    }
+
+    #[test]
+    fn train_mining_requires_smith() {
+        let mut sim = Sim::new_eastbrook("P", PlayerClass::Warrior);
+        sim.interact(
+            sim.player_id,
+            InteractAction::TrainProfession {
+                id: "mining".into(),
+            },
+        );
+        assert!(sim
+            .world
+            .get::<Progress>(sim.player_id)
+            .unwrap()
+            .professions
+            .get("mining")
+            .is_none());
+
+        let smith = find_template(&sim, "smith_brann").unwrap();
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(smith).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        sim.interact(smith, InteractAction::Talk);
+        sim.interact(
+            smith,
+            InteractAction::TrainProfession {
+                id: "mining".into(),
+            },
+        );
+        assert_eq!(
+            sim.world
+                .get::<Progress>(sim.player_id)
+                .unwrap()
+                .professions
+                .get("mining")
+                .copied(),
+            Some(1)
+        );
+
+        sim.interact(
+            smith,
+            InteractAction::TrainProfession {
+                id: "herbalism".into(),
+            },
+        );
+        assert!(sim
+            .world
+            .get::<Progress>(sim.player_id)
+            .unwrap()
+            .professions
+            .get("herbalism")
+            .is_none());
+    }
+
+    #[test]
+    fn repair_all_at_smith_restores_gear() {
+        let mut sim = Sim::new_eastbrook("R", PlayerClass::Warrior);
+        let smith = find_template(&sim, "smith_brann").unwrap();
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(smith).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            bags.equipment_wear.main_hand = Some(1);
+            bags.equipment_wear.chest = Some(1);
+        }
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 10_000;
+        }
+        let cost = {
+            let sword = 40 - 1;
+            let tunic = 30 - 1;
+            sword + tunic
+        };
+        sim.interact(smith, InteractAction::Talk);
+        let session = sim.snapshot_for_player(sim.player_id).open_npc.unwrap();
+        assert!(session.can_repair);
+        assert_eq!(session.repair_cost, cost);
+        let copper_before = sim.copper();
+        sim.interact(smith, InteractAction::RepairAll);
+        assert_eq!(sim.copper(), copper_before - cost);
+        let wear = &sim.world.get::<Bags>(sim.player_id).unwrap().equipment_wear;
+        assert_eq!(wear.main_hand, Some(40));
+        assert_eq!(wear.chest, Some(30));
+    }
+
+    #[test]
+    fn repair_refuses_without_copper() {
+        let mut sim = Sim::new_eastbrook("R", PlayerClass::Warrior);
+        let smith = find_template(&sim, "smith_brann").unwrap();
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(smith).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            bags.equipment_wear.main_hand = Some(0);
+        }
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 0;
+        }
+        sim.interact(smith, InteractAction::Talk);
+        sim.interact(smith, InteractAction::RepairAll);
+        assert_eq!(
+            sim.world
+                .get::<Bags>(sim.player_id)
+                .unwrap()
+                .equipment_wear
+                .main_hand,
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn train_class_at_alden_refreshes_kit() {
+        let mut sim = Sim::new_eastbrook("C", PlayerClass::Warrior);
+        let alden = find_template(&sim, "captain_alden").unwrap();
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(alden).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        if let Some(h) = sim.world.get_mut::<Health>(sim.player_id) {
+            h.level = 3;
+        }
+        if let Some(kit) = sim.world.get_mut::<ClassKit>(sim.player_id) {
+            kit.known_abilities.clear();
+        }
+
+        sim.interact(alden, InteractAction::Talk);
+        sim.interact(alden, InteractAction::TrainClass);
+
+        let expected = woc_content::known_abilities_at_level(PlayerClass::Warrior, 3)
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sim.world
+                .get::<ClassKit>(sim.player_id)
+                .unwrap()
+                .known_abilities,
+            expected
+        );
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message.starts_with("You are trained through level")
+        )));
+    }
+
+    #[test]
+    fn bind_and_hearthstone_from_wolf_run() {
+        let mut sim = Sim::new_eastbrook("H", PlayerClass::Warrior);
+        let mara = find_template(&sim, "innkeeper_mara").unwrap();
+        let (mx, mz) = {
+            let t = sim.world.get::<Transform>(mara).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, mx, mz);
+        sim.interact(mara, InteractAction::Talk);
+        sim.interact(mara, InteractAction::BindHearth);
+        let hearth = sim
+            .world
+            .get::<crate::ecs::components::Hearth>(sim.player_id)
+            .unwrap();
+        assert!((hearth.x - mx).abs() < 0.01);
+
+        place_player_at(&mut sim, -15.0, 55.0);
+        sim.tick = 20;
+        let player_id = sim.player_id;
+        WorldHost::interact(&mut sim, player_id, 0, InteractAction::UseHearthstone);
+        let t = sim.world.get::<Transform>(sim.player_id).unwrap();
+        assert!((t.x - mx).abs() < 0.5);
+        assert!((t.z - mz).abs() < 0.5);
+        assert_eq!(
+            sim.world
+                .get::<crate::ecs::components::Hearth>(sim.player_id)
+                .unwrap()
+                .ready_tick,
+            20 + 18_000
+        );
+
+        place_player_at(&mut sim, -15.0, 55.0);
+        let player_id = sim.player_id;
+        WorldHost::interact(&mut sim, player_id, 0, InteractAction::UseHearthstone);
+        let t = sim.world.get::<Transform>(sim.player_id).unwrap();
+        assert!(
+            (t.x + 15.0).abs() < 0.5,
+            "cooldown must block the second hearth"
+        );
     }
 
     #[test]
@@ -1461,6 +1718,98 @@ mod tests {
             .inventory
             .iter()
             .any(|s| s.item_id == "travelers_ration"));
+    }
+
+    #[test]
+    fn refuse_to_sell_quest_item() {
+        let mut sim = Sim::new_eastbrook("Q", PlayerClass::Warrior);
+        let vendor = find_template(&sim, "trader_wilkes").unwrap();
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(vendor).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            assert!(crate::inventory::grant_into(
+                &mut bags.inventory,
+                "boar_tusk",
+                1
+            ));
+        }
+        let copper_before = sim.copper();
+        sim.interact(vendor, InteractAction::Talk);
+        let slot = sim
+            .world
+            .get::<Bags>(sim.player_id)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "boar_tusk"))
+            .unwrap() as u8;
+        sim.interact(
+            vendor,
+            InteractAction::Sell {
+                bag_slot: slot,
+                count: 1,
+            },
+        );
+        assert_eq!(sim.copper(), copper_before);
+        assert_eq!(
+            crate::inventory::count_item(
+                &sim.world.get::<Bags>(sim.player_id).unwrap().inventory,
+                "boar_tusk"
+            ),
+            1
+        );
+    }
+
+    #[test]
+    fn sell_junk_then_buyback() {
+        let mut sim = Sim::new_eastbrook("B", PlayerClass::Warrior);
+        let vendor = find_template(&sim, "trader_wilkes").unwrap();
+        let (x, z) = {
+            let t = sim.world.get::<Transform>(vendor).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, x, z);
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            assert!(crate::inventory::grant_into(
+                &mut bags.inventory,
+                "wolf_fang",
+                2
+            ));
+        }
+        sim.interact(vendor, InteractAction::Talk);
+        let slot = sim
+            .world
+            .get::<Bags>(sim.player_id)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "wolf_fang"))
+            .unwrap() as u8;
+        let copper_before = sim.copper();
+        sim.interact(
+            vendor,
+            InteractAction::Sell {
+                bag_slot: slot,
+                count: 2,
+            },
+        );
+        let sold_for = woc_content::item("wolf_fang").unwrap().vendor_sell * 2;
+        assert_eq!(sim.copper(), copper_before + sold_for);
+        let session = sim.snapshot_for_player(sim.player_id).open_npc.unwrap();
+        assert_eq!(session.buyback[0].item_id, "wolf_fang");
+        assert_eq!(session.buyback[0].price, sold_for);
+        sim.interact(vendor, InteractAction::Buyback { slot: 0 });
+        assert_eq!(sim.copper(), copper_before);
+        assert_eq!(
+            crate::inventory::count_item(
+                &sim.world.get::<Bags>(sim.player_id).unwrap().inventory,
+                "wolf_fang"
+            ),
+            2
+        );
     }
 
     #[test]

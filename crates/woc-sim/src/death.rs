@@ -1,7 +1,7 @@
 //! Player death: corpse marker, PlayerDied event, combat clear.
 
 use crate::corpse::{clear_corpse_marker_world, has_corpse_marker_world, record_corpse_world};
-use crate::ecs::components::{ClassKit, Combat, Health, Motion};
+use crate::ecs::components::{Bags, ClassKit, Combat, Health, Motion};
 use crate::ecs::World;
 use woc_protocol::{EntityId, SimEvent};
 
@@ -36,6 +36,10 @@ fn finalize_player_death(world: &mut World, id: EntityId, events: &mut Vec<SimEv
         c.auto_attack = false;
         c.target = None;
         c.swing_timer = 0.0;
+    }
+    if let Some(bags) = world.get_mut::<Bags>(id) {
+        bags.open_vendor_npc = None;
+        bags.buyback.clear();
     }
     if let Some(m) = world.get_mut::<Motion>(id) {
         m.flying = false;

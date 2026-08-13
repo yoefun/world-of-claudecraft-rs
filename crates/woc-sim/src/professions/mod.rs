@@ -1,12 +1,12 @@
 //! Profession training, gathering, and crafting simulation hooks.
 
-use crate::ecs::components::{Bags, ClassKit, Health, Identity, Progress, Transform};
+use crate::ecs::components::{dist2d, Bags, ClassKit, Health, Identity, Progress, Transform};
 use crate::ecs::World;
 use crate::inventory::{count_item, grant_into, remove_item};
 use crate::quests::on_inventory_changed;
 use crate::types::INTERACT_RANGE;
-use woc_content::{gather_node, profession, recipe};
-use woc_protocol::{EntityId, InteractAction, SimEvent};
+use woc_content::{gather_node, npc, profession, recipe};
+use woc_protocol::{EntityId, EntityKind, InteractAction, SimEvent};
 
 pub type ProfessionResult = Result<(), &'static str>;
 
@@ -18,11 +18,14 @@ pub type ProfessionResult = Result<(), &'static str>;
 pub fn handle_interact(
     world: &mut World,
     player_id: EntityId,
+    target_id: EntityId,
     action: &InteractAction,
     events: &mut Vec<SimEvent>,
 ) -> bool {
     let result = match action {
-        InteractAction::TrainProfession { id } => train_profession(world, player_id, id, events),
+        InteractAction::TrainProfession { id } => {
+            try_train_at_npc(world, player_id, target_id, id, events)
+        }
         InteractAction::Gather { node_id } => {
             gather_from_entity(world, player_id, *node_id, events)
         }
@@ -36,6 +39,30 @@ pub fn handle_interact(
         });
     }
     true
+}
+
+fn try_train_at_npc(
+    world: &mut World,
+    player_id: EntityId,
+    npc_id: EntityId,
+    profession_id: &str,
+    events: &mut Vec<SimEvent>,
+) -> ProfessionResult {
+    let template_id = world
+        .get::<Identity>(npc_id)
+        .filter(|identity| identity.kind == EntityKind::Npc)
+        .and_then(|identity| identity.template_id.clone())
+        .ok_or("This trainer cannot teach that.")?;
+    if dist2d(world, player_id, npc_id)
+        .map(|distance| distance > INTERACT_RANGE)
+        .unwrap_or(true)
+    {
+        return Err("Too far away.");
+    }
+    if !npc(&template_id).is_some_and(|definition| definition.trains_profession(profession_id)) {
+        return Err("This trainer cannot teach that.");
+    }
+    train_profession(world, player_id, profession_id, events)
 }
 
 /// Learn a content-defined profession at skill 1.
@@ -349,6 +376,7 @@ mod tests {
             1,
             1,
             InteractAction::Equip { bag_slot: slot },
+            0,
             &mut events,
         );
         assert_eq!(
@@ -375,17 +403,11 @@ mod tests {
         );
         crate::ecs::spawn::create_gather_node(&mut world, 2, node);
         let mut events = Vec::new();
+        train_profession(&mut world, 1, "herbalism", &mut events).unwrap();
         assert!(handle_interact(
             &mut world,
             1,
-            &InteractAction::TrainProfession {
-                id: "herbalism".into(),
-            },
-            &mut events,
-        ));
-        assert!(handle_interact(
-            &mut world,
-            1,
+            2,
             &InteractAction::Gather { node_id: 2 },
             &mut events,
         ));

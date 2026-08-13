@@ -1,7 +1,8 @@
 //! Overworld zone transitions on the continuous strip.
 
-use crate::ecs::components::{Bags, Combat, Identity, InstanceAt, Threat, Transform};
+use crate::ecs::components::{Bags, Combat, Hearth, Identity, InstanceAt, Threat, Transform};
 use crate::ecs::World;
+use crate::types::HEARTH_COOLDOWN_TICKS;
 use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
@@ -49,6 +50,26 @@ pub(crate) fn load_overworld_zone(world: &mut World, player_id: EntityId, zone_i
     let Some(layout) = zone_layout(zone_id) else {
         return false;
     };
+    load_overworld_zone_at(
+        world,
+        player_id,
+        zone_id,
+        layout.player_spawn_x,
+        layout.player_spawn_z,
+    )
+}
+
+/// Ensure the destination zone population exists, then teleport to explicit coordinates.
+pub(crate) fn load_overworld_zone_at(
+    world: &mut World,
+    player_id: EntityId,
+    zone_id: &str,
+    x: f32,
+    z: f32,
+) -> bool {
+    let Some(layout) = zone_layout(zone_id) else {
+        return false;
+    };
     if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
         return false;
     }
@@ -56,11 +77,11 @@ pub(crate) fn load_overworld_zone(world: &mut World, player_id: EntityId, zone_i
     let tag = layout_zone_tag(zone_id);
     ensure_zone_population(world, layout, tag);
 
-    let spawn_y = crate::ecs::spawn::ground_at(layout.player_spawn_x, layout.player_spawn_z);
+    let y = crate::ecs::spawn::ground_at(x, z);
     if let Some(t) = world.get_mut::<Transform>(player_id) {
-        t.x = layout.player_spawn_x;
-        t.z = layout.player_spawn_z;
-        t.y = spawn_y;
+        t.x = x;
+        t.z = z;
+        t.y = y;
     }
     if let Some(identity) = world.get_mut::<Identity>(player_id) {
         identity.zone_id = tag.to_string();
@@ -76,9 +97,34 @@ pub(crate) fn load_overworld_zone(world: &mut World, player_id: EntityId, zone_i
     }
     if let Some(bags) = world.get_mut::<Bags>(player_id) {
         bags.open_vendor_npc = None;
+        bags.buyback.clear();
     }
     if let Some(threat) = world.get_mut::<Threat>(player_id) {
         threat.threat.clear();
+    }
+    true
+}
+
+pub(crate) fn use_hearthstone(
+    world: &mut World,
+    player_id: EntityId,
+    tick: u64,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let Some(hearth) = world.get::<Hearth>(player_id).cloned() else {
+        return false;
+    };
+    if tick < hearth.ready_tick {
+        events.push(SimEvent::Toast {
+            message: "Hearthstone is not ready.".into(),
+        });
+        return false;
+    }
+    if !load_overworld_zone_at(world, player_id, &hearth.zone_id, hearth.x, hearth.z) {
+        return false;
+    }
+    if let Some(hearth) = world.get_mut::<Hearth>(player_id) {
+        hearth.ready_tick = tick + HEARTH_COOLDOWN_TICKS;
     }
     true
 }

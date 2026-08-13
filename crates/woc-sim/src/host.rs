@@ -28,6 +28,31 @@ impl WorldHost for Sim {
             InteractAction::DismissPet => {
                 let _ = dismiss_pet(&mut self.world, player_id, &mut self.events);
             }
+            InteractAction::UseHearthstone => {
+                let _ = crate::zones::use_hearthstone(
+                    &mut self.world,
+                    player_id,
+                    self.tick,
+                    &mut self.events,
+                );
+            }
+            InteractAction::AbandonQuest { quest_id } => {
+                let _ = crate::quests::abandon_quest(
+                    &mut self.world,
+                    player_id,
+                    &quest_id,
+                    &mut self.events,
+                );
+            }
+            InteractAction::ShareQuest { quest_id } => {
+                let _ = crate::quests::share_quest(
+                    &mut self.world,
+                    &self.parties,
+                    player_id,
+                    &quest_id,
+                    &mut self.events,
+                );
+            }
             InteractAction::LearnTalent { talent_id } => {
                 let _ = talents::learn(&mut self.world, player_id, &talent_id, &mut self.events);
             }
@@ -193,6 +218,7 @@ impl WorldHost for Sim {
                 let _ = professions::handle_interact(
                     &mut self.world,
                     player_id,
+                    target_id,
                     other,
                     &mut self.events,
                 );
@@ -203,6 +229,7 @@ impl WorldHost for Sim {
                     player_id,
                     target_id,
                     other,
+                    self.tick,
                     &mut self.events,
                 );
             }

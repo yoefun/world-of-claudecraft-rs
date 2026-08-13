@@ -6,8 +6,10 @@ use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
 use woc_content::{can_equip, item, ItemKind, PlayerClass};
 use woc_protocol::{
-    AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, TickSnapshot,
+    AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, QuestLogEntry,
+    TickSnapshot,
 };
+use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
@@ -135,7 +137,16 @@ pub(crate) fn collect_intent(
     }
     // Digit keys: talents, loot rolls, bank withdraw, or abilities.
     let loot_rolling = host.snapshot.pending_loot.iter().any(|p| !p.rolled);
-    if !ui.show_talents && !ui.show_bank && !loot_rolling && !ui.show_bags && !ui.show_character {
+    let choice_turn_in = nearest_npc_template(&host.snapshot, 5.0)
+        .and_then(|(_, tid)| choice_turn_in_for_npc(&tid, &host.snapshot.quest_log))
+        .is_some();
+    if !ui.show_talents
+        && !ui.show_bank
+        && !loot_rolling
+        && !ui.show_bags
+        && !ui.show_character
+        && !choice_turn_in
+    {
         intent.ability = ability_slot_from_keys(&keys);
     }
 
@@ -240,6 +251,74 @@ fn local_pet_alive(snap: &TickSnapshot) -> bool {
         .any(|e| e.kind == EntityKind::Pet && e.alive)
 }
 
+fn vendor_session_open(snap: &TickSnapshot) -> bool {
+    snap.open_vendor.is_some()
+        || snap.open_npc.as_ref().is_some_and(|npc| {
+            npc.services
+                .iter()
+                .any(|service| service.as_str() == "vendor")
+        })
+}
+
+pub(crate) fn tracked_quest_id(log: &[QuestLogEntry]) -> Option<&str> {
+    log.iter()
+        .find(|e| e.state.eq_ignore_ascii_case("active") || e.state.eq_ignore_ascii_case("ready"))
+        .map(|e| e.quest_id.as_str())
+}
+
+pub(crate) fn nearest_npc_template(snap: &TickSnapshot, range: f32) -> Option<(EntityId, String)> {
+    let player = snap.entities.iter().find(|e| e.id == snap.player_id)?;
+    let mut best: Option<(EntityId, f32, String)> = None;
+    for e in &snap.entities {
+        if e.kind != EntityKind::Npc || !e.alive {
+            continue;
+        }
+        let Some(template_id) = e.template_id.as_ref() else {
+            continue;
+        };
+        let dx = e.x - player.x;
+        let dz = e.z - player.z;
+        let d = (dx * dx + dz * dz).sqrt();
+        if d <= range && best.as_ref().map(|(_, bd, _)| d < *bd).unwrap_or(true) {
+            best = Some((e.id, d, template_id.clone()));
+        }
+    }
+    best.map(|(id, _, tid)| (id, tid))
+}
+
+pub(crate) fn choice_turn_in_for_npc(
+    template_id: &str,
+    log: &[QuestLogEntry],
+) -> Option<&'static woc_content::QuestDef> {
+    npc_quest_offers(template_id, log)
+        .turn_in
+        .into_iter()
+        .find(|q| !q.reward.choices.is_empty())
+}
+
+pub(crate) fn quest_interact_actions(
+    template_id: &str,
+    log: &[QuestLogEntry],
+) -> Vec<InteractAction> {
+    let offers = npc_quest_offers(template_id, log);
+    let mut out = Vec::new();
+    for q in offers.turn_in {
+        if !q.reward.choices.is_empty() {
+            continue;
+        }
+        out.push(InteractAction::TurnInQuest {
+            quest_id: q.id.to_string(),
+            reward_choice: None,
+        });
+    }
+    for q in offers.accept {
+        out.push(InteractAction::AcceptQuest {
+            quest_id: q.id.to_string(),
+        });
+    }
+    out
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
@@ -305,6 +384,18 @@ pub(crate) fn handle_interact_keys(
     }
 
     let player_id = host.snapshot.player_id;
+    if ui.show_quests && !ui.show_talents {
+        if keys.just_pressed(KeyCode::KeyX) {
+            if let Some(qid) = tracked_quest_id(&host.snapshot.quest_log).map(str::to_string) {
+                host.interact(player_id, InteractAction::AbandonQuest { quest_id: qid });
+            }
+        }
+        if keys.just_pressed(KeyCode::KeyY) {
+            if let Some(qid) = tracked_quest_id(&host.snapshot.quest_log).map(str::to_string) {
+                host.interact(player_id, InteractAction::ShareQuest { quest_id: qid });
+            }
+        }
+    }
     if ui.show_talents {
         let slot = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
             Some(0usize)
@@ -342,6 +433,18 @@ pub(crate) fn handle_interact_keys(
     if ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
         host.interact(player_id, InteractAction::RespecTalents);
         host.recent_toasts.push(("Respeccing talents.".into(), 2.0));
+    }
+    if !ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
+        if let Some(npc) = host
+            .snapshot
+            .open_npc
+            .as_ref()
+            .filter(|npc| npc.can_repair)
+            .cloned()
+        {
+            host.interact(npc.npc_id, InteractAction::RepairAll);
+            host.recent_toasts.push(("Repairing gear.".into(), 2.0));
+        }
     }
 
     // Pet toggle (hunter/warlock): T — when mail panel is closed so P stays mail-collect.
@@ -403,6 +506,10 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.recent_toasts.push(("Bank is empty.".into(), 2.0));
         }
+    }
+    if !ui.show_bank && keys.just_pressed(KeyCode::KeyH) {
+        host.interact(player_id, InteractAction::UseHearthstone);
+        host.recent_toasts.push(("Using hearthstone.".into(), 2.0));
     }
     if ui.show_bank {
         let bank_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
@@ -643,7 +750,7 @@ pub(crate) fn handle_interact_keys(
                 .push(("No consumable in bags.".into(), 2.0));
         }
     }
-    if ui.show_bags && host.snapshot.open_vendor.is_some() && keys.just_pressed(KeyCode::KeyV) {
+    if ui.show_bags && vendor_session_open(&host.snapshot) && keys.just_pressed(KeyCode::KeyV) {
         if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
             host.interact(player_id, InteractAction::Sell { bag_slot, count });
             host.recent_toasts
@@ -686,6 +793,38 @@ pub(crate) fn handle_interact_keys(
                     },
                 );
                 host.recent_toasts.push(("Passing on loot…".into(), 1.5));
+            }
+        }
+    }
+
+    let loot_busy = host.snapshot.pending_loot.iter().any(|p| !p.rolled);
+    if !loot_busy && !ui.show_talents && !ui.show_bank && !ui.show_bags && !ui.show_character {
+        if let Some((nid, template_id)) = nearest_npc_template(&host.snapshot, 5.0) {
+            if let Some(def) = choice_turn_in_for_npc(&template_id, &host.snapshot.quest_log) {
+                let idx = if keys.just_pressed(KeyCode::Digit1)
+                    || keys.just_pressed(KeyCode::Numpad1)
+                {
+                    Some(0u32)
+                } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2)
+                {
+                    Some(1)
+                } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3)
+                {
+                    Some(2)
+                } else {
+                    None
+                };
+                if let Some(reward_choice) = idx {
+                    if def.reward.choices.get(reward_choice as usize).is_some() {
+                        host.interact(
+                            nid,
+                            InteractAction::TurnInQuest {
+                                quest_id: def.id.to_string(),
+                                reward_choice: Some(reward_choice),
+                            },
+                        );
+                    }
+                }
             }
         }
     }
@@ -738,7 +877,7 @@ pub(crate) fn handle_interact_keys(
         return;
     }
 
-    let mut best: Option<(EntityId, f32, bool)> = None;
+    let mut best: Option<(EntityId, f32, Option<String>)> = None;
     for e in &host.snapshot.entities {
         if e.kind != EntityKind::Npc || !e.alive {
             continue;
@@ -746,72 +885,94 @@ pub(crate) fn handle_interact_keys(
         let dx = e.x - player.x;
         let dz = e.z - player.z;
         let d = (dx * dx + dz * dz).sqrt();
-        if d < 5.0 && best.map(|(_, bd, _)| d < bd).unwrap_or(true) {
-            best = Some((e.id, d, e.template_id.as_deref() == Some("captain_alden")));
+        if d < 5.0 && best.as_ref().map(|(_, bd, _)| d < *bd).unwrap_or(true) {
+            best = Some((e.id, d, e.template_id.clone()));
         }
     }
-    let Some((nid, _, is_alden)) = best else {
+    let Some((nid, _, template_id)) = best else {
         host.recent_toasts.push(("No NPC nearby.".into(), 2.0));
         return;
     };
 
     host.interact(nid, InteractAction::Talk);
 
-    if is_alden {
-        let log = host.snapshot.quest_log.clone();
-        let has_wolves = log.iter().any(|q| q.quest_id == "wolves_at_the_gate");
-        let wolves_ready = log
-            .iter()
-            .any(|q| q.quest_id == "wolves_at_the_gate" && q.state == "ready");
-        if wolves_ready {
-            host.interact(
-                nid,
-                InteractAction::TurnInQuest {
-                    quest_id: "wolves_at_the_gate".into(),
-                },
-            );
-        } else if !has_wolves {
-            host.interact(
-                nid,
-                InteractAction::AcceptQuest {
-                    quest_id: "wolves_at_the_gate".into(),
-                },
-            );
-        }
-        let has_boar = log.iter().any(|q| q.quest_id == "boar_tusks");
-        let boar_ready = log
-            .iter()
-            .any(|q| q.quest_id == "boar_tusks" && q.state == "ready");
-        if boar_ready {
-            host.interact(
-                nid,
-                InteractAction::TurnInQuest {
-                    quest_id: "boar_tusks".into(),
-                },
-            );
-        } else if !has_boar && has_wolves {
-            host.interact(
-                nid,
-                InteractAction::AcceptQuest {
-                    quest_id: "boar_tusks".into(),
-                },
-            );
+    if let Some(template_id) = template_id.as_deref() {
+        for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
+            host.interact(nid, action);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::quest_interact_actions;
     use super::*;
-    use woc_protocol::{InvSlotSnapshot, TalentRankSnapshot, TickSnapshot};
+    use woc_protocol::{InvSlotSnapshot, QuestLogEntry, TalentRankSnapshot, TickSnapshot};
+
+    #[test]
+    fn e_on_crier_accepts_report_only() {
+        let actions = quest_interact_actions("town_crier", &[]);
+        assert_eq!(
+            actions,
+            vec![InteractAction::AcceptQuest {
+                quest_id: "report_to_alden".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn e_on_alden_turns_in_then_accepts_next() {
+        let log = vec![QuestLogEntry {
+            quest_id: "report_to_alden".into(),
+            state: "ready".into(),
+            counts: vec![1],
+        }];
+        let actions = quest_interact_actions("captain_alden", &log);
+        assert_eq!(
+            actions,
+            vec![InteractAction::TurnInQuest {
+                quest_id: "report_to_alden".into(),
+                reward_choice: None,
+            }]
+        );
+
+        let log = vec![QuestLogEntry {
+            quest_id: "report_to_alden".into(),
+            state: "completed".into(),
+            counts: vec![1],
+        }];
+        let actions = quest_interact_actions("captain_alden", &log);
+        assert_eq!(
+            actions,
+            vec![InteractAction::AcceptQuest {
+                quest_id: "wolves_at_the_gate".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn e_skips_choice_reward_turn_in() {
+        let log = vec![QuestLogEntry {
+            quest_id: "arms_of_the_watch".into(),
+            state: "ready".into(),
+            counts: vec![1],
+        }];
+        let actions = quest_interact_actions("trader_wilkes", &log);
+        assert!(
+            actions
+                .iter()
+                .all(|a| !matches!(a, InteractAction::TurnInQuest { .. })),
+            "choice turn-in must not auto-fire on E: {actions:?}"
+        );
+    }
 
     #[test]
     fn first_available_talent_uses_class_and_skips_max_rank() {
         let mut snap = TickSnapshot::default();
         snap.progress.class_id = "warrior".into();
-        for id in ["warrior_cruelty", "warrior_toughness", "warrior_vitality"] {
+        for def in talents_for_class("warrior") {
             snap.talents.push(TalentRankSnapshot {
-                talent_id: id.into(),
+                talent_id: def.id.into(),
                 rank: 5,
             });
         }
@@ -848,11 +1009,13 @@ mod tests {
             slot: 0,
             item_id: "baked_bread".into(),
             count: 2,
+            durability: None,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
             item_id: "wolf_fang".into(),
             count: 3,
+            durability: None,
         });
 
         assert_eq!(

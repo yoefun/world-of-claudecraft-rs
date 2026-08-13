@@ -138,45 +138,124 @@ fn spawn_overhead_markers(
         return;
     };
     let y = spec.label_height + 0.25;
-    if def.is_quest_giver {
-        let mat = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.95, 0.82, 0.25),
-            emissive: LinearRgba::from(Color::srgb(0.9, 0.6, 0.1)),
-            ..default()
-        });
-        let stem = commands
-            .spawn((
-                OverheadMarker,
-                Mesh3d(meshes.add(Cuboid::new(0.12, 0.45, 0.12))),
-                MeshMaterial3d(mat.clone()),
-                Transform::from_xyz(0.0, y + 0.15, 0.0),
-            ))
-            .id();
-        let dot = commands
-            .spawn((
-                OverheadMarker,
-                Mesh3d(meshes.add(Sphere::new(0.08))),
-                MeshMaterial3d(mat),
-                Transform::from_xyz(0.0, y - 0.22, 0.0),
-            ))
-            .id();
-        commands.entity(parent).add_child(stem);
-        commands.entity(parent).add_child(dot);
-    } else if def.is_vendor {
-        let mat = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.35, 0.85, 0.45),
-            emissive: LinearRgba::from(Color::srgb(0.1, 0.4, 0.15)),
-            ..default()
-        });
-        let bag = commands
-            .spawn((
-                OverheadMarker,
-                Mesh3d(meshes.add(Cuboid::new(0.35, 0.28, 0.22))),
-                MeshMaterial3d(mat),
-                Transform::from_xyz(0.0, y, 0.0),
-            ))
-            .id();
-        commands.entity(parent).add_child(bag);
+    #[derive(Clone, Copy)]
+    enum Cue {
+        Quest,
+        Vendor,
+        Repair,
+        Trainer,
+        Hearth,
+    }
+    let mut cues = Vec::new();
+    if def.is_quest_giver() {
+        cues.push(Cue::Quest);
+    }
+    if def.is_vendor() {
+        cues.push(Cue::Vendor);
+    }
+    if def.can_repair() {
+        cues.push(Cue::Repair);
+    }
+    if def.is_profession_trainer() || def.is_class_trainer() {
+        cues.push(Cue::Trainer);
+    }
+    if def.is_innkeeper() {
+        cues.push(Cue::Hearth);
+    }
+    let total = cues.len() as f32;
+    for (idx, cue) in cues.into_iter().enumerate() {
+        let x = (idx as f32 - (total - 1.0) * 0.5) * 0.32;
+        match cue {
+            Cue::Quest => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.95, 0.82, 0.25),
+                    emissive: LinearRgba::from(Color::srgb(0.9, 0.6, 0.1)),
+                    ..default()
+                });
+                let stem = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.12, 0.45, 0.12))),
+                        MeshMaterial3d(mat.clone()),
+                        Transform::from_xyz(x, y + 0.15, 0.0),
+                    ))
+                    .id();
+                let dot = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Sphere::new(0.08))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y - 0.22, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(stem);
+                commands.entity(parent).add_child(dot);
+            }
+            Cue::Vendor => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.35, 0.85, 0.45),
+                    emissive: LinearRgba::from(Color::srgb(0.1, 0.4, 0.15)),
+                    ..default()
+                });
+                let bag = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.32, 0.26, 0.22))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(bag);
+            }
+            Cue::Repair => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.75, 0.78, 0.82),
+                    emissive: LinearRgba::from(Color::srgb(0.25, 0.28, 0.32)),
+                    ..default()
+                });
+                let hammer = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.34, 0.12, 0.12))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(hammer);
+            }
+            Cue::Trainer => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.35, 0.62, 0.95),
+                    emissive: LinearRgba::from(Color::srgb(0.08, 0.18, 0.45)),
+                    ..default()
+                });
+                let book = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.28, 0.2, 0.18))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(book);
+            }
+            Cue::Hearth => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.95, 0.45, 0.25),
+                    emissive: LinearRgba::from(Color::srgb(0.5, 0.12, 0.04)),
+                    ..default()
+                });
+                let hearth = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Sphere::new(0.15))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(hearth);
+            }
+        }
     }
 }
 
