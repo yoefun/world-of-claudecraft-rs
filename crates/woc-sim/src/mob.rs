@@ -174,7 +174,9 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
 
     let mut just_engaged = false;
     let current_target = world.get::<Combat>(mob_id).and_then(|c| c.target);
-    if current_target.is_none() && d_player <= AGGRO_RANGE {
+    let stealthed = crate::combat::is_stealthed(world, player_id);
+    let can_see = !(stealthed && d_player > MELEE_RANGE);
+    if current_target.is_none() && d_player <= AGGRO_RANGE && can_see {
         if let Some(c) = world.get_mut::<Combat>(mob_id) {
             c.target = Some(player_id);
         }
@@ -388,5 +390,43 @@ mod tests {
         assert!((t.x - home.home_x).abs() < 1e-3);
         let h = world.get::<Health>(2).unwrap();
         assert!((h.hp - h.hp_max).abs() < 1e-3);
+    }
+
+    #[test]
+    fn stealth_skips_wolf_aggro_at_range() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Rogue", PlayerClass::Rogue, 8.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(kit) = world.get_mut::<crate::ecs::components::ClassKit>(1) {
+            kit.stealthed = true;
+        }
+        let before = world.get::<Transform>(2).unwrap().x;
+        update_mob_ai(&mut world, 2, 1);
+        assert!(
+            world.get::<Combat>(2).unwrap().target.is_none(),
+            "stealthed player outside melee must not pull"
+        );
+        assert!((world.get::<Transform>(2).unwrap().x - before).abs() < 1e-3);
+    }
+
+    #[test]
+    fn stealth_breaks_when_wolf_hits_in_melee() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Rogue", PlayerClass::Rogue, 1.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(kit) = world.get_mut::<crate::ecs::components::ClassKit>(1) {
+            kit.stealthed = true;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
+        let mut events = Vec::new();
+        crate::combat::update_mob_combat(2, 1, &mut world, &mut events);
+        assert!(
+            !world
+                .get::<crate::ecs::components::ClassKit>(1)
+                .unwrap()
+                .stealthed,
+            "melee hit breaks stealth"
+        );
     }
 }

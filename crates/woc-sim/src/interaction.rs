@@ -381,6 +381,8 @@ fn use_item_from_bag(
             source: player_id,
             stun: false,
             move_mult: 1.0,
+            absorb: 0.0,
+            breaks_on_damage: false,
         },
         events,
     );

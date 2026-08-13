@@ -211,6 +211,7 @@ fn spawn_boss_shell(world: &mut World, id: EntityId, def: &DungeonDef, instance_
             target: None,
             gcd: 0.0,
             cast: None,
+            cast_lockout: 0.0,
         },
     );
     world.insert(id, crate::ecs::components::Auras { auras: Vec::new() });

@@ -820,6 +820,18 @@ impl Sim {
                 .get::<Bank>(player_id)
                 .map(|b| b.bank_copper)
                 .unwrap_or(0),
+            combo_points: world
+                .get::<ClassKit>(player_id)
+                .map(|k| k.combo_points)
+                .unwrap_or(0),
+            stealthed: world
+                .get::<ClassKit>(player_id)
+                .is_some_and(|k| k.stealthed),
+            stance_id: world
+                .get::<ClassKit>(player_id)
+                .and_then(|k| k.stance_id.clone())
+                .unwrap_or_default(),
+            absorb: crate::combat::remaining_absorb(world, player_id),
         }
     }
 
@@ -1580,6 +1592,27 @@ mod tests {
         assert_eq!(snap.ability_bar[1].ability_id, "cleave");
         assert!(!snap.ability_bar[1].known, "cleave gated above level 1");
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
+        assert_eq!(snap.combo_points, 0);
+        assert!(!snap.stealthed);
+        assert!(snap.stance_id.is_empty());
+        assert_eq!(snap.absorb, 0.0);
+    }
+
+    #[test]
+    fn toggle_stealth_rogue_only() {
+        let mut rogue = Sim::new_eastbrook("Sneak", PlayerClass::Rogue);
+        let pid = rogue.player_id;
+        woc_protocol::WorldHost::interact(&mut rogue, pid, pid, InteractAction::ToggleStealth);
+        assert!(rogue.world.get::<ClassKit>(pid).unwrap().stealthed);
+        let snap = rogue.snapshot_for_player(pid);
+        assert!(snap.stealthed);
+        woc_protocol::WorldHost::interact(&mut rogue, pid, pid, InteractAction::ToggleStealth);
+        assert!(!rogue.world.get::<ClassKit>(pid).unwrap().stealthed);
+
+        let mut warrior = Sim::new_eastbrook("Tank", PlayerClass::Warrior);
+        let wid = warrior.player_id;
+        woc_protocol::WorldHost::interact(&mut warrior, wid, wid, InteractAction::ToggleStealth);
+        assert!(!warrior.world.get::<ClassKit>(wid).unwrap().stealthed);
     }
 
     #[test]

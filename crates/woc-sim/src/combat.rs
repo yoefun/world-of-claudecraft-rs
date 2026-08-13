@@ -9,7 +9,7 @@ use crate::ecs::World;
 use crate::rng::Rng;
 use crate::types::{
     CRIT_CHANCE, CRIT_MULT, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
-    RANGED_FALLBACK,
+    RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT,
 };
 use woc_content::{
     ability, aura_for_ability, class_ability_for_slot, mob, AbilityDef, AbilityEffect, ResourceType,
@@ -90,9 +90,13 @@ pub fn is_stunned(world: &World, id: EntityId) -> bool {
         .is_some_and(|store| store.auras.iter().any(|a| a.stun && a.remaining > 0.0))
 }
 
-/// Strongest (lowest) move multiplier from remaining auras. `1.0` if none.
+pub fn is_stealthed(world: &World, id: EntityId) -> bool {
+    world.get::<ClassKit>(id).is_some_and(|k| k.stealthed)
+}
+
+/// Strongest (lowest) move multiplier from remaining auras, then stealth.
 pub fn move_speed_mult(world: &World, id: EntityId) -> f32 {
-    world
+    let aura_mult = world
         .get::<Auras>(id)
         .map(|store| {
             store
@@ -103,7 +107,41 @@ pub fn move_speed_mult(world: &World, id: EntityId) -> f32 {
                 .fold(1.0_f32, f32::min)
         })
         .unwrap_or(1.0)
-        .clamp(0.0, 1.0)
+        .clamp(0.0, 1.0);
+    if is_stealthed(world, id) {
+        aura_mult.min(STEALTH_MOVE_MULT)
+    } else {
+        aura_mult
+    }
+}
+
+pub fn remaining_absorb(world: &World, id: EntityId) -> f32 {
+    world
+        .get::<Auras>(id)
+        .map(|store| store.auras.iter().map(|a| a.absorb.max(0.0)).sum())
+        .unwrap_or(0.0)
+}
+
+pub fn toggle_stealth(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
+    let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
+    if class != Some(woc_content::PlayerClass::Rogue) {
+        events.push(SimEvent::Toast {
+            message: "You cannot stealth.".into(),
+        });
+        return;
+    }
+    let Some(kit) = world.get_mut::<ClassKit>(player_id) else {
+        return;
+    };
+    kit.stealthed = !kit.stealthed;
+    let message = if kit.stealthed {
+        "You enter stealth."
+    } else {
+        "You leave stealth."
+    };
+    events.push(SimEvent::Toast {
+        message: message.into(),
+    });
 }
 
 #[derive(Clone, Copy)]
@@ -128,6 +166,10 @@ fn is_hot_ability(def: &AbilityDef) -> bool {
     aura_for_ability(def.id).is_some_and(|a| a.is_hot())
 }
 
+fn is_self_buff_ability(def: &AbilityDef) -> bool {
+    aura_for_ability(def.id).is_some_and(|a| a.is_self_buff())
+}
+
 fn target_hp_pct(world: &World, id: EntityId) -> Option<f32> {
     let h = world.get::<Health>(id)?;
     (h.hp_max > 1e-3).then_some(h.hp / h.hp_max)
@@ -141,7 +183,10 @@ fn aim_ability(
     hostile: Option<EntityId>,
 ) -> Option<AbilityAim> {
     match def.effect {
-        AbilityEffect::Heal { .. } => Some(AbilityAim::Help(heal_target(world, src, requested))),
+        AbilityEffect::Heal { .. } | AbilityEffect::Absorb { .. } => {
+            Some(AbilityAim::Help(heal_target(world, src, requested)))
+        }
+        AbilityEffect::Blink { .. } | AbilityEffect::Convert { .. } => Some(AbilityAim::Help(src)),
         AbilityEffect::HealOrHarm { .. } => {
             if let Some(tid) = hostile {
                 Some(AbilityAim::Harm(tid))
@@ -154,9 +199,10 @@ fn aim_ability(
             let pct = target_hp_pct(world, tid)?;
             (pct <= hp_pct).then_some(AbilityAim::Harm(tid))
         }
-        AbilityEffect::ApplyAura if is_hot_ability(def) => {
+        AbilityEffect::ApplyAura if is_hot_ability(def) || is_self_buff_ability(def) => {
             Some(AbilityAim::Help(heal_target(world, src, requested)))
         }
+        AbilityEffect::AoeDamage { .. } if def.flags.self_aoe => Some(AbilityAim::Help(src)),
         _ => hostile.map(AbilityAim::Harm),
     }
 }
@@ -222,19 +268,53 @@ pub fn deal_damage(
         .unwrap_or(1.0);
     let armor = world.get::<Combat>(target).map(|c| c.armor).unwrap_or(0.0);
     let mitigated = (amount * talent_mult - armor * 0.05).max(1.0);
-    let Some(health) = world.get_mut::<Health>(target) else {
-        return;
-    };
-    health.hp = (health.hp - mitigated).max(0.0);
-    let died = health.hp <= 0.0;
-    if died {
-        health.alive = false;
+
+    let mut remaining = mitigated;
+    let mut popped = Vec::new();
+    if let Some(store) = world.get_mut::<Auras>(target) {
+        for aura in store.auras.iter_mut() {
+            if remaining <= 0.0 {
+                break;
+            }
+            if aura.absorb > 0.0 {
+                let soak = remaining.min(aura.absorb);
+                aura.absorb -= soak;
+                remaining -= soak;
+                if aura.absorb <= 1e-4 {
+                    popped.push(aura.id.clone());
+                }
+            }
+        }
+        store.auras.retain(|a| !popped.iter().any(|id| id == &a.id));
+        store.auras.retain(|a| !a.breaks_on_damage);
+    }
+
+    if remaining > 0.0 {
+        let Some(health) = world.get_mut::<Health>(target) else {
+            return;
+        };
+        health.hp = (health.hp - remaining).max(0.0);
+        let died = health.hp <= 0.0;
+        if died {
+            health.alive = false;
+        }
+    }
+    let died = world.get::<Health>(target).is_some_and(|h| !h.alive);
+    if remaining > 0.0 {
+        if let Some(kit) = world.get_mut::<ClassKit>(target) {
+            if kit.resource_type == Some(ResourceType::Rage) {
+                gain_resource(kit, remaining * RAGE_FROM_TAKEN);
+            }
+        }
+    }
+    if let Some(kit) = world.get_mut::<ClassKit>(target) {
+        kit.stealthed = false;
     }
     add_threat(world, target, source, mitigated);
     events.push(SimEvent::Damage {
         source,
         target,
-        amount: mitigated,
+        amount: remaining.max(0.0),
         ability: ability_name.map(|s| s.to_string()),
     });
     if died {
@@ -270,6 +350,8 @@ pub fn apply_aura(
             existing.source = aura.source;
             existing.stun = aura.stun;
             existing.move_mult = aura.move_mult;
+            existing.absorb = existing.absorb.max(aura.absorb);
+            existing.breaks_on_damage = aura.breaks_on_damage;
         } else {
             store.auras.push(aura);
         }
@@ -311,6 +393,8 @@ fn apply_ability_aura(
             source,
             stun: def.stun,
             move_mult: def.move_mult,
+            absorb: def.absorb,
+            breaks_on_damage: def.breaks_on_damage,
         },
         events,
     );
@@ -360,6 +444,7 @@ fn apply_direct_damage(
             }
             deal_damage(world, src, tid, amount, Some(def.name), events);
             apply_ability_aura(world, src, tid, def.id, events);
+            add_combo_on_hit(world, src, def);
         }
     }
 }
@@ -446,6 +531,130 @@ fn is_living_friendly(world: &World, src: EntityId, tid: EntityId) -> bool {
     world.get::<ClassKit>(tid).is_some() && !is_living_hostile(world, src, tid)
 }
 
+fn add_combo_on_hit(world: &mut World, src: EntityId, def: &AbilityDef) {
+    if def.flags.combo_add == 0 {
+        return;
+    }
+    if let Some(kit) = world.get_mut::<ClassKit>(src) {
+        kit.combo_points = kit.combo_points.saturating_add(def.flags.combo_add).min(5);
+    }
+}
+
+fn consume_combo_and_rage_scale(world: &mut World, src: EntityId, def: &AbilityDef) -> f32 {
+    let mut scale = 1.0;
+    if def.flags.combo_spend {
+        let combo = world
+            .get::<ClassKit>(src)
+            .map(|k| k.combo_points)
+            .unwrap_or(0);
+        scale *= 1.0 + def.flags.combo_per_point * f32::from(combo);
+        if let Some(kit) = world.get_mut::<ClassKit>(src) {
+            kit.combo_points = 0;
+        }
+    }
+    if def.flags.rage_dump {
+        if let Some(kit) = world.get_mut::<ClassKit>(src) {
+            let spent = kit.resource;
+            kit.resource = 0.0;
+            if kit.resource_max > 1e-3 {
+                scale *= 1.0 + spent / kit.resource_max;
+            }
+        }
+    }
+    scale
+}
+
+fn apply_charge(
+    world: &mut World,
+    rng: &mut Rng,
+    src: EntityId,
+    tid: EntityId,
+    def: &AbilityDef,
+    gap: f32,
+    base: f32,
+    events: &mut Vec<SimEvent>,
+) {
+    let d = dist2d_ids(world, src, tid);
+    if d > gap + 1e-3 {
+        events.push(SimEvent::Toast {
+            message: "Out of range.".into(),
+        });
+        return;
+    }
+    if d > MELEE_RANGE {
+        let Some(target) = world.get::<Transform>(tid).copied() else {
+            return;
+        };
+        let speed = (gap / DT).max(crate::types::RUN_SPEED);
+        let _ = crate::entity_motion::step_toward(world, src, target.x, target.z, speed);
+        if dist2d_ids(world, src, tid) > MELEE_RANGE {
+            events.push(SimEvent::Toast {
+                message: "Charge blocked.".into(),
+            });
+            return;
+        }
+    }
+    apply_direct_damage(world, rng, src, tid, def, base, events);
+}
+
+fn apply_blink(world: &mut World, src: EntityId, distance: f32) {
+    let Some(t) = world.get::<Transform>(src).copied() else {
+        return;
+    };
+    let wish_x = t.x + distance * t.yaw.sin();
+    let wish_z = t.z + distance * t.yaw.cos();
+    let (nx, nz) = crate::world::clamp_to_world(wish_x, wish_z);
+    let ny = crate::world::ground_height(nx, nz, crate::world::WORLD_SEED);
+    if let Some(t) = world.get_mut::<Transform>(src) {
+        t.x = nx;
+        t.z = nz;
+        t.y = ny;
+    }
+}
+
+fn apply_convert(
+    world: &mut World,
+    src: EntityId,
+    hp_cost: f32,
+    resource_gain: f32,
+    events: &mut Vec<SimEvent>,
+) {
+    if let Some(health) = world.get_mut::<Health>(src) {
+        if !health.alive {
+            return;
+        }
+        health.hp = (health.hp - hp_cost).max(1.0);
+    }
+    if let Some(kit) = world.get_mut::<ClassKit>(src) {
+        gain_resource(kit, resource_gain);
+    }
+    events.push(SimEvent::Toast {
+        message: "Life Tap.".into(),
+    });
+}
+
+fn apply_absorb_shield(
+    world: &mut World,
+    src: EntityId,
+    requested: Option<EntityId>,
+    def: &AbilityDef,
+    amount: f32,
+    events: &mut Vec<SimEvent>,
+) {
+    let tid = heal_target(world, src, requested);
+    apply_ability_aura(world, src, tid, def.id, events);
+    if let Some(store) = world.get_mut::<Auras>(tid) {
+        if let Some(aura) = store
+            .auras
+            .iter_mut()
+            .rev()
+            .find(|a| def.aura.is_some_and(|id| a.id == id))
+        {
+            aura.absorb = amount;
+        }
+    }
+}
+
 pub fn apply_ability_effect(
     world: &mut World,
     rng: &mut Rng,
@@ -468,29 +677,43 @@ pub fn apply_ability_effect(
             gain_resource(kit, 5.0);
         }
     }
+    let dmg_scale = consume_combo_and_rage_scale(world, src, def);
 
     match def.effect {
         AbilityEffect::WeaponDamage { coefficient } => {
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_direct_damage(world, rng, src, tid, def, weapon * coefficient, events);
+            apply_direct_damage(
+                world,
+                rng,
+                src,
+                tid,
+                def,
+                weapon * coefficient * dmg_scale,
+                events,
+            );
         }
         AbilityEffect::SpellDamage { .. } => {
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_direct_damage(world, rng, src, tid, def, weapon, events);
+            apply_direct_damage(world, rng, src, tid, def, weapon * dmg_scale, events);
         }
         AbilityEffect::AoeDamage {
             radius,
             max_targets,
         } => {
-            let Some(primary) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
-                return;
+            let primary = if def.flags.self_aoe {
+                src
+            } else {
+                match requested.filter(|&t| is_living_hostile(world, src, t)) {
+                    Some(tid) => tid,
+                    None => return,
+                }
             };
             let hit = roll_player_hit(world, rng, src);
-            let Some(amount) = scale_hit(weapon, hit) else {
+            let Some(amount) = scale_hit(weapon * dmg_scale, hit) else {
                 toast_miss(events, def.name);
                 return;
             };
@@ -501,6 +724,9 @@ pub fn apply_ability_effect(
                 crate::talents::talent_bonus(world, src, "cleave_targets_plus").max(0.0) as u32;
             let cap = max_targets.saturating_add(extra);
             for tid in aoe_targets(world, src, primary, radius, cap) {
+                if tid == src {
+                    continue;
+                }
                 deal_damage(world, src, tid, amount, Some(def.name), events);
                 apply_ability_aura(world, src, tid, def.id, events);
             }
@@ -511,7 +737,15 @@ pub fn apply_ability_effect(
         }
         AbilityEffect::HealOrHarm { coefficient } => {
             if let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) {
-                apply_direct_damage(world, rng, src, tid, def, weapon * coefficient, events);
+                apply_direct_damage(
+                    world,
+                    rng,
+                    src,
+                    tid,
+                    def,
+                    weapon * coefficient * dmg_scale,
+                    events,
+                );
             } else {
                 let tid = heal_target(world, src, requested);
                 apply_direct_heal(world, rng, src, tid, def, coefficient, events);
@@ -530,23 +764,41 @@ pub fn apply_ability_effect(
             if pct > hp_pct {
                 return;
             }
-            apply_direct_damage(world, rng, src, tid, def, weapon * coefficient, events);
+            apply_direct_damage(
+                world,
+                rng,
+                src,
+                tid,
+                def,
+                weapon * coefficient * dmg_scale,
+                events,
+            );
         }
         AbilityEffect::ApplyAura => {
-            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
-                return;
+            let tid = if is_hot_ability(def) || is_self_buff_ability(def) {
+                heal_target(world, src, requested)
+            } else {
+                match requested.filter(|&t| is_living_hostile(world, src, t)) {
+                    Some(tid) => tid,
+                    None => return,
+                }
             };
-            let hit = roll_player_hit(world, rng, src);
-            if let Some(amount) = scale_hit(weapon.max(1.0), hit) {
-                if hit == HitResult::Crit {
-                    toast_crit(events, def.name);
-                }
-                if def.damage > 0.0 {
-                    deal_damage(world, src, tid, amount, Some(def.name), events);
-                }
+            if is_hot_ability(def) || is_self_buff_ability(def) {
                 apply_ability_aura(world, src, tid, def.id, events);
             } else {
-                toast_miss(events, def.name);
+                let hit = roll_player_hit(world, rng, src);
+                if let Some(amount) = scale_hit(weapon.max(1.0) * dmg_scale, hit) {
+                    if hit == HitResult::Crit {
+                        toast_crit(events, def.name);
+                    }
+                    if def.damage > 0.0 {
+                        deal_damage(world, src, tid, amount, Some(def.name), events);
+                    }
+                    apply_ability_aura(world, src, tid, def.id, events);
+                    add_combo_on_hit(world, src, def);
+                } else {
+                    toast_miss(events, def.name);
+                }
             }
         }
         AbilityEffect::Interrupt => {
@@ -555,11 +807,12 @@ pub fn apply_ability_effect(
             };
             if let Some(c) = world.get_mut::<Combat>(tid) {
                 c.cast = None;
+                c.cast_lockout = def.flags.interrupt_lockout.max(1.5);
             }
             events.push(SimEvent::Toast {
                 message: format!("{name} interrupts!", name = def.name),
             });
-            apply_direct_damage(world, rng, src, tid, def, weapon, events);
+            apply_direct_damage(world, rng, src, tid, def, weapon * dmg_scale, events);
         }
         AbilityEffect::Taunt { threat } => {
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
@@ -572,6 +825,27 @@ pub fn apply_ability_effect(
             events.push(SimEvent::Toast {
                 message: format!("{name} taunts.", name = def.name),
             });
+        }
+        AbilityEffect::Absorb { amount } => {
+            apply_absorb_shield(world, src, requested, def, amount, events);
+        }
+        AbilityEffect::Charge { gap } => {
+            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            apply_charge(world, rng, src, tid, def, gap, weapon * dmg_scale, events);
+        }
+        AbilityEffect::Blink { distance } => {
+            apply_blink(world, src, distance);
+            events.push(SimEvent::Toast {
+                message: "Blink.".into(),
+            });
+        }
+        AbilityEffect::Convert {
+            hp_cost,
+            resource_gain,
+        } => {
+            apply_convert(world, src, hp_cost, resource_gain, events);
         }
     }
 }
@@ -1039,6 +1313,9 @@ pub fn update_player_combat(
     if combat.gcd > 0.0 {
         combat.gcd = (combat.gcd - DT).max(0.0);
     }
+    if combat.cast_lockout > 0.0 {
+        combat.cast_lockout = (combat.cast_lockout - DT).max(0.0);
+    }
 
     if is_stunned(world, player_id) {
         combat.cast = None;
@@ -1104,11 +1381,15 @@ pub fn update_player_combat(
             }
         }
     } else if let Some(slot) = ability_slot {
-        if combat.gcd <= 0.0 {
+        if combat.gcd <= 0.0 && combat.cast_lockout <= 0.0 {
             if let Some(def) = resolve_slot_ability(&kit, slot) {
                 let abil_id = def.id;
                 let abil_range = def.range.max(RANGED_FALLBACK.min(def.range));
-                if let Some(aim) = aim_ability(world, player_id, def, tid, hostile) {
+                if def.flags.requires_stealth && !kit.stealthed {
+                    events.push(SimEvent::Toast {
+                        message: "Must be stealthed.".into(),
+                    });
+                } else if let Some(aim) = aim_ability(world, player_id, def, tid, hostile) {
                     let aim_tid = aim.target();
                     let in_slot_range =
                         aim_tid == player_id || dist2d_ids(world, player_id, aim_tid) <= abil_range;
@@ -1116,6 +1397,9 @@ pub fn update_player_combat(
                         && !ability_on_cd(&kit, abil_id)
                         && spend_resource(&mut kit, def.cost)
                     {
+                        if def.flags.breaks_stealth {
+                            kit.stealthed = false;
+                        }
                         start_ability_cd(&mut kit, &mut combat, abil_id, def.cooldown);
                         combat.gcd = GCD_SEC;
                         if aim.starts_auto_attack() {
@@ -1200,6 +1484,11 @@ pub fn update_mob_combat(
     if is_stunned(world, mob_id) {
         return;
     }
+    if let Some(c) = world.get_mut::<Combat>(mob_id) {
+        if c.cast_lockout > 0.0 {
+            c.cast_lockout = (c.cast_lockout - DT).max(0.0);
+        }
+    }
     let yaw = face_toward_ids(world, mob_id, focus);
     if let Some(t) = world.get_mut::<Transform>(mob_id) {
         t.yaw = yaw;
@@ -1221,7 +1510,7 @@ pub fn update_mob_combat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Auras, ClassKit, Combat, Health};
+    use crate::ecs::components::{Auras, ClassKit, Combat, Health, Transform};
     use woc_content::PlayerClass;
     use woc_protocol::AbilitySlot;
 
@@ -1341,6 +1630,8 @@ mod tests {
                     source: 1,
                     stun: false,
                     move_mult: 1.0,
+                    absorb: 0.0,
+                    breaks_on_damage: false,
                 }],
             },
         );
@@ -1370,6 +1661,8 @@ mod tests {
                     source: 1,
                     stun: false,
                     move_mult: 1.0,
+                    absorb: 0.0,
+                    breaks_on_damage: false,
                 }],
             },
         );
@@ -1880,6 +2173,9 @@ mod tests {
     #[test]
     fn cheap_shot_stuns_mob() {
         let mut world = class_and_mob(PlayerClass::Rogue, 6);
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.stealthed = true;
+        }
         fire_slot(&mut world, AbilitySlot::Slot3);
         assert!(is_stunned(&world, 2), "cheap shot stuns");
         let player_hp = world.get::<Health>(1).unwrap().hp;
@@ -1944,5 +2240,232 @@ mod tests {
                 "{class:?} heal slot should restore HP"
             );
         }
+    }
+
+    #[test]
+    fn absorb_soaks_damage_before_hp() {
+        let mut world = player_and_mob();
+        world.insert(
+            2,
+            Auras {
+                auras: vec![AuraInstance {
+                    id: "power_word_shield".into(),
+                    remaining: 15.0,
+                    stacks: 1,
+                    tick_timer: 99.0,
+                    tick_interval: 0.0,
+                    tick_damage: 0.0,
+                    tick_heal: 0.0,
+                    source: 1,
+                    stun: false,
+                    move_mult: 1.0,
+                    absorb: 30.0,
+                    breaks_on_damage: false,
+                }],
+            },
+        );
+        let start_hp = world.get::<Health>(2).unwrap().hp;
+        let mut events = Vec::new();
+        deal_damage(&mut world, 1, 2, 20.0, Some("Smite"), &mut events);
+        assert_eq!(world.get::<Health>(2).unwrap().hp, start_hp);
+        let absorb = world.get::<Auras>(2).unwrap().auras[0].absorb;
+        assert!(absorb < 30.0 && absorb > 0.0, "partial soak, left {absorb}");
+    }
+
+    #[test]
+    fn interrupt_sets_cast_lockout() {
+        let mut world = class_and_mob(PlayerClass::Shaman, 3);
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.cast = Some(CastState {
+                ability_id: "bite".into(),
+                elapsed: 0.2,
+                duration: 2.0,
+                target: 1,
+            });
+        }
+        fire_slot(&mut world, AbilitySlot::Slot2);
+        assert!(world.get::<Combat>(2).unwrap().cast.is_none());
+        assert!(world.get::<Combat>(2).unwrap().cast_lockout >= 1.5 - 1e-3);
+    }
+
+    #[test]
+    fn self_aoe_fires_without_hostile_target() {
+        let mut world = class_and_mob(PlayerClass::Mage, 3);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        let start = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Slot4);
+        assert!(
+            world.get::<Health>(2).unwrap().hp < start,
+            "frost nova should hit nearby wolves without a target"
+        );
+        assert!(world
+            .get::<Auras>(2)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "chill"));
+    }
+
+    #[test]
+    fn rage_increases_when_warrior_is_hit() {
+        let mut world = player_and_mob();
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        let mut events = Vec::new();
+        deal_damage(&mut world, 2, 1, 40.0, None, &mut events);
+        assert!(
+            world.get::<ClassKit>(1).unwrap().resource > 0.0,
+            "warrior should gain rage from taken damage"
+        );
+    }
+
+    #[test]
+    fn execute_dumps_remaining_rage() {
+        let mut world = class_and_mob(PlayerClass::Warrior, 6);
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 80.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 25.0;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot3);
+        let low_rage_hp = world.get::<Health>(2).unwrap().hp;
+        assert!(low_rage_hp < 80.0);
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 80.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.gcd = 0.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 100.0;
+            kit.ability_cds.clear();
+        }
+        fire_slot(&mut world, AbilitySlot::Slot3);
+        let dumped = world.get::<Health>(2).unwrap().hp;
+        assert!(
+            dumped < low_rage_hp,
+            "dumping leftover rage should increase execute damage"
+        );
+        assert_eq!(world.get::<ClassKit>(1).unwrap().resource, 0.0);
+    }
+
+    #[test]
+    fn combo_builder_and_spend() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 3);
+        fire_slot(&mut world, AbilitySlot::Primary);
+        assert_eq!(world.get::<ClassKit>(1).unwrap().combo_points, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.gcd = 0.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 200.0;
+            kit.ability_cds.clear();
+        }
+        fire_slot(&mut world, AbilitySlot::Primary);
+        assert_eq!(world.get::<ClassKit>(1).unwrap().combo_points, 2);
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 500.0;
+        }
+        let before = world.get::<Health>(2).unwrap().hp;
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.gcd = 0.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 200.0;
+            kit.ability_cds.clear();
+            kit.combo_points = 5;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot2);
+        assert_eq!(world.get::<ClassKit>(1).unwrap().combo_points, 0);
+        assert!(world.get::<Health>(2).unwrap().hp < before);
+    }
+
+    #[test]
+    fn charge_closes_gap_then_hits() {
+        let mut world = player_and_mob();
+        if let Some(t) = world.get_mut::<Transform>(1) {
+            t.x = 0.0;
+            t.z = 0.0;
+        }
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 8.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        let start_x = world.get::<Transform>(1).unwrap().x;
+        let start_hp = world.get::<Health>(2).unwrap().hp;
+        let def = ability("charge").expect("charge");
+        let mut events = Vec::new();
+        apply_ability_effect(&mut world, &mut hit_rng(), 1, def, &mut events);
+        assert!(
+            world.get::<Transform>(1).unwrap().x > start_x + 0.5,
+            "charge should close toward the wolf"
+        );
+        assert!(world.get::<Health>(2).unwrap().hp < start_hp);
+        assert!(dist2d_ids(&world, 1, 2) <= MELEE_RANGE + 0.15);
+    }
+
+    #[test]
+    fn blink_displaces_along_facing() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Mage", PlayerClass::Mage, 0.0, 0.0);
+        if let Some(t) = world.get_mut::<Transform>(1) {
+            t.yaw = 0.0;
+        }
+        let start = world.get::<Transform>(1).copied().unwrap();
+        let def = ability("blink").expect("blink");
+        let mut events = Vec::new();
+        apply_ability_effect(&mut world, &mut hit_rng(), 1, def, &mut events);
+        let after = world.get::<Transform>(1).unwrap();
+        let dz = after.z - start.z;
+        assert!(
+            dz.abs() > 5.0,
+            "blink along yaw 0 should move on +z, got dz={dz}"
+        );
+    }
+
+    #[test]
+    fn life_tap_converts_hp_to_mana() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Lock", PlayerClass::Warlock, 0.0, 0.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.hp = 80.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 20.0;
+        }
+        let def = ability("life_tap").expect("life_tap");
+        let mut events = Vec::new();
+        apply_ability_effect(&mut world, &mut hit_rng(), 1, def, &mut events);
+        assert!(world.get::<Health>(1).unwrap().hp < 80.0);
+        assert!(world.get::<Health>(1).unwrap().hp >= 1.0);
+        assert!(world.get::<ClassKit>(1).unwrap().resource > 20.0);
+    }
+
+    #[test]
+    fn cheap_shot_requires_stealth() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 6);
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.stealthed = false;
+        }
+        let start = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Slot3);
+        assert_eq!(world.get::<Health>(2).unwrap().hp, start);
+        assert!(!is_stunned(&world, 2));
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.stealthed = true;
+            kit.resource = 200.0;
+            kit.ability_cds.clear();
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.gcd = 0.0;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot3);
+        assert!(is_stunned(&world, 2));
+        assert!(!world.get::<ClassKit>(1).unwrap().stealthed);
     }
 }

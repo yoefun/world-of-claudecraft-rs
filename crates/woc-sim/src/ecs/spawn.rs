@@ -82,6 +82,7 @@ fn insert_combat_blank(world: &mut World, id: EntityId, attack_damage: f32) {
             target: None,
             gcd: 0.0,
             cast: None,
+            cast_lockout: 0.0,
         },
     );
     world.insert(id, Auras { auras: Vec::new() });
@@ -141,6 +142,9 @@ pub fn create_player(
             primary_ability: Some(def.primary_ability.to_string()),
             known_abilities: Vec::new(),
             ability_cds: HashMap::new(),
+            combo_points: 0,
+            stealthed: false,
+            stance_id: None,
         },
     );
     let mut inventory = vec![None; BACKPACK_SLOTS];
@@ -284,6 +288,7 @@ pub fn create_pet(
             target: None,
             gcd: 0.0,
             cast: None,
+            cast_lockout: 0.0,
         },
     );
     world.insert(id, Auras { auras: Vec::new() });

@@ -143,6 +143,19 @@ impl WorldHost for Sim {
             InteractAction::LeaveInstance => {
                 let _ = leave_instance(&mut self.world, player_id, &mut self.events);
             }
+            InteractAction::ToggleStealth => {
+                crate::combat::toggle_stealth(&mut self.world, player_id, &mut self.events);
+            }
+            InteractAction::CycleStance => {
+                self.events.push(SimEvent::Toast {
+                    message: "You cannot change stance.".into(),
+                });
+            }
+            InteractAction::ToggleForm => {
+                self.events.push(SimEvent::Toast {
+                    message: "You cannot change form.".into(),
+                });
+            }
             InteractAction::LootNeed { loot_id } => {
                 self.roll_loot(loot_id, player_id, RollChoice::Need);
             }

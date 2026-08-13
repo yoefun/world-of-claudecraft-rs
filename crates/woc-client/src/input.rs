@@ -344,6 +344,15 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Summoning pet…".into(), 1.5));
         }
     }
+    // Rogue stealth (Z). Other classes toast from the sim.
+    if !ui.show_mail
+        && !ui.show_bank
+        && !ui.show_market
+        && !ui.show_talents
+        && keys.just_pressed(KeyCode::KeyZ)
+    {
+        host.interact(player_id, InteractAction::ToggleStealth);
+    }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
         if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
             host.interact(player_id, InteractAction::BankDeposit { bag_slot, count });

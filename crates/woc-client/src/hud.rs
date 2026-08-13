@@ -542,12 +542,25 @@ pub(crate) fn update_hud(
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
         if let Ok(mut t) = hp.single_mut() {
             **t = format!(
-                "HP {:.0}/{:.0}   {} {:.0}/{:.0}",
+                "HP {:.0}/{:.0}   {} {:.0}/{:.0}{absorb}{stealth}{combo}",
                 player.hp,
                 player.hp_max,
                 snap.progress.resource_type,
                 player.resource,
                 player.resource_max,
+                absorb = if snap.absorb > 0.5 {
+                    format!("   absorb {:.0}", snap.absorb)
+                } else {
+                    String::new()
+                },
+                stealth = if snap.stealthed { "   STEALTH" } else { "" },
+                combo = if snap.combo_points > 0 {
+                    let filled = "●".repeat(snap.combo_points as usize);
+                    let empty = "○".repeat(5usize.saturating_sub(snap.combo_points as usize));
+                    format!("   {filled}{empty}")
+                } else {
+                    String::new()
+                },
             );
         }
     } else if let Ok(mut t) = hp.single_mut() {

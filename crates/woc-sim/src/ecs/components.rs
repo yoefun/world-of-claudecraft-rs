@@ -53,6 +53,10 @@ pub struct AuraInstance {
     pub stun: bool,
     /// Horizontal speed multiplier (`1.0` = unchanged).
     pub move_mult: f32,
+    /// Remaining damage this aura soaks before HP.
+    pub absorb: f32,
+    /// Removed when the bearer takes a hit (fear, travel form).
+    pub breaks_on_damage: bool,
 }
 
 /// In-progress ability cast.
@@ -128,6 +132,8 @@ pub struct Combat {
     pub target: Option<EntityId>,
     pub gcd: f32,
     pub cast: Option<CastState>,
+    /// Seconds remaining before the actor may start a new cast / instant.
+    pub cast_lockout: f32,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -178,6 +184,11 @@ pub struct ClassKit {
     pub primary_ability: Option<String>,
     pub known_abilities: Vec<String>,
     pub ability_cds: HashMap<String, f32>,
+    /// Rogue combo points, 0–5.
+    pub combo_points: u8,
+    pub stealthed: bool,
+    /// Warrior stance or shapeshift id.
+    pub stance_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
