@@ -2,7 +2,8 @@
 
 **Current rewrite:** `1.8.0` / `class-forms`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.  
+**Next:** `1.9.0` / `quest-loop` (planned) — [`quest-loop design`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`implementation plan`](../superpowers/plans/2026-08-13-quest-loop.md)
 
 ## Client version gate (`client-compat`)
 
@@ -56,6 +57,17 @@
 | Mage | Blink; Frost Nova self-AoE |
 | Warlock | Life Tap; Fear (stun, breaks on damage) |
 | Druid | **F** Travel Form (1.4 move, breaks on hit) |
+
+## Next (`quest-loop`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Giver / turn-in NPC checks | planned | Accept/turn-in fail unless the target template matches the table |
+| `QuestDef.requires` chains | planned | Breadcrumb → hub sequences; integrity + acyclic tests |
+| Talk / collect coverage | planned | Sim tests beyond the wolf kill path; ready toast |
+| Generic **E** accept/turn-in | planned | Drop Captain Alden hardcoded ids |
+| Named log + objective counts | planned | HUD uses `woc-content` `QuestDef` |
+| Offer-aware map markers | planned | Yellow/green from `npc_quest_offers`, not raw table membership |
 
 ## Post-completion (`stable` → `online-hard`)
 

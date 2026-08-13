@@ -16,6 +16,7 @@
 | **1.6.0** (shipped) | `class-engine` | Combo, stealth, absorb, interrupt lockout, Charge/Blink/Life Tap, hunter mana |
 | **1.7.0** (shipped) | `class-identity` | Rogue stealth+combo, priest shield, warrior Charge, mage Blink, hunter Aspect |
 | **1.8.0** (this branch) | `class-forms` | Warrior stances, shaman/druid forms, paladin aura/seal, warlock Fear |
+| **1.9.0** (planned) | `quest-loop` | Accept / progress / complete gates, prerequisite chains, generic E / log / map |
 
 ## Completion program (closed)
 
@@ -46,6 +47,13 @@ Online Bevy clients must not enter a realm with a mismatched rewrite version or 
 **Runbook:** [`docs/client-update.md`](client-update.md)
 
 Players start `woc-updater`. CI on version tags packs a zstd full archive plus a per-file bsdiff from the previous GitHub Release. Skip-version downloads full. Windows/macOS and Velopack/Electron stay out of scope.
+
+## Next: quest loop (`1.9.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-quest-loop-design.md`](superpowers/specs/2026-08-13-quest-loop-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-quest-loop.md`](superpowers/plans/2026-08-13-quest-loop.md)
+
+Close the playable accept → progress → ready → turn-in loop (giver/turn-in NPC checks, `requires` chains, generic client **E**, named log + objective counts). Does not add new objective kinds, abandon, or a protocol rev.
 
 ## Internal: sim ECS columns (done)
 
