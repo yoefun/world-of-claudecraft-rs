@@ -110,7 +110,7 @@ mod tests {
                         assert!(it.armor_class.is_none(), "{}", it.id);
                     } else if matches!(
                         it.equip_slot,
-                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger)
+                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger | ItemEquipSlot::Trinket)
                     ) {
                         assert!(style.is_none(), "{}", it.id);
                         assert!(it.armor_class.is_none(), "{}", it.id);

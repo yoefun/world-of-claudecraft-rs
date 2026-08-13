@@ -88,6 +88,14 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
                 item_id: "spring_water",
                 count: 40,
             },
+            VendorOffer {
+                item_id: "worn_hatchet",
+                count: 2,
+            },
+            VendorOffer {
+                item_id: "lucky_pebble",
+                count: 2,
+            },
         ],
         trains: &[],
     },
@@ -140,6 +148,14 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
             VendorOffer {
                 item_id: "minor_wizard_oil",
                 count: 20,
+            },
+            VendorOffer {
+                item_id: "wool_cloak",
+                count: 8,
+            },
+            VendorOffer {
+                item_id: "work_gloves",
+                count: 8,
             },
         ],
         trains: &["mining", "blacksmithing"],
