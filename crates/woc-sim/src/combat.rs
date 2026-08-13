@@ -550,6 +550,7 @@ fn equipment_item_id(equipment: &Equipment, slot: EquipSlot) -> Option<&str> {
         EquipSlot::Feet => equipment.feet.as_deref(),
         EquipSlot::Neck => equipment.neck.as_deref(),
         EquipSlot::Finger => equipment.finger.as_deref(),
+        EquipSlot::Finger2 => equipment.finger2.as_deref(),
     }
 }
 
@@ -561,7 +562,7 @@ fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> Option<
         EquipSlot::Chest => Some(&mut wear.chest),
         EquipSlot::Legs => Some(&mut wear.legs),
         EquipSlot::Feet => Some(&mut wear.feet),
-        EquipSlot::Neck | EquipSlot::Finger => None,
+        EquipSlot::Neck | EquipSlot::Finger | EquipSlot::Finger2 => None,
     }
 }
 

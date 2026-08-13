@@ -1399,14 +1399,11 @@ mod tests {
 
     #[test]
     fn finger2_and_enchant_defaults() {
-        let eq: EquipmentSnapshot = serde_json::from_str(
-            r#"{"main_hand":null,"off_hand":null,"chest":null}"#,
-        )
-        .unwrap();
+        let eq: EquipmentSnapshot =
+            serde_json::from_str(r#"{"main_hand":null,"off_hand":null,"chest":null}"#).unwrap();
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
-        let slot: InvSlotSnapshot =
-            serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
+        let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
         assert_eq!(PROTOCOL_REV, 8);
     }

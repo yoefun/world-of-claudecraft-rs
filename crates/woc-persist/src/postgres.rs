@@ -392,6 +392,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
                 durability: None,
+                enchant_id: None,
             })],
             bank_copper: 0,
             honor: 125,

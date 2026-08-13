@@ -649,6 +649,7 @@ impl Sim {
                             item_id: st.item_id.clone(),
                             count: st.count,
                             durability: st.durability,
+                            enchant_id: st.enchant_id.clone(),
                         })
                     })
                     .collect()
@@ -666,6 +667,8 @@ impl Sim {
                 feet: bags.equipment.feet.clone(),
                 neck: bags.equipment.neck.clone(),
                 finger: bags.equipment.finger.clone(),
+                finger2: bags.equipment.finger2.clone(),
+                main_hand_enchant: bags.equipment_enchants.main_hand.clone(),
                 main_hand_durability: bags
                     .equipment
                     .main_hand
@@ -815,6 +818,7 @@ impl Sim {
                                 item_id: st.item_id.clone(),
                                 count: st.count,
                                 durability: st.durability,
+                                enchant_id: st.enchant_id.clone(),
                             })
                         })
                         .collect()

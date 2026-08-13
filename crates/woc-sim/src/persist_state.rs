@@ -28,6 +28,7 @@ pub struct PlayerPersistentState {
     pub inventory: Vec<Option<InvStack>>,
     pub equipment: Equipment,
     pub equipment_wear: EquipmentWear,
+    pub equipment_enchants: crate::ecs::components::EquipmentEnchants,
     pub quests: Vec<QuestProgress>,
     pub zone_id: String,
     pub talent_points: u32,
@@ -62,7 +63,9 @@ impl PlayerPersistentState {
             && self.equipment.feet.is_none()
             && self.equipment.neck.is_none()
             && self.equipment.finger.is_none()
+            && self.equipment.finger2.is_none()
             && self.equipment_wear == EquipmentWear::default()
+            && self.equipment_enchants == crate::ecs::components::EquipmentEnchants::default()
             && self.quests.is_empty()
             && self.talents.is_empty()
             && self.professions.is_empty()
@@ -104,6 +107,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
         equipment_wear: world
             .get::<Bags>(player_id)
             .map(|b| b.equipment_wear.clone())
+            .unwrap_or_default(),
+        equipment_enchants: world
+            .get::<Bags>(player_id)
+            .map(|b| b.equipment_enchants.clone())
             .unwrap_or_default(),
         quests: world
             .get::<QuestLog>(player_id)
@@ -236,6 +243,7 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         bags.inventory = pad_slots(state.inventory.clone(), BACKPACK_SLOTS);
         bags.equipment = state.equipment.clone();
         bags.equipment_wear = state.equipment_wear.clone();
+        bags.equipment_enchants = state.equipment_enchants.clone();
         bags.open_vendor_npc = None;
         bags.buyback.clear();
     }
@@ -359,6 +367,7 @@ mod tests {
             inventory: vec![],
             equipment: Equipment::default(),
             equipment_wear: EquipmentWear::default(),
+            equipment_enchants: Default::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 0,
@@ -413,7 +422,9 @@ mod tests {
         if let Some(bags) = world.get_mut::<Bags>(1) {
             bags.equipment.neck = Some("fang_pendant".into());
             bags.equipment.finger = Some("boar_tusk_ring".into());
+            bags.equipment.finger2 = Some("boar_tusk_ring".into());
             bags.equipment_wear.main_hand = Some(17);
+            bags.equipment_enchants.main_hand = Some("coarse_sharpening".into());
         }
         if let Some(hearth) = world.get_mut::<Hearth>(1) {
             hearth.zone_id = "eastfen".into();
@@ -447,7 +458,15 @@ mod tests {
         assert!((restored.pos_z - 20.0).abs() < 1e-3);
         assert_eq!(restored.equipment.neck.as_deref(), Some("fang_pendant"));
         assert_eq!(restored.equipment.finger.as_deref(), Some("boar_tusk_ring"));
+        assert_eq!(
+            restored.equipment.finger2.as_deref(),
+            Some("boar_tusk_ring")
+        );
         assert_eq!(restored.equipment_wear.main_hand, Some(17));
+        assert_eq!(
+            restored.equipment_enchants.main_hand.as_deref(),
+            Some("coarse_sharpening")
+        );
         assert!(!restored.is_virgin());
     }
 

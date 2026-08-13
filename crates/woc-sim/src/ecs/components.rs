@@ -80,6 +80,7 @@ pub struct InvStack {
     pub item_id: String,
     pub count: u32,
     pub durability: Option<u32>,
+    pub enchant_id: Option<String>,
 }
 
 impl InvStack {
@@ -91,6 +92,7 @@ impl InvStack {
             item_id,
             count,
             durability,
+            enchant_id: None,
         }
     }
 }
@@ -105,6 +107,7 @@ pub struct Equipment {
     pub feet: Option<String>,
     pub neck: Option<String>,
     pub finger: Option<String>,
+    pub finger2: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -132,6 +135,11 @@ impl EquipmentWear {
             feet: equipment.feet.as_deref().and_then(Self::max_for_item),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EquipmentEnchants {
+    pub main_hand: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -266,6 +274,7 @@ pub struct Bags {
     pub inventory: Vec<Option<InvStack>>,
     pub equipment: Equipment,
     pub equipment_wear: EquipmentWear,
+    pub equipment_enchants: EquipmentEnchants,
     pub open_vendor_npc: Option<EntityId>,
     pub buyback: Vec<BuybackEntry>,
 }

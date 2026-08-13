@@ -208,6 +208,8 @@ mod serialize_tests {
         assert_eq!(eq.main_hand.as_deref(), Some("worn_sword"));
         assert!(eq.neck.is_none());
         assert!(eq.finger.is_none());
+        assert!(eq.finger2.is_none());
+        assert!(eq.main_hand_enchant.is_none());
     }
 
     #[test]
@@ -217,6 +219,7 @@ mod serialize_tests {
                 item_id: "bread".into(),
                 count: 3,
                 durability: None,
+                enchant_id: None,
             }),
             None,
         ];

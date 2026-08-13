@@ -260,6 +260,8 @@ pub struct InvStackDto {
     pub count: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enchant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -292,6 +294,10 @@ pub struct EquipmentDto {
     pub neck: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finger: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finger2: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main_hand_enchant: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_hand_durability: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -496,6 +502,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
                 durability: None,
+                enchant_id: None,
             })],
             bank_copper: 0,
             honor: 125,
@@ -556,6 +563,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
                 durability: None,
+                enchant_id: None,
             })],
             bank_copper: 0,
             honor: 125,
