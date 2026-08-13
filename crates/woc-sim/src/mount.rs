@@ -62,25 +62,19 @@ pub fn summon_mount(
         return false;
     }
 
-    if combat::is_stealthed(world, player_id) {
+    let def = mount(mount_id);
+    let (x, y, z) = world
+        .get::<Transform>(player_id)
+        .map(|t| (t.x, t.y, t.z))
+        .unwrap_or((0.0, 0.0, 0.0));
+    if def.is_some_and(|d| d.kind == MountKind::Ground) && is_swimming_at(x, y, z) {
         events.push(SimEvent::Toast {
             message: "You cannot mount here.".into(),
         });
         return false;
     }
 
-    let Some(def) = mount(mount_id) else {
-        events.push(SimEvent::Toast {
-            message: "You do not know a mount.".into(),
-        });
-        return false;
-    };
-
-    let (x, y, z) = world
-        .get::<Transform>(player_id)
-        .map(|t| (t.x, t.y, t.z))
-        .unwrap_or((0.0, 0.0, 0.0));
-    if def.kind == MountKind::Ground && is_swimming_at(x, y, z) {
+    if combat::is_stealthed(world, player_id) {
         events.push(SimEvent::Toast {
             message: "You cannot mount here.".into(),
         });
@@ -97,6 +91,25 @@ pub fn summon_mount(
         });
         return false;
     }
+
+    let Some(def) = def else {
+        events.push(SimEvent::Toast {
+            message: "You do not know a mount.".into(),
+        });
+        return false;
+    };
+
+    let known = world
+        .get::<Riding>(player_id)
+        .map(|r| r.known.contains(mount_id))
+        .unwrap_or(false);
+    if !known {
+        events.push(SimEvent::Toast {
+            message: "You do not know a mount.".into(),
+        });
+        return false;
+    }
+
     if rank < def.riding_rank {
         events.push(SimEvent::Toast {
             message: "Your riding skill is too low.".into(),
@@ -106,17 +119,6 @@ pub fn summon_mount(
     if def.kind == MountKind::Flying && rank < 3 {
         events.push(SimEvent::Toast {
             message: "Your riding skill is too low.".into(),
-        });
-        return false;
-    }
-
-    let known = world
-        .get::<Riding>(player_id)
-        .map(|r| r.known.contains(mount_id))
-        .unwrap_or(false);
-    if !known {
-        events.push(SimEvent::Toast {
-            message: "You do not know a mount.".into(),
         });
         return false;
     }
@@ -284,6 +286,23 @@ mod tests {
         assert!(!world.get::<Motion>(id).unwrap().flying);
         assert!(world.get::<Riding>(id).unwrap().active_id.is_none());
         assert!(toast_text(&events).iter().any(|m| m == "You do not know a mount."));
+    }
+
+    #[test]
+    fn summon_mount_failure_checks_prefer_training_over_unknown() {
+        let (mut world, id) = warrior();
+        let mut events = Vec::new();
+        assert!(!summon_mount(&mut world, id, "nonexistent_mount", &mut events));
+        assert_eq!(toast_text(&events), vec!["You need riding training.".to_string()]);
+    }
+
+    #[test]
+    fn summon_mount_failure_checks_prefer_stealth_over_unknown() {
+        let (mut world, id) = warrior();
+        world.get_mut::<crate::ecs::components::ClassKit>(id).unwrap().stealthed = true;
+        let mut events = Vec::new();
+        assert!(!summon_mount(&mut world, id, "nonexistent_mount", &mut events));
+        assert_eq!(toast_text(&events), vec!["You cannot mount here.".to_string()]);
     }
 
     #[test]
