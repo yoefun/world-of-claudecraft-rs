@@ -4,4 +4,4 @@ v1 设计规格：[`../superpowers/specs/2026-08-13-manufacturing-system-design.
 
 实现计划：[`../superpowers/plans/2026-08-13-manufacturing-system.md`](../superpowers/plans/2026-08-13-manufacturing-system.md)
 
-覆盖专业：采集（采矿、草药学）、锻造、剥皮、制皮、附魔、工程学、炼金。
+覆盖专业：采集（采矿、草药学）、锻造、剥皮、制皮、裁缝、珠宝、附魔、工程学、炼金。

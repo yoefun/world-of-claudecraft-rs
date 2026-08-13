@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在空的 `world-of-claudecraft-rs` 仓库里落地一套可单测的确定性制造核，覆盖采集（采矿、草药学）、剥皮、锻造、制皮、炼金、工程学、附魔的 v1 闭环。
+**Goal:** 在空的 `world-of-claudecraft-rs` 仓库里落地一套可单测的确定性制造核，覆盖采集（采矿、草药学）、剥皮、锻造、制皮、裁缝、珠宝、炼金、工程学、附魔的 v1 闭环。
 
 **Architecture:** 全部玩法逻辑放在 `crates/woc-sim`：纯函数 + 注入 `Rng`，禁止 I/O 与墙钟。物品、节点、配方、附魔是 `src/content/` 里的静态表。`ProfessionSession` 是测试门面，模拟一名玩家、一组节点、若干尸体与城镇工作台。日后的服务器只把命令推进这个核。
 
@@ -46,7 +46,7 @@
 | `crates/woc-sim/src/content/mod.rs` | 内容出口 |
 | `crates/woc-sim/src/content/items.rs` | 全部 `ItemDef` |
 | `crates/woc-sim/src/content/nodes.rs` | 东溪谷矿脉与药草 |
-| `crates/woc-sim/src/content/recipes.rs` | 五条制造专业的配方 |
+| `crates/woc-sim/src/content/recipes.rs` | 七条制造专业的配方 |
 | `crates/woc-sim/src/content/enchants.rs` | 分解表与附魔定义 |
 | `crates/woc-sim/src/content/stations.rs` | 东溪谷工作台坐标 |
 | `crates/woc-sim/src/content/vendors.rs` | NPC 可售加工品（不含采集物） |
@@ -293,6 +293,8 @@ pub enum EquipSlot {
     Chest,
     Wrist,
     Waist,
+    Legs,
+    Ring,
     None,
 }
 
@@ -319,6 +321,13 @@ pub enum ItemId {
     CopperChainVest,
     LightLeatherJerkin,
     LightLeatherBelt,
+    LinenCloth,
+    BoltOfLinen,
+    LinenTrousers,
+    LinenVestments,
+    Tigerseye,
+    CopperSetting,
+    TigerseyeBand,
     MinorHealingPotion,
     ElixirOfMinorStrength,
     RoughBlastingPowder,
@@ -376,6 +385,13 @@ pub const ITEM_DEFS: &[ItemDef] = &[
     ItemDef { id: ItemId::CopperChainVest, quality: Quality::Common, slot: EquipSlot::Chest, sell_value: 40, buy_value: 0, stackable: false, gathered: false },
     ItemDef { id: ItemId::LightLeatherJerkin, quality: Quality::Common, slot: EquipSlot::Chest, sell_value: 36, buy_value: 0, stackable: false, gathered: false },
     ItemDef { id: ItemId::LightLeatherBelt, quality: Quality::Common, slot: EquipSlot::Waist, sell_value: 16, buy_value: 0, stackable: false, gathered: false },
+    ItemDef { id: ItemId::LinenCloth, quality: Quality::Common, slot: EquipSlot::None, sell_value: 4, buy_value: 16, stackable: true, gathered: false },
+    ItemDef { id: ItemId::BoltOfLinen, quality: Quality::Common, slot: EquipSlot::None, sell_value: 6, buy_value: 0, stackable: true, gathered: false },
+    ItemDef { id: ItemId::LinenTrousers, quality: Quality::Common, slot: EquipSlot::Legs, sell_value: 40, buy_value: 0, stackable: false, gathered: false },
+    ItemDef { id: ItemId::LinenVestments, quality: Quality::Common, slot: EquipSlot::Chest, sell_value: 50, buy_value: 0, stackable: false, gathered: false },
+    ItemDef { id: ItemId::Tigerseye, quality: Quality::Uncommon, slot: EquipSlot::None, sell_value: 15, buy_value: 0, stackable: true, gathered: false },
+    ItemDef { id: ItemId::CopperSetting, quality: Quality::Common, slot: EquipSlot::None, sell_value: 6, buy_value: 0, stackable: true, gathered: false },
+    ItemDef { id: ItemId::TigerseyeBand, quality: Quality::Common, slot: EquipSlot::Ring, sell_value: 18, buy_value: 0, stackable: false, gathered: false },
     ItemDef { id: ItemId::MinorHealingPotion, quality: Quality::Common, slot: EquipSlot::None, sell_value: 12, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::ElixirOfMinorStrength, quality: Quality::Common, slot: EquipSlot::None, sell_value: 14, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::RoughBlastingPowder, quality: Quality::Common, slot: EquipSlot::None, sell_value: 3, buy_value: 0, stackable: true, gathered: false },
@@ -594,6 +610,13 @@ mod tests {
             ItemId::CopperChainVest,
             ItemId::LightLeatherJerkin,
             ItemId::LightLeatherBelt,
+            ItemId::LinenCloth,
+            ItemId::BoltOfLinen,
+            ItemId::LinenTrousers,
+            ItemId::LinenVestments,
+            ItemId::Tigerseye,
+            ItemId::CopperSetting,
+            ItemId::TigerseyeBand,
             ItemId::MinorHealingPotion,
             ItemId::ElixirOfMinorStrength,
             ItemId::RoughBlastingPowder,
@@ -644,7 +667,7 @@ git commit -m "feat: add item catalog, stacking inventory, and gold"
 
 **Interfaces:**
 - Consumes: `ticks_from_seconds`
-- Produces: `ProfessionId::{Mining, Herbalism, Skinning, Forging, Leatherworking, Enchanting, Engineering, Alchemy}`；`ProfessionSkills::gain(id, req) -> u16`；`craft_cast_seconds(skill_req: u16) -> f32`；`gather_cast_seconds(tool_tiers_above: u8, proficiency_bands_above: u8) -> f32`
+- Produces: `ProfessionId::{Mining, Herbalism, Skinning, Forging, Leatherworking, Tailoring, Jewelcrafting, Enchanting, Engineering, Alchemy}`；`ProfessionSkills::gain(id, req) -> u16`；`craft_cast_seconds(skill_req: u16) -> f32`；`gather_cast_seconds(tool_tiers_above: u8, proficiency_bands_above: u8) -> f32`
 
 - [ ] **Step 1: Write types and skill tests**
 
@@ -664,18 +687,22 @@ pub enum ProfessionId {
     Skinning,
     Forging,
     Leatherworking,
+    Tailoring,
+    Jewelcrafting,
     Enchanting,
     Engineering,
     Alchemy,
 }
 
 impl ProfessionId {
-    pub const ALL: [ProfessionId; 8] = [
+    pub const ALL: [ProfessionId; 10] = [
         ProfessionId::Mining,
         ProfessionId::Herbalism,
         ProfessionId::Skinning,
         ProfessionId::Forging,
         ProfessionId::Leatherworking,
+        ProfessionId::Tailoring,
+        ProfessionId::Jewelcrafting,
         ProfessionId::Enchanting,
         ProfessionId::Engineering,
         ProfessionId::Alchemy,
@@ -737,7 +764,7 @@ use super::types::{ProfessionId, TIER_SKILL_STEP};
 
 #[derive(Clone, Debug, Default)]
 pub struct ProfessionSkills {
-    values: [u16; 8],
+    values: [u16; 10],
 }
 
 impl ProfessionSkills {
@@ -748,9 +775,11 @@ impl ProfessionSkills {
             ProfessionId::Skinning => 2,
             ProfessionId::Forging => 3,
             ProfessionId::Leatherworking => 4,
-            ProfessionId::Enchanting => 5,
-            ProfessionId::Engineering => 6,
-            ProfessionId::Alchemy => 7,
+            ProfessionId::Tailoring => 5,
+            ProfessionId::Jewelcrafting => 6,
+            ProfessionId::Enchanting => 7,
+            ProfessionId::Engineering => 8,
+            ProfessionId::Alchemy => 9,
         }
     }
 
@@ -1265,6 +1294,8 @@ git commit -m "feat: add skinning profession on hide-tagged corpses"
 pub enum StationType {
     Forge,
     Tannery,
+    Loom,
+    JewelersBench,
     Apothecary,
     Toolworks,
 }
@@ -1278,6 +1309,12 @@ pub enum RecipeId {
     CureLightLeather,
     LightLeatherJerkin,
     LightLeatherBelt,
+    BoltOfLinen,
+    LinenTrousers,
+    LinenVestments,
+    ProspectCopper,
+    CopperSetting,
+    TigerseyeBand,
     MinorHealingPotion,
     ElixirOfMinorStrength,
     RoughBlastingPowder,
@@ -1317,6 +1354,8 @@ pub struct StationDef {
 pub const STATIONS: &[StationDef] = &[
     StationDef { kind: StationType::Forge, pos: Vec2 { x: 0.0, z: 0.0 } },
     StationDef { kind: StationType::Tannery, pos: Vec2 { x: 80.0, z: 40.0 } },
+    StationDef { kind: StationType::Loom, pos: Vec2 { x: 20.0, z: -10.0 } },
+    StationDef { kind: StationType::JewelersBench, pos: Vec2 { x: 15.0, z: 5.0 } },
     StationDef { kind: StationType::Apothecary, pos: Vec2 { x: 7.0, z: 660.0 } },
     StationDef { kind: StationType::Toolworks, pos: Vec2 { x: 30.0, z: 10.0 } },
 ];
@@ -1487,6 +1526,7 @@ pub const VENDOR_ITEMS: &[ItemId] = &[
     ItemId::SmithingFlux,
     ItemId::SpoolOfThread,
     ItemId::EmptyVial,
+    ItemId::LinenCloth,
     ItemId::CopperPick,
     ItemId::CopperSickle,
     ItemId::SkinningKnife,
@@ -1591,7 +1631,201 @@ git commit -m "feat: add leatherworking cure and tannery armor recipes"
 
 ---
 
-### Task 10: Alchemy recipes
+### Task 10: Tailoring recipes
+
+**Files:**
+- Modify: `crates/woc-sim/src/content/recipes.rs`
+
+**Interfaces:**
+- Consumes: `StationType::Loom`、`ItemId::{LinenCloth, BoltOfLinen, SpoolOfThread}`、`ProfessionId::Tailoring`
+- Produces: `bolt_of_linen`（野外）、`linen_trousers`、`linen_vestments`
+
+- [ ] **Step 1: Write tests**
+
+```rust
+#[test]
+fn bolt_of_linen_is_field_craftable() {
+    let mut session = test_session_at(Vec2 { x: 999.0, z: 999.0 });
+    session.inventory.try_add(ItemStack { item: ItemId::LinenCloth, count: 2 }).unwrap();
+    session.start_craft(RecipeId::BoltOfLinen, 1).unwrap();
+    session.complete_ready(&mut ScriptedRng::from_seq(&[99]));
+    assert_eq!(session.inventory.count(ItemId::BoltOfLinen), 1);
+    assert_eq!(session.skills.get(ProfessionId::Tailoring), 2);
+}
+
+#[test]
+fn trousers_require_loom() {
+    let mut at_forge = test_session_at(Vec2 { x: 0.0, z: 0.0 });
+    at_forge.inventory.try_add(ItemStack { item: ItemId::BoltOfLinen, count: 3 }).unwrap();
+    at_forge.inventory.try_add(ItemStack { item: ItemId::SpoolOfThread, count: 2 }).unwrap();
+    assert_eq!(
+        at_forge.start_craft(RecipeId::LinenTrousers, 1).unwrap_err(),
+        DenyReason::StationRequired
+    );
+    let mut at_loom = test_session_at(Vec2 { x: 20.0, z: -10.0 });
+    at_loom.inventory.try_add(ItemStack { item: ItemId::BoltOfLinen, count: 3 }).unwrap();
+    at_loom.inventory.try_add(ItemStack { item: ItemId::SpoolOfThread, count: 2 }).unwrap();
+    at_loom.start_craft(RecipeId::LinenTrousers, 1).unwrap();
+    at_loom.complete_ready(&mut ScriptedRng::from_seq(&[99]));
+    assert_eq!(at_loom.inventory.count(ItemId::LinenTrousers), 1);
+}
+```
+
+- [ ] **Step 2: Author recipes**
+
+```rust
+RecipeDef {
+    id: RecipeId::BoltOfLinen,
+    profession: ProfessionId::Tailoring,
+    result: ItemId::BoltOfLinen,
+    result_count: 1,
+    reagents: &[Reagent { item: ItemId::LinenCloth, count: 2 }],
+    skill_req: 0,
+    item_level_budget: 1,
+    station: None,
+},
+RecipeDef {
+    id: RecipeId::LinenTrousers,
+    profession: ProfessionId::Tailoring,
+    result: ItemId::LinenTrousers,
+    result_count: 1,
+    reagents: &[
+        Reagent { item: ItemId::BoltOfLinen, count: 3 },
+        Reagent { item: ItemId::SpoolOfThread, count: 2 },
+    ],
+    skill_req: 0,
+    item_level_budget: 8,
+    station: Some(StationType::Loom),
+},
+RecipeDef {
+    id: RecipeId::LinenVestments,
+    profession: ProfessionId::Tailoring,
+    result: ItemId::LinenVestments,
+    result_count: 1,
+    reagents: &[
+        Reagent { item: ItemId::BoltOfLinen, count: 4 },
+        Reagent { item: ItemId::SpoolOfThread, count: 3 },
+    ],
+    skill_req: 0,
+    item_level_budget: 9,
+    station: Some(StationType::Loom),
+},
+```
+
+`LinenCloth` 已在 `VENDOR_ITEMS`。宝石/布匹成品不得加入货物表。
+
+- [ ] **Step 3: Run tests**
+
+Run: `cargo test -p woc-sim`
+
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add crates/woc-sim/src/content/recipes.rs
+git commit -m "feat: add tailoring bolts and loom cloth armor"
+```
+
+---
+
+### Task 11: Jewelcrafting recipes
+
+**Files:**
+- Modify: `crates/woc-sim/src/content/recipes.rs`
+
+**Interfaces:**
+- Consumes: `StationType::JewelersBench`、`ItemId::{CopperOre, CopperBar, Tigerseye, CopperSetting}`、`ProfessionId::Jewelcrafting`
+- Produces: `prospect_copper`、`copper_setting`（野外，确定性，无额外随机抽）、`tigerseye_band`（珠宝台）
+
+- [ ] **Step 1: Write tests**
+
+```rust
+#[test]
+fn prospect_copper_is_field_craftable_and_deterministic() {
+    let mut session = test_session_at(Vec2 { x: 999.0, z: 999.0 });
+    session.inventory.try_add(ItemStack { item: ItemId::CopperOre, count: 5 }).unwrap();
+    session.start_craft(RecipeId::ProspectCopper, 1).unwrap();
+    session.complete_ready(&mut ScriptedRng::from_seq(&[99]));
+    assert_eq!(session.inventory.count(ItemId::Tigerseye), 1);
+    assert_eq!(session.inventory.count(ItemId::CopperOre), 0);
+    assert_eq!(session.skills.get(ProfessionId::Jewelcrafting), 2);
+}
+
+#[test]
+fn tigerseye_band_requires_jewelers_bench() {
+    let mut at_forge = test_session_at(Vec2 { x: 0.0, z: 0.0 });
+    at_forge.inventory.try_add(ItemStack { item: ItemId::Tigerseye, count: 1 }).unwrap();
+    at_forge.inventory.try_add(ItemStack { item: ItemId::CopperSetting, count: 1 }).unwrap();
+    assert_eq!(
+        at_forge.start_craft(RecipeId::TigerseyeBand, 1).unwrap_err(),
+        DenyReason::StationRequired
+    );
+    let mut at_bench = test_session_at(Vec2 { x: 15.0, z: 5.0 });
+    at_bench.inventory.try_add(ItemStack { item: ItemId::Tigerseye, count: 1 }).unwrap();
+    at_bench.inventory.try_add(ItemStack { item: ItemId::CopperSetting, count: 1 }).unwrap();
+    at_bench.start_craft(RecipeId::TigerseyeBand, 1).unwrap();
+    at_bench.complete_ready(&mut ScriptedRng::from_seq(&[99]));
+    assert_eq!(at_bench.inventory.count(ItemId::TigerseyeBand), 1);
+}
+```
+
+- [ ] **Step 2: Author recipes**
+
+```rust
+RecipeDef {
+    id: RecipeId::ProspectCopper,
+    profession: ProfessionId::Jewelcrafting,
+    result: ItemId::Tigerseye,
+    result_count: 1,
+    reagents: &[Reagent { item: ItemId::CopperOre, count: 5 }],
+    skill_req: 0,
+    item_level_budget: 2,
+    station: None,
+},
+RecipeDef {
+    id: RecipeId::CopperSetting,
+    profession: ProfessionId::Jewelcrafting,
+    result: ItemId::CopperSetting,
+    result_count: 1,
+    reagents: &[Reagent { item: ItemId::CopperBar, count: 1 }],
+    skill_req: 0,
+    item_level_budget: 1,
+    station: None,
+},
+RecipeDef {
+    id: RecipeId::TigerseyeBand,
+    profession: ProfessionId::Jewelcrafting,
+    result: ItemId::TigerseyeBand,
+    result_count: 1,
+    reagents: &[
+        Reagent { item: ItemId::Tigerseye, count: 1 },
+        Reagent { item: ItemId::CopperSetting, count: 1 },
+    ],
+    skill_req: 0,
+    item_level_budget: 8,
+    station: Some(StationType::JewelersBench),
+},
+```
+
+选矿不另抽随机；制造引擎的精工抽仍发生一次。`Tigerseye` 与 `CopperSetting` 不得加入 `VENDOR_ITEMS`。
+
+- [ ] **Step 3: Run tests**
+
+Run: `cargo test -p woc-sim`
+
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add crates/woc-sim/src/content/recipes.rs
+git commit -m "feat: add jewelcrafting prospecting and tigerseye band"
+```
+
+---
+
+### Task 12: Alchemy recipes
 
 **Files:**
 - Modify: `crates/woc-sim/src/content/recipes.rs`
@@ -1662,7 +1896,7 @@ git commit -m "feat: add alchemy potions at the apothecary"
 
 ---
 
-### Task 11: Engineering recipes
+### Task 13: Engineering recipes
 
 **Files:**
 - Modify: `crates/woc-sim/src/content/recipes.rs`
@@ -1741,7 +1975,7 @@ git commit -m "feat: add engineering powder, bolts, and grenades"
 
 ---
 
-### Task 12: Enchanting — disenchant and apply
+### Task 14: Enchanting — disenchant and apply
 
 **Files:**
 - Create: `crates/woc-sim/src/content/enchants.rs`
@@ -1836,7 +2070,7 @@ git commit -m "feat: add enchanting disenchant and apply-with-replace rules"
 
 ---
 
-### Task 13: Recipe economy invariant and vendor exclusion
+### Task 15: Recipe economy invariant and vendor exclusion
 
 **Files:**
 - Create: `crates/woc-sim/src/content/economy.rs`（或 `recipes.rs` 测试模块）
@@ -1896,7 +2130,7 @@ git commit -m "test: pin recipe economy and vendor exclusion invariants"
 
 ---
 
-### Task 14: ProfessionSession facade and determinism golden
+### Task 16: ProfessionSession facade and determinism golden
 
 **Files:**
 - Modify: `crates/woc-sim/src/professions/mod.rs`（加入 `ProfessionSession`）
@@ -1970,10 +2204,10 @@ git commit -m "feat: add ProfessionSession facade and determinism golden"
 
 ---
 
-### Task 15: Spec self-check and docs sync
+### Task 17: Spec self-check and docs sync
 
 **Files:**
-- Modify: `README.md`（列出八个 `ProfessionId` 与 `cargo test`）
+- Modify: `README.md`（列出十个 `ProfessionId` 与 `cargo test`）
 - Modify: `docs/design/manufacturing.md`（若实现时符号名有出入，改文档对齐代码）
 
 **Interfaces:**
@@ -2007,11 +2241,13 @@ git commit -m "docs: sync manufacturing README with shipped sim surface"
 | 剥皮专业、一尸一次 | Task 6 |
 | 锻造 / 熔炉 | Task 7–8 |
 | 制皮 / 制皮厂 | Task 9 |
-| 炼金 / 药剂台 | Task 10 |
-| 工程学 / 工具坊 | Task 11 |
-| 附魔分解与替换 | Task 12 |
-| 经济不变量、NPC 不卖采集物 | Task 13 |
-| 确定性、施法节奏 | Task 2, 4, 14 |
+| 裁缝 / 织布机 | Task 10 |
+| 珠宝 / 选矿与戒指 | Task 11 |
+| 炼金 / 药剂台 | Task 12 |
+| 工程学 / 工具坊 | Task 13 |
+| 附魔分解与替换 | Task 14 |
+| 经济不变量、NPC 不卖采集物 | Task 15 |
+| 确定性、施法节奏 | Task 2, 4, 16 |
 | 技能独立与封顶 | Task 4 |
 
-v1 明确不做、本计划也不开任务：archetype、委托板、钓鱼伐木烹饪裁缝、工具符文充能、签名实例合并。
+v1 明确不做、本计划也不开任务：archetype、委托板、钓鱼伐木烹饪铭文、工具符文充能、签名实例合并。

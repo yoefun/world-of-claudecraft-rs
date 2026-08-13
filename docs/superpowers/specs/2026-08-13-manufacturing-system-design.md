@@ -2,9 +2,9 @@
 
 日期：2026-08-13  
 仓库：`world-of-claudecraft-rs`（Rust 重写）  
-范围：v1 可玩制造闭环——采集、锻造、剥皮、制皮、附魔、工程学、炼金
+范围：v1 可玩制造闭环——采集、锻造、剥皮、制皮、裁缝、珠宝、附魔、工程学、炼金
 
-本规格把 TypeScript 版 [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft) 已落地的 Professions 2.0 模型，收成一份可在空仓库里从零实现的 Rust 设计。v1 只做用户点名的七条生产线；烹饪、伐木、钓鱼、裁缝、珠宝、铭文、职业原型（archetype）与委托板明确延后。
+本规格把 TypeScript 版 [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft) 已落地的 Professions 2.0 模型，收成一份可在空仓库里从零实现的 Rust 设计。v1 做用户点名的生产线（含裁缝、珠宝）；烹饪、伐木、钓鱼、铭文、职业原型（archetype）与委托板明确延后。
 
 ---
 
@@ -18,7 +18,7 @@
 4. 附魔把装备分解为奥术材料，再把加成写回具体物品实例。
 5. 任何配方的 NPC 回收价严格低于原料价值，避免制造成为印钞机。
 
-成功标准：`cargo test -p woc-sim` 覆盖采集、剥皮、五条制造专业与经济不变量；给定同一 `Rng` 种子，两次完整制造会话的背包、技能与产出字节一致。
+成功标准：`cargo test -p woc-sim` 覆盖采集、剥皮、七条制造专业与经济不变量；给定同一 `Rng` 种子，两次完整制造会话的背包、技能与产出字节一致。
 
 ---
 
@@ -26,7 +26,7 @@
 
 - 十职业环、相邻双专业 combo、archetype / Jack of All Trades。
 - 委托订单板、Maker's Bond、邮件、世界拍卖。
-- 钓鱼、伐木、烹饪、裁缝、铭文、珠宝。
+- 钓鱼、伐木、烹饪、铭文。
 - 客户端 HUD、3D 场景、网络同步（只预留命令/事件形状）。
 - 移动工作台、工具附魔充能、GM 恢复路径。
 
@@ -45,6 +45,8 @@
 | 剥皮 | `Skinning` | 采集 | 100 | 无（尸体） | 带皮尸体 | 兽皮 |
 | 锻造 | `Forging` | 制造 | 125 | `Forge` | 矿石/锭、助熔剂 | 武器、锁甲/板甲、锭 |
 | 制皮 | `Leatherworking` | 制造 | 125 | `Tannery` | 兽皮、筋、线 | 皮甲 |
+| 裁缝 | `Tailoring` | 制造 | 125 | `Loom` | 亚麻布、线 | 布甲 |
+| 珠宝 | `Jewelcrafting` | 制造 | 125 | `JewelersBench` | 矿石、锭、宝石 | 戒指、宝石 |
 | 炼金 | `Alchemy` | 制造 | 125 | `Apothecary` | 草药、空瓶 | 药剂、合剂 |
 | 工程学 | `Engineering` | 制造 | 125 | `Toolworks` | 锭、粗石、螺栓 | 装置、炸药、工具 |
 | 附魔 | `Enchanting` | 制造 | 125 | 无（任意地点） | 分解材料 | 装备实例上的加成 |
@@ -303,6 +305,30 @@ v1 可学附魔（全员已知）：
 
 加成写进 `ItemInstance.enchant`，战斗核日后读取。同一实例同时只有一条附魔。
 
+### 8.8 裁缝
+
+工作台：`Loom`。亚麻布是加工品（非采集物），由东溪裁缝供应商出售。
+
+| 配方 | 试剂 | 产物 | skill_req | 工作台 |
+|------|------|------|-----------|--------|
+| `bolt_of_linen` | LinenCloth×2 | BoltOfLinen×1 | 0 | 无 |
+| `linen_trousers` | BoltOfLinen×3, SpoolOfThread×2 | LinenTrousers×1 | 0 | Loom |
+| `linen_vestments` | BoltOfLinen×4, SpoolOfThread×3 | LinenVestments×1 | 0 | Loom |
+
+`LinenTrousers` 槽位 `Legs`；`LinenVestments` 槽位 `Chest`。
+
+### 8.9 珠宝
+
+工作台：`JewelersBench`。选矿（prospect）把矿石变成宝石，野外可做；成品首饰必须在珠宝台。
+
+| 配方 | 试剂 | 产物 | skill_req | 工作台 |
+|------|------|------|-----------|--------|
+| `prospect_copper` | CopperOre×5 | Tigerseye×1 | 0 | 无 |
+| `copper_setting` | CopperBar×1 | CopperSetting×1 | 0 | 无 |
+| `tigerseye_band` | Tigerseye×1, CopperSetting×1 | TigerseyeBand×1 | 0 | JewelersBench |
+
+选矿 v1 **确定性**（不额外抽随机），精工抽仍走制造引擎的那一次。`TigerseyeBand` 槽位 `Ring`。宝石与镶托不得出现在 NPC 货物表。
+
 ---
 
 ## 9. 错误处理
@@ -356,4 +382,4 @@ v1 可学附魔（全员已知）：
 
 ## 13. 实施顺序
 
-见 `docs/superpowers/plans/2026-08-13-manufacturing-system.md`。顺序锁定为：工作区与物品核 → 技能 → 采集 → 剥皮 → 制造引擎与工作台 → 锻造 → 制皮 → 炼金 → 工程学 → 附魔 → 经济与确定性金样。每一截结束时 `cargo test -p woc-sim` 为绿，并可单独玩通该专业。
+见 `docs/superpowers/plans/2026-08-13-manufacturing-system.md`。顺序锁定为：工作区与物品核 → 技能 → 采集 → 剥皮 → 制造引擎与工作台 → 锻造 → 制皮 → 裁缝 → 珠宝 → 炼金 → 工程学 → 附魔 → 经济与确定性金样。每一截结束时 `cargo test -p woc-sim` 为绿，并可单独玩通该专业。
