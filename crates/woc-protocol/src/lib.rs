@@ -14,6 +14,7 @@ pub type EntityId = u32;
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
 /// Rev 8: quest abandon/share, optional turn-in reward choice.
+/// Rev 8 additive: riding snapshot + TrainRiding.
 pub const PROTOCOL_REV: u32 = 8;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
@@ -242,6 +243,8 @@ pub enum InteractAction {
     CycleStance,
     /// Toggle shaman/druid form (F).
     ToggleForm,
+    /// Train the next riding rank at a riding trainer.
+    TrainRiding,
     /// Need roll on pending party loot.
     LootNeed {
         loot_id: EntityId,
@@ -316,6 +319,9 @@ pub struct EntitySnapshot {
     /// Treading / submerged in a lake body.
     #[serde(default)]
     pub swimming: bool,
+    /// Active mount id when the player is mounted.
+    #[serde(default)]
+    pub mounted: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -418,6 +424,8 @@ pub struct NpcSessionSnapshot {
     pub can_bind: bool,
     #[serde(default)]
     pub buyback: Vec<BuybackSnapshot>,
+    #[serde(default)]
+    pub train_riding: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -575,6 +583,12 @@ pub struct TickSnapshot {
     /// Derived spell power from gear and stats.
     #[serde(default)]
     pub spell_power: f32,
+    #[serde(default)]
+    pub riding_rank: u8,
+    #[serde(default)]
+    pub known_mounts: Vec<String>,
+    #[serde(default)]
+    pub mounted: Option<String>,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -685,6 +699,9 @@ impl Default for TickSnapshot {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            mounted: None,
         }
     }
 }
@@ -1191,6 +1208,9 @@ mod tests {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            mounted: None,
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -1524,5 +1544,29 @@ mod tests {
                 equip_slot: EquipSlot::Neck
             }
         ));
+    }
+
+    #[test]
+    fn train_riding_roundtrip() {
+        let json = serde_json::to_string(&InteractAction::TrainRiding).unwrap();
+        assert!(json.contains("train_riding"));
+        let back: InteractAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, InteractAction::TrainRiding);
+    }
+
+    #[test]
+    fn mounted_fields_default_when_omitted() {
+        let snap: EntitySnapshot = serde_json::from_str(
+            r#"{"id":1,"kind":"player","x":0.0,"y":0.0,"z":0.0,"yaw":0.0,"hp":1.0,"hp_max":1.0,"level":1,"name":"A","resource":0.0,"resource_max":0.0,"alive":true}"#,
+        )
+        .unwrap();
+        assert!(snap.mounted.is_none());
+        let tick: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0}}"#,
+        )
+        .unwrap();
+        assert_eq!(tick.riding_rank, 0);
+        assert!(tick.known_mounts.is_empty());
+        assert!(tick.mounted.is_none());
     }
 }

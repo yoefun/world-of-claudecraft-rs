@@ -885,6 +885,9 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            mounted: None,
         }
     }
 
@@ -958,6 +961,7 @@ fn entity_snapshot(world: &World, id: EntityId) -> Option<EntitySnapshot> {
         on_ground: motion.map(|m| m.on_ground).unwrap_or(true),
         flying: motion.map(|m| m.flying).unwrap_or(false),
         swimming: crate::player_motion::is_swimming_at(t.x, t.y, t.z),
+        mounted: None,
     })
 }
 

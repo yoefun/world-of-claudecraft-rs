@@ -1094,6 +1094,7 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
         repair_cost: repair_cost(world, player_id),
         can_bind: def.is_innkeeper(),
         buyback,
+        train_riding: false,
     })
 }
 
