@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `auction-depth`:** Eastbrook Auctioneer Lise; list/buy/cancel require her session.
+- Auction listings keep durability and enchant; 5% house cut; sale proceeds always arrive as mail.
+- Quest items cannot be listed. Client **L** lists the first non-quest bag stack; `[A]` nameplate.
+- Protocol rev stays **8** (additive listing/mail/`can_auction` fields).
+
 ## 1.13.0 — 2026-08-13
 
 ### Added

@@ -1,8 +1,22 @@
 # Parity status
 
-**Current rewrite:** `1.13.0` / `gear-slots`.  
+**Current rewrite:** `1.14.0` / `auction-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; auction depth shipped as `1.14.0`.
+
+## Auction depth (`auction-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-auction-depth-design.md`](../superpowers/specs/2026-08-13-auction-depth-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-auction-depth.md`](../superpowers/plans/2026-08-13-auction-depth.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Auctioneer Lise | done | Eastbrook `(4, 6)`; Talk opens session; `[A]` |
+| Instance listings | done | Slot take; durability + enchant persist |
+| Quest block | done | Same toast as vendor sell |
+| House cut 5% | done | `price / 20` destroyed; proceeds mailed |
+| Mail settlement | done | Online sellers get mail, not silent copper |
+| Protocol | done | Rev 8 additive fields |
 
 ## Gear slots (`gear-slots`) — done
 
@@ -153,7 +167,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.13.0` / gear-slots (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.14.0` / auction-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
@@ -179,7 +193,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Dungeons / instances | done | unique instance keys; party share; overworld preserved; crypt/barrow trash |
 | Delves | done | eastbrook_hollow 3-room loop + reward |
 | Bank + mail | done | durable character bank + copper vault; mail keyed by character UUID |
-| Auction market | done | durable listings; list/buy/cancel from client; offline proceed/return via mail |
+| Auction market | done | Auctioneer Lise; instance listings; 5% cut; mail-always proceeds |
 | Professions gather/craft | done | herbalism → alchemy; mining → blacksmithing sword |
 | Duel + PvP honor | done | |
 | World boss + deeds | done | one-shot deed completion persisted |
