@@ -242,6 +242,8 @@ pub struct QuestProgressDto {
     pub state: String,
     #[serde(default)]
     pub counts: Vec<u32>,
+    #[serde(default)]
+    pub completed_tick: u64,
 }
 
 /// Public character summary for list endpoints.
@@ -447,6 +449,7 @@ mod tests {
                 quest_id: "q1".into(),
                 state: "ready".into(),
                 counts: vec![2],
+                completed_tick: 0,
             }],
             zone_id: "eastfen".into(),
             talent_points: 2,

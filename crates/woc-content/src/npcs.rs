@@ -34,7 +34,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         id: "trader_wilkes",
         name: "Trader Wilkes",
         greeting: "Fresh rations and a fair price, traveler.",
-        is_quest_giver: false,
+        is_quest_giver: true,
         is_vendor: true,
         vendor_stock: &[
             VendorOffer {
@@ -56,6 +56,14 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         name: "Town Crier",
         greeting: "Hear ye! Eastbrook stands, and the Vale endures.",
         is_quest_giver: true,
+        is_vendor: false,
+        vendor_stock: &[],
+    },
+    NpcDef {
+        id: "eastbrook_courier",
+        name: "Eastbrook Courier",
+        greeting: "Stay close — the north road is not kind to messengers.",
+        is_quest_giver: false,
         is_vendor: false,
         vendor_stock: &[],
     },

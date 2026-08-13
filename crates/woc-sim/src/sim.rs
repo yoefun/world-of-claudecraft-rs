@@ -29,7 +29,9 @@ use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
 use crate::player_motion::step_player_motion;
-use crate::quests::{on_mob_killed, quest_log_entries};
+use crate::quests::{
+    credit_explore, on_mob_killed, quest_log_entries, refresh_daily_quests, tick_escorts,
+};
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
@@ -389,6 +391,9 @@ impl Sim {
         self.tick += 1;
 
         let player_ids = self.player_ids();
+        for &pid in &player_ids {
+            refresh_daily_quests(&mut self.world, pid, self.tick);
+        }
 
         // Phase 1: apply intents + motion
         for &pid in &player_ids {
@@ -461,6 +466,7 @@ impl Sim {
                     }
                 }
             }
+            credit_explore(&mut self.world, pid, &mut self.events);
         }
         // Phase 2: player_combat
         for &pid in &player_ids {
@@ -476,6 +482,7 @@ impl Sim {
 
         // Phase 3: pet_ai
         let _dropped = tick_pets(&mut self.world, &mut self.events);
+        tick_escorts(&mut self.world, &mut self.events);
 
         // Phase 4: mob_ai_combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
@@ -1338,6 +1345,7 @@ mod tests {
             giver,
             InteractAction::TurnInQuest {
                 quest_id: "report_to_alden".into(),
+                reward_choice: None,
             },
         );
         sim.interact(
@@ -1413,6 +1421,7 @@ mod tests {
             giver,
             InteractAction::TurnInQuest {
                 quest_id: "wolves_at_the_gate".into(),
+                reward_choice: None,
             },
         );
         let log = WorldHost::snapshot_for(&sim, sim.player_id).quest_log;

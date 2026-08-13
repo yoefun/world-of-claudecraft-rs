@@ -1,30 +1,30 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.9.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.10.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.9.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`quest-loop`**.
+**Rewrite `1.10.0`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`quest-depth`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.9.0 (quest-loop)
+## What works in 1.10.0 (quest-depth)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
 - Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; Eastbrook Crypt + Mirefen Barrow + 3-room delve
-- Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
+- Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
 - Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
 - Client panels: talents / bank / mail / market / bags (equip·use·sell); **minimap** + **world map** (M)
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.9.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.10.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -98,7 +98,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.9.0` / `quest-loop`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.10.0` / `quest-depth`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 

@@ -13,7 +13,8 @@ pub type EntityId = u32;
 /// `protocol_rev` / `rewrite_version` identity; omitting them is valid JSON and
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
-pub const PROTOCOL_REV: u32 = 7;
+/// Rev 8: quest abandon/share, optional turn-in reward choice.
+pub const PROTOCOL_REV: u32 = 8;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -59,6 +60,14 @@ pub enum InteractAction {
         quest_id: String,
     },
     TurnInQuest {
+        quest_id: String,
+        #[serde(default)]
+        reward_choice: Option<u32>,
+    },
+    AbandonQuest {
+        quest_id: String,
+    },
+    ShareQuest {
         quest_id: String,
     },
     Buy {
@@ -587,6 +596,10 @@ pub enum SimEvent {
         player: EntityId,
         quest_id: String,
     },
+    QuestAbandoned {
+        player: EntityId,
+        quest_id: String,
+    },
     ItemGained {
         player: EntityId,
         item_id: String,
@@ -788,6 +801,13 @@ mod tests {
                 quest_id: "wolves_at_the_gate".into(),
             },
             InteractAction::TurnInQuest {
+                quest_id: "wolves_at_the_gate".into(),
+                reward_choice: None,
+            },
+            InteractAction::AbandonQuest {
+                quest_id: "wolves_at_the_gate".into(),
+            },
+            InteractAction::ShareQuest {
                 quest_id: "wolves_at_the_gate".into(),
             },
             InteractAction::Buy {
@@ -1163,12 +1183,31 @@ mod tests {
             InteractAction::ToggleStealth,
             InteractAction::CycleStance,
             InteractAction::ToggleForm,
+            InteractAction::AbandonQuest {
+                quest_id: "wolf_patrol".into(),
+            },
+            InteractAction::ShareQuest {
+                quest_id: "wolf_patrol".into(),
+            },
         ];
         for a in actions {
             let v = serde_json::to_value(&a).unwrap();
             let back: InteractAction = serde_json::from_value(v).unwrap();
             assert_eq!(format!("{back:?}"), format!("{a:?}"));
         }
+    }
+
+    #[test]
+    fn turn_in_quest_reward_choice_defaults_none() {
+        let v: InteractAction =
+            serde_json::from_str(r#"{"type":"turn_in_quest","quest_id":"x"}"#).unwrap();
+        assert_eq!(
+            v,
+            InteractAction::TurnInQuest {
+                quest_id: "x".into(),
+                reward_choice: None,
+            }
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@
 //! | `Home`, `Threat`, `LootTable`, `Respawn` | mob |
 //! | `LootPile` | loot |
 //! | `Owner` | pet |
+//! | `Escort` | escort NPC (quest follower; not Owner) |
 //! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable` | player |
 //!
 //! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
@@ -102,6 +103,7 @@ pub struct QuestProgress {
     pub quest_id: String,
     pub state: QuestState,
     pub counts: Vec<u32>,
+    pub completed_tick: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -179,6 +181,16 @@ pub struct LootPile {
 #[derive(Debug, Clone, Copy)]
 pub struct Owner {
     pub owner_id: EntityId,
+}
+
+/// NPC following a player for an escort objective. Not a pet (`Owner`).
+#[derive(Debug, Clone)]
+pub struct Escort {
+    pub player_id: EntityId,
+    pub quest_id: String,
+    pub dest_x: f32,
+    pub dest_z: f32,
+    pub radius: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -267,6 +279,7 @@ impl_component!(LootTable, loot_table);
 impl_component!(Respawn, respawn);
 impl_component!(LootPile, loot_pile);
 impl_component!(Owner, owner);
+impl_component!(Escort, escort);
 impl_component!(ClassKit, class_kit);
 impl_component!(Bags, bags);
 impl_component!(QuestLog, quest_log);

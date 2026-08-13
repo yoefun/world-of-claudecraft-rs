@@ -349,6 +349,7 @@ mod tests {
             1,
             1,
             InteractAction::Equip { bag_slot: slot },
+            0,
             &mut events,
         );
         assert_eq!(

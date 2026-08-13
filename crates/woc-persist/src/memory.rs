@@ -266,6 +266,7 @@ mod tests {
                 quest_id: "wolves_at_the_gate".into(),
                 state: "active".into(),
                 counts: vec![1],
+                completed_tick: 0,
             }],
             zone_id: "eastfen".into(),
             talent_points: 2,

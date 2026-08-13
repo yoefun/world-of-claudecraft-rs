@@ -1,9 +1,9 @@
 # Parity status
 
-**Current rewrite:** `1.9.0` / `quest-loop`.  
+**Current rewrite:** `1.10.0` / `quest-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.  
-**Shipped:** [`quest-loop design`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`implementation plan`](../superpowers/plans/2026-08-13-quest-loop.md)
+**Shipped:** [`quest-loop`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`quest-depth design`](../superpowers/specs/2026-08-13-quest-depth-design.md)
 
 ## Client version gate (`client-compat`)
 
@@ -69,6 +69,17 @@
 | Named log + objective counts | done | HUD uses `woc-content` `QuestDef` |
 | Offer-aware map markers | done | Yellow/green from `npc_quest_offers`, not raw table membership |
 
+## Quest depth (`1.10.0`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Abandon | done | **L** then **X**; cannot abandon completed |
+| Party share | done | **L** then **Y**; 40 yd; skips standing at giver |
+| Daily | done | `QuestRepeat::Daily`; `DAILY_PERIOD_TICKS` (12_000); persist `completed_tick` |
+| Explore / escort | done | `QuestObjective::{Explore,Escort}`; `Escort` column (not `Owner`) |
+| Choice rewards | done | `TurnInQuest.reward_choice`; **1/2/3** at turn-in NPC; **E** does not auto-pick |
+| Protocol rev 8 | done | `AbandonQuest` / `ShareQuest` / optional choice index |
+
 ## Post-completion (`stable` → `online-hard`)
 
 Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
@@ -104,7 +115,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.9.0` / quest-loop (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.10.0` / quest-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

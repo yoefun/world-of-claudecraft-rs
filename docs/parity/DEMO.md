@@ -10,8 +10,9 @@ Manual. Requires a GPU client. CI does not run this.
 6. Bank an item and copper; mail copper; list then buy/cancel on the AH; gather + craft a salve or copper shortsword.
 7. Duel a player; honor increments.
 8. Town Crier **E** → accept Report to Alden → **E** Captain Alden (talk) → **E** turn-in → **E** accept Wolves → kill 3 → ready toast → **E** turn-in → **E** accept Boar Tusks.
+9. Quest log **L**: **X** abandons the tracked quest; **Y** shares it with in-range party mates. After wolves, Alden offers the daily Wolf Patrol (resets every 12_000 ticks). Walk the north road for Scout the North Road. After tusks, escort the courier. Trader Wilkes: Arms of the Watch → **1/2/3** choose ration.
 
-Footer reads `WoC-rs 1.9.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
+Footer reads `WoC-rs 1.10.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 

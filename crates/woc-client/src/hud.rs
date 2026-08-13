@@ -456,7 +456,9 @@ pub(crate) fn format_quest_log_line(entry: &QuestLogEntry) -> String {
             let (label, need) = match obj {
                 QuestObjective::Kill { label, count, .. } => (*label, *count),
                 QuestObjective::Collect { label, count, .. } => (*label, *count),
-                QuestObjective::Talk { label, .. } => (*label, 1u32),
+                QuestObjective::Talk { label, .. }
+                | QuestObjective::Explore { label, .. }
+                | QuestObjective::Escort { label, .. } => (*label, 1u32),
             };
             let have = entry.counts.get(i).copied().unwrap_or(0);
             format!("{label} {have}/{need}")
@@ -630,17 +632,32 @@ pub(crate) fn update_hud(
                 **t = "Quests: (none — talk to a quest giver with E)".into();
             } else {
                 let lines: Vec<String> = snap.quest_log.iter().map(format_quest_log_line).collect();
-                **t = format!("Quests: {}", lines.join(" · "));
+                **t = format!("Quests: {}  [X] abandon [Y] share", lines.join(" · "));
             }
         } else {
             let active = snap
                 .quest_log
                 .iter()
                 .find(|q| q.state == "active" || q.state == "ready");
-            **t = match active {
+            let mut line = match active {
                 Some(q) => format!("{} (L list)", format_quest_log_line(q)),
                 None => "Quest: — (E talk · L list)".into(),
             };
+            if let Some(ready) = snap.quest_log.iter().find(|q| q.state == "ready") {
+                if let Some(def) = woc_content::quest(&ready.quest_id) {
+                    if !def.reward.choices.is_empty() {
+                        let picks: Vec<String> = def
+                            .reward
+                            .choices
+                            .iter()
+                            .enumerate()
+                            .map(|(i, id)| format!("{} {id}", i + 1))
+                            .collect();
+                        line.push_str(&format!(" · choose {}", picks.join(" · ")));
+                    }
+                }
+            }
+            **t = line;
         }
     }
     if let Ok(mut t) = bags.single_mut() {
@@ -1063,6 +1080,20 @@ mod tests {
         assert!(line.contains("1/3"));
         assert!(line.contains("Young Wolves slain"));
         assert!(!line.starts_with("wolves_at_the_gate"));
+    }
+
+    #[test]
+    fn quest_log_line_covers_explore() {
+        use super::format_quest_log_line;
+        use woc_protocol::QuestLogEntry;
+
+        let line = format_quest_log_line(&QuestLogEntry {
+            quest_id: "scout_north_road".into(),
+            state: "active".into(),
+            counts: vec![0],
+        });
+        assert!(line.contains("Scout the North Road"));
+        assert!(line.contains("North road scouted 0/1"));
     }
 
     #[test]

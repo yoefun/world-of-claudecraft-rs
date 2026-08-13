@@ -48,7 +48,9 @@ pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
 pub use pets::{pet, pet_for_class, PetDef, PETS};
 pub use professions::{profession, ProfessionDef, ProfessionKind, PROFESSIONS};
-pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
+pub use quests::{
+    quest, QuestDef, QuestObjective, QuestRepeat, QuestReward, DAILY_PERIOD_TICKS, QUESTS,
+};
 pub use quests_zone2::ZONE2_QUESTS;
 pub use quests_zone3::ZONE3_QUESTS;
 pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
@@ -283,6 +285,43 @@ mod tests {
                             q.id
                         );
                     }
+                    QuestObjective::Explore { x, z, radius, .. } => {
+                        assert!(
+                            *radius > 0.0,
+                            "quest {} explore radius must be positive",
+                            q.id
+                        );
+                        assert!(
+                            x.abs() <= WORLD_MAX_X && *z >= WORLD_MIN_Z && *z <= WORLD_MAX_Z,
+                            "quest {} explore point ({x},{z}) out of world",
+                            q.id
+                        );
+                    }
+                    QuestObjective::Escort {
+                        npc_id,
+                        dest_x,
+                        dest_z,
+                        radius,
+                        ..
+                    } => {
+                        assert!(
+                            NPCS.iter().any(|n| n.id == *npc_id),
+                            "quest {} missing escort npc {npc_id}",
+                            q.id
+                        );
+                        assert!(
+                            *radius > 0.0,
+                            "quest {} escort radius must be positive",
+                            q.id
+                        );
+                        assert!(
+                            dest_x.abs() <= WORLD_MAX_X
+                                && *dest_z >= WORLD_MIN_Z
+                                && *dest_z <= WORLD_MAX_Z,
+                            "quest {} escort dest ({dest_x},{dest_z}) out of world",
+                            q.id
+                        );
+                    }
                 }
             }
             if let Some(item_id) = q.reward.item_id {
@@ -292,7 +331,33 @@ mod tests {
                     q.id
                 );
             }
+            for item_id in q.reward.choices {
+                assert!(
+                    ITEMS.iter().any(|i| i.id == *item_id),
+                    "quest {} missing choice item {item_id}",
+                    q.id
+                );
+            }
         }
+    }
+
+    #[test]
+    fn quest_depth_demo_rows_exist() {
+        assert_eq!(quest("scout_north_road").unwrap().repeat, QuestRepeat::Once);
+        assert_eq!(quest("wolf_patrol").unwrap().repeat, QuestRepeat::Daily);
+        assert!(matches!(
+            quest("courier_to_the_gate").unwrap().objectives[0],
+            QuestObjective::Escort {
+                npc_id: "eastbrook_courier",
+                ..
+            }
+        ));
+        assert_eq!(
+            quest("arms_of_the_watch").unwrap().reward.choices,
+            &["travelers_ration", "spring_water", "baked_bread"]
+        );
+        assert!(npc("trader_wilkes").unwrap().is_quest_giver);
+        assert!(npc("eastbrook_courier").is_some());
     }
 
     #[test]

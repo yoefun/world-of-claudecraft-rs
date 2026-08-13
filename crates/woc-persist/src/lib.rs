@@ -219,6 +219,7 @@ mod serialize_tests {
             quest_id: "q1".into(),
             state: "ready".into(),
             counts: vec![2, 0],
+            completed_tick: 0,
         }];
         let inv_s = inventory_to_json(&inv).unwrap();
         let eq_s = equipment_to_json(&eq).unwrap();

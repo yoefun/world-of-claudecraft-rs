@@ -16,7 +16,8 @@
 | **1.6.0** (shipped) | `class-engine` | Combo, stealth, absorb, interrupt lockout, Charge/Blink/Life Tap, hunter mana |
 | **1.7.0** (shipped) | `class-identity` | Rogue stealth+combo, priest shield, warrior Charge, mage Blink, hunter Aspect |
 | **1.8.0** (shipped) | `class-forms` | Warrior stances, shaman/druid forms, paladin aura/seal, warlock Fear |
-| **1.9.0** (this branch) | `quest-loop` | Accept / progress / complete gates, prerequisite chains, generic E / log / map |
+| **1.9.0** (shipped) | `quest-loop` | Accept / progress / complete gates, prerequisite chains, generic E / log / map |
+| **1.10.0** (this branch) | `quest-depth` | Abandon, party share, daily reset, explore/escort objectives, choice rewards |
 
 ## Completion program (closed)
 
@@ -54,6 +55,12 @@ Players start `woc-updater`. CI on version tags packs a zstd full archive plus a
 **Implementation:** [`docs/superpowers/plans/2026-08-13-quest-loop.md`](superpowers/plans/2026-08-13-quest-loop.md)
 
 Close the playable accept → progress → ready → turn-in loop (giver/turn-in NPC checks, `requires` chains, generic client **E**, named log + objective counts). Does not add new objective kinds, abandon, or a protocol rev.
+
+## Current: quest depth (`1.10.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-quest-depth-design.md`](superpowers/specs/2026-08-13-quest-depth-design.md)
+
+Abandon (**L** then **X**), party share (**L** then **Y**), tick-epoch dailies, explore/escort objectives, and turn-in choice rewards (**1/2/3**). Protocol rev **8**.
 
 ## Internal: sim ECS columns (done)
 

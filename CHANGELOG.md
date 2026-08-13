@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.10.0 — 2026-08-13
+
+### Added
+
+- Quest depth (`1.10.0` / `quest-depth`, protocol rev **8**): abandon (**L** then **X**), party share (**L** then **Y**), tick-epoch dailies (`wolf_patrol`), explore (`scout_north_road`), escort (`courier_to_the_gate` + `Escort` column), choice rewards at Wilkes (**1/2/3**).
+
 ## 1.9.0 — 2026-08-13
 
 ### Added

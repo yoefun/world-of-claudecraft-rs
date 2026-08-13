@@ -200,6 +200,7 @@ fn quests_from_dto(quests: &[QuestProgressDto]) -> Vec<QuestProgress> {
             quest_id: q.quest_id.clone(),
             state: quest_state_from_str(&q.state),
             counts: q.counts.clone(),
+            completed_tick: q.completed_tick,
         })
         .collect()
 }
@@ -211,6 +212,7 @@ fn quests_to_dto(quests: &[QuestProgress]) -> Vec<QuestProgressDto> {
             quest_id: q.quest_id.clone(),
             state: quest_state_to_str(q.state).to_string(),
             counts: q.counts.clone(),
+            completed_tick: q.completed_tick,
         })
         .collect()
 }

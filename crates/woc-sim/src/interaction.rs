@@ -43,6 +43,7 @@ pub fn handle_interact(
     player_id: EntityId,
     target_id: EntityId,
     action: InteractAction,
+    now_tick: u64,
     events: &mut Vec<SimEvent>,
 ) {
     if !world.get::<Health>(player_id).is_some_and(|h| h.alive) {
@@ -100,7 +101,10 @@ pub fn handle_interact(
                 on_talked_to(world, player_id, tid, events);
             }
         }
-        InteractAction::TurnInQuest { quest_id } => {
+        InteractAction::TurnInQuest {
+            quest_id,
+            reward_choice,
+        } => {
             if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
                 return;
             }
@@ -110,7 +114,15 @@ pub fn handle_interact(
             else {
                 return;
             };
-            let _ = turn_in_quest(world, player_id, &quest_id, &tid, events);
+            let _ = turn_in_quest(
+                world,
+                player_id,
+                &quest_id,
+                &tid,
+                now_tick,
+                reward_choice,
+                events,
+            );
         }
         InteractAction::Buy { item_id, count } => {
             buy(world, player_id, target_id, &item_id, count, events);
@@ -551,6 +563,7 @@ mod tests {
             1,
             1,
             InteractAction::UseItem { bag_slot: slot },
+            0,
             &mut events,
         );
         assert!(world.get::<Health>(1).unwrap().hp > 5.0);
