@@ -1,9 +1,17 @@
-use crate::item::ItemId;
+use crate::content::enchants::EnchantId;
+use crate::item::{EquipSlot, ItemId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ItemStack {
     pub item: ItemId,
     pub count: u16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ItemInstance {
+    pub id: u64,
+    pub item: ItemId,
+    pub enchant: Option<EnchantId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,26 +23,62 @@ pub enum InventoryError {
 #[derive(Clone, Debug)]
 pub struct Inventory {
     slots: Vec<Option<ItemStack>>,
+    pub instances: Vec<ItemInstance>,
+    next_instance_id: u64,
 }
 
 impl Inventory {
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             slots: vec![None; cap],
+            instances: Vec::new(),
+            next_instance_id: 1,
         }
     }
 
+    pub fn instance(&self, id: u64) -> Option<&ItemInstance> {
+        self.instances.iter().find(|i| i.id == id)
+    }
+
+    pub fn instance_mut(&mut self, id: u64) -> Option<&mut ItemInstance> {
+        self.instances.iter_mut().find(|i| i.id == id)
+    }
+
+    fn is_instanced_equipment(item: ItemId) -> bool {
+        let def = crate::content::items::item_def(item);
+        !def.stackable && def.slot != EquipSlot::None
+    }
+
     pub fn count(&self, item: ItemId) -> u16 {
-        self.slots
+        let stacked: u16 = self
+            .slots
             .iter()
             .flatten()
             .filter(|s| s.item == item)
             .map(|s| s.count)
-            .sum()
+            .sum();
+        let instanced = self
+            .instances
+            .iter()
+            .filter(|i| i.item == item)
+            .count() as u16;
+        stacked.saturating_add(instanced)
     }
 
     pub fn try_add(&mut self, stack: ItemStack) -> Result<(), InventoryError> {
         let def = crate::content::items::item_def(stack.item);
+        if Self::is_instanced_equipment(stack.item) {
+            for _ in 0..stack.count {
+                let id = self.next_instance_id;
+                self.next_instance_id += 1;
+                self.instances.push(ItemInstance {
+                    id,
+                    item: stack.item,
+                    enchant: None,
+                });
+            }
+            return Ok(());
+        }
         if def.stackable {
             if let Some(existing) = self
                 .slots
