@@ -200,6 +200,10 @@ pub enum InteractAction {
     MailCollect {
         mail_id: u32,
     },
+    /// Return uncollected mail to sender (postage refund rules in sim).
+    MailReturn {
+        mail_id: u32,
+    },
     /// List a bag stack on the auction house.
     MarketList {
         bag_slot: u8,
@@ -575,6 +579,9 @@ pub struct TickSnapshot {
     /// Derived spell power from gear and stats.
     #[serde(default)]
     pub spell_power: f32,
+    /// Postage in copper the sim will charge for player-to-player mail.
+    #[serde(default)]
+    pub mail_postage: u32,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -602,6 +609,12 @@ pub struct MailSnapshot {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub expires_tick: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -685,6 +698,7 @@ impl Default for TickSnapshot {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            mail_postage: 0,
         }
     }
 }
@@ -1191,6 +1205,7 @@ mod tests {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            mail_postage: 0,
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -1355,6 +1370,7 @@ mod tests {
                 count: 1,
             },
             InteractAction::MailCollect { mail_id: 7 },
+            InteractAction::MailReturn { mail_id: 9 },
             InteractAction::MarketList {
                 bag_slot: 0,
                 count: 1,
@@ -1524,5 +1540,30 @@ mod tests {
                 equip_slot: EquipSlot::Neck
             }
         ));
+    }
+
+    #[test]
+    fn mail_return_roundtrip() {
+        let a = InteractAction::MailReturn { mail_id: 9 };
+        let back: InteractAction = serde_json::from_value(serde_json::to_value(&a).unwrap()).unwrap();
+        assert!(matches!(back, InteractAction::MailReturn { mail_id: 9 }));
+    }
+
+    #[test]
+    fn mail_snapshot_omitted_instance_fields_default() {
+        let mail: MailSnapshot = serde_json::from_str(
+            r#"{"id":1,"from":"AH","subject":"Sold","copper":40,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(mail.durability.is_none());
+        assert!(mail.enchant_id.is_none());
+        assert_eq!(mail.expires_tick, 0);
+    }
+
+    #[test]
+    fn tick_snapshot_mail_postage_defaults_zero() {
+        let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
+        assert_eq!(snap.mail_postage, 0);
+        assert_eq!(PROTOCOL_REV, 8);
     }
 }

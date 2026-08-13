@@ -86,6 +86,7 @@ impl Mailbox {
                         copper: m.copper,
                         item_id: m.item_id.clone(),
                         item_count: m.item_count,
+                        ..Default::default()
                     })
                     .collect()
             })

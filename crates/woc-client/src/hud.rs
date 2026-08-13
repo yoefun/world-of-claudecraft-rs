@@ -1224,6 +1224,7 @@ mod tests {
             copper: 9,
             item_id: Some("baked_bread".into()),
             item_count: 2,
+            ..Default::default()
         });
         snap.market.push(MarketListingSnapshot {
             id: 11,

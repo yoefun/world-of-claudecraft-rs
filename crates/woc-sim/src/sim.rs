@@ -885,6 +885,7 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
+            mail_postage: 0,
         }
     }
 
