@@ -1,5 +1,7 @@
 # Remaining rewrite — max-parallel dispatch schedule
 
+> **Historical.** New dispatch uses [`2026-08-13-parallel-post-completion.md`](2026-08-13-parallel-post-completion.md). This file is the R1–R4 log that closed `1.0.0-pre`.
+
 **Base tip:** rewrite `0.3.0` / `online-alive` (`cursor/ws-framework-polish-0a-8e8e`).  
 **Parent plan:** [`2026-07-28-rust-rewrite-completion.md`](2026-07-28-rust-rewrite-completion.md)
 

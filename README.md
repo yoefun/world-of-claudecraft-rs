@@ -84,8 +84,9 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Current:** `1.0.0-pre` / `completion`.
-Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.0.0-pre` / `completion`. **Next:** `1.0.0` / `stable` (tick-phase contract, CI, demo script) then combat-depth → content-depth → online-hard.
+
+Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 
 ## License
 

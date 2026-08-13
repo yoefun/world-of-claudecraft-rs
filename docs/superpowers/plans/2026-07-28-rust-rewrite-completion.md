@@ -1,5 +1,7 @@
 # Rust Rewrite Completion Implementation Plan
 
+> **Historical.** Gameplay-core `1.0.0-pre` / `completion` shipped. New work uses [`2026-08-13-post-completion-program.md`](2026-08-13-post-completion-program.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Orchestration:** Main agent freezes contracts → dispatches parallel subagents on isolated branches → merges by dependency → runs full tests → updates STATUS.

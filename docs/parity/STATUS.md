@@ -1,5 +1,30 @@
 # Parity status
 
+**Current rewrite:** `1.0.0-pre` / `completion` (gameplay-core shipped).  
+**Next program:** `1.0.0` / `stable` — see [`docs/ROADMAP.md`](../ROADMAP.md) and [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](../superpowers/specs/2026-08-13-post-completion-program-design.md).
+
+## Post-completion (`stable` → `online-hard`)
+
+Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Tick-phase contract vs `tick_all` | planned | Six named phases; pets/auras/PvP/market run unnamed. Wave 0. |
+| CI on `develop` | planned | Workflow currently `main` + `cursor/**` only. |
+| Protocol/crate “stub” / “framework slice” copy | planned | Shipped actions still documented as stubs. |
+| 1.0.0 acceptance demo doc | planned | Completion §8 script → `docs/parity/DEMO.md`. |
+| Data-driven `AbilityEffect` | planned | Hits are damage + hardcoded DoT ids. 1.1. |
+| Heal / AoE / interrupt / taunt | planned | Cleave is single-target; heals require a mob target. |
+| Miss / crit hit table | planned | Always hit. |
+| Mining + blacksmithing | planned | Herbalism → alchemy only. 1.2. |
+| Dungeon trash packs | planned | Crypt is a boss shell. |
+| Second dungeon or delve | planned | One crypt + one hollow. |
+| Ability-modifying talents | planned | Stat % only (3/class). |
+| Park / resume on reconnect | planned | Hello spawns a new entity after disconnect. 1.3. |
+| Snapshot AOI | planned | Full-zone snapshots. |
+| Postgres as documented production path | partial | Works via `DATABASE_URL`; README still memory-first. |
+| ECS `Entity` split | done | Sparse-column `World` is the required actor store. |
+
 ## Rewrite 1.0.0-pre ↔ upstream 0.31.0 (`completion`)
 
 Legend: `done` · `partial` · `planned` · `deferred` · `n/a`

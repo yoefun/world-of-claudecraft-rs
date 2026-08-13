@@ -1,7 +1,8 @@
 # Rust rewrite completion design — remaining features
 
-**Status:** Proposed (planning deliverable 2026-07-28).  
-**Baseline:** rewrite `0.2.0` / parity `framework` on `develop`.  
+**Status:** Shipped as rewrite `1.0.0-pre` / parity `completion` (2026-07-28 program; polish continued on `develop`).  
+**Successor:** [`2026-08-13-post-completion-program-design.md`](2026-08-13-post-completion-program-design.md).  
+**Baseline (when written):** rewrite `0.2.0` / parity `framework` on `develop`.  
 **Upstream pin (unchanged unless bumped later):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `completion` — gameplay-core remaining systems rewritten in Rust (not byte-identical / not full platform parity).
 
