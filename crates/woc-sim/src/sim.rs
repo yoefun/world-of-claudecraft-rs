@@ -793,6 +793,11 @@ impl Sim {
                 .map(|h| !h.alive)
                 .unwrap_or(false),
             party_id: self.parties.party_id(player_id),
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: world
                 .get::<Identity>(player_id)
                 .map(|i| i.zone_id.clone())
