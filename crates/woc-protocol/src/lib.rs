@@ -7,7 +7,9 @@ pub type EntityId = u32;
 
 /// Protocol revision for snapshot / WS envelopes (0.1 was implicit rev 1).
 /// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
-pub const PROTOCOL_REV: u32 = 4;
+/// Rev 4: jump / swim / flight intent + motion snapshot flags.
+/// Rev 5: clear_target intent + ability_bar kit slots for combat HUD.
+pub const PROTOCOL_REV: u32 = 5;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -200,6 +202,9 @@ pub struct PlayerIntent {
     /// Toggle travel flight (V just pressed).
     #[serde(default)]
     pub fly_toggle: bool,
+    /// Clear current target and stop auto-attack (Esc).
+    #[serde(default)]
+    pub clear_target: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,6 +306,21 @@ pub struct AuraSnapshot {
     pub stacks: u32,
 }
 
+/// One action-bar binding exposed to the client HUD (slots 1–5).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct AbilityBarSlot {
+    /// Discriminant matching `AbilitySlot` (1=Primary … 5=Slot5).
+    pub slot: u8,
+    pub ability_id: String,
+    pub name: String,
+    /// Known at the player's current level.
+    pub known: bool,
+    /// Ready to fire (known, off CD, GCD free, not casting, affordable).
+    pub ready: bool,
+    /// Remaining cooldown seconds (0 when ready / unknown).
+    pub cooldown: f32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct CastSnapshot {
     /// Ability currently being cast.
@@ -336,6 +356,15 @@ pub struct TickSnapshot {
     /// In-progress cast bar, if any.
     #[serde(default)]
     pub cast: Option<CastSnapshot>,
+    /// Class kit action bar (slots 1–5). Empty for older peers.
+    #[serde(default)]
+    pub ability_bar: Vec<AbilityBarSlot>,
+    /// Remaining global cooldown seconds.
+    #[serde(default)]
+    pub gcd: f32,
+    /// True when sticky auto-attack is engaged.
+    #[serde(default)]
+    pub auto_attack: bool,
     /// True when the local player is dead.
     #[serde(default)]
     pub is_dead: bool,
@@ -441,6 +470,9 @@ impl Default for TickSnapshot {
             ability_name: String::new(),
             auras: Vec::new(),
             cast: None,
+            ability_bar: Vec::new(),
+            gcd: 0.0,
+            auto_attack: false,
             is_dead: false,
             party_id: None,
             zone_id: String::new(),
@@ -770,6 +802,9 @@ mod tests {
         let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
         assert!(snap.auras.is_empty());
         assert!(snap.cast.is_none());
+        assert!(snap.ability_bar.is_empty());
+        assert_eq!(snap.gcd, 0.0);
+        assert!(!snap.auto_attack);
         assert!(!snap.is_dead);
         assert!(snap.party_id.is_none());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
@@ -808,6 +843,16 @@ mod tests {
                 ability_id: "fireball".into(),
                 progress: 0.35,
             }),
+            ability_bar: vec![AbilityBarSlot {
+                slot: 1,
+                ability_id: "heroic_strike".into(),
+                name: "Heroic Strike".into(),
+                known: true,
+                ready: false,
+                cooldown: 1.2,
+            }],
+            gcd: 0.4,
+            auto_attack: true,
             is_dead: true,
             party_id: Some(3),
             zone_id: "eastbrook".into(),
@@ -833,6 +878,10 @@ mod tests {
         let cast = back.cast.expect("cast present");
         assert_eq!(cast.ability_id, "fireball");
         assert!((cast.progress - 0.35).abs() < f32::EPSILON);
+        assert_eq!(back.ability_bar.len(), 1);
+        assert_eq!(back.ability_bar[0].ability_id, "heroic_strike");
+        assert!((back.gcd - 0.4).abs() < f32::EPSILON);
+        assert!(back.auto_attack);
         assert!(back.is_dead);
         assert_eq!(back.party_id, Some(3));
         assert_eq!(back.zone_id, "eastbrook");
@@ -880,6 +929,22 @@ mod tests {
         // Old JSON still deserializes Primary.
         let old: AbilitySlot = serde_json::from_str("\"Primary\"").unwrap();
         assert_eq!(old, AbilitySlot::Primary);
+    }
+
+    #[test]
+    fn player_intent_clear_target_defaults_false() {
+        let intent: PlayerIntent = serde_json::from_str(
+            r#"{"move_x":0.0,"move_z":0.0,"facing":0.0,"attack":false,"ability":null,"target_id":null}"#,
+        )
+        .unwrap();
+        assert!(!intent.clear_target);
+        let with = PlayerIntent {
+            clear_target: true,
+            ..Default::default()
+        };
+        let s = serde_json::to_string(&with).unwrap();
+        let back: PlayerIntent = serde_json::from_str(&s).unwrap();
+        assert!(back.clear_target);
     }
 
     #[test]

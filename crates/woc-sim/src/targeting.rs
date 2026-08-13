@@ -6,11 +6,11 @@ use woc_protocol::{EntityId, EntityKind};
 /// Max range for tab-target candidates (same ballpark as combat acquire).
 pub const TAB_TARGET_RANGE: f32 = 40.0;
 
-fn angle_to(player: &Entity, target: &Entity) -> f32 {
-    let dx = target.x - player.x;
-    let dz = target.z - player.z;
+fn angle_delta(player_yaw: f32, from_x: f32, from_z: f32, to_x: f32, to_z: f32) -> f32 {
+    let dx = to_x - from_x;
+    let dz = to_z - from_z;
     let facing_to = dz.atan2(dx);
-    let mut delta = facing_to - player.yaw;
+    let mut delta = facing_to - player_yaw;
     while delta > std::f32::consts::PI {
         delta -= std::f32::consts::TAU;
     }
@@ -20,10 +20,47 @@ fn angle_to(player: &Entity, target: &Entity) -> f32 {
     delta.abs()
 }
 
-fn dist2d(a: &Entity, b: &Entity) -> f32 {
-    let dx = a.x - b.x;
-    let dz = a.z - b.z;
-    (dx * dx + dz * dz).sqrt()
+/// Cycle candidates `(id, x, z)` by facing angle, then distance.
+///
+/// Shared by sim entities and client snapshot-based tab targeting.
+pub fn tab_target_pose(
+    player_x: f32,
+    player_z: f32,
+    player_yaw: f32,
+    current: Option<EntityId>,
+    candidates: &[(EntityId, f32, f32)],
+) -> Option<EntityId> {
+    let mut ranked: Vec<(EntityId, f32, f32)> = candidates
+        .iter()
+        .filter_map(|&(id, x, z)| {
+            let dx = x - player_x;
+            let dz = z - player_z;
+            let d = (dx * dx + dz * dz).sqrt();
+            if d > TAB_TARGET_RANGE {
+                return None;
+            }
+            Some((id, angle_delta(player_yaw, player_x, player_z, x, z), d))
+        })
+        .collect();
+
+    if ranked.is_empty() {
+        return None;
+    }
+
+    ranked.sort_by(|a, b| {
+        a.1.partial_cmp(&b.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    if let Some(cur) = current {
+        if let Some(idx) = ranked.iter().position(|(id, ..)| *id == cur) {
+            let next = (idx + 1) % ranked.len();
+            return Some(ranked[next].0);
+        }
+    }
+    Some(ranked[0].0)
 }
 
 /// Cycle living hostile mobs by facing angle, then distance.
@@ -36,36 +73,13 @@ pub fn tab_target(player_id: EntityId, entities: &[Entity]) -> Option<EntityId> 
         return None;
     }
 
-    let mut candidates: Vec<(EntityId, f32, f32)> = entities
+    let candidates: Vec<(EntityId, f32, f32)> = entities
         .iter()
         .filter(|e| e.kind == EntityKind::Mob && e.alive)
-        .filter_map(|e| {
-            let d = dist2d(player, e);
-            if d > TAB_TARGET_RANGE {
-                return None;
-            }
-            Some((e.id, angle_to(player, e), d))
-        })
+        .map(|e| (e.id, e.x, e.z))
         .collect();
 
-    if candidates.is_empty() {
-        return None;
-    }
-
-    candidates.sort_by(|a, b| {
-        a.1.partial_cmp(&b.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
-            .then_with(|| a.0.cmp(&b.0))
-    });
-
-    if let Some(cur) = player.target {
-        if let Some(idx) = candidates.iter().position(|(id, ..)| *id == cur) {
-            let next = (idx + 1) % candidates.len();
-            return Some(candidates[next].0);
-        }
-    }
-    Some(candidates[0].0)
+    tab_target_pose(player.x, player.z, player.yaw, player.target, &candidates)
 }
 
 #[cfg(test)]
@@ -135,7 +149,23 @@ mod tests {
         let second = sim.tab_target().expect("tab cycles");
         assert_ne!(first, second);
 
+        if let Some(p) = sim.player_mut() {
+            p.auto_attack = true;
+        }
         sim.clear_target();
         assert!(sim.player().unwrap().target.is_none());
+        assert!(!sim.player().unwrap().auto_attack);
+    }
+
+    #[test]
+    fn tab_target_pose_matches_entity_tab() {
+        let mut player = create_player(1, "Tabber", PlayerClass::Warrior, 0.0, 0.0);
+        player.yaw = 0.0;
+        let a = create_mob_from_template(2, "young_wolf", 5.0, 0.0).unwrap();
+        let b = create_mob_from_template(3, "young_wolf", 0.0, 5.0).unwrap();
+        let entities = vec![player.clone(), a, b];
+        let from_entities = tab_target(1, &entities).unwrap();
+        let pose = tab_target_pose(0.0, 0.0, 0.0, None, &[(2, 5.0, 0.0), (3, 0.0, 5.0)]).unwrap();
+        assert_eq!(from_entities, pose);
     }
 }

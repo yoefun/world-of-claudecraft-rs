@@ -1,7 +1,7 @@
 //! Bevy host for the framework slice (offline sim embed + online WS).
 
-mod api;
 mod anim;
+mod api;
 mod char_create;
 mod char_select;
 mod hud;
@@ -52,7 +52,8 @@ fn main() {
             hud::plugin,
             nameplates::plugin,
             map::plugin,
-        ))        .add_systems(
+        ))
+        .add_systems(
             Update,
             (
                 input::grab_cursor,

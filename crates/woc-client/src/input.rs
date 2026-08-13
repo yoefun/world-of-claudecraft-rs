@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, TickSnapshot};
+use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{first_junk_bag_stack, UiFlags};
 use crate::GameHost;
@@ -14,11 +15,24 @@ pub(crate) fn grab_cursor(
     mouse: Res<ButtonInput<MouseButton>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut host: ResMut<GameHost>,
+    ui: Res<UiFlags>,
 ) {
     let Ok(mut window) = windows.single_mut() else {
         return;
     };
     if keys.just_pressed(KeyCode::Escape) {
+        // Close map first; otherwise clear combat target / stop AA and release cursor.
+        if ui.show_map {
+            // map close handled in handle_interact_keys
+        } else {
+            host.pending_intent.clear_target = true;
+            host.local_auto_attack = false;
+            if let Some(sim) = host.sim.as_mut() {
+                sim.clear_target();
+            }
+            host.snapshot.target_id = None;
+            host.snapshot.auto_attack = false;
+        }
         host.cursor_grabbed = false;
         window.cursor_options.grab_mode = CursorGrabMode::None;
         window.cursor_options.visible = true;
@@ -41,13 +55,49 @@ pub(crate) fn camera_look(mut motion: EventReader<MouseMotion>, mut host: ResMut
     }
 }
 
+fn ability_slot_from_keys(keys: &ButtonInput<KeyCode>) -> Option<AbilitySlot> {
+    if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
+        return Some(AbilitySlot::Primary);
+    }
+    if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+        return Some(AbilitySlot::Slot2);
+    }
+    if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+        return Some(AbilitySlot::Slot3);
+    }
+    if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+        return Some(AbilitySlot::Slot4);
+    }
+    if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+        return Some(AbilitySlot::Slot5);
+    }
+    None
+}
+
+fn tab_cycle_from_snapshot(snap: &TickSnapshot, facing: f32) -> Option<EntityId> {
+    let player = snap.entities.iter().find(|e| e.id == snap.player_id)?;
+    if !player.alive {
+        return None;
+    }
+    let candidates: Vec<(EntityId, f32, f32)> = snap
+        .entities
+        .iter()
+        .filter(|e| e.kind == EntityKind::Mob && e.alive)
+        .map(|e| (e.id, e.x, e.z))
+        .collect();
+    tab_target_pose(player.x, player.z, facing, snap.target_id, &candidates)
+}
+
 pub(crate) fn collect_intent(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut host: ResMut<GameHost>,
 ) {
+    // Preserve one-shot clear_target from Esc until the next sim/net step consumes it.
+    let clear_target = host.pending_intent.clear_target;
     let mut intent = PlayerIntent {
         facing: host.look_yaw,
+        clear_target,
         ..default()
     };
     let mut mx = 0.0;
@@ -76,16 +126,20 @@ pub(crate) fn collect_intent(
     if keys.just_pressed(KeyCode::KeyV) {
         intent.fly_toggle = true;
     }
-    if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
-        intent.ability = Some(AbilitySlot::Primary);
+    intent.ability = ability_slot_from_keys(&keys);
+
+    if keys.just_pressed(KeyCode::Tab) {
+        if let Some(id) = tab_cycle_from_snapshot(&host.snapshot, host.look_yaw) {
+            intent.target_id = Some(id);
+            host.snapshot.target_id = Some(id);
+            if let Some(sim) = host.sim.as_mut() {
+                if let Some(p) = sim.player_mut() {
+                    p.target = Some(id);
+                }
+            }
+        }
     }
-    // Slots 2–5 reserved for ability kits (no-op until protocol/sim expose them).
-    let _ = (
-        keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2),
-        keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3),
-        keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4),
-        keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5),
-    );
+
     if mouse.just_pressed(MouseButton::Left) || keys.pressed(KeyCode::KeyF) {
         intent.attack = true;
         host.local_auto_attack = true;
@@ -362,10 +416,12 @@ mod tests {
     fn first_available_talent_uses_class_and_skips_max_rank() {
         let mut snap = TickSnapshot::default();
         snap.progress.class_id = "warrior".into();
-        snap.talents.push(TalentRankSnapshot {
-            talent_id: "warrior_cruelty".into(),
-            rank: 5,
-        });
+        for id in ["warrior_cruelty", "warrior_toughness", "warrior_vitality"] {
+            snap.talents.push(TalentRankSnapshot {
+                talent_id: id.into(),
+                rank: 5,
+            });
+        }
 
         assert_eq!(first_available_talent_id(&snap), None);
 
@@ -394,5 +450,79 @@ mod tests {
             first_junk_bag_stack(&snap),
             Some((1, 3, "wolf_fang".into()))
         );
+    }
+
+    #[test]
+    fn tab_cycle_from_snapshot_picks_nearest_facing() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.entities.push(woc_protocol::EntitySnapshot {
+            id: 1,
+            kind: EntityKind::Player,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            yaw: 0.0,
+            hp: 100.0,
+            hp_max: 100.0,
+            level: 1,
+            name: "You".into(),
+            resource: 0.0,
+            resource_max: 100.0,
+            alive: true,
+            template_id: None,
+            on_ground: true,
+            flying: false,
+            swimming: false,
+        });
+        snap.entities.push(woc_protocol::EntitySnapshot {
+            id: 2,
+            kind: EntityKind::Mob,
+            x: 5.0,
+            y: 0.0,
+            z: 0.0,
+            yaw: 0.0,
+            hp: 50.0,
+            hp_max: 50.0,
+            level: 1,
+            name: "Wolf A".into(),
+            resource: 0.0,
+            resource_max: 0.0,
+            alive: true,
+            template_id: Some("young_wolf".into()),
+            on_ground: true,
+            flying: false,
+            swimming: false,
+        });
+        snap.entities.push(woc_protocol::EntitySnapshot {
+            id: 3,
+            kind: EntityKind::Mob,
+            x: 0.0,
+            y: 0.0,
+            z: 5.0,
+            yaw: 0.0,
+            hp: 50.0,
+            hp_max: 50.0,
+            level: 1,
+            name: "Wolf B".into(),
+            resource: 0.0,
+            resource_max: 0.0,
+            alive: true,
+            template_id: Some("young_wolf".into()),
+            on_ground: true,
+            flying: false,
+            swimming: false,
+        });
+        let first = tab_cycle_from_snapshot(&snap, 0.0).expect("first");
+        snap.target_id = Some(first);
+        let second = tab_cycle_from_snapshot(&snap, 0.0).expect("second");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn ability_slot_mapping_covers_kit_keys() {
+        assert_eq!(AbilitySlot::Primary as u8, 1);
+        assert_eq!(AbilitySlot::Slot2 as u8, 2);
+        assert_eq!(AbilitySlot::Slot5 as u8, 5);
     }
 }

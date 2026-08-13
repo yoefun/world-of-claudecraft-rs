@@ -20,7 +20,7 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Sticky WS realm | done | authenticated Hello + per-player snapshots |
 | Client online mode | done | token + character_id Hello |
 | Death / spirit / graveyard | done | |
-| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT |
+| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT; ability bar + Tab/Esc combat UX |
 | Deeper bags / consumables | done | absolute inventory/bank slot indices |
 | Tab targeting | done | |
 | Player motion / colliders | done | |
