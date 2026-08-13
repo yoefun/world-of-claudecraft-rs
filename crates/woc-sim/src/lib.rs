@@ -4,6 +4,7 @@ pub mod content;
 pub mod gold;
 pub mod inventory;
 pub mod item;
+pub mod professions;
 pub mod rng;
 
 pub fn ticks_from_seconds(seconds: f32) -> u32 {
