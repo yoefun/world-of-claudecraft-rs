@@ -1,17 +1,17 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.2.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.3.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.2.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`content-depth`**.
+**Rewrite `1.3.0`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`online-hard`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 
-## What works in 1.2.0 (content-depth)
+## What works in 1.3.0 (online-hard)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
@@ -23,9 +23,9 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.2.0 · upstream 0.31.0`
-- `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello
-- Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; Postgres optional)
+- Version footer: `WoC-rs 1.3.0 · upstream 0.31.0`
+- `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
+- Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
 ## Crates
 
@@ -72,7 +72,16 @@ REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` o
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
+### Persistence (production vs dev)
+
+`DATABASE_URL` is the durable realm path. When it is set, `woc-server` / `woc-persist` use **Postgres** for accounts, character saves, mail, and the auction house (migrations in `crates/woc-persist/migrations/`). When it is unset, the in-memory store remains the **zero-config dev default**.
+
+```bash
+DATABASE_URL=postgres://woc:woc@127.0.0.1:5432/woc cargo run -p woc-server
+```
+
 Controls: **WASD** move, **Space** jump / swim hop / fly up, **Ctrl** descend (swim/fly), **V** travel flight toggle, **mouse** look (hold right), **left click** / **F** attack, **Tab** cycle target, **1–5** abilities (or Need/Greed/Pass while rolling), **T** pet summon/dismiss (hunter/warlock), **Esc** clear target / stop attack / release cursor, **E** interact/loot, **B** bags (**Q** equip / **F** use / **V** sell junk at vendor), **L** quests, **C** character, **N** talents (**1–3** spend / Y first available / R respec), **K** bank (**G** deposit junk / **H**/**1–9** withdraw / **J**/**Y** copper vault), **I** mail (**P** collect), **M** world map, **U** market (**L** list / **O** buy / **X** cancel), **[**/**]** party loot mode. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
+
 ## Architecture
 
 One sim, multiple hosts:
@@ -84,7 +93,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.2.0` / `content-depth`. **Next:** `1.3.0` / `online-hard`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.3.0` / `online-hard`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 

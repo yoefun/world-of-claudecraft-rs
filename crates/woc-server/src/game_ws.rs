@@ -150,7 +150,7 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
 
                 // Save previous binding if any.
                 if let Some(prev) = binding.take() {
-                    save_and_despawn(&shared, &prev).await;
+                    save_and_park(&shared, &prev).await;
                     shared.player_tx.lock().await.remove(&prev.player_id);
                 }
 
@@ -269,7 +269,7 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
 
     send_task.abort();
     if let Some(prev) = binding.take() {
-        save_and_despawn(&shared, &prev).await;
+        save_and_park(&shared, &prev).await;
         shared.player_tx.lock().await.remove(&prev.player_id);
     }
 }
@@ -281,7 +281,7 @@ fn err_json(message: &str) -> String {
     .unwrap_or_default()
 }
 
-async fn save_and_despawn(shared: &Shared, binding: &SessionBinding) {
+async fn save_and_park(shared: &Shared, binding: &SessionBinding) {
     let (save, economy) = {
         let mut realm = shared.realm.lock().await;
         let save = realm
@@ -289,7 +289,7 @@ async fn save_and_despawn(shared: &Shared, binding: &SessionBinding) {
             .export_player_state(binding.player_id)
             .map(|s| state_to_save(&s));
         let economy = export_economy_from_sim(&realm.sim);
-        realm.sim.despawn_player(binding.player_id);
+        realm.sim.park_player(binding.player_id);
         realm.economy_dirty = true;
         (save, economy)
     };
@@ -419,6 +419,29 @@ mod tests {
         assert_eq!(npc_before, npc_after);
         realm.sim.despawn_player(a);
         assert!(realm.sim.world.contains(b));
+    }
+
+    #[test]
+    fn park_keeps_player_for_resume() {
+        let mut realm = Realm::new(Sim::new_empty_eastbrook());
+        let a = realm
+            .sim
+            .spawn_player("Alice", PlayerClass::Warrior)
+            .expect("spawn a");
+        if let Some(d) = realm
+            .sim
+            .world
+            .get_mut::<woc_sim::ecs::components::Durable>(a)
+        {
+            d.durable_id = Some("11111111-1111-1111-1111-111111111111".into());
+        }
+        realm.sim.park_player(a);
+        assert!(realm.sim.world.contains(a));
+        let resumed = realm
+            .sim
+            .resume_player("11111111-1111-1111-1111-111111111111")
+            .expect("resume");
+        assert_eq!(resumed, a);
     }
 
     #[test]

@@ -46,6 +46,9 @@ use woc_protocol::{
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
 pub const MAX_REALM_PLAYERS: usize = 8;
 
+/// Snapshot radius for other players, mobs, pets, and non-roll loot (yards).
+pub const SNAPSHOT_AOI_RADIUS: f32 = 80.0;
+
 pub struct Sim {
     pub tick: u64,
     pub seed: u32,
@@ -137,6 +140,11 @@ impl Sim {
         class: PlayerClass,
         state: &crate::persist_state::PlayerPersistentState,
     ) -> Option<EntityId> {
+        if let Some(ref did) = state.durable_id {
+            if let Some(id) = self.resume_player(did) {
+                return Some(id);
+            }
+        }
         let players = self.player_count();
         if players >= MAX_REALM_PLAYERS {
             return None;
@@ -202,6 +210,47 @@ impl Sim {
         if self.player_id == player_id {
             self.player_id = self.player_ids().into_iter().next().unwrap_or(0);
         }
+    }
+
+    /// Park a player on disconnect: keep the entity and HP, drop intents.
+    pub fn park_player(&mut self, player_id: EntityId) {
+        if self.world.get::<ClassKit>(player_id).is_none() {
+            return;
+        }
+        self.intents.remove(&player_id);
+        if let Some(combat) = self.world.get_mut::<Combat>(player_id) {
+            combat.auto_attack = false;
+            combat.target = None;
+            combat.cast = None;
+        }
+    }
+
+    /// Resume a parked player by durable character id. Returns `None` if missing
+    /// or still connected (has an intent slot).
+    pub fn resume_player(&mut self, durable_id: &str) -> Option<EntityId> {
+        let id = self.player_id_by_durable(durable_id)?;
+        if self.intents.contains_key(&id) {
+            return None;
+        }
+        self.intents.insert(id, PlayerIntent::default());
+        if self.player_id == 0 {
+            self.player_id = id;
+        }
+        Some(id)
+    }
+
+    fn player_id_by_durable(&self, durable_id: &str) -> Option<EntityId> {
+        self.world
+            .ids::<crate::ecs::components::Durable>()
+            .into_iter()
+            .find(|&id| {
+                self.world.get::<ClassKit>(id).is_some()
+                    && self
+                        .world
+                        .get::<crate::ecs::components::Durable>(id)
+                        .and_then(|d| d.durable_id.as_deref())
+                        == Some(durable_id)
+            })
     }
 
     /// Party invite by target player name.
@@ -664,7 +713,7 @@ impl Sim {
             .and_then(|i| i.instance_id.clone());
         let entities = world
             .live_ids()
-            .filter(|&id| snapshot_includes_entity(world, viewer_instance.as_deref(), id))
+            .filter(|&id| self.snapshot_visible(player_id, viewer_instance.as_deref(), id))
             .filter_map(|id| entity_snapshot(world, id))
             .collect();
 
@@ -772,6 +821,51 @@ impl Sim {
                 .map(|b| b.bank_copper)
                 .unwrap_or(0),
         }
+    }
+
+    fn snapshot_visible(
+        &self,
+        viewer: EntityId,
+        viewer_instance: Option<&str>,
+        id: EntityId,
+    ) -> bool {
+        if !snapshot_includes_entity(&self.world, viewer_instance, id) {
+            return false;
+        }
+        if id == viewer {
+            return true;
+        }
+        if self
+            .parties
+            .members_of(viewer)
+            .is_some_and(|m| m.contains(&id))
+        {
+            return true;
+        }
+        if self.world.get::<Combat>(viewer).and_then(|c| c.target) == Some(id) {
+            return true;
+        }
+        let Some(identity) = self.world.get::<Identity>(id) else {
+            return false;
+        };
+        let viewer_zone = self
+            .world
+            .get::<Identity>(viewer)
+            .map(|i| i.zone_id.as_str())
+            .unwrap_or("");
+        if identity.kind == EntityKind::Npc && identity.zone_id == viewer_zone {
+            return true;
+        }
+        if self
+            .loot_rules
+            .pending
+            .iter()
+            .any(|p| p.loot_id == id && p.eligible.contains(&viewer))
+        {
+            return true;
+        }
+        crate::ecs::components::dist2d(&self.world, viewer, id)
+            .is_some_and(|d| d <= SNAPSHOT_AOI_RADIUS)
     }
 }
 
@@ -1045,7 +1139,7 @@ mod tests {
         let expected: Vec<EntityId> = sim
             .world
             .live_ids()
-            .filter(|&id| snapshot_includes_entity(&sim.world, viewer_instance.as_deref(), id))
+            .filter(|&id| sim.snapshot_visible(sim.player_id, viewer_instance.as_deref(), id))
             .filter(|&id| entity_snapshot(&sim.world, id).is_some())
             .collect();
         let snap_ids: Vec<EntityId> = snap.entities.iter().map(|e| e.id).collect();
@@ -1652,6 +1746,112 @@ mod tests {
         assert!(
             hp_after < hp_before,
             "expected pet+player damage ({hp_after} < {hp_before})"
+        );
+    }
+
+    #[test]
+    fn park_then_resume_keeps_entity_id_and_position() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let id = sim.spawn_player("Ada", PlayerClass::Warrior).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(id) {
+            d.durable_id = Some("char-ada".into());
+        }
+        if let Some(t) = sim.world.get_mut::<Transform>(id) {
+            t.x = 12.0;
+            t.z = 8.0;
+        }
+        if let Some(h) = sim.world.get_mut::<Health>(id) {
+            h.hp = 17.0;
+        }
+        sim.park_player(id);
+        assert!(sim.world.contains(id), "park must keep the entity");
+        assert!(
+            !sim.intents.contains_key(&id),
+            "park must drop the intent slot"
+        );
+        assert_eq!(sim.world.get::<Health>(id).unwrap().hp, 17.0);
+        let resumed = sim.resume_player("char-ada").expect("resume parked");
+        assert_eq!(resumed, id);
+        let t = sim.world.get::<Transform>(id).unwrap();
+        assert_eq!(t.x, 12.0);
+        assert_eq!(t.z, 8.0);
+        assert!(sim.intents.contains_key(&id));
+        assert!(sim.resume_player("char-ada").is_none(), "already connected");
+        sim.park_player(id);
+        let state = sim.export_player_state(id).unwrap();
+        let via_spawn = sim
+            .spawn_player_with_state("Ada", PlayerClass::Warrior, &state)
+            .expect("spawn resumes parked");
+        assert_eq!(via_spawn, id);
+        assert_eq!(sim.world.get::<Health>(id).unwrap().hp, 17.0);
+    }
+
+    #[test]
+    fn snapshot_includes_nearby_mob_and_omits_far_mob() {
+        let mut sim = Sim::new_eastbrook("Scout", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        let (px, pz) = {
+            let t = sim.world.get::<Transform>(pid).unwrap();
+            (t.x, t.z)
+        };
+        let near = sim.world.next_id();
+        crate::ecs::spawn::create_mob_from_template(
+            &mut sim.world,
+            near,
+            "young_wolf",
+            px + 5.0,
+            pz,
+        )
+        .unwrap();
+        let far = sim.world.next_id();
+        crate::ecs::spawn::create_mob_from_template(
+            &mut sim.world,
+            far,
+            "young_wolf",
+            px,
+            pz + 200.0,
+        )
+        .unwrap();
+        let snap = sim.snapshot_for_player(pid);
+        assert!(
+            snap.entities.iter().any(|e| e.id == near),
+            "mob at 5 yd must be in the snapshot"
+        );
+        assert!(
+            !snap.entities.iter().any(|e| e.id == far),
+            "mob at 200 yd same zone must be omitted"
+        );
+        assert!(
+            crate::ecs::components::dist2d(&sim.world, pid, far).unwrap() > SNAPSHOT_AOI_RADIUS
+        );
+    }
+
+    #[test]
+    fn snapshot_always_includes_zone_npcs() {
+        let mut sim = Sim::new_eastbrook("Talker", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        let zone = sim.world.get::<Identity>(pid).unwrap().zone_id.clone();
+        let far_npc = sim
+            .world
+            .live_ids()
+            .find(|&id| {
+                sim.world
+                    .get::<Identity>(id)
+                    .is_some_and(|i| i.kind == EntityKind::Npc && i.zone_id == zone)
+            })
+            .expect("zone npc");
+        let (px, pz) = {
+            let p = sim.world.get::<Transform>(pid).unwrap();
+            (p.x, p.z)
+        };
+        if let Some(t) = sim.world.get_mut::<Transform>(far_npc) {
+            t.x = px;
+            t.z = pz + 200.0;
+        }
+        let snap = sim.snapshot_for_player(pid);
+        assert!(
+            snap.entities.iter().any(|e| e.id == far_npc),
+            "zone NPCs stay in the snapshot so talk/quest still works"
         );
     }
 }

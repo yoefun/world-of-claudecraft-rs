@@ -1,7 +1,7 @@
 # Parity status
 
-**Current rewrite:** `1.2.0` / `content-depth`.  
-**Next program:** `1.3.0` / `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md) and [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](../superpowers/specs/2026-08-13-post-completion-program-design.md).
+**Current rewrite:** `1.3.0` / `online-hard`.  
+**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -20,9 +20,9 @@ Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
 | Dungeon trash packs | done | Crypt and barrow spawn `DungeonTrashSpot` packs on enter. |
 | Second dungeon or delve | done | `mirefen_barrow` (boss `barrow_hag`). |
 | Ability-modifying talents | done | 4th talent/class: cleave targets / heal% / crit%. |
-| Park / resume on reconnect | planned | Hello spawns a new entity after disconnect. 1.3. |
-| Snapshot AOI | planned | Full-zone snapshots. |
-| Postgres as documented production path | partial | Works via `DATABASE_URL`; README still memory-first. |
+| Park / resume on reconnect | done | WS close parks the entity; Hello with the same `character_id` resumes it. |
+| Snapshot AOI | done | 80 yd for other players/mobs/pets; zone NPCs and pending loot always included. |
+| Postgres as documented production path | done | `DATABASE_URL` is the durable realm path; memory is the dev default. |
 | ECS `Entity` split | done | Sparse-column `World` is the required actor store. |
 
 ## Rewrite 1.0.0-pre ↔ upstream 0.31.0 (`completion`)
@@ -38,7 +38,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.2.0` / content-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.3.0` / online-hard (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |

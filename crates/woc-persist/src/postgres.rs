@@ -1,6 +1,9 @@
 //! Postgres persist backend (feature = `postgres`).
 //!
-//! Requires `DATABASE_URL`, e.g. `postgres://woc:woc@127.0.0.1:5432/woc`.
+//! This is the durable production store for accounts, characters, mail, and
+//! auction listings. The server selects it when `DATABASE_URL` is set, e.g.
+//! `postgres://woc:woc@127.0.0.1:5432/woc`. Leave `DATABASE_URL` unset for the
+//! in-memory dev default.
 
 use crate::error::{PersistError, PersistResult};
 use crate::models::{

@@ -10,7 +10,7 @@
 | **1.0.0** (this branch) | `stable` | Tick-phase contract, CI on `develop`, docs/demo hygiene |
 | **1.1.0** (this branch) | `combat-depth` | Data-driven ability effects: heal, AoE, miss/crit, interrupt, taunt |
 | **1.2.0** (this branch) | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
-| **1.3.0** | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
+| **1.3.0** (this branch) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
 
 ## Completion program (closed)
 

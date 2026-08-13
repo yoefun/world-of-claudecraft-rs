@@ -9,7 +9,8 @@
 - Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.
 - Wave 1 `combat-depth` on ECS columns: `AbilityEffect` (heal, cleave AoE, interrupt, taunt), miss/crit hit table, priest `flash_heal`, warrior `taunt`.
 - Wave 2 `content-depth`: mining → blacksmithing (`copper_shortsword`); dungeon trash packs; `mirefen_barrow`; ability-mod talents (`cleave_targets_plus` / `heal_pct` / `crit_pct`).
-- Rewrite version `1.0.0-pre` → `1.2.0`; parity `completion` → `content-depth`.
+- Wave 3 `online-hard`: park/resume on WS close; 80 yd snapshot AOI; Postgres documented as the `DATABASE_URL` production path.
+- Rewrite version `1.0.0-pre` → `1.3.0`; parity `completion` → `online-hard`.
 - Protocol rev **6**: pending Need/Greed loot snapshot, bank copper vault, market `mine` flag; `BankDepositCopper` / `BankWithdrawCopper`.
 - Party Need/Greed is wired into mob loot spawn (eligible mates within 40 yd); pending piles skip FFA auto-pickup.
 - `LootCorpse` interact claims ground piles / corpse-adjacent loot (respects rolls).

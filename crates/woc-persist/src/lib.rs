@@ -2,8 +2,10 @@
 //!
 //! # Backends
 //!
-//! - **Memory** (always available): used when `DATABASE_URL` is unset.
-//! - **Postgres** (`feature = "postgres"`, default): used when `DATABASE_URL` is set.
+//! - **Memory** (always available): zero-config **dev default** when `DATABASE_URL`
+//!   is unset. Accounts, characters, mail, and auction live only in this process.
+//! - **Postgres** (`feature = "postgres"`, default): the **durable production
+//!   path**. Used when `DATABASE_URL` is set to a non-empty Postgres URL.
 //!
 //! # Environment
 //!
@@ -11,7 +13,9 @@
 //! DATABASE_URL=postgres://woc:woc@127.0.0.1:5432/woc
 //! ```
 //!
-//! Migrations live in `migrations/001_init.sql` and are applied on Postgres connect.
+//! `Persist::from_env()` picks Postgres when that variable is set, otherwise
+//! memory. Migrations live in `crates/woc-persist/migrations/` (`001_init.sql`,
+//! `002_realm_economy.sql`) and are applied on Postgres connect.
 //!
 //! Unit tests for hashing / JSON serialize always run. Postgres integration tests
 //! skip automatically when `DATABASE_URL` is absent.
