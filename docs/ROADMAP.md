@@ -19,7 +19,8 @@
 | **1.9.0** (shipped) | `quest-loop` | Accept / progress / complete gates, prerequisite chains, generic E / log / map |
 | **1.10.0** (shipped) | `quest-depth` | Abandon, party share, daily reset, explore/escort objectives, choice rewards |
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
-| **1.12.0** (this branch) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
+| **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
+| **1.13.0** (this branch) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
 
 ## Completion program (closed)
 
@@ -41,7 +42,14 @@ Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-depth-design.md`](superpowers/specs/2026-08-13-gear-depth-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-depth.md`](superpowers/plans/2026-08-13-gear-depth.md)
 
-Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services; crafted quality stays out of this program.
+Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services.
+
+## Gear slots (shipped as `1.13.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-slots-design.md`](superpowers/specs/2026-08-13-gear-slots-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-slots.md`](superpowers/plans/2026-08-13-gear-slots.md)
+
+Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
 
 ## Client version gate (current)
 

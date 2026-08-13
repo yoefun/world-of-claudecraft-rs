@@ -1,8 +1,19 @@
 # Parity status
 
-**Current rewrite:** `1.12.0` / `gear-depth`.  
+**Current rewrite:** `1.13.0` / `gear-slots`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth shipped as `1.12.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+
+## Gear slots (`gear-slots`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Dual-wield | done | Warrior/Rogue; second OneHand → OffHand; OH AP ×0.25 |
+| Finger2 | done | Fill Finger then Finger2; jewelry still no wear |
+| Quality | done | Poor/Common/Uncommon/Rare multipliers on AP/armor/sta/SP |
+| MH enchant | done | Whetstone +6 AP; wizard oil +6 SP; broken MH skips both |
+| Client sheet | done | 9 slots; quality prefix; `[enchant]`; unequip 1–9 |
+| Protocol | done | Rev 8; additive `finger2` / `main_hand_enchant` / `enchant_id` |
 
 ## Gear depth (`gear-depth`) — done
 
@@ -142,7 +153,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.12.0` / gear-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.13.0` / gear-slots (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
