@@ -13,7 +13,7 @@
 //! 8. `loot_pickup` — proximity pickup for all players
 //! 9. `build_snapshot` — snapshot for primary/`snapshot_for` viewer
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::combat::{
     collect_pending_mob_kills, grant_xp, spawn_mob_loot, tick_auras, try_pickup_loot,
@@ -21,8 +21,8 @@ use crate::combat::{
 };
 use crate::context::SimContext;
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootTable, Motion, Owner,
-    Progress, QuestLog, QuestState, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootPile, LootTable,
+    Motion, Owner, Progress, QuestLog, QuestState, Transform,
 };
 use crate::ecs::World;
 use crate::interaction::vendor_snapshot;
@@ -532,29 +532,38 @@ impl Sim {
                     }
                 }
             }
-            let loot_id = spawn_mob_loot(
+            let loot_before: HashSet<EntityId> =
+                self.world.ids::<LootPile>().into_iter().collect();
+            let _first = spawn_mob_loot(
                 &mut self.world,
                 &mut self.rng,
                 reward.template_id.as_deref(),
                 reward.x,
                 reward.z,
             );
-            if let Some(killer_inst) = self
+            let killer_inst = self
                 .world
                 .get::<InstanceAt>(reward.killer)
-                .and_then(|i| i.instance_id.clone())
+                .and_then(|i| i.instance_id.clone());
+            for loot_id in self
+                .world
+                .ids::<LootPile>()
+                .into_iter()
+                .filter(|id| !loot_before.contains(id))
             {
-                if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
-                    loot.instance_id = Some(killer_inst);
+                if let Some(ref inst) = killer_inst {
+                    if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
+                        loot.instance_id = Some(inst.clone());
+                    }
                 }
+                self.loot_rules.maybe_start_party_roll(
+                    &self.parties,
+                    &self.world,
+                    reward.killer,
+                    loot_id,
+                    &mut self.events,
+                );
             }
-            self.loot_rules.maybe_start_party_roll(
-                &self.parties,
-                &self.world,
-                reward.killer,
-                loot_id,
-                &mut self.events,
-            );
         }
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
         crate::death::on_player_death_check(&mut self.world, &mut self.events);
@@ -1096,6 +1105,7 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{Bags, Bank, ClassKit, LootPile, Owner, Threat, Transform};
+    use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
 
     fn kind_count(sim: &Sim, kind: EntityKind) -> usize {
@@ -1979,5 +1989,76 @@ mod tests {
             snap.entities.iter().any(|e| e.id == far_npc),
             "zone NPCs stay in the snapshot so talk/quest still works"
         );
+    }
+
+    #[test]
+    fn instance_independent_loot_tags_all_piles() {
+        let mut sim = Sim::new_eastbrook("InstLoot", PlayerClass::Warrior);
+        let instance_id = "mirefen_barrow#loot-test".to_string();
+        if let Some(i) = sim.world.get_mut::<InstanceAt>(sim.player_id) {
+            i.instance_id = Some(instance_id.clone());
+        }
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "barrow_hag", 0.0, 0.0)
+            .expect("barrow_hag");
+        if let Some(i) = sim.world.get_mut::<InstanceAt>(mob_id) {
+            i.instance_id = Some(instance_id.clone());
+        }
+        if let Some(h) = sim.world.get_mut::<Health>(mob_id) {
+            h.hp = 1.0;
+            h.hp_max = 1.0;
+        }
+        place_player_at(&mut sim, 2.5, 0.0);
+        if let Some(kit) = sim.world.get_mut::<ClassKit>(sim.player_id) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
+            c.target = Some(mob_id);
+            c.auto_attack = true;
+        }
+        let intent = PlayerIntent {
+            attack: true,
+            ability: Some(AbilitySlot::Primary),
+            target_id: Some(mob_id),
+            ..Default::default()
+        };
+        let mut saw_kill = false;
+        for _ in 0..400 {
+            let (_snap, events) = sim.tick(intent);
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob_id))
+            {
+                saw_kill = true;
+                break;
+            }
+        }
+        assert!(saw_kill, "barrow_hag should die in combat");
+        let piles: Vec<(Option<String>, Option<String>)> = sim
+            .world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| {
+                let item = sim.world.get::<LootPile>(id)?.item.clone();
+                let inst = sim
+                    .world
+                    .get::<InstanceAt>(id)?
+                    .instance_id
+                    .clone();
+                Some((item, inst))
+            })
+            .filter(|(item, _)| {
+                matches!(item.as_deref(), Some("hag_claw") | Some("hag_focus"))
+            })
+            .collect();
+        assert_eq!(piles.len(), 2, "expected two independent loot piles");
+        assert!(
+            piles
+                .iter()
+                .all(|(_, inst)| inst.as_ref() == Some(&instance_id)),
+            "every pile must inherit the killer's instance"
+        );
+        assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_claw")));
+        assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_focus")));
     }
 }
