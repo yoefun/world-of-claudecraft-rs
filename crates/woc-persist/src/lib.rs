@@ -104,6 +104,14 @@ impl Persist {
         }
     }
 
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        match self {
+            Self::Memory(s) => s.list_mailbox_directory().await,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(s) => s.list_mailbox_directory().await,
+        }
+    }
+
     pub async fn create_character(
         &self,
         account_id: Uuid,

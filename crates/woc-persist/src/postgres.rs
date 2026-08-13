@@ -261,6 +261,16 @@ impl PostgresStore {
         self.save_character(character_id, save).await
     }
 
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        let rows = sqlx::query("SELECT name, id FROM characters")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| (row.get::<String, _>("name"), row.get::<Uuid, _>("id")))
+            .collect())
+    }
+
     pub async fn load_economy(&self) -> PersistResult<crate::economy::RealmEconomy> {
         let row = sqlx::query("SELECT data::text AS data FROM realm_economy WHERE id = 1")
             .fetch_optional(&self.pool)
