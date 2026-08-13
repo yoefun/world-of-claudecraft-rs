@@ -359,8 +359,18 @@ const PLAYER_WARRIOR: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.65, 0.65, 0.70),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -381,8 +391,18 @@ const PLAYER_PALADIN: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.80, 0.78, 0.55),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -403,8 +423,18 @@ const PLAYER_HUNTER: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.45, 0.32, 0.18),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -425,8 +455,18 @@ const PLAYER_ROGUE: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.15, 0.15, 0.18),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -447,8 +487,18 @@ const PLAYER_PRIEST: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(1.0, 0.85, 0.40),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -469,8 +519,18 @@ const PLAYER_SHAMAN: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.55, 0.40, 0.25),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -491,8 +551,18 @@ const PLAYER_MAGE: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.20, 0.30, 0.65),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -513,8 +583,18 @@ const PLAYER_WARLOCK: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.55, 0.35, 0.20),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -535,8 +615,18 @@ const PLAYER_DRUID: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.45, 0.70, 0.35),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -557,8 +647,18 @@ const NPC_QUEST: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.95, 0.80, 0.25),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -579,8 +679,18 @@ const NPC_VENDOR: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.45, 0.30, 0.18),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -594,8 +704,18 @@ const NPC_TOWN: VisualSpec = VisualSpec {
     parts: parts![
         body(0.90, 0.31, 0.50, rgb(0.50, 0.55, 0.45)),
         head(1.72, 0.20, rgb(0.82, 0.68, 0.52)),
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -628,10 +748,30 @@ const MOB_WOLF: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.35, 0.30, 0.26),
         },
-        leg(PartRole::LegL, [-0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
-        leg(PartRole::LegR, [0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
-        leg(PartRole::HindLegL, [-0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
-        leg(PartRole::HindLegR, [0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(
+            PartRole::LegL,
+            [-0.18, 0.22, 0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.18, 0.22, 0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
+        leg(
+            PartRole::HindLegL,
+            [-0.18, 0.22, -0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
+        leg(
+            PartRole::HindLegR,
+            [0.18, 0.22, -0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
     ],
 };
 
@@ -671,10 +811,30 @@ const MOB_BOAR: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.90, 0.88, 0.80),
         },
-        leg(PartRole::LegL, [-0.22, 0.20, 0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
-        leg(PartRole::LegR, [0.22, 0.20, 0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
-        leg(PartRole::HindLegL, [-0.22, 0.20, -0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
-        leg(PartRole::HindLegR, [0.22, 0.20, -0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
+        leg(
+            PartRole::LegL,
+            [-0.22, 0.20, 0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.40, 0.28, 0.18)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.22, 0.20, 0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.40, 0.28, 0.18)
+        ),
+        leg(
+            PartRole::HindLegL,
+            [-0.22, 0.20, -0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.40, 0.28, 0.18)
+        ),
+        leg(
+            PartRole::HindLegR,
+            [0.22, 0.20, -0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.40, 0.28, 0.18)
+        ),
     ],
 };
 
@@ -858,8 +1018,18 @@ const MOB_UNDEAD: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.40, 0.42, 0.38),
         },
-        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
-        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(
+            PartRole::LegL,
+            [-0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.14, 0.35, 0.0],
+            [0.14, 0.70, 0.16],
+            rgb(0.25, 0.22, 0.20)
+        ),
     ],
 };
 
@@ -875,7 +1045,7 @@ const MOB_GENERIC: VisualSpec = VisualSpec {
         offset: [0.0, 0.35, 0.0],
         size: [0.90, 0.55, 1.30],
         role: PartRole::Prop,
-            color: rgb(0.45, 0.35, 0.28),
+        color: rgb(0.45, 0.35, 0.28),
     }],
 };
 
@@ -901,10 +1071,30 @@ const PET_WOLF: VisualSpec = VisualSpec {
             role: PartRole::Prop,
             color: rgb(0.38, 0.45, 0.52),
         },
-        leg(PartRole::LegL, [-0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
-        leg(PartRole::LegR, [0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
-        leg(PartRole::HindLegL, [-0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
-        leg(PartRole::HindLegR, [0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(
+            PartRole::LegL,
+            [-0.18, 0.22, 0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.18, 0.22, 0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
+        leg(
+            PartRole::HindLegL,
+            [-0.18, 0.22, -0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
+        leg(
+            PartRole::HindLegR,
+            [0.18, 0.22, -0.32],
+            [0.10, 0.40, 0.10],
+            rgb(0.35, 0.30, 0.26)
+        ),
     ],
 };
 
@@ -947,7 +1137,7 @@ const PET_GENERIC: VisualSpec = VisualSpec {
         offset: [0.0, 0.30, 0.0],
         size: [0.55, 0.40, 0.80],
         role: PartRole::Prop,
-            color: rgb(0.35, 0.55, 0.65),
+        color: rgb(0.35, 0.55, 0.65),
     }],
 };
 

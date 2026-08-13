@@ -52,13 +52,7 @@ impl LocoTrack {
 /// `vx`/`vz` are render-space horizontal displacement since last frame;
 /// `facing` is entity yaw (radians, 0 = +Z) for backpedal detection;
 /// `dt` is frame delta in seconds.
-pub fn update_locomotion(
-    t: &mut LocoTrack,
-    vx: f32,
-    vz: f32,
-    facing: f32,
-    dt: f32,
-) -> LocoState {
+pub fn update_locomotion(t: &mut LocoTrack, vx: f32, vz: f32, facing: f32, dt: f32) -> LocoState {
     let dist = (vx * vx + vz * vz).sqrt();
     let mut speed = dist / dt.max(1e-4);
     if speed > TELEPORT_SPEED {

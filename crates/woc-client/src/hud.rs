@@ -388,20 +388,13 @@ pub(crate) fn update_hud(
     let snap = &host.snapshot;
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
         if let Ok(mut t) = hp.single_mut() {
-            let abil = if snap.ability_name.is_empty() {
-                "Ability"
-            } else {
-                &snap.ability_name
-            };
             **t = format!(
-                "HP {:.0}/{:.0}   {} {:.0}/{:.0}   [1] {} {}",
+                "HP {:.0}/{:.0}   {} {:.0}/{:.0}",
                 player.hp,
                 player.hp_max,
                 snap.progress.resource_type,
                 player.resource,
                 player.resource_max,
-                abil,
-                if snap.ability_ready { "READY" } else { "CD" }
             );
         }
     } else if let Ok(mut t) = hp.single_mut() {
@@ -422,18 +415,26 @@ pub(crate) fn update_hud(
     if let Ok(mut t) = target.single_mut() {
         **t = if let Some(tid) = snap.target_id {
             if let Some(e) = snap.entities.iter().find(|e| e.id == tid) {
+                let pct = if e.hp_max > 0.0 {
+                    (e.hp / e.hp_max * 100.0).clamp(0.0, 100.0)
+                } else {
+                    0.0
+                };
+                let aa = if snap.auto_attack { "  AA" } else { "" };
                 format!(
-                    "Target: {}  HP {:.0}/{:.0}{}",
+                    "Target: {}  HP {:.0}/{:.0} ({:.0}%){}{}",
                     e.name,
                     e.hp,
                     e.hp_max,
+                    pct,
+                    aa,
                     if e.alive { "" } else { " (dead)" }
                 )
             } else {
                 "Target: none".into()
             }
         } else {
-            "Target: none".into()
+            "Target: none (Tab cycle · LMB acquire · Esc clear)".into()
         };
     }
     if let Ok(mut t) = quest.single_mut() {
@@ -554,16 +555,59 @@ pub(crate) fn update_hud(
         }
     }
 
-    // Action bar: Primary + slots 2–5 labels (kits later)
+    // Action bar: class kit slots 1–5 from snapshot (fallback to primary name).
     if let Ok(mut t) = action.single_mut() {
+        **t = format_action_bar(snap);
+    }
+}
+
+fn format_action_bar(snap: &TickSnapshot) -> String {
+    if snap.ability_bar.is_empty() {
         let name = if snap.ability_name.is_empty() {
             "Ability"
         } else {
             snap.ability_name.as_str()
         };
         let ready = if snap.ability_ready { "READY" } else { "CD" };
-        **t = format!("[1] {name} {ready}   [2] —   [3] —   [4] —   [5] —");
+        return format!("[1] {name} {ready}   [2] —   [3] —   [4] —   [5] —");
     }
+    let mut parts = Vec::new();
+    for slot in 1u8..=5 {
+        if let Some(entry) = snap.ability_bar.iter().find(|e| e.slot == slot) {
+            let status = if !entry.known {
+                "locked".to_string()
+            } else if entry.ready {
+                "READY".to_string()
+            } else if entry.cooldown > 0.0 {
+                format!("{:.1}s", entry.cooldown)
+            } else if snap.gcd > 0.0 {
+                "GCD".to_string()
+            } else {
+                "…".to_string()
+            };
+            parts.push(format!("[{slot}] {} {status}", entry.name));
+        } else {
+            parts.push(format!("[{slot}] —"));
+        }
+    }
+    let auras = if snap.auras.is_empty() {
+        String::new()
+    } else {
+        let list = snap
+            .auras
+            .iter()
+            .map(|a| {
+                if a.stacks > 1 {
+                    format!("{}×{} {:.0}s", a.stacks, a.id, a.remaining)
+                } else {
+                    format!("{} {:.0}s", a.id, a.remaining)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" · ");
+        format!("   | Auras: {list}")
+    };
+    format!("{}{auras}", parts.join("   "))
 }
 
 /// Show vendor panel when `open_vendor` is set; rebuild buy buttons as stock changes.
@@ -777,5 +821,45 @@ mod tests {
         assert!(text.contains("Copper: 75"));
         assert!(text.contains("#11 5×peacebloom — 30c (Grace)"));
         assert!(text.contains("[O] Buy first listing"));
+    }
+
+    #[test]
+    fn action_bar_formats_kit_and_auras() {
+        let mut snap = TickSnapshot::default();
+        snap.ability_bar = vec![
+            woc_protocol::AbilityBarSlot {
+                slot: 1,
+                ability_id: "heroic_strike".into(),
+                name: "Heroic Strike".into(),
+                known: true,
+                ready: true,
+                cooldown: 0.0,
+            },
+            woc_protocol::AbilityBarSlot {
+                slot: 2,
+                ability_id: "cleave".into(),
+                name: "Cleave".into(),
+                known: false,
+                ready: false,
+                cooldown: 0.0,
+            },
+            woc_protocol::AbilityBarSlot {
+                slot: 3,
+                ability_id: "execute".into(),
+                name: "Execute".into(),
+                known: false,
+                ready: false,
+                cooldown: 0.0,
+            },
+        ];
+        snap.auras.push(woc_protocol::AuraSnapshot {
+            id: "rend".into(),
+            remaining: 6.0,
+            stacks: 1,
+        });
+        let text = format_action_bar(&snap);
+        assert!(text.contains("[1] Heroic Strike READY"));
+        assert!(text.contains("[2] Cleave locked"));
+        assert!(text.contains("Auras: rend 6s"));
     }
 }

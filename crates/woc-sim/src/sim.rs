@@ -31,9 +31,9 @@ use crate::world::WORLD_SEED;
 use crate::zones::populate_all_overworld;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
-    AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot, EquipmentSnapshot,
-    InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress, QuestLogEntry, SimEvent,
-    TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
+    AbilityBarSlot, AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot,
+    EquipmentSnapshot, InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress,
+    QuestLogEntry, SimEvent, TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
@@ -270,10 +270,12 @@ impl Sim {
         Some(id)
     }
 
-    /// Clear the primary player's current target (Esc).
+    /// Clear the primary player's current target and stop auto-attack (Esc).
     pub fn clear_target(&mut self) {
         if let Some(p) = self.player_mut() {
             p.target = None;
+            p.auto_attack = false;
+            p.cast = None;
         }
     }
 
@@ -337,6 +339,11 @@ impl Sim {
             };
             if !self.entities[pi].alive {
                 continue;
+            }
+            if intent.clear_target {
+                self.entities[pi].target = None;
+                self.entities[pi].auto_attack = false;
+                self.entities[pi].cast = None;
             }
             let effect = step_player_motion(&mut self.entities[pi], &intent);
             if intent.fly_toggle {
@@ -584,6 +591,10 @@ impl Sim {
 
         let gcd = player.map(|p| p.gcd).unwrap_or(0.0);
         let casting = player.map(|p| p.cast.is_some()).unwrap_or(false);
+        let auto_attack = player.map(|p| p.auto_attack).unwrap_or(false);
+        let ability_bar = player
+            .map(|p| build_ability_bar(p, gcd, casting))
+            .unwrap_or_default();
 
         let viewer_instance = player.and_then(|p| p.instance_id.clone());
         let entities = self
@@ -647,6 +658,9 @@ impl Sim {
             ability_name,
             auras,
             cast,
+            ability_bar,
+            gcd,
+            auto_attack,
             is_dead: player.map(|p| !p.alive).unwrap_or(false),
             party_id: self.parties.party_id(player_id),
             zone_id: player
@@ -697,6 +711,59 @@ impl Sim {
             loot_mode: self.parties.loot_mode(player_id),
         }
     }
+}
+
+fn build_ability_bar(player: &Entity, gcd: f32, casting: bool) -> Vec<AbilityBarSlot> {
+    let Some(class) = player.class_id else {
+        return Vec::new();
+    };
+    let def = class_def(class);
+    def.kit
+        .iter()
+        .map(|entry| {
+            let abil = ability(entry.ability_id);
+            let name = abil.map(|a| a.name.to_string()).unwrap_or_else(|| {
+                entry
+                    .ability_id
+                    .replace('_', " ")
+                    .split_whitespace()
+                    .map(|w| {
+                        let mut c = w.chars();
+                        match c.next() {
+                            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                            None => String::new(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            });
+            let known = player
+                .known_abilities
+                .iter()
+                .any(|id| id == entry.ability_id);
+            let cd = player
+                .ability_cds
+                .get(entry.ability_id)
+                .copied()
+                .unwrap_or(0.0)
+                .max(if entry.slot == 1 {
+                    player.ability_cd
+                } else {
+                    0.0
+                });
+            let cost = abil.map(|a| a.cost).unwrap_or(0.0);
+            let affordable = player.resource + 1e-3 >= cost;
+            let ready = known && cd <= 0.0 && gcd <= 0.0 && !casting && affordable;
+            AbilityBarSlot {
+                slot: entry.slot,
+                ability_id: entry.ability_id.to_string(),
+                name,
+                known,
+                ready,
+                cooldown: cd.max(0.0),
+            }
+        })
+        .collect()
 }
 
 fn map_party_effects(effects: Vec<PartyEffect>) -> Vec<WsServerMsg> {
@@ -1072,6 +1139,46 @@ mod tests {
             saw_loot || sim.copper() > 0 || !sim.snapshot().inventory.is_empty(),
             "expected loot drop or auto-pickup"
         );
+    }
+
+    #[test]
+    fn clear_target_intent_stops_auto_attack() {
+        let mut sim = Sim::new_eastbrook("Clearer", PlayerClass::Warrior);
+        let wolf_id = sim
+            .entities
+            .iter()
+            .find(|e| e.kind == EntityKind::Mob && e.alive)
+            .unwrap()
+            .id;
+        if let Some(p) = sim.player_mut() {
+            p.target = Some(wolf_id);
+            p.auto_attack = true;
+        }
+
+        let (snap, _) = sim.tick(PlayerIntent {
+            clear_target: true,
+            ..Default::default()
+        });
+        assert!(sim.player().unwrap().target.is_none());
+        assert!(!sim.player().unwrap().auto_attack);
+        assert!(snap.target_id.is_none());
+        assert!(!snap.auto_attack);
+    }
+
+    #[test]
+    fn snapshot_ability_bar_lists_class_kit() {
+        let sim = Sim::new_eastbrook("Kit", PlayerClass::Warrior);
+        let snap = sim.snapshot();
+        assert!(
+            snap.ability_bar.len() >= 3,
+            "warrior kit should expose ≥3 slots"
+        );
+        assert_eq!(snap.ability_bar[0].slot, 1);
+        assert_eq!(snap.ability_bar[0].ability_id, "heroic_strike");
+        assert!(snap.ability_bar[0].known);
+        assert_eq!(snap.ability_bar[1].ability_id, "cleave");
+        assert!(!snap.ability_bar[1].known, "cleave gated above level 1");
+        assert_eq!(snap.protocol_rev, PROTOCOL_REV);
     }
 
     #[test]
