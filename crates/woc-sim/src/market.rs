@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{Bags, ClassKit, Durable, Identity, InvStack, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, grant_stack, take_from_slot};
+use crate::inventory::{grant_stack, take_from_slot};
 use crate::mail::Mailbox;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
@@ -249,7 +249,6 @@ impl AuctionHouse {
             "Auction sold",
             sale_proceeds(listing.price),
             None,
-            0,
         );
         self.listings.remove(idx);
         events.push(SimEvent::ItemGained {
@@ -291,9 +290,10 @@ impl AuctionHouse {
             return false;
         }
         let listing = self.listings.remove(idx);
+        let stack = listing_stack(&listing);
         if world.get::<ClassKit>(seller).is_some() {
             let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
-                grant_into(&mut bags.inventory, &listing.item_id, listing.count)
+                grant_stack(&mut bags.inventory, stack.clone())
             } else {
                 false
             };
@@ -303,8 +303,7 @@ impl AuctionHouse {
                     "Auction House",
                     "Listing cancelled",
                     0,
-                    Some(listing.item_id),
-                    listing.count,
+                    Some(stack),
                 );
             }
         } else {
@@ -313,8 +312,7 @@ impl AuctionHouse {
                 "Auction House",
                 "Listing cancelled",
                 0,
-                Some(listing.item_id),
-                listing.count,
+                Some(stack),
             );
         }
         events.push(SimEvent::Toast {
@@ -335,8 +333,9 @@ impl AuctionHouse {
                         || id == listing.seller_id
                 });
                 if let Some(seller) = seller_online {
+                    let stack = listing_stack(&listing);
                     let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
-                        grant_into(&mut bags.inventory, &listing.item_id, listing.count)
+                        grant_stack(&mut bags.inventory, stack.clone())
                     } else {
                         false
                     };
@@ -346,8 +345,7 @@ impl AuctionHouse {
                             "Auction House",
                             "Listing expired",
                             0,
-                            Some(listing.item_id),
-                            listing.count,
+                            Some(stack),
                         );
                     }
                 } else {
@@ -356,8 +354,7 @@ impl AuctionHouse {
                         "Auction House",
                         "Listing expired",
                         0,
-                        Some(listing.item_id),
-                        listing.count,
+                        Some(listing_stack(&listing)),
                     );
                 }
             } else {
@@ -365,6 +362,15 @@ impl AuctionHouse {
             }
         }
         self.listings = keep;
+    }
+}
+
+fn listing_stack(listing: &Listing) -> InvStack {
+    InvStack {
+        item_id: listing.item_id.clone(),
+        count: listing.count,
+        durability: listing.durability,
+        enchant_id: listing.enchant_id.clone(),
     }
 }
 

@@ -105,6 +105,8 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             copper: m.copper,
             item_id: m.item_id.clone(),
             item_count: m.item_count,
+            durability: m.durability,
+            enchant_id: m.enchant_id.clone(),
         })
         .collect();
     sim.mail.load_mails(mails, economy.next_mail_id);
@@ -119,8 +121,8 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             seller_name: l.seller_name.clone(),
             item_id: l.item_id.clone(),
             count: l.count,
-            durability: None,
-            enchant_id: None,
+            durability: l.durability,
+            enchant_id: l.enchant_id.clone(),
             price: l.price,
             expires_tick: l.expires_tick,
         })
@@ -142,6 +144,8 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 copper: m.copper,
                 item_id: m.item_id,
                 item_count: m.item_count,
+                durability: m.durability,
+                enchant_id: m.enchant_id,
             })
             .collect(),
         market: sim
@@ -156,6 +160,8 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 count: l.count,
                 price: l.price,
                 expires_tick: l.expires_tick,
+                durability: l.durability,
+                enchant_id: l.enchant_id.clone(),
             })
             .collect(),
         next_mail_id: sim.mail.next_id(),

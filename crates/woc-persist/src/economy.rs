@@ -11,6 +11,10 @@ pub struct MailDto {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -22,6 +26,10 @@ pub struct MarketListingDto {
     pub count: u32,
     pub price: u32,
     pub expires_tick: u64,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -63,6 +71,8 @@ mod tests {
                 copper: 40,
                 item_id: None,
                 item_count: 0,
+                durability: None,
+                enchant_id: None,
             }],
             market: vec![MarketListingDto {
                 id: 2,
@@ -72,11 +82,23 @@ mod tests {
                 count: 1,
                 price: 12,
                 expires_tick: 100,
+                durability: None,
+                enchant_id: None,
             }],
             next_mail_id: 3,
             next_listing_id: 4,
         };
         let back = economy_from_json(&economy_to_json(&eco).unwrap()).unwrap();
         assert_eq!(back, eco);
+    }
+
+    #[test]
+    fn economy_omitted_instance_fields_default() {
+        let eco: RealmEconomy = serde_json::from_str(
+            r#"{"mail":[{"id":1,"from":"AH","to_durable":"ada","subject":"Sold","copper":40,"item_id":null,"item_count":0}],"market":[{"id":2,"seller_durable":"bob","seller_name":"Bob","item_id":"worn_sword","count":1,"price":12,"expires_tick":100}],"next_mail_id":3,"next_listing_id":4}"#,
+        )
+        .unwrap();
+        assert!(eco.mail[0].durability.is_none());
+        assert!(eco.market[0].enchant_id.is_none());
     }
 }
