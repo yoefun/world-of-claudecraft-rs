@@ -570,10 +570,13 @@ fn apply_charge(
     src: EntityId,
     tid: EntityId,
     def: &AbilityDef,
-    gap: f32,
     base: f32,
     events: &mut Vec<SimEvent>,
 ) {
+    let gap = match def.effect {
+        AbilityEffect::Charge { gap } => gap,
+        _ => 25.0,
+    };
     let d = dist2d_ids(world, src, tid);
     if d > gap + 1e-3 {
         events.push(SimEvent::Toast {
@@ -829,11 +832,11 @@ pub fn apply_ability_effect(
         AbilityEffect::Absorb { amount } => {
             apply_absorb_shield(world, src, requested, def, amount, events);
         }
-        AbilityEffect::Charge { gap } => {
+        AbilityEffect::Charge { .. } => {
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_charge(world, rng, src, tid, def, gap, weapon * dmg_scale, events);
+            apply_charge(world, rng, src, tid, def, weapon * dmg_scale, events);
         }
         AbilityEffect::Blink { distance } => {
             apply_blink(world, src, distance);
@@ -2326,19 +2329,25 @@ mod tests {
     fn execute_dumps_remaining_rage() {
         let mut world = class_and_mob(PlayerClass::Warrior, 6);
         if let Some(h) = world.get_mut::<Health>(2) {
-            h.hp = 80.0;
+            h.hp_max = 2000.0;
+            h.hp = 300.0;
+            h.alive = true;
         }
         if let Some(kit) = world.get_mut::<ClassKit>(1) {
             kit.resource = 25.0;
         }
         fire_slot(&mut world, AbilitySlot::Slot3);
         let low_rage_hp = world.get::<Health>(2).unwrap().hp;
-        assert!(low_rage_hp < 80.0);
+        assert!(low_rage_hp < 300.0);
+        assert!(world.get::<Health>(2).unwrap().alive);
         if let Some(h) = world.get_mut::<Health>(2) {
-            h.hp = 80.0;
+            h.hp = 300.0;
+            h.alive = true;
         }
         if let Some(c) = world.get_mut::<Combat>(1) {
             c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
         }
         if let Some(kit) = world.get_mut::<ClassKit>(1) {
             kit.resource = 100.0;
@@ -2348,7 +2357,7 @@ mod tests {
         let dumped = world.get::<Health>(2).unwrap().hp;
         assert!(
             dumped < low_rage_hp,
-            "dumping leftover rage should increase execute damage"
+            "dumping leftover rage should increase execute damage ({dumped} vs {low_rage_hp})"
         );
         assert_eq!(world.get::<ClassKit>(1).unwrap().resource, 0.0);
     }
