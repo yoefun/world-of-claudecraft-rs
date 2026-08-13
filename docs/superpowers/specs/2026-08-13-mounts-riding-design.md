@@ -1,6 +1,6 @@
 # Mounts and riding design — `1.14.0` / `mounts`
 
-**Status:** Proposed (planning deliverable 2026-08-13).  
+**Status:** Shipped (rewrite `1.14.0` / `mounts`).  
 **Baseline:** rewrite `1.13.0` / `gear-slots` on `develop` (ECS `World`; NPC services shipped).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `mounts`.
