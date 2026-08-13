@@ -8,6 +8,8 @@ use woc_protocol::{EntityId, EntityKind};
 
 /// Hard cap on party membership (inclusive).
 pub const MAX_PARTY_SIZE: usize = 5;
+/// Hard cap on raid membership (inclusive).
+pub const MAX_RAID_SIZE: usize = 10;
 /// Below this size a party dissolves.
 pub const MIN_PARTY_SIZE: usize = 2;
 /// Invite lifetime in sim ticks (30 s at 20 Hz).
@@ -146,7 +148,7 @@ impl PartyRoster {
         }
         if let Some(pid) = self.party_id(inviter) {
             if let Some(party) = self.parties.get(&pid) {
-                if party.members.len() >= MAX_PARTY_SIZE {
+                if party.members.len() >= Self::cap_for(party) {
                     return vec![PartyEffect::Error {
                         message: "Your party is full.".into(),
                     }];
@@ -211,12 +213,19 @@ impl PartyRoster {
                 self.membership.remove(&inviter);
                 return self.form_new_party(inviter, invitee);
             };
-            if party.members.len() >= MAX_PARTY_SIZE {
+            if party.members.len() >= Self::cap_for(party) {
                 return vec![PartyEffect::Error {
                     message: "That party is full.".into(),
                 }];
             }
             party.members.push(invitee);
+            if party.kind == GroupKind::Raid {
+                if party.raid_groups[0].len() < MAX_PARTY_SIZE {
+                    party.raid_groups[0].push(invitee);
+                } else {
+                    party.raid_groups[1].push(invitee);
+                }
+            }
             self.membership.insert(invitee, pid);
             let members = party.members.clone();
             return vec![PartyEffect::Update { members }];
@@ -262,6 +271,9 @@ impl PartyRoster {
             }];
         };
         party.members.retain(|m| *m != player);
+        for group in &mut party.raid_groups {
+            group.retain(|m| *m != player);
+        }
         if party.members.len() < MIN_PARTY_SIZE {
             for m in &party.members {
                 self.membership.remove(m);
@@ -531,6 +543,13 @@ impl PartyRoster {
                 ready_names(world, &no)
             ),
         }]
+    }
+
+    fn cap_for(party: &Party) -> usize {
+        match party.kind {
+            GroupKind::Party => MAX_PARTY_SIZE,
+            GroupKind::Raid => MAX_RAID_SIZE,
+        }
     }
 
     pub fn convert_to_raid(&mut self, leader: EntityId) -> Vec<PartyEffect> {
@@ -858,5 +877,38 @@ mod tests {
         assert_eq!(group_xp(100, 5), 60);
         assert_eq!(group_xp(100, 10), 30);
         assert_eq!(group_xp(50, 2), 37); // 50 * 15 / 20
+    }
+
+    #[test]
+    fn convert_full_party_to_raid_then_sixth() {
+        let world = world_with_players(6);
+        let mut roster = PartyRoster::new();
+        form_party(&mut roster, &world, 1, 2);
+        for other in 3..=5 {
+            let name = world.get::<Identity>(other).unwrap().name.clone();
+            let _ = roster.invite(1, &name, &world, 0);
+            let _ = roster.accept(other, &world);
+        }
+        let effects = roster.convert_to_raid(1);
+        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Converted to a raid.")));
+        assert_eq!(roster.kind_of(1), Some(GroupKind::Raid));
+        let _ = roster.invite(1, "Frank", &world, 0);
+        let _ = roster.accept(6, &world);
+        assert_eq!(roster.members_of(1).unwrap().len(), 6);
+        assert_eq!(roster.raid_group_of(6), 1);
+        let effects = roster.convert_to_party(1);
+        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "Too many members to convert to a party."));
+        let _ = roster.leave(6);
+        let effects = roster.convert_to_party(1);
+        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Converted to a party.")));
+    }
+
+    #[test]
+    fn convert_requires_five() {
+        let world = world_with_players(2);
+        let mut roster = PartyRoster::new();
+        form_party(&mut roster, &world, 1, 2);
+        let effects = roster.convert_to_raid(1);
+        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You need a full party of 5 to convert to a raid."));
     }
 }

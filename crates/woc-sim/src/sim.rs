@@ -47,7 +47,7 @@ use woc_protocol::{
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
-pub const MAX_REALM_PLAYERS: usize = 8;
+pub const MAX_REALM_PLAYERS: usize = 10;
 
 /// Snapshot radius for other players, mobs, pets, and non-roll loot (yards).
 pub const SNAPSHOT_AOI_RADIUS: f32 = 80.0;
