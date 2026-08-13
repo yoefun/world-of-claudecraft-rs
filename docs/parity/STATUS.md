@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.14.0` / `parcel-bank`.  
+**Current rewrite:** `1.17.0` / `parcel-bank`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots is `1.13.0`; parcel-bank shipped as `1.14.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; parcel-bank shipped as `1.17.0`.
 
 ## Parcel and bank (`parcel-bank`) — done
 
@@ -11,13 +11,51 @@ Plan: [`../superpowers/plans/2026-08-13-parcel-bank.md`](../superpowers/plans/20
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Slot-accurate stack moves | done | `take_from_slot` / `put_stack`; keep wear + enchant |
-| Bank any non-quest stack | done | Client **G** deposits first non-quest bag stack |
-| Repair includes warehouse | done | `repair_cost` sums `Bank.bank` |
 | Offline parcels | done | `CharacterDirectory` on `Sim`; realm-boot load |
 | Client send / numbered collect / return | done | **S**/**Y**/**1–9**/**X**; compose field |
 | Postage / inbox cap / expiry | done | 1c, 20, 24h ticks; system mail uncapped |
-| AH instance fields | done | Listing durability/enchant on persist |
+| Bank any non-quest stack | done | Client **G** deposits first non-quest bag stack |
+| Repair includes warehouse | done | `repair_cost` sums `Bank.bank` |
+| NPC gates | kept | Banker Holme / Eastbrook Post from `1.16.0` |
+
+## Economy depth (`economy-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-economy-depth-design.md`](../superpowers/specs/2026-08-13-economy-depth-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Auctioneer Lise | done | Eastbrook `(4, 6)`; Talk opens session; `[U]` |
+| Instance listings | done | Slot take; durability + enchant persist |
+| Bidding | done | `MarketBid`; outbid mail; expire-win mails item + proceeds |
+| Duration 12/24/48h | done | Fees 5/10/20c; ticks 864k / 1.728M / 3.456M |
+| Search / pages | done | Client filter `/`; `[` `]` pages of 8 |
+| Soulbound | done | OnEquip gear / OnPickup quest; blocks list + mail |
+| Banker Holme | done | Eastbrook `(6, 6)`; `[K]`; `"Talk to a banker first."` |
+| Eastbrook Post | done | Eastbrook `(0, 8)`; `[I]`; `"Talk to a mailbox first."` |
+| Protocol | done | Rev 8 additive bid/bound/`can_bank`/`can_mail` |
+
+## Gear more (`gear-more`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Extra slots | done | Shoulder/Back/Wrist/Hands/Waist + Trinket/Trinket2 |
+| Hunter dual-wield | done | Warrior/Rogue/Hunter; shaman still no |
+| OH enchant | done | Second oil → OH; full AP/SP; sheet `[enchant]` |
+| Loot quality | done | Stack quality; `max(catalog, roll)` after drop list |
+| Client sheet | done | Extra lines; unequip `0-=[]\;` |
+| Protocol | done | Rev 8; additive extra slots / `off_hand_enchant` / `quality` |
+
+## Reputation (`reputation`) — done
+
+Design: [`../superpowers/specs/2026-08-13-reputation-design.md`](../superpowers/specs/2026-08-13-reputation-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Faction table + standing ladder | done | Watch / Circle / Ferry / Highwatch; Neutral 0 |
+| Quest + kill grants | done | Party-shared on kills; `Reputation` column |
+| Vendor discount / gates | done | Friendly 5%…Exalted 20%; Unfriendly refuse; `watch_signet` |
+| Snapshot + persist | done | Additive `reputation` on rev **8**; completion JSON |
+| Client sheet | done | **C** lists standing |
 
 ## Gear slots (`gear-slots`) — done
 
@@ -168,7 +206,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.14.0` / parcel-bank (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.17.0` / parcel-bank (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
@@ -194,7 +232,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Dungeons / instances | done | unique instance keys; party share; overworld preserved; crypt/barrow trash |
 | Delves | done | eastbrook_hollow 3-room loop + reward |
 | Bank + mail | done | durable character bank + copper vault; mail keyed by character UUID |
-| Auction market | done | durable listings; list/buy/cancel from client; offline proceed/return via mail |
+| Auction market | done | Auctioneer Lise; instance listings; 5% cut; mail-always proceeds |
 | Professions gather/craft | done | herbalism → alchemy; mining → blacksmithing sword |
 | Duel + PvP honor | done | |
 | World boss + deeds | done | one-shot deed completion persisted |

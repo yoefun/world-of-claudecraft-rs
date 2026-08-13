@@ -1,14 +1,40 @@
 # Changelog
 
+## 1.17.0 — 2026-08-13
+
+### Added
+
+- **1.17.0 `parcel-bank`:** Offline parcels via `CharacterDirectory`, client compose/send/numbered collect/return, postage 1c, inbox cap 20, 24h tick expiry with return, and `RepairAll` includes banked gear.
+- Client **K** **G** banks any non-quest stack; **I** **S**/**Y** send item or wallet copper, **1–9** numbered collect, **X** return; compose field for recipient names.
+- Banker Holme and Eastbrook Post still gate **K** / **I** actions (from `1.16.0`). Protocol rev stays **8** (`mail_postage`, `MailReturn`, mail `expires_tick` are additive).
+
+## 1.16.0 — 2026-08-13
+
+### Added
+
+- **1.16.0 `economy-depth`:** Auctioneer Lise, instance-preserving listings, 5% house cut, mail-always proceeds.
+- Auction bids, 12/24/48 hour listings, client search/pagination, soulbound, banker and mailbox NPCs.
+- Bid copper is held; outbid mail returns it. Expire with a bid mails `"Auction won"` and sale proceeds. Buyout still instant.
+- Weapons/armor bind on equip; quest items bind on pickup. Bound stacks cannot list or mail.
+- Eastbrook Banker Holme and Eastbrook Post gate **K** / **I** actions. Protocol rev stays **8**.
+
+## 1.15.0 — 2026-08-13
+
+### Added
+
+- **1.15.0 `gear-more`:** Extra doll slots (Shoulder, Back, Wrist, Hands, Waist, Trinket + Trinket2).
+- Hunter dual-wield (with Warrior/Rogue). Worn Hatchet at Wilkes; Hunter can equip copper shortsword.
+- Off-hand weapon enchants: second oil applies to OH at full AP/SP; C-sheet Off line shows `[enchant]`.
+- Instance loot quality on Weapon/Armor piles (`max(catalog, roll)`); persist roundtrips stack quality.
+- Protocol rev stays **8** (additive extra slots, `off_hand_enchant`, per-stack `quality`).
+
 ## 1.14.0 — 2026-08-13
 
 ### Added
 
-- **1.14.0 `parcel-bank`:** Slot-accurate `take_from_slot` / `put_stack` for bank, mail, and AH moves — worn gear and main-hand enchants survive deposit, withdraw, parcel, and listing.
-- Client **K** **G** banks any non-quest stack (not junk-only); **I** **S**/**Y** send item or wallet copper, **1–9** numbered collect, **X** return; compose field for offline recipient names.
-- `CharacterDirectory` on `Sim` plus persist `list_mailbox_directory` — mail to parked or offline characters by name.
-- `RepairAll` includes banked gear; postage 1c, player inbox cap 20, 24h tick expiry with return to sender; AH listings carry durability/enchant on persist and expire/cancel as the same instance.
-- Protocol rev stays **8** (`mail_postage`, mail/listing instance fields, `MailReturn` are additive).
+- **1.14.0 `reputation`:** four hub factions (Eastbrook Watch, Eastfen Circle, Mirefen Ferry, Highwatch) with a Neutral→Exalted ladder on a player `Reputation` column.
+- Quest turn-in and mob kills grant standing (party-shared on kills). Friendly+ vendor discounts; Unfriendly vendors refuse trade.
+- Wilkes sells `watch_signet` at Friendly Watch. Character sheet **C** lists standing. Additive on protocol rev **8**.
 
 ## 1.13.0 — 2026-08-13
 

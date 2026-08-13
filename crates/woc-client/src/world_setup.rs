@@ -306,7 +306,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB/F attack · Tab target · 1–5 abilities · T pet · E interact/loot · B bags (Q/F) · L quests · C sheet · N talents · K bank (G/H/J/Y) · I mail (S/Y send, P/X collect) · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
+                        "LMB/F attack · Tab target · 1–5 abilities · T pet · E interact/loot · B bags (Q/F) · L quests · C sheet (rep) · N talents · K bank (G/H/J/Y) · I mail (S/Y send, P/X collect) · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
@@ -321,7 +321,7 @@ fn setup_world(
                     position_type: PositionType::Absolute,
                     left: Val::Px(12.0),
                     top: Val::Px(200.0),
-                    width: Val::Px(280.0),
+                    width: Val::Px(300.0),
                     padding: UiRect::all(Val::Px(12.0)),
                     flex_direction: FlexDirection::Column,
                     ..default()

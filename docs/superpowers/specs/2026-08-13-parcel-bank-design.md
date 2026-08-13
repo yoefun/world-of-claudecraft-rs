@@ -1,11 +1,11 @@
-# Parcel and bank (warehouse) design — `1.14.0` / `parcel-bank`
+# Parcel and bank (warehouse) design — `1.17.0` / `parcel-bank`
 
-**Status:** Implemented (1.14.0).  
-**Baseline:** rewrite `1.13.0` / `gear-slots` on `develop` (ECS `World` actor store; durability + MH enchants already ship).  
+**Status:** Implemented (1.17.0, rebased onto `1.16.0` / `economy-depth`).  
+**Baseline:** rewrite `1.16.0` / `economy-depth` on `develop` (instance-preserving bank/AH/mail, soulbound, banker + mailbox NPCs).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `parcel-bank`.
 
-NPC services left banker/mailbox NPCs as non-goals (`2026-08-13-npc-services-design.md` §7). This program does **not** NPC-gate K/I. It makes the existing warehouse and parcel loops instance-correct, offline-capable, and client-reachable.
+NPC services left banker/mailbox NPCs as non-goals (`2026-08-13-npc-services-design.md` §7). This program originally rejected NPC-gating K/I. `1.16.0` `economy-depth` shipped Eastbrook Banker Holme and Eastbrook Post anyway; this rebase **keeps those gates** and adds offline parcels, postage/cap/expiry/return, client compose, and warehouse repair on top.
 
 ## 1. Goal
 

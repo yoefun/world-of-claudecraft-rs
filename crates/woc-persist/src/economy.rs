@@ -16,6 +16,10 @@ pub struct MailDto {
     #[serde(default)]
     pub enchant_id: Option<String>,
     #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
+    #[serde(default)]
     pub expires_tick: u64,
     #[serde(default)]
     pub return_to: Option<String>,
@@ -34,6 +38,18 @@ pub struct MarketListingDto {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
+    #[serde(default)]
+    pub start_bid: u32,
+    #[serde(default)]
+    pub current_bid: u32,
+    #[serde(default)]
+    pub bidder_durable: Option<String>,
+    #[serde(default)]
+    pub bidder_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -74,6 +90,8 @@ mod tests {
         assert!(m.enchant_id.is_none());
         assert_eq!(m.expires_tick, 0);
         assert!(m.return_to.is_none());
+        assert!(m.quality.is_none());
+        assert!(!m.bound);
     }
 
     #[test]
@@ -104,5 +122,20 @@ mod tests {
         };
         let back = economy_from_json(&economy_to_json(&eco).unwrap()).unwrap();
         assert_eq!(back, eco);
+    }
+
+    #[test]
+    fn economy_omitted_instance_fields_default() {
+        let eco: RealmEconomy = serde_json::from_str(
+            r#"{"mail":[{"id":1,"from":"AH","to_durable":"ada","subject":"Sold","copper":40,"item_id":null,"item_count":0}],"market":[{"id":2,"seller_durable":"bob","seller_name":"Bob","item_id":"worn_sword","count":1,"price":12,"expires_tick":100}],"next_mail_id":3,"next_listing_id":4}"#,
+        )
+        .unwrap();
+        assert!(eco.mail[0].durability.is_none());
+        assert!(eco.market[0].enchant_id.is_none());
+        assert!(eco.mail[0].quality.is_none());
+        assert!(eco.market[0].quality.is_none());
+        assert!(!eco.mail[0].bound);
+        assert_eq!(eco.market[0].start_bid, 0);
+        assert!(eco.market[0].bidder_durable.is_none());
     }
 }

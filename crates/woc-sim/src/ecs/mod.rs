@@ -223,6 +223,7 @@ mod tests {
             crate::ecs::components::LootPile {
                 copper: 5,
                 item: None,
+                quality: None,
             },
         );
         w.insert(
@@ -232,6 +233,7 @@ mod tests {
                 equipment: crate::ecs::components::Equipment::default(),
                 equipment_wear: crate::ecs::components::EquipmentWear::default(),
                 equipment_enchants: crate::ecs::components::EquipmentEnchants::default(),
+                equipment_qualities: crate::ecs::components::EquipmentQualities::default(),
                 open_vendor_npc: None,
                 buyback: Vec::new(),
             },

@@ -448,6 +448,15 @@ fn npc_service_tags(template_id: Option<&str>) -> String {
     if def.is_innkeeper() {
         tags.push_str("[H]");
     }
+    if def.is_auctioneer() {
+        tags.push_str("[A]");
+    }
+    if def.is_banker() {
+        tags.push_str("[B]");
+    }
+    if def.is_mailbox() {
+        tags.push_str("[M]");
+    }
     tags
 }
 

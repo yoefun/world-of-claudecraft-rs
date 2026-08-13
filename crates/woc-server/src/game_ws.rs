@@ -525,6 +525,7 @@ mod tests {
             },
             equipment_wear: woc_sim::ecs::components::EquipmentWear::default(),
             equipment_enchants: woc_sim::ecs::components::EquipmentEnchants::default(),
+            equipment_qualities: woc_sim::ecs::components::EquipmentQualities::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 1,
@@ -540,6 +541,7 @@ mod tests {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Default::default(),
         };
         // Force non-virgin by setting copper.
         assert!(!state.is_virgin());

@@ -1,5 +1,6 @@
 //! Zone 2 (Eastfen Marsh and Mirefen) mob templates.
 
+use crate::factions::RepAward;
 use crate::mobs::{LootEntry, MobTemplate};
 
 const BOG_WISP_LOOT: &[LootEntry] = &[
@@ -43,6 +44,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.70,
             count: 1,
         }],
+        kill_reputation: Some(RepAward::new("eastfen_circle", 20)),
     },
     MobTemplate {
         id: "mire_toad",
@@ -58,6 +60,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.80,
             count: 1,
         }],
+        kill_reputation: Some(RepAward::new("eastfen_circle", 20)),
     },
     MobTemplate {
         id: "bog_wisp",
@@ -69,6 +72,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         copper_max: 24,
         attack_damage: 14.0,
         loot: BOG_WISP_LOOT,
+        kill_reputation: Some(RepAward::new("eastfen_circle", 25)),
     },
     MobTemplate {
         id: "mire_leech",
@@ -84,6 +88,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.75,
             count: 1,
         }],
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 25)),
     },
     MobTemplate {
         id: "rotcap_shambler",
@@ -99,6 +104,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.70,
             count: 1,
         }],
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 30)),
     },
     MobTemplate {
         id: "mire_terror",
@@ -114,6 +120,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 1.0,
             count: 1,
         }],
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 100)),
     },
     MobTemplate {
         id: "barrow_hag",
@@ -125,5 +132,6 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         copper_max: 40,
         attack_damage: 18.0,
         loot: BARROW_HAG_LOOT,
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 75)),
     },
 ];

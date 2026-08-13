@@ -21,8 +21,10 @@
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
 | **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
-| **1.14.0** (shipped) | `parcel-bank` | Instance-preserving bank/mail, offline parcels, client send |
-
+| **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
+| **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
+| **1.16.0** (shipped) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
+| **1.17.0** (this branch) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
 ## Completion program (closed)
 
 **Definition of done:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](superpowers/specs/2026-07-28-rust-rewrite-completion-design.md)  
@@ -38,6 +40,12 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
 
+## Reputation (shipped as `1.14.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-reputation-design.md`](superpowers/specs/2026-08-13-reputation-design.md)
+
+Four hub factions on a player `Reputation` column. Quest and kill grants; Friendly vendor discount and gated `watch_signet`; Unfriendly refuse. Protocol rev stays **8**.
+
 ## Gear depth (shipped as `1.12.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-depth-design.md`](superpowers/specs/2026-08-13-gear-depth-design.md)  
@@ -52,12 +60,25 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
 
-## Parcel and bank (shipped as `1.14.0`)
+## Gear more (shipped as `1.15.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-more-design.md`](superpowers/specs/2026-08-13-gear-more-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
+
+Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
+
+## Economy depth (shipped as `1.16.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-economy-depth-design.md`](superpowers/specs/2026-08-13-economy-depth-design.md)
+
+Auctioneer Lise, instance listings, 5% cut, mail-always proceeds, then bids, 12/24/48 h, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
+
+## Parcel and bank (shipped as `1.17.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-parcel-bank-design.md`](superpowers/specs/2026-08-13-parcel-bank-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-parcel-bank.md`](superpowers/plans/2026-08-13-parcel-bank.md)
 
-Bank and mail preserve item instances (durability, enchant, slot identity) through deposit, withdraw, attach, collect, and AH listing. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the selected bag slot, not junk-only. Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. HUD **K**/**I** stay ungated (no banker NPC). Protocol rev **8**.
+Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the first non-quest bag stack. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. Banker/mailbox NPC gates from `1.16.0` stay. Protocol rev **8**.
 
 ## Client version gate (current)
 

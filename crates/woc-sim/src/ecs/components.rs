@@ -11,14 +11,14 @@
 //! | `Skinnable` | beast loot piles |
 //! | `Owner` | pet |
 //! | `Escort` | escort NPC (quest follower; not Owner) |
-//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `ProfessionCast` | player |
+//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Reputation`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `ProfessionCast` | player |
 //!
 //! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
 
 use std::collections::{BTreeSet, HashMap};
 
 use crate::ecs::{SparseSet, World};
-use woc_content::{item, PlayerClass, ResourceType};
+use woc_content::{item, ItemQuality, PlayerClass, ResourceType};
 use woc_protocol::{EntityId, EntityKind};
 
 pub trait Component: Sized + 'static {
@@ -83,6 +83,8 @@ pub struct InvStack {
     pub count: u32,
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
+    pub quality: Option<ItemQuality>,
+    pub bound: bool,
 }
 
 impl InvStack {
@@ -95,7 +97,16 @@ impl InvStack {
             count,
             durability,
             enchant_id: None,
+            quality: None,
+            bound: false,
         }
+    }
+
+    pub fn with_loot_bind(mut self) -> Self {
+        if item(&self.item_id).is_some_and(|d| d.bind == woc_content::ItemBind::OnPickup) {
+            self.bound = true;
+        }
+        self
     }
 }
 
@@ -110,6 +121,13 @@ pub struct Equipment {
     pub neck: Option<String>,
     pub finger: Option<String>,
     pub finger2: Option<String>,
+    pub shoulder: Option<String>,
+    pub back: Option<String>,
+    pub wrist: Option<String>,
+    pub hands: Option<String>,
+    pub waist: Option<String>,
+    pub trinket: Option<String>,
+    pub trinket2: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -120,6 +138,11 @@ pub struct EquipmentWear {
     pub chest: Option<u32>,
     pub legs: Option<u32>,
     pub feet: Option<u32>,
+    pub shoulder: Option<u32>,
+    pub back: Option<u32>,
+    pub wrist: Option<u32>,
+    pub hands: Option<u32>,
+    pub waist: Option<u32>,
 }
 
 impl EquipmentWear {
@@ -135,6 +158,11 @@ impl EquipmentWear {
             chest: equipment.chest.as_deref().and_then(Self::max_for_item),
             legs: equipment.legs.as_deref().and_then(Self::max_for_item),
             feet: equipment.feet.as_deref().and_then(Self::max_for_item),
+            shoulder: equipment.shoulder.as_deref().and_then(Self::max_for_item),
+            back: equipment.back.as_deref().and_then(Self::max_for_item),
+            wrist: equipment.wrist.as_deref().and_then(Self::max_for_item),
+            hands: equipment.hands.as_deref().and_then(Self::max_for_item),
+            waist: equipment.waist.as_deref().and_then(Self::max_for_item),
         }
     }
 }
@@ -145,12 +173,33 @@ pub struct EquipmentEnchants {
     pub off_hand: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EquipmentQualities {
+    pub main_hand: Option<ItemQuality>,
+    pub off_hand: Option<ItemQuality>,
+    pub head: Option<ItemQuality>,
+    pub chest: Option<ItemQuality>,
+    pub legs: Option<ItemQuality>,
+    pub feet: Option<ItemQuality>,
+    pub neck: Option<ItemQuality>,
+    pub finger: Option<ItemQuality>,
+    pub finger2: Option<ItemQuality>,
+    pub shoulder: Option<ItemQuality>,
+    pub back: Option<ItemQuality>,
+    pub wrist: Option<ItemQuality>,
+    pub hands: Option<ItemQuality>,
+    pub waist: Option<ItemQuality>,
+    pub trinket: Option<ItemQuality>,
+    pub trinket2: Option<ItemQuality>,
+}
+
 #[derive(Debug, Clone)]
 pub struct BuybackEntry {
     pub item_id: String,
     pub count: u32,
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
+    pub quality: Option<ItemQuality>,
     pub copper: u32,
 }
 
@@ -240,6 +289,7 @@ pub struct Respawn {
 pub struct LootPile {
     pub copper: u32,
     pub item: Option<String>,
+    pub quality: Option<ItemQuality>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -279,6 +329,7 @@ pub struct Bags {
     pub equipment: Equipment,
     pub equipment_wear: EquipmentWear,
     pub equipment_enchants: EquipmentEnchants,
+    pub equipment_qualities: EquipmentQualities,
     pub open_vendor_npc: Option<EntityId>,
     pub buyback: Vec<BuybackEntry>,
 }
@@ -307,6 +358,12 @@ pub struct Progress {
     pub professions: HashMap<String, u32>,
     pub last_masterwork: Option<String>,
     pub completed_deeds: BTreeSet<String>,
+}
+
+/// Per-faction standing values. Missing ids read as Neutral 0.
+#[derive(Debug, Clone, Default)]
+pub struct Reputation {
+    pub values: HashMap<String, i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -401,6 +458,7 @@ impl_component!(Bags, bags);
 impl_component!(Hearth, hearth);
 impl_component!(QuestLog, quest_log);
 impl_component!(Progress, progress);
+impl_component!(Reputation, reputation);
 impl_component!(Bank, bank);
 impl_component!(Motion, motion);
 impl_component!(Spirit, spirit);

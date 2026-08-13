@@ -6,8 +6,8 @@ use std::collections::HashMap;
 
 use crate::ecs::components::{Bags, ClassKit, Durable, Health, Identity, InvStack, Progress};
 use crate::ecs::World;
-use crate::inventory::{put_stack, take_from_slot};
-use woc_content::ItemKind;
+use crate::inventory::{grant_stack, take_from_slot};
+use woc_content::{ItemKind, ItemQuality};
 use woc_protocol::{EntityId, MailSnapshot, SimEvent};
 
 /// Flat postage in copper charged for player-to-player mail.
@@ -36,17 +36,10 @@ impl CharacterDirectory {
 
     /// Case-insensitive name lookup.
     pub fn lookup(&self, name: &str) -> Option<&str> {
-        self.by_name.get(&name.to_ascii_lowercase()).map(String::as_str)
+        self.by_name
+            .get(&name.to_ascii_lowercase())
+            .map(String::as_str)
     }
-}
-
-/// A single item instance to attach to a system-delivered mail.
-#[derive(Debug, Clone)]
-pub struct MailAttachment {
-    pub item_id: String,
-    pub count: u32,
-    pub durability: Option<u32>,
-    pub enchant_id: Option<String>,
 }
 
 /// Durable mailbox entry (survives reconnect / restart when persisted).
@@ -62,6 +55,8 @@ pub struct MailItem {
     pub item_count: u32,
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
+    pub quality: Option<ItemQuality>,
+    pub bound: bool,
     /// Tick after which an uncollected player parcel auto-returns. `0` means
     /// system mail that never expires.
     pub expires_tick: u64,
@@ -131,6 +126,8 @@ impl Mailbox {
                 item_count: m.item_count,
                 durability: m.durability,
                 enchant_id: m.enchant_id.clone(),
+                quality: m.quality.map(|q| q.as_str().to_string()),
+                bound: m.bound,
                 expires_tick: m.expires_tick,
             })
             .collect()
@@ -175,10 +172,7 @@ impl Mailbox {
         if world.get::<ClassKit>(from).is_none() {
             return false;
         }
-        let alive = world
-            .get::<Health>(from)
-            .map(|h| h.alive)
-            .unwrap_or(false);
+        let alive = world.get::<Health>(from).map(|h| h.alive).unwrap_or(false);
         if !alive {
             return false;
         }
@@ -233,6 +227,17 @@ impl Mailbox {
                 });
                 return false;
             }
+            let bound = world
+                .get::<Bags>(from)
+                .and_then(|b| b.inventory.get(slot as usize))
+                .and_then(|s| s.as_ref().map(|st| st.bound))
+                .unwrap_or(false);
+            if bound {
+                events.push(SimEvent::Toast {
+                    message: "That item is soulbound.".into(),
+                });
+                return false;
+            }
         }
 
         let sender_copper = world.get::<Progress>(from).map(|p| p.copper).unwrap_or(0);
@@ -253,7 +258,7 @@ impl Mailbox {
         let attachment = if let Some(slot) = bag_slot {
             let taken = world
                 .get_mut::<Bags>(from)
-                .and_then(|b| take_from_slot(&mut b.inventory, slot as usize, count));
+                .and_then(|b| take_from_slot(&mut b.inventory, slot, count));
             let Some(taken) = taken else {
                 events.push(SimEvent::Toast {
                     message: "Empty bag slot.".into(),
@@ -275,9 +280,16 @@ impl Mailbox {
             .unwrap_or_default();
         let mail_id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
-        let (item_id, item_count, durability, enchant_id) = match attachment {
-            Some(stack) => (Some(stack.item_id), stack.count, stack.durability, stack.enchant_id),
-            None => (None, 0, None, None),
+        let (item_id, item_count, durability, enchant_id, quality, bound) = match attachment {
+            Some(stack) => (
+                Some(stack.item_id),
+                stack.count,
+                stack.durability,
+                stack.enchant_id,
+                stack.quality,
+                stack.bound,
+            ),
+            None => (None, 0, None, None, None, false),
         };
         self.inbox
             .entry(to_key.clone())
@@ -292,6 +304,8 @@ impl Mailbox {
                 item_count,
                 durability,
                 enchant_id,
+                quality,
+                bound,
                 expires_tick: now_tick.saturating_add(MAIL_TTL_TICKS),
                 return_to: Some(sender_key),
             });
@@ -306,19 +320,26 @@ impl Mailbox {
     /// Deliver system mail (auction proceeds / returns) to a durable key.
     /// Bypasses postage and the inbox cap. `expires_tick` is always `0` and
     /// `return_to` is always `None` (system mail cannot re-return).
-    pub fn deliver_system_ex(
+    pub fn deliver_system(
         &mut self,
         to_durable: &str,
         from: &str,
         subject: &str,
         copper: u32,
-        attachment: Option<MailAttachment>,
+        attachment: Option<InvStack>,
     ) -> u32 {
         let mail_id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
-        let (item_id, item_count, durability, enchant_id) = match attachment {
-            Some(a) => (Some(a.item_id), a.count, a.durability, a.enchant_id),
-            None => (None, 0, None, None),
+        let (item_id, item_count, durability, enchant_id, quality, bound) = match attachment {
+            Some(stack) => (
+                Some(stack.item_id),
+                stack.count,
+                stack.durability,
+                stack.enchant_id,
+                stack.quality,
+                stack.bound,
+            ),
+            None => (None, 0, None, None, None, false),
         };
         self.inbox
             .entry(to_durable.to_string())
@@ -333,32 +354,12 @@ impl Mailbox {
                 item_count,
                 durability,
                 enchant_id,
+                quality,
+                bound,
                 expires_tick: 0,
                 return_to: None,
             });
         mail_id
-    }
-
-    /// Legacy `(item_id, item_count)` shape kept so existing callers (e.g.
-    /// `market.rs`) keep compiling without instance data. Prefer
-    /// [`Mailbox::deliver_system_ex`] for new call sites that carry
-    /// durability/enchant.
-    pub fn deliver_system(
-        &mut self,
-        to_durable: &str,
-        from: &str,
-        subject: &str,
-        copper: u32,
-        item_id: Option<String>,
-        item_count: u32,
-    ) -> u32 {
-        let attachment = item_id.map(|item_id| MailAttachment {
-            count: item_count.max(1),
-            durability: None,
-            enchant_id: None,
-            item_id,
-        });
-        self.deliver_system_ex(to_durable, from, subject, copper, attachment)
     }
 
     /// Collect a mail's copper and item into the player's bags/wallet.
@@ -381,14 +382,15 @@ impl Mailbox {
         };
         let mail = mails.remove(idx);
         if let Some(ref item_id) = mail.item_id {
-            let stack = InvStack {
-                item_id: item_id.clone(),
-                count: mail.item_count.max(1),
-                durability: mail.durability,
-                enchant_id: mail.enchant_id.clone(),
-            };
+            let mut stack = InvStack::new(item_id, mail.item_count.max(1));
+            if mail.durability.is_some() {
+                stack.durability = mail.durability;
+            }
+            stack.enchant_id = mail.enchant_id.clone();
+            stack.quality = mail.quality;
+            stack.bound = mail.bound;
             let placed = if let Some(bags) = world.get_mut::<Bags>(player) {
-                put_stack(&mut bags.inventory, stack).is_ok()
+                grant_stack(&mut bags.inventory, stack)
             } else {
                 false
             };
@@ -443,8 +445,13 @@ impl Mailbox {
     /// mail (`expires_tick == 0`) never expires. Does not emit realm-wide
     /// toasts (unlike interactive [`Mailbox::return_mail`]).
     pub fn tick_expire(&mut self, now_tick: u64, events: &mut Vec<SimEvent>) {
+        let mut keys: Vec<String> = self.inbox.keys().cloned().collect();
+        keys.sort();
         let mut expired = Vec::new();
-        for mails in self.inbox.values_mut() {
+        for key in keys {
+            let Some(mails) = self.inbox.get_mut(&key) else {
+                continue;
+            };
             let mut i = 0;
             while i < mails.len() {
                 if mails[i].expires_tick > 0 && now_tick >= mails[i].expires_tick {
@@ -454,6 +461,7 @@ impl Mailbox {
                 }
             }
         }
+        expired.sort_by_key(|m| m.id);
         for mail in expired {
             self.route_return_or_discard(mail, events, true);
         }
@@ -466,13 +474,15 @@ impl Mailbox {
         silent: bool,
     ) {
         if let Some(return_to) = mail.return_to.clone() {
-            let attachment = mail.item_id.clone().map(|item_id| MailAttachment {
+            let attachment = mail.item_id.clone().map(|item_id| InvStack {
                 item_id,
-                count: mail.item_count,
+                count: mail.item_count.max(1),
                 durability: mail.durability,
                 enchant_id: mail.enchant_id.clone(),
+                quality: mail.quality,
+                bound: mail.bound,
             });
-            self.deliver_system_ex(
+            self.deliver_system(
                 &return_to,
                 "Mail",
                 &format!("Returned: {}", mail.subject),
@@ -495,9 +505,9 @@ impl Mailbox {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Durable, Progress};
+    use crate::ecs::components::{Bags, Durable, InvStack, Progress};
     use crate::inventory::{count_item, grant_into};
-    use woc_content::PlayerClass;
+    use woc_content::{ItemQuality, PlayerClass};
 
     #[test]
     fn send_and_collect_copper_and_item() {
@@ -531,9 +541,19 @@ mod tests {
         dir.register("Bob", "bob");
         let mut box_ = Mailbox::new();
         let mut events = Vec::new();
-        assert!(box_.send(&mut world, 1, "Bob", 25, Some(slot), 1, 0, &dir, &mut events));
+        assert!(box_.send(
+            &mut world,
+            1,
+            "Bob",
+            25,
+            Some(slot),
+            1,
+            0,
+            &dir,
+            &mut events
+        ));
         assert_eq!(world.get::<Progress>(1).unwrap().copper, 74); // 100 - 25 - postage
-        // Rebind Bob to a new id under same durable key.
+                                                                  // Rebind Bob to a new id under same durable key.
         world.despawn(2);
         crate::ecs::spawn::create_player(&mut world, 99, "Bob", PlayerClass::Mage, 1.0, 0.0);
         if let Some(d) = world.get_mut::<Durable>(99) {
@@ -547,7 +567,7 @@ mod tests {
     #[test]
     fn load_mails_roundtrip() {
         let mut box_ = Mailbox::new();
-        box_.deliver_system("ada", "AH", "Sold", 40, None, 0);
+        box_.deliver_system("ada", "AH", "Sold", 40, None);
         let all = box_.all_mails();
         let next = box_.next_id();
         let mut box2 = Mailbox::new();
@@ -649,7 +669,7 @@ mod tests {
     fn inbox_cap_blocks_player_mail_not_system() {
         let mut box_ = Mailbox::new();
         for _ in 0..MAIL_INBOX_CAP {
-            box_.deliver_system_ex("bob", "Ada", "Parcel", 1, None);
+            box_.deliver_system("bob", "Ada", "Parcel", 1, None);
         }
         // player cap counts all mails in the inbox including system
         // Spec: system bypasses cap on deliver_system, player send checks len >= cap
@@ -668,10 +688,10 @@ mod tests {
         assert!(events
             .iter()
             .any(|e| matches!(e, SimEvent::Toast { message } if message == "Mailbox is full.")));
-        box_.deliver_system_ex("bob", "Auction House", "Sold", 40, None);
+        box_.deliver_system("bob", "Auction House", "Sold", 40, None);
         assert_eq!(
             box_.snapshot_for_entity_key("bob").len(),
-            MAIL_INBOX_CAP as usize + 1
+            MAIL_INBOX_CAP + 1
         );
     }
 
@@ -784,14 +804,126 @@ mod tests {
             .iter()
             .any(|e| matches!(e, SimEvent::Toast { message } if message == "Mail returned.")));
         assert!(box_.snapshot_for_entity(2, &world).is_empty());
-        assert_eq!(box_.snapshot_for_entity(1, &world)[0].subject, "Returned: Parcel");
+        assert_eq!(
+            box_.snapshot_for_entity(1, &world)[0].subject,
+            "Returned: Parcel"
+        );
 
         // System mail has no `return_to`, so returning it discards instead.
-        let sys_id = box_.deliver_system_ex("ada", "Auction House", "Sold", 5, None);
+        let sys_id = box_.deliver_system("ada", "Auction House", "Sold", 5, None);
         events.clear();
         assert!(box_.return_mail(&mut world, 1, sys_id, &mut events));
         assert!(events
             .iter()
             .any(|e| matches!(e, SimEvent::Toast { message } if message == "Mail discarded.")));
+    }
+
+    #[test]
+    fn collect_restores_listed_wear() {
+        let mut box_ = Mailbox::new();
+        box_.deliver_system(
+            "ada",
+            "Auction House",
+            "Listing expired",
+            0,
+            Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(7),
+                enchant_id: Some("coarse_sharpening".into()),
+                quality: Some(ItemQuality::Uncommon),
+                bound: false,
+            }),
+        );
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("ada".into());
+        }
+        let mut events = Vec::new();
+        assert!(box_.collect(&mut world, 1, 1, &mut events));
+        let sword = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "worn_sword")
+            .unwrap();
+        assert_eq!(sword.durability, Some(7));
+        assert_eq!(sword.enchant_id.as_deref(), Some("coarse_sharpening"));
+        assert_eq!(sword.quality, Some(ItemQuality::Uncommon));
+    }
+
+    #[test]
+    fn send_refuses_soulbound_items() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 50;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.inventory[0] = Some(InvStack {
+                item_id: "silverleaf".into(),
+                count: 1,
+                durability: None,
+                enchant_id: None,
+                quality: None,
+                bound: true,
+            });
+        }
+        let mut dir = CharacterDirectory::default();
+        dir.register("Bob", "bob");
+        let mut box_ = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(!box_.send(&mut world, 1, "Bob", 0, Some(0), 1, 0, &dir, &mut events));
+        assert!(box_.all_mails().is_empty());
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "That item is soulbound."
+        )));
+    }
+
+    #[test]
+    fn interact_mail_requires_mailbox_session() {
+        use crate::ecs::components::{Identity, Transform};
+        use woc_protocol::{InteractAction, WorldHost};
+        let mut sim = crate::sim::Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        WorldHost::interact(&mut sim, pid, 0, InteractAction::MailCollect { mail_id: 1 });
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Talk to a mailbox first."
+        )));
+
+        let post = sim
+            .world
+            .ids::<Identity>()
+            .into_iter()
+            .find(|&id| {
+                sim.world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some("mailbox_post")
+            })
+            .expect("mailbox_post");
+        if let Some(nt) = sim.world.get::<Transform>(post).cloned() {
+            if let Some(p) = sim.world.get_mut::<Transform>(pid) {
+                p.x = nt.x;
+                p.z = nt.z;
+            }
+        }
+        WorldHost::interact(&mut sim, pid, post, InteractAction::Talk);
+        sim.events.clear();
+        WorldHost::interact(
+            &mut sim,
+            pid,
+            post,
+            InteractAction::MailCollect { mail_id: 1 },
+        );
+        assert!(!sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Talk to a mailbox first."
+        )));
     }
 }
