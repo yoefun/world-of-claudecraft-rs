@@ -9,11 +9,11 @@ mod release;
 mod sign;
 mod store;
 
-pub use apply::apply_update;
+pub use apply::{apply_update, apply_update_with_full_fallback};
 pub use delta::{apply_delta, pack_delta, DeltaMeta, PatchEntry};
 pub use error::UpdateError;
 pub use hash::sha256_hex;
-pub use manifest::{Artifact, FileEntry, InstallState, Manifest};
+pub use manifest::{install_json_bytes, Artifact, FileEntry, InstallState, Manifest};
 pub use pack::{file_entry, pack_full, unpack_full};
 pub use plan::{plan_fetch, FetchPlan};
 pub use release::{pack_release, PackOpts};

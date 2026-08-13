@@ -1,6 +1,6 @@
 use crate::{
-    apply_delta, file_entry, plan_fetch, sha256_hex, unpack_full, ArtifactStore, FetchPlan,
-    InstallState, Manifest, UpdateError,
+    apply_delta, file_entry, install_json_bytes, plan_fetch, sha256_hex, unpack_full,
+    ArtifactStore, FetchPlan, InstallState, Manifest, UpdateError,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,13 +34,16 @@ pub fn apply_update(
     remote: &Manifest,
     store: &dyn ArtifactStore,
 ) -> Result<FetchPlan, UpdateError> {
-    let local = read_install_state(prefix)?;
+    let mut local = read_install_state(prefix)?;
+    if local.target.is_empty() {
+        local.target = remote.target.clone();
+    }
     let plan = plan_fetch(&local, remote)?;
     if matches!(plan, FetchPlan::Nothing) {
         return Ok(plan);
     }
 
-    let (artifact, blob) = match &plan {
+    let blob = match &plan {
         FetchPlan::Delta { artifact, .. } | FetchPlan::Full { artifact } => {
             let blob = store.fetch(&artifact.name)?;
             if sha256_hex(&blob) != artifact.sha256 {
@@ -48,7 +51,7 @@ pub fn apply_update(
                     path: artifact.name.clone(),
                 });
             }
-            (artifact.clone(), blob)
+            blob
         }
         FetchPlan::Nothing => unreachable!(),
     };
@@ -76,13 +79,9 @@ pub fn apply_update(
             FetchPlan::Nothing => unreachable!(),
         }
 
-        let install = InstallState {
-            rewrite_version: remote.rewrite_version.clone(),
-            target: remote.target.clone(),
-        };
         fs::write(
             staging.join("install.json"),
-            serde_json::to_string(&install)?,
+            install_json_bytes(&remote.rewrite_version, &remote.target)?,
         )?;
 
         for fe in &remote.files {
@@ -106,10 +105,34 @@ pub fn apply_update(
         fs::remove_dir_all(&backup)?;
     }
     fs::rename(prefix, &backup)?;
-    fs::rename(&staging, prefix)?;
+    if let Err(e) = fs::rename(&staging, prefix) {
+        let _ = fs::rename(&backup, prefix);
+        return Err(e.into());
+    }
 
-    let _ = artifact;
     Ok(plan)
+}
+
+/// Like [`apply_update`], but a failed delta apply retries once with the full archive.
+pub fn apply_update_with_full_fallback(
+    prefix: &Path,
+    remote: &Manifest,
+    store: &dyn ArtifactStore,
+) -> Result<FetchPlan, UpdateError> {
+    let mut local = read_install_state(prefix)?;
+    if local.target.is_empty() {
+        local.target = remote.target.clone();
+    }
+    let planned = plan_fetch(&local, remote)?;
+    match apply_update(prefix, remote, store) {
+        Ok(plan) => Ok(plan),
+        Err(_) if matches!(planned, FetchPlan::Delta { .. }) => {
+            let mut full_only = remote.clone();
+            full_only.delta_from.clear();
+            apply_update(prefix, &full_only, store)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]
@@ -332,5 +355,35 @@ mod tests {
         let install: InstallState =
             serde_json::from_slice(&fs::read(fx.prefix.join("install.json")).unwrap()).unwrap();
         assert_eq!(install.rewrite_version, "1.0.1");
+    }
+
+    #[test]
+    fn apply_update_full_fallback_after_corrupt_delta() {
+        let fx = Fixture::new();
+        let manifest = build_manifest(
+            &fx.v101,
+            &fx.full_blob,
+            Some(&fx.delta_blob),
+            Some("1.0.0"),
+            &fx.sk,
+        );
+        write_store(
+            &fx.store_dir,
+            &manifest,
+            &fx.full_blob,
+            Some(&fx.delta_blob),
+        );
+        let delta_path = fx.store_dir.join("delta.wocdelta");
+        let mut stored = fs::read(&delta_path).unwrap();
+        let flip = stored.len() / 2;
+        stored[flip] ^= 0xff;
+        fs::write(&delta_path, &stored).unwrap();
+        let store = DirStore {
+            root: fx.store_dir.clone(),
+        };
+
+        let plan = apply_update_with_full_fallback(&fx.prefix, &manifest, &store).unwrap();
+        assert!(matches!(plan, FetchPlan::Full { .. }));
+        assert_eq!(fs::read(fx.prefix.join("woc-client")).unwrap(), b"V101");
     }
 }

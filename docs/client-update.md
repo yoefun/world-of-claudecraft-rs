@@ -6,7 +6,7 @@ Packaged Bevy clients ship as a signed full archive plus an optional bsdiff delt
 
 1. Download `woc-rs-VERSION-x86_64-unknown-linux-gnu.tar.zst` from the GitHub Release for your rewrite version (for example `woc-rs-1.5.0-x86_64-unknown-linux-gnu.tar.zst`).
 2. Extract the archive into a directory of your choice.
-3. Run `./woc-updater` once to verify `install.json` and launch `./woc-client`.
+3. Run `./woc-updater` to launch `./woc-client` (no download when already current).
 
 The archive contains `woc-client`, `woc-updater`, and `install.json`.
 
@@ -14,8 +14,15 @@ The archive contains `woc-client`, `woc-updater`, and `install.json`.
 
 From the same install prefix, run `./woc-updater`.
 
+With no arguments, the updater uses the directory that contains the binary as `--prefix` and launches `./woc-client` (no download). To apply an update, pass the signed manifest URL (the title **Update** button does this) or set `WOC_UPDATE_MANIFEST_URL`:
+
+```bash
+./woc-updater --manifest https://github.com/yoefun/world-of-claudecraft-rs/releases/download/v1.5.0/woc-rs-1.5.0-x86_64-unknown-linux-gnu.manifest.json
+```
+
 - When your installed rewrite is **N−1** and a delta exists on the release, the updater downloads the smaller `.wocdelta` artifact.
 - When you skipped a version or no delta was published (first release tag), it downloads the full `.tar.zst` instead.
+- If a delta fails hash or apply checks, the updater retries once with the full archive.
 
 After a successful apply, `woc-updater` execs `./woc-client`.
 

@@ -64,8 +64,17 @@ fn update_offered(mode: PlayMode, compat: &RealmCompat) -> bool {
 
 fn launch_updater(url: &str) {
     let updater = updater_path().expect("update_offered checked updater exists");
-    let mut cmd = std::process::Command::new(updater);
-    cmd.arg("--once").arg("--manifest").arg(url);
+    let prefix = updater
+        .parent()
+        .expect("updater has a parent directory")
+        .to_path_buf();
+    let mut cmd = std::process::Command::new(&updater);
+    cmd.current_dir(&prefix)
+        .arg("--once")
+        .arg("--prefix")
+        .arg(&prefix)
+        .arg("--manifest")
+        .arg(url);
     let _ = cmd.spawn();
     std::process::exit(0);
 }

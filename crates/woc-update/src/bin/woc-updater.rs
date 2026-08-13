@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use woc_update::{
-    apply_update, fetch_url, plan_fetch, url_parent, verify_manifest, verifying_key_from_hex,
-    ArtifactStore, DirStore, HttpStore, InstallState, Manifest, UpdateError,
+    apply_update_with_full_fallback, fetch_url, plan_fetch, url_parent, verify_manifest,
+    verifying_key_from_hex, ArtifactStore, DirStore, HttpStore, InstallState, Manifest,
+    UpdateError,
 };
 
 struct Args {
     prefix: PathBuf,
-    manifest: String,
+    manifest: Option<String>,
     store: Option<PathBuf>,
     once: bool,
     no_exec: bool,
@@ -21,8 +22,10 @@ struct Args {
 
 fn usage() -> ! {
     eprintln!(
-        "usage: woc-updater --prefix DIR --manifest PATH|URL [--store DIR] [--once] \\
-       [--no-exec] [--pubkey HEX] [--already-copied] [--apply-from DIR]"
+        "usage: woc-updater [--prefix DIR] [--manifest PATH|URL] [--store DIR] [--once] \\
+       [--no-exec] [--pubkey HEX] [--already-copied] [--apply-from DIR]
+       --prefix defaults to the directory containing this binary.
+       omitting --manifest launches the installed client without checking for updates."
     );
     process::exit(2);
 }
@@ -39,19 +42,25 @@ fn has_flag(args: &[String], flag: &str) -> bool {
 
 fn parse_args() -> Args {
     let raw: Vec<String> = env::args().collect();
-    if raw.len() < 2 {
-        usage();
-    }
 
     let apply_from = arg_value(&raw, "--apply-from").map(PathBuf::from);
     let prefix = apply_from
         .clone()
-        .or_else(|| arg_value(&raw, "--prefix").map(PathBuf::from));
+        .or_else(|| arg_value(&raw, "--prefix").map(PathBuf::from))
+        .or_else(|| {
+            env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        });
 
-    let manifest = arg_value(&raw, "--manifest");
+    let manifest = arg_value(&raw, "--manifest").or_else(|| {
+        env::var("WOC_UPDATE_MANIFEST_URL")
+            .ok()
+            .filter(|s| !s.is_empty())
+    });
     let store = arg_value(&raw, "--store").map(PathBuf::from);
 
-    let (Some(prefix), Some(manifest)) = (prefix, manifest) else {
+    let Some(prefix) = prefix else {
         usage();
     };
 
@@ -204,19 +213,21 @@ fn exec_client(prefix: &Path) -> Result<(), UpdateError> {
 
 fn run() -> Result<(), UpdateError> {
     let args = parse_args();
-    let manifest = load_manifest(&args.manifest)?;
+    if let Some(manifest_src) = args.manifest.as_deref() {
+        let manifest = load_manifest(manifest_src)?;
 
-    let pubkey_hex = args
-        .pubkey
-        .as_deref()
-        .unwrap_or_else(|| default_pubkey_hex());
-    let pk = verifying_key_from_hex(pubkey_hex)?;
-    verify_manifest(&manifest, &pk)?;
+        let pubkey_hex = args
+            .pubkey
+            .as_deref()
+            .unwrap_or_else(|| default_pubkey_hex());
+        let pk = verifying_key_from_hex(pubkey_hex)?;
+        verify_manifest(&manifest, &pk)?;
 
-    maybe_self_update(&args, &manifest)?;
+        maybe_self_update(&args, &manifest)?;
 
-    let store = artifact_store(&args, &args.manifest)?;
-    apply_update(&args.prefix, &manifest, store.as_ref())?;
+        let store = artifact_store(&args, manifest_src)?;
+        apply_update_with_full_fallback(&args.prefix, &manifest, store.as_ref())?;
+    }
 
     if !args.no_exec {
         exec_client(&args.prefix)?;

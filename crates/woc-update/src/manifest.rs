@@ -34,6 +34,17 @@ pub struct InstallState {
     pub target: String,
 }
 
+/// Compact JSON bytes written by pack and apply (must stay in sync).
+pub fn install_json_bytes(
+    rewrite_version: &str,
+    target: &str,
+) -> Result<Vec<u8>, crate::UpdateError> {
+    Ok(serde_json::to_vec(&InstallState {
+        rewrite_version: rewrite_version.to_string(),
+        target: target.to_string(),
+    })?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

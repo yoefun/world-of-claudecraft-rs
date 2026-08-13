@@ -1,6 +1,6 @@
 use crate::{
-    file_entry, pack_delta, pack_full, sha256_hex, sign_manifest, signing_key_from_hex, Artifact,
-    Manifest, UpdateError,
+    file_entry, install_json_bytes, pack_delta, pack_full, sha256_hex, sign_manifest,
+    signing_key_from_hex, Artifact, Manifest, UpdateError,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -19,6 +19,10 @@ pub struct PackOpts<'a> {
 
 pub fn pack_release(opts: PackOpts<'_>) -> Result<Manifest, UpdateError> {
     fs::create_dir_all(opts.out)?;
+    fs::write(
+        opts.layout.join("install.json"),
+        install_json_bytes(opts.version, opts.target)?,
+    )?;
 
     let full_name = format!("woc-rs-{}-{}.tar.zst", opts.version, opts.target);
     let full_blob = pack_full(opts.layout)?;
@@ -169,5 +173,40 @@ mod tests {
         )
         .unwrap();
         verify_manifest(&written, &pk).unwrap();
+    }
+
+    #[test]
+    fn pack_release_rewrites_spaced_install_json() {
+        let root = unique_tmp("spaced");
+        let layout = root.join("layout");
+        let out = root.join("out");
+        write_layout(&layout, "1.5.0", b"CLIENT", b"UP");
+        fs::write(
+            layout.join("install.json"),
+            r#"{ "rewrite_version": "1.5.0", "target": "x86_64-unknown-linux-gnu" }"#,
+        )
+        .unwrap();
+
+        let seed = "11".repeat(32);
+        let manifest = pack_release(PackOpts {
+            layout: &layout,
+            prev_layout: None,
+            prev_version: None,
+            out: &out,
+            version: "1.5.0",
+            target: "x86_64-unknown-linux-gnu",
+            protocol_rev: 6,
+            signing_seed_hex: &seed,
+        })
+        .unwrap();
+
+        let expected = install_json_bytes("1.5.0", "x86_64-unknown-linux-gnu").unwrap();
+        let install = manifest
+            .files
+            .iter()
+            .find(|f| f.path == "install.json")
+            .unwrap();
+        assert_eq!(install.sha256, crate::sha256_hex(&expected));
+        assert_eq!(fs::read(layout.join("install.json")).unwrap(), expected);
     }
 }
