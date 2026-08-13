@@ -67,10 +67,16 @@ impl World {
         self.live_index.contains_key(&id)
     }
 
-    /// Register an existing id (dual-write from the fat `Entity` list). Does not allocate 0.
-    pub fn adopt(&mut self, id: EntityId) {
+    /// Bring an externally-assigned id to life: the factories in [`crate::ecs::spawn`]
+    /// take an explicit `id`, and hydration paths must re-adopt persisted ids.
+    ///
+    /// Returns `false` and changes nothing when the id is 0 or already live. Since
+    /// `next_id()` is a pure getter that reserves nothing, a caller that reads it
+    /// twice without an intervening adopt gets the same id back, and the second
+    /// adopt reports `false` rather than aliasing a live entity.
+    pub fn adopt(&mut self, id: EntityId) -> bool {
         if id == 0 || self.contains(id) {
-            return;
+            return false;
         }
         let idx = self.live.len();
         self.live.push(id);
@@ -78,6 +84,7 @@ impl World {
         if id >= self.next_id {
             self.next_id = id.saturating_add(1);
         }
+        true
     }
 
     pub fn live_ids(&self) -> impl Iterator<Item = EntityId> + '_ {
@@ -88,9 +95,18 @@ impl World {
         self.live.len()
     }
 
-    pub fn insert<C: Component>(&mut self, id: EntityId, value: C) {
-        debug_assert!(self.contains(id), "insert on unknown entity {id}");
+    /// Write a component column for a live entity. Returns `false` and writes
+    /// nothing when `id` is not live.
+    ///
+    /// The liveness check is a real guard, not a `debug_assert!`: without it a
+    /// release build would happily write an orphan column for a despawned id, or
+    /// overwrite a live entity's columns after a double `next_id()` read.
+    pub fn insert<C: Component>(&mut self, id: EntityId, value: C) -> bool {
+        if !self.contains(id) {
+            return false;
+        }
         C::storage_mut(self).insert(id, value);
+        true
     }
 
     pub fn get<C: Component>(&self, id: EntityId) -> Option<&C> {

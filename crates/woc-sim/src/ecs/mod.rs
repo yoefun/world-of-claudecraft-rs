@@ -109,10 +109,93 @@ mod tests {
     #[test]
     fn adopt_keeps_existing_id() {
         let mut w = World::new();
-        w.adopt(9);
+        assert!(w.adopt(9));
         assert!(w.contains(9));
         assert_eq!(w.next_id(), 10);
-        w.adopt(9);
+        assert!(!w.adopt(9), "re-adopting a live id must report failure");
+        assert_eq!(w.spawn_count(), 1);
+    }
+
+    /// `next_id()` reserves nothing, so reading it twice hands out the same id.
+    /// The second adopt must refuse rather than alias the live entity.
+    #[test]
+    fn adopt_rejects_duplicate_and_zero() {
+        let mut w = World::new();
+        let id = w.next_id();
+        assert_eq!(w.next_id(), id, "next_id is a pure getter");
+        assert!(w.adopt(id));
+        assert!(!w.adopt(id));
+        assert_eq!(w.spawn_count(), 1);
+
+        assert!(!w.adopt(0), "id 0 is never live");
+        assert!(!w.contains(0));
+        assert_eq!(w.spawn_count(), 1);
+    }
+
+    #[test]
+    fn insert_on_a_non_live_id_writes_nothing() {
+        let mut w = World::new();
+        let live = w.spawn();
+        let never_live = live + 100;
+
+        assert!(!w.insert(
+            never_live,
+            Transform {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                yaw: 0.0,
+            },
+        ));
+        assert!(w.get::<Transform>(never_live).is_none());
+        assert!(w.ids::<Transform>().is_empty());
+
+        assert!(w.insert(
+            live,
+            Transform {
+                x: 2.0,
+                y: 0.0,
+                z: 0.0,
+                yaw: 0.0,
+            },
+        ));
+        assert_eq!(w.get::<Transform>(live).unwrap().x, 2.0);
+    }
+
+    /// Release builds must not be able to write orphan columns for an id that
+    /// was despawned; the old `debug_assert!` compiled that guard out.
+    #[test]
+    fn insert_after_despawn_writes_nothing() {
+        let mut w = World::new();
+        let id = w.spawn();
+        assert!(w.despawn(id));
+
+        assert!(!w.insert(
+            id,
+            Identity {
+                kind: EntityKind::Loot,
+                name: "ghost".into(),
+                template_id: None,
+                zone_id: "eastbrook".into(),
+            },
+        ));
+        assert!(w.get::<Identity>(id).is_none());
+        assert!(w.ids::<Identity>().is_empty());
+    }
+
+    /// Two `next_id()` reads with no adopt between them yield the same id. The
+    /// second adopt now reports `false`, which is what the `debug_assert!` at
+    /// every factory call site fires on. `insert` cannot catch this case — the
+    /// id *is* live — so detection has to happen at adopt.
+    #[test]
+    fn a_double_next_id_read_is_detected_at_adopt() {
+        let mut w = World::new();
+        let first = w.next_id();
+        let second = w.next_id();
+        assert_eq!(first, second);
+
+        assert!(w.adopt(first));
+        assert!(!w.adopt(second), "the aliasing adopt must report failure");
         assert_eq!(w.spawn_count(), 1);
     }
 
