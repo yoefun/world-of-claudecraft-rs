@@ -4,7 +4,7 @@
 //! (gravity, coyote jump, swim tread, fall damage). Flight kinematics apply when
 //! `Motion.flying` is set (e.g. by a flying mount via `mount::summon_mount`).
 
-use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Transform};
+use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Riding, Transform};
 use crate::ecs::World;
 use crate::physics::{eastbrook_buildings, sweep_character_xz};
 use crate::types::{
@@ -360,6 +360,13 @@ pub fn step_player_motion(
     } else {
         RUN_SPEED
     } * crate::combat::move_speed_mult(world, player_id);
+    let mount_mult = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_deref())
+        .and_then(woc_content::mount)
+        .map(|m| m.speed_mult)
+        .unwrap_or(1.0);
+    let speed = speed * mount_mult;
 
     let grounded = m.on_ground && !m.flying;
     apply_horizontal_wish(

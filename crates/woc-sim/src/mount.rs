@@ -260,7 +260,7 @@ mod tests {
     use crate::ecs::spawn::create_player;
     use crate::ecs::components::{Health, Motion, Progress, Riding};
     use woc_content::PlayerClass;
-    use woc_protocol::SimEvent;
+    use woc_protocol::{EntityId, PlayerIntent, SimEvent};
 
     fn warrior() -> (World, EntityId) {
         let mut world = World::new();
@@ -303,6 +303,50 @@ mod tests {
         let mut events = Vec::new();
         assert!(!summon_mount(&mut world, id, "nonexistent_mount", &mut events));
         assert_eq!(toast_text(&events), vec!["You cannot mount here.".to_string()]);
+    }
+
+    #[test]
+    fn pony_is_faster_than_foot() {
+        let (mut world, id) = warrior();
+        world.get_mut::<Riding>(id).unwrap().rank = 1;
+        world.get_mut::<Riding>(id).unwrap().known.insert("brown_pony".into());
+        let mut events = Vec::new();
+        assert!(summon_mount(&mut world, id, "brown_pony", &mut events));
+        let z0 = world.get::<Transform>(id).unwrap().z;
+        let intent = PlayerIntent {
+            move_z: 1.0,
+            facing: 0.0,
+            ..Default::default()
+        };
+        let _ = crate::player_motion::step_player_motion(&mut world, id, &intent);
+        let mounted_dz = world.get::<Transform>(id).unwrap().z - z0;
+
+        let (mut foot, fid) = warrior();
+        let z1 = foot.get::<Transform>(fid).unwrap().z;
+        let _ = crate::player_motion::step_player_motion(&mut foot, fid, &intent);
+        let foot_dz = foot.get::<Transform>(fid).unwrap().z - z1;
+        assert!(mounted_dz > foot_dz * 1.4);
+    }
+
+    #[test]
+    fn gryphon_toggle_allows_ascend() {
+        let (mut world, id) = warrior();
+        world.get_mut::<Health>(id).unwrap().level = 8;
+        world.get_mut::<Riding>(id).unwrap().rank = 3;
+        world.get_mut::<Riding>(id).unwrap().known.insert("tawny_gryphon".into());
+        world.get_mut::<Riding>(id).unwrap().last_id = Some("tawny_gryphon".into());
+        let mut events = Vec::new();
+        toggle_mount(&mut world, id, &mut events);
+        assert!(world.get::<Motion>(id).unwrap().flying);
+        let start_y = world.get::<Transform>(id).unwrap().y;
+        let up = PlayerIntent {
+            jump: true,
+            ..Default::default()
+        };
+        for _ in 0..10 {
+            let _ = crate::player_motion::step_player_motion(&mut world, id, &up);
+        }
+        assert!(world.get::<Transform>(id).unwrap().y > start_y + 2.0);
     }
 
     #[test]
