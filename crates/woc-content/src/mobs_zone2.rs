@@ -125,7 +125,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             count: 1,
         }],
         respawn_seconds: 300.0,
-        ability_id: None,
+        ability_id: Some("terror_slam"),
     },
     MobTemplate {
         id: "barrow_hag",

@@ -20,6 +20,8 @@ pub const MOB_SPEED: f32 = 5.5;
 pub const RAGE_FROM_TAKEN: f32 = 0.05;
 /// Stealthed horizontal speed multiplier (stacked with chill via `min`).
 pub const STEALTH_MOVE_MULT: f32 = 0.7;
+/// Threat required on a challenger before a mob retargets away from its current focus.
+pub const THREAT_SWITCH_RATIO: f32 = 1.1;
 
 /// White-hit table (player auto-attack and damaging abilities).
 pub const MISS_CHANCE: f32 = 0.05;

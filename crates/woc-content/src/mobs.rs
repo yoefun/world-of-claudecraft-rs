@@ -89,7 +89,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         attack_damage: 9.0,
         loot: SCARRED_WOLF_LOOT,
         respawn_seconds: 30.0,
-        ability_id: None,
+        ability_id: Some("wolf_bite"),
     },
     MobTemplate {
         id: "young_boar",
@@ -115,7 +115,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         attack_damage: 14.0,
         loot: CRYPT_WARDEN_LOOT,
         respawn_seconds: 30.0,
-        ability_id: None,
+        ability_id: Some("warden_smash"),
     },
 ];
 

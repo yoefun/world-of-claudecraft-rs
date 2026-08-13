@@ -490,7 +490,8 @@ mod tests {
         update_mob_ai(&mut world, 2, 1);
         assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
         let mut events = Vec::new();
-        crate::combat::update_mob_combat(2, 1, &mut world, &mut events);
+        let mut rng = crate::rng::Rng::new(1);
+        crate::combat::update_mob_combat(2, 1, &mut world, &mut rng, &mut events);
         assert!(
             !world
                 .get::<crate::ecs::components::ClassKit>(1)

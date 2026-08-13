@@ -509,7 +509,7 @@ impl Sim {
                 .and_then(|c| c.target)
                 .or_else(|| nearest_alive_player(&self.world, *mid, 40.0));
             if let Some(pid) = focus {
-                update_mob_combat(*mid, pid, &mut self.world, &mut self.events);
+                update_mob_combat(*mid, pid, &mut self.world, &mut self.rng, &mut self.events);
             }
         }
 

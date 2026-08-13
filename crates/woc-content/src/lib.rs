@@ -643,8 +643,18 @@ mod tests {
     }
 
     #[test]
+    fn mob_abilities_exist() {
+        assert!(ability("wolf_bite").is_some());
+        assert!(ability("warden_smash").is_some());
+        assert!(ability("terror_slam").is_some());
+        assert_eq!(mob("scarred_wolf").unwrap().ability_id, Some("wolf_bite"));
+        assert_eq!(mob("crypt_warden").unwrap().ability_id, Some("warden_smash"));
+        assert_eq!(mob("mire_terror").unwrap().ability_id, Some("terror_slam"));
+    }
+
+    #[test]
     fn every_ability_declares_an_effect() {
-        assert_eq!(ABILITIES.len(), 51);
+        assert_eq!(ABILITIES.len(), 54);
         for def in ABILITIES {
             let _ = def.effect;
             if let Some(aura_id) = def.aura {

@@ -10,7 +10,7 @@ use crate::rng::Rng;
 use crate::stats::recalc_player_stats;
 use crate::types::{
     CRIT_CHANCE, CRIT_MULT, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
-    RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT,
+    RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT, THREAT_SWITCH_RATIO,
 };
 use woc_content::{
     ability, aura_for_ability, class_ability_for_slot, item, mob, AbilityDef, AbilityEffect,
@@ -44,6 +44,9 @@ pub fn roll_hit_with_crit(rng: &mut Rng, crit_chance: f32) -> HitResult {
 }
 
 fn roll_player_hit(world: &World, rng: &mut Rng, src: EntityId) -> HitResult {
+    if world.get::<LootTable>(src).is_some() && world.get::<ClassKit>(src).is_none() {
+        return HitResult::Hit;
+    }
     let crit = (CRIT_CHANCE + crate::talents::talent_bonus(world, src, "crit_pct"))
         .clamp(0.0, 1.0 - MISS_CHANCE);
     roll_hit_with_crit(rng, crit)
@@ -397,27 +400,41 @@ pub fn add_threat(world: &mut World, mob_id: EntityId, source: EntityId, amount:
 
 /// Prefer current living target; else highest threat in range; else `None`.
 pub fn prefer_mob_target(world: &World, mob_id: EntityId, max_range: f32) -> Option<EntityId> {
-    if let Some(tid) = world.get::<Combat>(mob_id).and_then(|c| c.target) {
-        if world.get::<ClassKit>(tid).is_some() && world.get::<Health>(tid).is_some_and(|h| h.alive)
-        {
-            return Some(tid);
+    let current = world.get::<Combat>(mob_id).and_then(|c| c.target);
+    let Some(threat) = world.get::<Threat>(mob_id).map(|t| t.threat.clone()) else {
+        if let Some(tid) = current {
+            if world.get::<ClassKit>(tid).is_some()
+                && world.get::<Health>(tid).is_some_and(|h| h.alive)
+            {
+                return Some(tid);
+            }
         }
-    }
-    let threat = world.get::<Threat>(mob_id)?.threat.clone();
+        return None;
+    };
     let mut best: Option<(EntityId, f32)> = None;
-    for (id, threat_val) in threat {
-        if world.get::<ClassKit>(id).is_none() {
+    for (id, threat_val) in &threat {
+        if world.get::<ClassKit>(*id).is_none() {
             continue;
         }
-        if !world.get::<Health>(id).is_some_and(|h| h.alive) {
+        if !world.get::<Health>(*id).is_some_and(|h| h.alive) {
             continue;
         }
-        let d = dist2d_ids(world, mob_id, id);
+        let d = dist2d_ids(world, mob_id, *id);
         if d > max_range {
             continue;
         }
-        if best.map(|(_, t)| threat_val > t).unwrap_or(true) {
-            best = Some((id, threat_val));
+        if best.map(|(_, t)| *threat_val > t).unwrap_or(true) {
+            best = Some((*id, *threat_val));
+        }
+    }
+    let best_threat = best.map(|(_, t)| t).unwrap_or(0.0);
+    if let Some(tid) = current {
+        if world.get::<ClassKit>(tid).is_some() && world.get::<Health>(tid).is_some_and(|h| h.alive)
+        {
+            let current_threat = threat.get(&tid).copied().unwrap_or(0.0);
+            if current_threat * THREAT_SWITCH_RATIO >= best_threat {
+                return Some(tid);
+            }
         }
     }
     best.map(|(id, _)| id)
@@ -779,6 +796,9 @@ fn is_living_hostile(world: &World, src: EntityId, tid: EntityId) -> bool {
         return true;
     }
     if world.get::<ClassKit>(tid).is_some() {
+        if world.get::<LootTable>(src).is_some() {
+            return true;
+        }
         let src_flag = world
             .get::<Progress>(src)
             .map(|p| p.pvp_flagged)
@@ -1822,6 +1842,7 @@ pub fn update_mob_combat(
     mob_id: EntityId,
     player_id: EntityId,
     world: &mut World,
+    rng: &mut Rng,
     events: &mut Vec<SimEvent>,
 ) {
     if !is_living_mob(world, mob_id) {
@@ -1837,10 +1858,6 @@ pub fn update_mob_combat(
         }
         return;
     }
-    let d = dist2d_ids(world, mob_id, focus);
-    if d > MELEE_RANGE {
-        return;
-    }
     if is_stunned(world, mob_id) {
         return;
     }
@@ -1848,23 +1865,56 @@ pub fn update_mob_combat(
         if c.cast_lockout > 0.0 {
             c.cast_lockout = (c.cast_lockout - DT).max(0.0);
         }
+        if c.ability_cd > 0.0 {
+            c.ability_cd = (c.ability_cd - DT).max(0.0);
+        }
     }
     let yaw = face_toward_ids(world, mob_id, focus);
     if let Some(t) = world.get_mut::<Transform>(mob_id) {
         t.yaw = yaw;
     }
-    let dmg = {
-        let Some(combat) = world.get_mut::<Combat>(mob_id) else {
+    let d = dist2d_ids(world, mob_id, focus);
+    if d <= MELEE_RANGE {
+        let swing_dmg = {
+            let Some(combat) = world.get_mut::<Combat>(mob_id) else {
+                return;
+            };
+            combat.swing_timer -= DT;
+            if combat.swing_timer > 0.0 {
+                None
+            } else {
+                combat.swing_timer = MOB_SWING_SEC;
+                Some(combat.attack_damage.max(3.0))
+            }
+        };
+        if let Some(dmg) = swing_dmg {
+            deal_damage(world, mob_id, focus, dmg, None, true, events);
+        }
+    }
+    let template_id = world
+        .get::<Identity>(mob_id)
+        .and_then(|i| i.template_id.as_deref());
+    let abil_id = template_id.and_then(|tid| mob(tid).and_then(|t| t.ability_id));
+    if let Some(abil_id) = abil_id {
+        let Some(def) = ability(abil_id) else {
             return;
         };
-        combat.swing_timer -= DT;
-        if combat.swing_timer > 0.0 {
+        let (cast_lockout, ability_cd) = world
+            .get::<Combat>(mob_id)
+            .map(|c| (c.cast_lockout, c.ability_cd))
+            .unwrap_or((0.0, 0.0));
+        if cast_lockout > 0.0 || ability_cd > 0.0 {
             return;
         }
-        combat.swing_timer = MOB_SWING_SEC;
-        combat.attack_damage.max(3.0)
-    };
-    deal_damage(world, mob_id, focus, dmg, None, true, events);
+        let dist = dist2d_ids(world, mob_id, focus);
+        if dist > def.range {
+            return;
+        }
+        apply_ability_effect(world, rng, mob_id, def, events);
+        if let Some(c) = world.get_mut::<Combat>(mob_id) {
+            c.ability_cd = def.cooldown;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2601,6 +2651,39 @@ mod tests {
     }
 
     #[test]
+    fn scarred_wolf_casts_bite() {
+        let mut world = World::new();
+        let mut rng = Rng::new(7);
+        crate::ecs::spawn::create_player(&mut world, 1, "Tank", woc_content::PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "scarred_wolf", 1.0, 0.0).unwrap();
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = Some(1);
+            c.ability_cd = 0.0;
+            c.swing_timer = 99.0; // suppress white hit
+        }
+        let mut events = Vec::new();
+        update_mob_combat(2, 1, &mut world, &mut rng, &mut events);
+        assert!(
+            events.iter().any(|e| matches!(e, SimEvent::Damage { ability: Some(name), .. } if name == "Wolf Bite")),
+            "{events:?}"
+        );
+    }
+
+    #[test]
+    fn threat_switches_at_ratio() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", woc_content::PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", woc_content::PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.5, 0.0).unwrap();
+        add_threat(&mut world, 3, 1, 10.0);
+        add_threat(&mut world, 3, 2, 12.0); // 1.2× > 1.1
+        if let Some(c) = world.get_mut::<Combat>(3) {
+            c.target = Some(1);
+        }
+        assert_eq!(prefer_mob_target(&world, 3, 40.0), Some(2));
+    }
+
+    #[test]
     fn cheap_shot_stuns_mob() {
         let mut world = class_and_mob(PlayerClass::Rogue, 6);
         if let Some(kit) = world.get_mut::<ClassKit>(1) {
@@ -2614,7 +2697,7 @@ mod tests {
             c.swing_timer = 0.0;
         }
         let mut events = Vec::new();
-        update_mob_combat(2, 1, &mut world, &mut events);
+        update_mob_combat(2, 1, &mut world, &mut hit_rng(), &mut events);
         assert_eq!(
             world.get::<Health>(1).unwrap().hp,
             player_hp,
