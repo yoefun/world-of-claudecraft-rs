@@ -1,5 +1,6 @@
 //! Zone 2 (Eastfen Marsh and Mirefen) quest definitions.
 
+use crate::factions::RepAward;
 use crate::quests::{QuestDef, QuestObjective, QuestRepeat, QuestReward};
 
 pub static ZONE2_QUESTS: &[QuestDef] = &[
@@ -20,6 +21,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 10,
             item_id: Some("fen_tonic"),
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 150)),
         },
     },
     QuestDef {
@@ -40,6 +42,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 40,
             item_id: Some("reedwalk_boots"),
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 250)),
         },
     },
     QuestDef {
@@ -60,6 +63,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 35,
             item_id: Some("fen_tonic"),
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 150)),
         },
     },
     QuestDef {
@@ -80,6 +84,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 50,
             item_id: Some("marsh_wraps"),
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 250)),
         },
     },
     QuestDef {
@@ -100,6 +105,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 30,
             item_id: None,
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 150)),
         },
     },
     QuestDef {
@@ -120,6 +126,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 45,
             item_id: Some("fen_tonic"),
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 150)),
         },
     },
     QuestDef {
@@ -139,6 +146,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 30,
             item_id: Some("deepfen_draught"),
             choices: &[],
+            reputation: Some(RepAward::new("eastfen_circle", 100)),
         },
     },
     QuestDef {
@@ -159,6 +167,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 65,
             item_id: Some("mireguard_hood"),
             choices: &[],
+            reputation: Some(RepAward::new("mirefen_ferry", 250)),
         },
     },
     QuestDef {
@@ -179,6 +188,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 70,
             item_id: Some("deepfen_draught"),
             choices: &[],
+            reputation: Some(RepAward::new("mirefen_ferry", 200)),
         },
     },
     QuestDef {
@@ -199,6 +209,7 @@ pub static ZONE2_QUESTS: &[QuestDef] = &[
             copper: 150,
             item_id: Some("deepfen_draught"),
             choices: &[],
+            reputation: Some(RepAward::new("mirefen_ferry", 500)),
         },
     },
 ];

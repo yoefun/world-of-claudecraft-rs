@@ -492,6 +492,9 @@ pub fn turn_in_quest(
             let _ = grant_item(world, player_id, item_id, 1, events);
         }
     }
+    if let Some(rep) = def.reward.reputation {
+        crate::reputation::award(world, player_id, rep.faction_id, rep.amount, events);
+    }
     events.push(SimEvent::QuestCompleted {
         player: player_id,
         quest_id: quest_id.to_string(),

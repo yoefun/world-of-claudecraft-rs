@@ -1,6 +1,6 @@
-# 公会系统完善设计 — `1.14.0` / `guilds`
+# 公会系统完善设计 — `1.16.0` / `guilds`
 
-**Status:** Proposed (planning deliverable 2026-08-13).  
+**Status:** Implemented. Ships as rewrite `1.16.0` / `guilds` (`1.14.0` reputation and `1.15.0` gear-more landed on `develop` after this spec was written).  
 **Baseline:** rewrite `1.13.0` / parity `gear-slots` on `develop` (ECS `World` actor store).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `guilds`.  
@@ -52,9 +52,11 @@ Rust 重写目前只有**小队**（2–5 人、按 `EntityId`、下线即散）
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
 | **1.13.0** | `gear-slots` | Dual-wield / Finger2 / quality / MH enchant（shipped） |
-| **1.14.0** | `guilds` | 建会、邀请、职位、公会/官员聊天、MOTD、花名册、持久化 |
+| **1.14.0** | `reputation` | Hub factions（shipped after this spec was written） |
+| **1.15.0** | `gear-more` | Extra slots / Hunter DW / OH enchant（shipped after this spec was written） |
+| **1.16.0** | `guilds` | 建会、邀请、职位、公会/官员聊天、MOTD、花名册、持久化 |
 
-`PROTOCOL_REV` → **9**（新 `WsClientMsg` 公会动词 + snapshot 花名册）。上游钉仍是 **0.31.0**。规划 PR 不改 `Cargo.toml` version；实现波打标 `1.14.0`。
+`PROTOCOL_REV` → **9**（新 `WsClientMsg` 公会动词 + snapshot 花名册）。上游钉仍是 **0.31.0**。实现波打标 `1.16.0`。
 
 ## 5. Architecture
 
@@ -354,7 +356,7 @@ Membership **不**写入 `CharacterSave`。`GuildRoster` 是唯一来源，避�
 4. `RealmEconomy.guilds` roundtrip；apply/export 后重连角色仍在会。
 5. 停泊/恢复不退会；小队仍在 despawn 时解散。
 6. Bevy **J** 面板：无会可建会；有邀请可接受；在会可见花名册与 MOTD；**V** 邀请当前目标。
-7. `docs/parity/STATUS.md` + `DEMO.md` 有 1.14.0 公会步骤。
+7. `docs/parity/STATUS.md` + `DEMO.md` 有 1.16.0 公会步骤。
 8. 指纹测试仍为 `3214741777866168171`。无新 tick phase。无脂肪 `Entity`。
 
 ## 7. Explicit non-goals
@@ -396,4 +398,4 @@ Membership **不**写入 `CharacterSave`。`GuildRoster` 是唯一来源，避�
 6. 两人均 Alt-F4 再登入：仍在 `<Vale Watch>`，MOTD 仍在。
 7. Alice **T** 把会交给 Bob，**Q** 离会；Bob **D** 解散。
 
-Footer：`WoC-rs 1.14.0 · upstream 0.31.0`。
+Footer：`WoC-rs 1.16.0 · upstream 0.31.0`。

@@ -21,7 +21,9 @@
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
 | **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
-| **1.14.0** (this branch) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
+| **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
+| **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
+| **1.16.0** (this branch) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
 
 ## Completion program (closed)
 
@@ -38,6 +40,12 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
 
+## Reputation (shipped as `1.14.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-reputation-design.md`](superpowers/specs/2026-08-13-reputation-design.md)
+
+Four hub factions on a player `Reputation` column. Quest and kill grants; Friendly vendor discount and gated `watch_signet`; Unfriendly refuse. Protocol rev stays **8**.
+
 ## Gear depth (shipped as `1.12.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-depth-design.md`](superpowers/specs/2026-08-13-gear-depth-design.md)  
@@ -45,7 +53,7 @@ Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/
 
 Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services.
 
-## Guilds (shipped as `1.14.0`)
+## Guilds (this branch as `1.16.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-guilds-design.md`](superpowers/specs/2026-08-13-guilds-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-guilds.md`](superpowers/plans/2026-08-13-guilds.md)
@@ -58,6 +66,13 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-slots.md`](superpowers/plans/2026-08-13-gear-slots.md)
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
+
+## Gear more (shipped as `1.15.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-more-design.md`](superpowers/specs/2026-08-13-gear-more-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
+
+Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
 
 ## Client version gate (current)
 

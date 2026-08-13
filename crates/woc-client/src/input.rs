@@ -805,11 +805,25 @@ pub(crate) fn handle_interact_keys(
             Some(7)
         } else if keys.just_pressed(KeyCode::Digit9) || keys.just_pressed(KeyCode::Numpad9) {
             Some(8)
+        } else if keys.just_pressed(KeyCode::Digit0) || keys.just_pressed(KeyCode::Numpad0) {
+            Some(9)
+        } else if keys.just_pressed(KeyCode::Minus) {
+            Some(10)
+        } else if keys.just_pressed(KeyCode::Equal) {
+            Some(11)
+        } else if keys.just_pressed(KeyCode::BracketLeft) {
+            Some(12)
+        } else if keys.just_pressed(KeyCode::BracketRight) {
+            Some(13)
+        } else if keys.just_pressed(KeyCode::Semicolon) {
+            Some(14)
+        } else if keys.just_pressed(KeyCode::Quote) {
+            Some(15)
         } else {
             None
         };
         if let Some(idx) = equip_idx {
-            const SLOTS: [EquipSlot; 9] = [
+            const SLOTS: [EquipSlot; 16] = [
                 EquipSlot::MainHand,
                 EquipSlot::OffHand,
                 EquipSlot::Head,
@@ -819,6 +833,13 @@ pub(crate) fn handle_interact_keys(
                 EquipSlot::Neck,
                 EquipSlot::Finger,
                 EquipSlot::Finger2,
+                EquipSlot::Shoulder,
+                EquipSlot::Back,
+                EquipSlot::Wrist,
+                EquipSlot::Hands,
+                EquipSlot::Waist,
+                EquipSlot::Trinket,
+                EquipSlot::Trinket2,
             ];
             let equip_slot = SLOTS[idx];
             host.interact(player_id, InteractAction::Unequip { equip_slot });
@@ -1165,6 +1186,7 @@ mod tests {
             count: 2,
             durability: None,
             enchant_id: None,
+            quality: None,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
@@ -1172,6 +1194,7 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            quality: None,
         });
 
         assert_eq!(

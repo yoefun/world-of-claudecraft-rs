@@ -331,6 +331,7 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         hearth_z: completion.hearth_z,
         hearth_ready_tick: completion.hearth_ready_tick,
         stance_id: completion.stance_id,
+        reputation: completion.reputation,
     })
 }
 
@@ -393,6 +394,7 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             })],
             bank_copper: 0,
             honor: 125,

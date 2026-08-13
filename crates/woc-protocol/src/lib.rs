@@ -13,8 +13,11 @@ pub type EntityId = u32;
 /// `protocol_rev` / `rewrite_version` identity; omitting them is valid JSON and
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
-/// Rev 8: quest abandon/share, optional turn-in reward choice.
-/// Rev 9: guild snapshot / invite + guild client verbs.
+/// Rev 8: quest abandon/share, optional turn-in reward choice. Additive
+/// reputation snapshot / vendor discount_pct / ReputationChanged (1.14.0);
+/// also `finger2` / `main_hand_enchant` / stack `enchant_id` (1.13.0);
+/// extra slots / `off_hand_enchant` / stack `quality` (1.15.0).
+/// Rev 9: guild snapshot / invite + guild client verbs (1.16.0).
 pub const PROTOCOL_REV: u32 = 9;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
@@ -54,6 +57,13 @@ pub enum EquipSlot {
     Neck,
     Finger,
     Finger2,
+    Shoulder,
+    Back,
+    Wrist,
+    Hands,
+    Waist,
+    Trinket,
+    Trinket2,
 }
 
 /// Stable profession denial id. Sim never emits English copy for these.
@@ -334,6 +344,8 @@ pub struct InvSlotSnapshot {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -354,7 +366,23 @@ pub struct EquipmentSnapshot {
     #[serde(default)]
     pub finger2: Option<String>,
     #[serde(default)]
+    pub shoulder: Option<String>,
+    #[serde(default)]
+    pub back: Option<String>,
+    #[serde(default)]
+    pub wrist: Option<String>,
+    #[serde(default)]
+    pub hands: Option<String>,
+    #[serde(default)]
+    pub waist: Option<String>,
+    #[serde(default)]
+    pub trinket: Option<String>,
+    #[serde(default)]
+    pub trinket2: Option<String>,
+    #[serde(default)]
     pub main_hand_enchant: Option<String>,
+    #[serde(default)]
+    pub off_hand_enchant: Option<String>,
     #[serde(default)]
     pub main_hand_durability: Option<u32>,
     #[serde(default)]
@@ -367,6 +395,48 @@ pub struct EquipmentSnapshot {
     pub legs_durability: Option<u32>,
     #[serde(default)]
     pub feet_durability: Option<u32>,
+    #[serde(default)]
+    pub shoulder_durability: Option<u32>,
+    #[serde(default)]
+    pub back_durability: Option<u32>,
+    #[serde(default)]
+    pub wrist_durability: Option<u32>,
+    #[serde(default)]
+    pub hands_durability: Option<u32>,
+    #[serde(default)]
+    pub waist_durability: Option<u32>,
+    #[serde(default)]
+    pub main_hand_quality: Option<String>,
+    #[serde(default)]
+    pub off_hand_quality: Option<String>,
+    #[serde(default)]
+    pub head_quality: Option<String>,
+    #[serde(default)]
+    pub chest_quality: Option<String>,
+    #[serde(default)]
+    pub legs_quality: Option<String>,
+    #[serde(default)]
+    pub feet_quality: Option<String>,
+    #[serde(default)]
+    pub neck_quality: Option<String>,
+    #[serde(default)]
+    pub finger_quality: Option<String>,
+    #[serde(default)]
+    pub finger2_quality: Option<String>,
+    #[serde(default)]
+    pub shoulder_quality: Option<String>,
+    #[serde(default)]
+    pub back_quality: Option<String>,
+    #[serde(default)]
+    pub wrist_quality: Option<String>,
+    #[serde(default)]
+    pub hands_quality: Option<String>,
+    #[serde(default)]
+    pub waist_quality: Option<String>,
+    #[serde(default)]
+    pub trinket_quality: Option<String>,
+    #[serde(default)]
+    pub trinket2_quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,6 +459,8 @@ pub struct VendorSnapshot {
     pub npc_id: EntityId,
     pub npc_name: String,
     pub stock: Vec<VendorOfferSnapshot>,
+    #[serde(default)]
+    pub discount_pct: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -419,6 +491,9 @@ pub struct NpcSessionSnapshot {
     pub can_bind: bool,
     #[serde(default)]
     pub buyback: Vec<BuybackSnapshot>,
+    /// Vendor buy discount percent from the viewer's standing (0 if none).
+    #[serde(default)]
+    pub discount_pct: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -582,6 +657,18 @@ pub struct TickSnapshot {
     /// Pending guild invite for the viewing player, if any.
     #[serde(default)]
     pub guild_invite: Option<GuildInviteSnapshot>,
+    /// Per-faction standing for the local player (all known factions).
+    #[serde(default)]
+    pub reputation: Vec<ReputationSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ReputationSnapshot {
+    pub faction_id: String,
+    pub name: String,
+    pub value: i32,
+    /// `hated` … `exalted`
+    pub standing: String,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -720,6 +807,7 @@ impl Default for TickSnapshot {
             spell_power: 0.0,
             guild: None,
             guild_invite: None,
+            reputation: Vec::new(),
         }
     }
 }
@@ -904,6 +992,13 @@ pub enum SimEvent {
         delve_id: String,
         reward_copper: u32,
         reward_item: Option<String>,
+    },
+    ReputationChanged {
+        player: EntityId,
+        faction_id: String,
+        delta: i32,
+        total: i32,
+        standing: String,
     },
 }
 
@@ -1171,6 +1266,7 @@ mod tests {
         assert!(!snap.stealthed);
         assert!(snap.stance_id.is_empty());
         assert_eq!(snap.absorb, 0.0);
+        assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
     }
 
@@ -1249,7 +1345,9 @@ mod tests {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
-            ..Default::default()
+            guild: None,
+            guild_invite: None,
+            reputation: Vec::new(),
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -1291,6 +1389,13 @@ mod tests {
             SimEvent::ProfessionDenied {
                 player: 9,
                 reason: ProfessionDeny::MissingTool,
+            },
+            SimEvent::ReputationChanged {
+                player: 1,
+                faction_id: "eastbrook_watch".into(),
+                delta: 150,
+                total: 150,
+                standing: "neutral".into(),
             },
         ];
         for e in events {
@@ -1537,8 +1642,11 @@ mod tests {
             serde_json::from_str(r#"{"main_hand":null,"off_hand":null,"chest":null}"#).unwrap();
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
+        assert!(eq.off_hand_enchant.is_none());
+        assert!(eq.back.is_none());
         let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
+        assert!(slot.quality.is_none());
         assert_eq!(PROTOCOL_REV, 9);
     }
 
@@ -1560,7 +1668,9 @@ mod tests {
     #[test]
     fn guild_ws_client_roundtrip() {
         let msgs = vec![
-            WsClientMsg::GuildCreate { name: "Vale Watch".into() },
+            WsClientMsg::GuildCreate {
+                name: "Vale Watch".into(),
+            },
             WsClientMsg::GuildInvite { name: "Bob".into() },
             WsClientMsg::GuildAccept,
             WsClientMsg::GuildDecline,
@@ -1579,6 +1689,21 @@ mod tests {
             let back: WsClientMsg = serde_json::from_str(&s).unwrap();
             assert_eq!(format!("{back:?}"), format!("{msg:?}"));
         }
+    }
+
+    #[test]
+    fn unequip_shoulder_roundtrip() {
+        let a = InteractAction::Unequip {
+            equip_slot: EquipSlot::Shoulder,
+        };
+        let v = serde_json::to_value(&a).unwrap();
+        let back: InteractAction = serde_json::from_value(v).unwrap();
+        assert!(matches!(
+            back,
+            InteractAction::Unequip {
+                equip_slot: EquipSlot::Shoulder
+            }
+        ));
     }
 
     #[test]
@@ -1605,6 +1730,7 @@ mod tests {
         assert_eq!(snap.attack_power, 0.0);
         assert_eq!(snap.armor, 0.0);
         assert_eq!(snap.spell_power, 0.0);
+        assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
         assert_eq!(PROTOCOL_REV, 9);
     }

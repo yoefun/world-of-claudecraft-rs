@@ -74,9 +74,18 @@ pub struct PendingInvite {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GuildEffect {
-    Notice { to: EntityId, message: String },
-    GuildNotice { guild_id: u32, message: String },
-    Error { to: EntityId, message: String },
+    Notice {
+        to: EntityId,
+        message: String,
+    },
+    GuildNotice {
+        guild_id: u32,
+        message: String,
+    },
+    Error {
+        to: EntityId,
+        message: String,
+    },
     Chat {
         guild_id: u32,
         channel: String,
@@ -375,7 +384,9 @@ impl GuildRoster {
                 message: "That guild is full.".into(),
             }];
         }
-        guild.members.push(live_member(world, actor, GuildRank::Member));
+        guild
+            .members
+            .push(live_member(world, actor, GuildRank::Member));
         let guild_id = guild.id;
         let joiner = world
             .get::<Identity>(actor)
@@ -444,12 +455,7 @@ impl GuildRoster {
         ]
     }
 
-    pub fn kick(
-        &mut self,
-        actor: EntityId,
-        target_name: &str,
-        world: &World,
-    ) -> Vec<GuildEffect> {
+    pub fn kick(&mut self, actor: EntityId, target_name: &str, world: &World) -> Vec<GuildEffect> {
         if world.get::<ClassKit>(actor).is_none() {
             return vec![GuildEffect::Error {
                 to: actor,
@@ -499,11 +505,7 @@ impl GuildRoster {
                 message: "You are not in a guild.".into(),
             }];
         };
-        let Some(target_idx) = guild
-            .members
-            .iter()
-            .position(|m| m.name == target_name)
-        else {
+        let Some(target_idx) = guild.members.iter().position(|m| m.name == target_name) else {
             return vec![GuildEffect::Error {
                 to: actor,
                 message: format!("{target_name} is not in your guild."),
@@ -536,7 +538,9 @@ impl GuildRoster {
         }
         effects.push(GuildEffect::GuildNotice {
             guild_id,
-            message: format!("{target_name_display} has been removed from the guild by {actor_name}."),
+            message: format!(
+                "{target_name_display} has been removed from the guild by {actor_name}."
+            ),
         });
         effects
     }
@@ -718,12 +722,7 @@ impl GuildRoster {
         }]
     }
 
-    pub fn set_motd(
-        &mut self,
-        actor: EntityId,
-        text: &str,
-        world: &World,
-    ) -> Vec<GuildEffect> {
+    pub fn set_motd(&mut self, actor: EntityId, text: &str, world: &World) -> Vec<GuildEffect> {
         if world.get::<ClassKit>(actor).is_none() {
             return vec![GuildEffect::Error {
                 to: actor,
@@ -836,10 +835,12 @@ impl GuildRoster {
         world: &World,
     ) -> Option<woc_protocol::GuildInviteSnapshot> {
         let key = Self::member_key(world, player_id);
-        self.pending.get(&key).map(|p| woc_protocol::GuildInviteSnapshot {
-            from_name: p.from_name.clone(),
-            guild_name: p.guild_name.clone(),
-        })
+        self.pending
+            .get(&key)
+            .map(|p| woc_protocol::GuildInviteSnapshot {
+                from_name: p.from_name.clone(),
+                guild_name: p.guild_name.clone(),
+            })
     }
 }
 
@@ -876,17 +877,17 @@ fn live_member(world: &World, id: EntityId, rank: GuildRank) -> GuildMember {
 }
 
 fn find_player_by_name(world: &World, name: &str) -> Option<EntityId> {
-    world.ids::<ClassKit>().into_iter().find(|&id| {
-        world
-            .get::<Identity>(id)
-            .is_some_and(|i| i.name == name)
-    })
+    world
+        .ids::<ClassKit>()
+        .into_iter()
+        .find(|&id| world.get::<Identity>(id).is_some_and(|i| i.name == name))
 }
 
 fn find_player_by_durable(world: &World, durable: &str) -> Option<EntityId> {
-    world.ids::<ClassKit>().into_iter().find(|&id| {
-        GuildRoster::member_key(world, id) == durable
-    })
+    world
+        .ids::<ClassKit>()
+        .into_iter()
+        .find(|&id| GuildRoster::member_key(world, id) == durable)
 }
 
 #[cfg(test)]
@@ -919,7 +920,10 @@ mod tests {
 
     #[test]
     fn validate_guild_name_accepts_letters_and_single_spaces() {
-        assert_eq!(validate_guild_name("  Vale Watch  ").as_deref(), Some("Vale Watch"));
+        assert_eq!(
+            validate_guild_name("  Vale Watch  ").as_deref(),
+            Some("Vale Watch")
+        );
         assert!(validate_guild_name("ab").is_none());
         assert!(validate_guild_name("Vale  Watch").is_none());
         assert!(validate_guild_name("Vale Watch 1").is_none());
@@ -934,7 +938,9 @@ mod tests {
             e,
             GuildEffect::Notice { to: 1, message } if message.contains("<Vale Watch>")
         )));
-        let gid = roster.guild_id_of(&GuildRoster::member_key(&world, 1)).unwrap();
+        let gid = roster
+            .guild_id_of(&GuildRoster::member_key(&world, 1))
+            .unwrap();
         let g = roster.guild(gid).unwrap();
         assert_eq!(g.members.len(), 1);
         assert_eq!(g.members[0].rank, GuildRank::Leader);
@@ -954,7 +960,10 @@ mod tests {
             matches!(&dup[0], GuildEffect::Error { message, .. } if message.contains("already exists"))
         );
         let again = roster.create(1, "Other Name", &world);
-        assert!(matches!(again.as_slice(), [GuildEffect::Error { to: 1, .. }]));
+        assert!(matches!(
+            again.as_slice(),
+            [GuildEffect::Error { to: 1, .. }]
+        ));
         assert!(
             matches!(&again[0], GuildEffect::Error { message, .. } if message.contains("already in a guild"))
         );
@@ -966,10 +975,16 @@ mod tests {
         let mut roster = GuildRoster::new();
         let _ = roster.create(1, "Vale Watch", &world);
         let inv = roster.invite(1, "Bob", 10, &world);
-        assert!(inv.iter().any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+        assert!(inv
+            .iter()
+            .any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
         let acc = roster.accept(2, 11, &world);
-        assert!(acc.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
-        let gid = roster.guild_id_of(&GuildRoster::member_key(&world, 2)).unwrap();
+        assert!(acc
+            .iter()
+            .any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        let gid = roster
+            .guild_id_of(&GuildRoster::member_key(&world, 2))
+            .unwrap();
         assert_eq!(roster.guild(gid).unwrap().members.len(), 2);
     }
 
@@ -1006,13 +1021,17 @@ mod tests {
             GuildEffect::Error { to: 1, message } if message.contains("promote a new leader")
         )));
         let left = roster.leave(2, &world);
-        assert!(left.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        assert!(left
+            .iter()
+            .any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
         let last = roster.leave(1, &world);
         assert!(last.iter().any(|e| matches!(
             e,
             GuildEffect::Notice { to: 1, message } if message.contains("disbanded")
         )));
-        assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 1)).is_none());
+        assert!(roster
+            .guild_id_of(&GuildRoster::member_key(&world, 1))
+            .is_none());
     }
 
     fn formed_duo(tick: u64) -> (World, GuildRoster) {
@@ -1041,7 +1060,9 @@ mod tests {
         let _ = roster.invite(2, "Carol", 5, &world);
         let _ = roster.accept(3, 6, &world);
         let ok = roster.kick(2, "Carol", &world);
-        assert!(ok.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        assert!(ok
+            .iter()
+            .any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
     }
 
     #[test]
@@ -1049,25 +1070,39 @@ mod tests {
         let (world, mut roster) = formed_duo(0);
         let _ = roster.transfer_leader(1, "Bob", &world);
         let alice_key = GuildRoster::member_key(&world, 1);
-        let g = roster.guild(roster.guild_id_of(&alice_key).unwrap()).unwrap();
+        let g = roster
+            .guild(roster.guild_id_of(&alice_key).unwrap())
+            .unwrap();
         assert_eq!(
             g.members.iter().find(|m| m.name == "Bob").unwrap().rank,
             GuildRank::Leader
         );
         let left = roster.leave(1, &world);
-        assert!(left.iter().any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+        assert!(left
+            .iter()
+            .any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
     }
 
     #[test]
     fn disband_and_motd() {
         let (world, mut roster) = formed_duo(0);
         let motd = roster.set_motd(1, "Kill wolves at dusk", &world);
-        assert!(motd.iter().any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
-        let gid = roster.guild_id_of(&GuildRoster::member_key(&world, 1)).unwrap();
+        assert!(motd
+            .iter()
+            .any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+        let gid = roster
+            .guild_id_of(&GuildRoster::member_key(&world, 1))
+            .unwrap();
         assert_eq!(roster.guild(gid).unwrap().motd, "Kill wolves at dusk");
         let gone = roster.disband(1, &world);
-        assert!(gone.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
-        assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 1)).is_none());
-        assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 2)).is_none());
+        assert!(gone
+            .iter()
+            .any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        assert!(roster
+            .guild_id_of(&GuildRoster::member_key(&world, 1))
+            .is_none());
+        assert!(roster
+            .guild_id_of(&GuildRoster::member_key(&world, 2))
+            .is_none());
     }
 }

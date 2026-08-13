@@ -87,9 +87,10 @@ pub async fn ws_handler(
 fn expand_deliveries(sim: &Sim, outs: Vec<GuildDelivery>) -> Vec<(Vec<EntityId>, String)> {
     outs.into_iter()
         .map(|d| match d {
-            GuildDelivery::To { player, msg } => {
-                (vec![player], serde_json::to_string(&msg).unwrap_or_default())
-            }
+            GuildDelivery::To { player, msg } => (
+                vec![player],
+                serde_json::to_string(&msg).unwrap_or_default(),
+            ),
             GuildDelivery::Guild {
                 guild_id,
                 officer_only,
@@ -113,10 +114,7 @@ async fn send_to_players(shared: &Shared, recips: Vec<(Vec<EntityId>, String)>) 
     }
 }
 
-async fn run_guild_op(
-    shared: &Arc<Shared>,
-    op: impl FnOnce(&mut Sim) -> Vec<GuildDelivery>,
-) {
+async fn run_guild_op(shared: &Arc<Shared>, op: impl FnOnce(&mut Sim) -> Vec<GuildDelivery>) {
     let recips = {
         let mut realm = shared.realm.lock().await;
         let outs = op(&mut realm.sim);
@@ -664,6 +662,7 @@ mod tests {
             },
             equipment_wear: woc_sim::ecs::components::EquipmentWear::default(),
             equipment_enchants: woc_sim::ecs::components::EquipmentEnchants::default(),
+            equipment_qualities: woc_sim::ecs::components::EquipmentQualities::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 1,
@@ -679,6 +678,7 @@ mod tests {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Default::default(),
         };
         // Force non-virgin by setting copper.
         assert!(!state.is_virgin());

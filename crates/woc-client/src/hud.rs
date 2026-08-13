@@ -235,16 +235,25 @@ pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
         .map(|npc| npc.can_repair)
         .unwrap_or(false)
     {
-        parts.push("[R] Repair");
+        parts.push("[R] Repair".into());
     }
-    parts.push("[H] Hearthstone");
+    parts.push("[H] Hearthstone".into());
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.discount_pct > 0)
+        .unwrap_or(false)
+    {
+        let pct = snap.open_npc.as_ref().map(|n| n.discount_pct).unwrap_or(0);
+        parts.push(format!("[{pct}% off]"));
+    }
     if snap
         .open_npc
         .as_ref()
         .map(|npc| !npc.train_professions.is_empty())
         .unwrap_or(false)
     {
-        parts.push("[T] Train");
+        parts.push("[T] Train".into());
     }
     parts.join("   ")
 }
@@ -266,31 +275,77 @@ fn bag_stack_label(item_id: &str, count: u32, durability: Option<u32>) -> String
     format!("{count}×{item_id}")
 }
 
-fn equipment_label(item_id: Option<&str>, durability: Option<u32>) -> String {
+fn quality_prefix(instance: Option<&str>, item_id: Option<&str>) -> &'static str {
+    let q = instance
+        .and_then(ItemQuality::parse)
+        .or_else(|| item_id.and_then(item).map(|d| d.quality));
+    match q {
+        Some(ItemQuality::Uncommon) => "Uncommon ",
+        Some(ItemQuality::Rare) => "Rare ",
+        Some(ItemQuality::Poor) => "Poor ",
+        _ => "",
+    }
+}
+
+fn equipment_label(
+    item_id: Option<&str>,
+    durability: Option<u32>,
+    instance_quality: Option<&str>,
+) -> String {
     match item_id {
         Some(id) => {
             let base = gear_durability_text(id, durability)
                 .or_else(|| item(id).map(|d| d.name.to_string()))
                 .unwrap_or_else(|| id.to_string());
-            match item(id).map(|d| d.quality) {
-                Some(ItemQuality::Uncommon) => format!("Uncommon {base}"),
-                Some(ItemQuality::Rare) => format!("Rare {base}"),
-                Some(ItemQuality::Poor) => format!("Poor {base}"),
-                _ => base,
-            }
+            format!("{}{base}", quality_prefix(instance_quality, Some(id)))
         }
         None => "—".into(),
     }
 }
 
-fn main_hand_label(eq: &woc_protocol::EquipmentSnapshot) -> String {
-    let mut label = equipment_label(eq.main_hand.as_deref(), eq.main_hand_durability);
-    if let Some(eid) = eq.main_hand_enchant.as_deref() {
+fn weapon_label(
+    item_id: Option<&str>,
+    durability: Option<u32>,
+    instance_quality: Option<&str>,
+    enchant_id: Option<&str>,
+) -> String {
+    let mut label = equipment_label(item_id, durability, instance_quality);
+    if let Some(eid) = enchant_id {
         if let Some(def) = enchant(eid) {
             label = format!("{label} [{}]", def.name);
         }
     }
     label
+}
+
+fn standing_display(standing: &str) -> &str {
+    match standing {
+        "hated" => "Hated",
+        "hostile" => "Hostile",
+        "unfriendly" => "Unfriendly",
+        "neutral" => "Neutral",
+        "friendly" => "Friendly",
+        "honored" => "Honored",
+        "revered" => "Revered",
+        "exalted" => "Exalted",
+        other => other,
+    }
+}
+
+fn reputation_block(snap: &TickSnapshot) -> String {
+    if snap.reputation.is_empty() {
+        return "Reputation: —".into();
+    }
+    let mut lines = vec!["Reputation:".to_string()];
+    for row in &snap.reputation {
+        lines.push(format!(
+            "  {}  {} ({})",
+            row.name,
+            standing_display(&row.standing),
+            row.value
+        ));
+    }
+    lines.join("\n")
 }
 
 fn talent_panel_text(snap: &TickSnapshot) -> String {
@@ -882,25 +937,47 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip slot",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\n  Shoulder: {}\n  Back: {}\n  Wrist: {}\n  Hands: {}\n  Waist: {}\n  Trinket: {}\n  Trinket2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n{}\n[1-9] Unequip  [0-=[]';] Extra slots",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
             snap.progress.copper,
             snap.talent_points,
             talent_bonus_summary(snap),
-            main_hand_label(eq),
-            equipment_label(eq.off_hand.as_deref(), eq.off_hand_durability),
-            equipment_label(eq.head.as_deref(), eq.head_durability),
-            equipment_label(eq.chest.as_deref(), eq.chest_durability),
-            equipment_label(eq.legs.as_deref(), eq.legs_durability),
-            equipment_label(eq.feet.as_deref(), eq.feet_durability),
-            equipment_label(eq.neck.as_deref(), None),
-            equipment_label(eq.finger.as_deref(), None),
-            equipment_label(eq.finger2.as_deref(), None),
+            weapon_label(
+                eq.main_hand.as_deref(),
+                eq.main_hand_durability,
+                eq.main_hand_quality.as_deref(),
+                eq.main_hand_enchant.as_deref(),
+            ),
+            weapon_label(
+                eq.off_hand.as_deref(),
+                eq.off_hand_durability,
+                eq.off_hand_quality.as_deref(),
+                eq.off_hand_enchant.as_deref(),
+            ),
+            equipment_label(eq.head.as_deref(), eq.head_durability, eq.head_quality.as_deref()),
+            equipment_label(eq.chest.as_deref(), eq.chest_durability, eq.chest_quality.as_deref()),
+            equipment_label(eq.legs.as_deref(), eq.legs_durability, eq.legs_quality.as_deref()),
+            equipment_label(eq.feet.as_deref(), eq.feet_durability, eq.feet_quality.as_deref()),
+            equipment_label(eq.neck.as_deref(), None, eq.neck_quality.as_deref()),
+            equipment_label(eq.finger.as_deref(), None, eq.finger_quality.as_deref()),
+            equipment_label(eq.finger2.as_deref(), None, eq.finger2_quality.as_deref()),
+            equipment_label(
+                eq.shoulder.as_deref(),
+                eq.shoulder_durability,
+                eq.shoulder_quality.as_deref(),
+            ),
+            equipment_label(eq.back.as_deref(), eq.back_durability, eq.back_quality.as_deref()),
+            equipment_label(eq.wrist.as_deref(), eq.wrist_durability, eq.wrist_quality.as_deref()),
+            equipment_label(eq.hands.as_deref(), eq.hands_durability, eq.hands_quality.as_deref()),
+            equipment_label(eq.waist.as_deref(), eq.waist_durability, eq.waist_quality.as_deref()),
+            equipment_label(eq.trinket.as_deref(), None, eq.trinket_quality.as_deref()),
+            equipment_label(eq.trinket2.as_deref(), None, eq.trinket2_quality.as_deref()),
             snap.attack_power,
             snap.armor,
             snap.spell_power,
+            reputation_block(snap),
         );
     }
 
@@ -1246,6 +1323,7 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            quality: None,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
@@ -1253,6 +1331,7 @@ mod tests {
             count: 4,
             durability: None,
             enchant_id: None,
+            quality: None,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1334,11 +1413,27 @@ mod tests {
             repair_cost: 12,
             can_bind: false,
             buyback: vec![],
+            discount_pct: 0,
         });
 
         let text = npc_session_help(&snap);
 
         assert!(text.contains("[R] Repair"));
+    }
+
+    #[test]
+    fn reputation_block_lists_standing() {
+        let mut snap = TickSnapshot::default();
+        snap.reputation.push(woc_protocol::ReputationSnapshot {
+            faction_id: "eastbrook_watch".into(),
+            name: "Eastbrook Watch".into(),
+            value: 500,
+            standing: "friendly".into(),
+        });
+        let text = reputation_block(&snap);
+        assert!(text.contains("Eastbrook Watch"));
+        assert!(text.contains("Friendly"));
+        assert!(text.contains("500"));
     }
 
     #[test]
@@ -1450,8 +1545,16 @@ mod tests {
     #[test]
     fn jewelry_equipment_label_uses_quality_and_name() {
         assert_eq!(
-            equipment_label(Some("fang_pendant"), None),
+            equipment_label(Some("fang_pendant"), None, None),
             "Uncommon Fang Pendant"
+        );
+        assert_eq!(
+            weapon_label(Some("worn_sword"), None, None, Some("coarse_sharpening"),),
+            "Worn Sword [Coarse Sharpening]"
+        );
+        assert_eq!(
+            equipment_label(Some("wool_cloak"), None, None),
+            "Uncommon Wool Cloak"
         );
     }
 }
