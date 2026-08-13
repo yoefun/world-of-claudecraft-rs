@@ -10,7 +10,7 @@ use woc_sim::{
     terrain_height, water_bodies, water_level, zone_atmosphere, Sim, WORLD_MAX_X, WORLD_MAX_Z,
     WORLD_MIN_Z, WORLD_SEED,
 };
-use woc_version::footer;
+use woc_version::{footer, Compat};
 
 use crate::anim::{
     apply_limb_gait, death_root_rotation, family_uses_gait, sample_gait, GaitLimb, VisualMotion,
@@ -654,7 +654,7 @@ fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
     }
 }
 
-fn apply_online_messages(host: &mut GameHost) {
+fn apply_online_messages(host: &mut GameHost) -> bool {
     let mut pending = Vec::new();
     if let Some(rx_mutex) = host.from_net.as_ref() {
         if let Ok(rx) = rx_mutex.lock() {
@@ -663,12 +663,24 @@ fn apply_online_messages(host: &mut GameHost) {
             }
         }
     }
+    let mut kick = false;
     for msg in pending {
         match msg {
             WsServerMsg::Welcome {
                 player_id,
                 protocol_rev,
             } => {
+                if protocol_rev != woc_protocol::PROTOCOL_REV {
+                    let message = Compat::ProtocolMismatch {
+                        client_rev: woc_protocol::PROTOCOL_REV,
+                        realm_rev: protocol_rev,
+                    }
+                    .user_message();
+                    host.net_status = NetStatus::Error(message.clone());
+                    host.recent_toasts.push((message, 5.0));
+                    kick = true;
+                    continue;
+                }
                 host.net_status = NetStatus::Connected { player_id };
                 host.snapshot.player_id = player_id;
                 host.recent_toasts.push((
@@ -689,7 +701,10 @@ fn apply_online_messages(host: &mut GameHost) {
             }
             WsServerMsg::Error { message } => {
                 host.net_status = NetStatus::Error(message.clone());
-                host.recent_toasts.push((message, 5.0));
+                host.recent_toasts.push((message.clone(), 5.0));
+                if message.starts_with("version:") {
+                    kick = true;
+                }
             }
             WsServerMsg::Chat {
                 channel,
@@ -702,18 +717,23 @@ fn apply_online_messages(host: &mut GameHost) {
             WsServerMsg::PartyUpdate { .. } => {}
         }
     }
+    kick
 }
 
 pub(crate) fn sim_fixed_step(
     time: Res<Time>,
     mut host: ResMut<GameHost>,
+    mut next: ResMut<NextState<AppState>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut visuals: Query<(Entity, &SimVisual, &mut VisualMotion)>,
 ) {
     if host.is_online() {
-        apply_online_messages(&mut host);
+        if apply_online_messages(&mut host) {
+            next.set(AppState::Title);
+            return;
+        }
         host.accumulator += time.delta_secs();
         let step = DT;
         while host.accumulator >= step {
