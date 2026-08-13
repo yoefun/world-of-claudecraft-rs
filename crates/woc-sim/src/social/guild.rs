@@ -195,6 +195,210 @@ impl GuildRoster {
             message: format!("You found the guild <{name}>! You are its Guild Master."),
         }]
     }
+
+    pub fn expire_pending(&mut self, tick: u64) {
+        self.pending.retain(|_, p| p.expires_tick > tick);
+    }
+
+    pub fn pending_for(&self, durable: &str) -> Option<&PendingInvite> {
+        self.pending.get(durable)
+    }
+
+    pub fn invite(
+        &mut self,
+        actor: EntityId,
+        target_name: &str,
+        tick: u64,
+        world: &World,
+    ) -> Vec<GuildEffect> {
+        self.expire_pending(tick);
+        if world.get::<ClassKit>(actor).is_none() {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in the realm.".into(),
+            }];
+        }
+        let actor_key = Self::member_key(world, actor);
+        let Some(&guild_id) = self.membership.get(&actor_key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(guild) = self.guilds.get(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let actor_rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == actor_key)
+            .map(|m| m.rank);
+        if actor_rank == Some(GuildRank::Member) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only officers and the Guild Master may invite.".into(),
+            }];
+        }
+        let Some(target_id) = find_player_by_name(world, target_name) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("No player named '{target_name}'."),
+            }];
+        };
+        if target_id == actor {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You cannot invite yourself.".into(),
+            }];
+        }
+        let target_key = Self::member_key(world, target_id);
+        let target_display = world
+            .get::<Identity>(target_id)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| target_name.to_string());
+        if self.membership.contains_key(&target_key) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_display} is already in a guild."),
+            }];
+        }
+        if self.pending.contains_key(&target_key) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_display} already has a pending guild invitation."),
+            }];
+        }
+        let guild = self.guilds.get(&guild_id).unwrap();
+        if guild.members.len() >= MAX_GUILD_MEMBERS {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Your guild is full.".into(),
+            }];
+        }
+        let guild_name = guild.name.clone();
+        let from_name = world
+            .get::<Identity>(actor)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| "Someone".into());
+        self.pending.insert(
+            target_key,
+            PendingInvite {
+                guild_id,
+                guild_name,
+                from_name,
+                expires_tick: tick + GUILD_INVITE_TTL_TICKS,
+            },
+        );
+        vec![GuildEffect::Notice {
+            to: actor,
+            message: format!("You have invited {target_display} to the guild."),
+        }]
+    }
+
+    pub fn accept(&mut self, actor: EntityId, tick: u64, world: &World) -> Vec<GuildEffect> {
+        self.expire_pending(tick);
+        let key = Self::member_key(world, actor);
+        let Some(inv) = self.pending.remove(&key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "The guild invitation has expired.".into(),
+            }];
+        };
+        if inv.expires_tick <= tick {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "The guild invitation has expired.".into(),
+            }];
+        }
+        if self.membership.contains_key(&key) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are already in a guild.".into(),
+            }];
+        }
+        let Some(guild) = self.guilds.get_mut(&inv.guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "That guild no longer exists.".into(),
+            }];
+        };
+        if guild.members.len() >= MAX_GUILD_MEMBERS {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "That guild is full.".into(),
+            }];
+        }
+        guild.members.push(live_member(world, actor, GuildRank::Member));
+        let guild_id = guild.id;
+        let joiner = world
+            .get::<Identity>(actor)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| "Someone".into());
+        self.membership.insert(key, guild_id);
+        vec![GuildEffect::GuildNotice {
+            guild_id,
+            message: format!("{joiner} has joined the guild."),
+        }]
+    }
+
+    pub fn decline(&mut self, actor: EntityId, world: &World) -> Vec<GuildEffect> {
+        let key = Self::member_key(world, actor);
+        self.pending.remove(&key);
+        Vec::new()
+    }
+
+    pub fn leave(&mut self, actor: EntityId, world: &World) -> Vec<GuildEffect> {
+        let key = Self::member_key(world, actor);
+        let Some(gid) = self.membership.remove(&key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(mut guild) = self.guilds.remove(&gid) else {
+            return Vec::new();
+        };
+        let name = guild.name.clone();
+        let rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == key)
+            .map(|m| m.rank);
+        let actor_name = world
+            .get::<Identity>(actor)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| "Someone".into());
+        let others = guild.members.len().saturating_sub(1);
+        if rank == Some(GuildRank::Leader) && others > 0 {
+            self.membership.insert(key, gid);
+            self.guilds.insert(gid, guild);
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "As Guild Master you must promote a new leader or disband the guild before leaving.".into(),
+            }];
+        }
+        guild.members.retain(|m| m.durable_id != key);
+        if guild.members.is_empty() {
+            return vec![GuildEffect::Notice {
+                to: actor,
+                message: format!("You have left <{name}>. The guild has disbanded."),
+            }];
+        }
+        self.guilds.insert(gid, guild);
+        vec![
+            GuildEffect::Notice {
+                to: actor,
+                message: format!("You have left <{name}>."),
+            },
+            GuildEffect::GuildNotice {
+                guild_id: gid,
+                message: format!("{actor_name} has left the guild."),
+            },
+        ]
+    }
 }
 
 fn live_member(world: &World, id: EntityId, rank: GuildRank) -> GuildMember {
@@ -291,5 +495,60 @@ mod tests {
         assert!(
             matches!(&again[0], GuildEffect::Error { message, .. } if message.contains("already in a guild"))
         );
+    }
+
+    #[test]
+    fn invite_accept_adds_member() {
+        let world = world_with_players(2);
+        let mut roster = GuildRoster::new();
+        let _ = roster.create(1, "Vale Watch", &world);
+        let inv = roster.invite(1, "Bob", 10, &world);
+        assert!(inv.iter().any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+        let acc = roster.accept(2, 11, &world);
+        assert!(acc.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        let gid = roster.guild_id_of(&GuildRoster::member_key(&world, 2)).unwrap();
+        assert_eq!(roster.guild(gid).unwrap().members.len(), 2);
+    }
+
+    #[test]
+    fn invite_expires_and_member_cannot_invite() {
+        let world = world_with_players(3);
+        let mut roster = GuildRoster::new();
+        let _ = roster.create(1, "Vale Watch", &world);
+        let _ = roster.invite(1, "Bob", 0, &world);
+        let late = roster.accept(2, GUILD_INVITE_TTL_TICKS + 1, &world);
+        assert!(late.iter().any(|e| matches!(
+            e,
+            GuildEffect::Error { message, .. } if message.contains("expired")
+        )));
+        let _ = roster.invite(1, "Bob", 0, &world);
+        let _ = roster.accept(2, 1, &world);
+        let denied = roster.invite(2, "Carol", 2, &world);
+        assert!(denied.iter().any(|e| matches!(
+            e,
+            GuildEffect::Error { to: 2, message } if message.contains("Only officers")
+        )));
+    }
+
+    #[test]
+    fn leader_cannot_leave_while_others_remain() {
+        let world = world_with_players(2);
+        let mut roster = GuildRoster::new();
+        let _ = roster.create(1, "Vale Watch", &world);
+        let _ = roster.invite(1, "Bob", 0, &world);
+        let _ = roster.accept(2, 1, &world);
+        let blocked = roster.leave(1, &world);
+        assert!(blocked.iter().any(|e| matches!(
+            e,
+            GuildEffect::Error { to: 1, message } if message.contains("promote a new leader")
+        )));
+        let left = roster.leave(2, &world);
+        assert!(left.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        let last = roster.leave(1, &world);
+        assert!(last.iter().any(|e| matches!(
+            e,
+            GuildEffect::Notice { to: 1, message } if message.contains("disbanded")
+        )));
+        assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 1)).is_none());
     }
 }
