@@ -151,6 +151,7 @@ const fn weapon(
     weapon_gear(id, name, vendor_sell, attack_power, 0.0, 1, style, allowed)
 }
 
+#[allow(clippy::too_many_arguments)]
 const fn weapon_gear(
     id: &'static str,
     name: &'static str,
@@ -181,6 +182,7 @@ const fn weapon_gear(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 const fn jewelry(
     id: &'static str,
     name: &'static str,
