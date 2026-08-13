@@ -159,6 +159,9 @@ pub fn create_player(
             equipment: Equipment {
                 main_hand: Some(def.start_weapon.to_string()),
                 chest: Some(def.start_chest.to_string()),
+                head: Some("recruit_cap".into()),
+                legs: Some("recruit_pants".into()),
+                feet: Some("recruit_boots".into()),
                 ..Default::default()
             },
             open_vendor_npc: None,

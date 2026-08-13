@@ -602,7 +602,10 @@ mod tests {
         let slot = bag_slot_of(&world, 1, "veteran_helm");
         let mut events = Vec::new();
         equip_from_bag(&mut world, 1, slot, &mut events);
-        assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
+        assert_ne!(
+            world.get::<Bags>(1).unwrap().equipment.head.as_deref(),
+            Some("veteran_helm")
+        );
         assert_eq!(
             count_item(&world.get::<Bags>(1).unwrap().inventory, "veteran_helm"),
             1
