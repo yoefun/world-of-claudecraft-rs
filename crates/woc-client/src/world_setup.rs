@@ -7,8 +7,8 @@ use woc_protocol::{
     WsServerMsg, DT,
 };
 use woc_sim::{
-    terrain_height, water_bodies, water_level, Sim, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z,
-    WORLD_SEED,
+    terrain_height, water_bodies, water_level, zone_atmosphere, Sim, WORLD_MAX_X, WORLD_MAX_Z,
+    WORLD_MIN_Z, WORLD_SEED,
 };
 use woc_version::footer;
 
@@ -20,12 +20,11 @@ use crate::hud::{
     HudXpText,
 };
 use crate::online;
+use crate::visuals::{
+    self, apply_alive_tint, spawn_entity_visual, spawn_scene_props, sync_zone_atmosphere,
+    ActiveAtmosphere, SceneProp, SimVisual,
+};
 use crate::{AppState, GameHost, NetStatus, PlayMode};
-
-#[derive(Component)]
-pub(crate) struct SimVisual {
-    pub(crate) id: EntityId,
-}
 
 #[derive(Component)]
 struct TerrainMarker;
@@ -34,7 +33,8 @@ struct TerrainMarker;
 pub(crate) struct FollowCam;
 
 pub(crate) fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup_camera_light)
+    app.init_resource::<ActiveAtmosphere>()
+        .add_systems(Startup, setup_camera_light)
         .add_systems(OnEnter(AppState::InWorld), setup_world)
         .add_systems(OnExit(AppState::InWorld), cleanup_world);
 }
@@ -59,6 +59,9 @@ fn setup_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut clear: ResMut<ClearColor>,
+    mut ambient: ResMut<AmbientLight>,
+    mut atmo: ResMut<ActiveAtmosphere>,
     name: Res<CharName>,
     class: Res<SelectedClass>,
     play_mode: Res<PlayMode>,
@@ -106,14 +109,45 @@ fn setup_world(
         }
     };
 
-    let terrain_mat = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.35, 0.52, 0.28),
+    // Seed sky from starting zone (eastbrook offline; online waits for first snapshot).
+    sync_zone_atmosphere(
+        host.snapshot.zone_id.as_str(),
+        &mut atmo,
+        &mut clear,
+        &mut ambient,
+    );
+
+    let eastbrook = zone_atmosphere("eastbrook");
+    let marsh = zone_atmosphere("eastfen");
+    let peaks = zone_atmosphere("thornpeak");
+    let terrain_vale = materials.add(StandardMaterial {
+        base_color: Color::srgb(
+            eastbrook.terrain[0],
+            eastbrook.terrain[1],
+            eastbrook.terrain[2],
+        ),
+        perceptual_roughness: 0.95,
+        ..default()
+    });
+    let terrain_marsh = materials.add(StandardMaterial {
+        base_color: Color::srgb(marsh.terrain[0], marsh.terrain[1], marsh.terrain[2]),
+        perceptual_roughness: 0.95,
+        ..default()
+    });
+    let terrain_peaks = materials.add(StandardMaterial {
+        base_color: Color::srgb(peaks.terrain[0], peaks.terrain[1], peaks.terrain[2]),
         perceptual_roughness: 0.95,
         ..default()
     });
     let water_mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.15, 0.35, 0.55, 0.65),
+        base_color: Color::srgba(
+            eastbrook.water[0],
+            eastbrook.water[1],
+            eastbrook.water[2],
+            eastbrook.water[3],
+        ),
         perceptual_roughness: 0.2,
+        alpha_mode: AlphaMode::Blend,
         ..default()
     });
     // Chunked height samples across the continuous strip (step ~8 yd).
@@ -127,10 +161,18 @@ fn setup_world(
             let y01 = terrain_height(x, z + step, WORLD_SEED);
             let y11 = terrain_height(x + step, z + step, WORLD_SEED);
             let y = (y00 + y10 + y01 + y11) * 0.25;
+            let mid_z = z + step * 0.5;
+            let terrain_mat = if mid_z < 180.0 {
+                terrain_vale.clone()
+            } else if mid_z < 540.0 {
+                terrain_marsh.clone()
+            } else {
+                terrain_peaks.clone()
+            };
             commands.spawn((
                 TerrainMarker,
                 Mesh3d(meshes.add(Cuboid::new(step * 0.98, 0.45, step * 0.98))),
-                MeshMaterial3d(terrain_mat.clone()),
+                MeshMaterial3d(terrain_mat),
                 Transform::from_xyz(x + step * 0.5, y - 0.2, z + step * 0.5),
             ));
             z += step;
@@ -146,6 +188,8 @@ fn setup_world(
             Transform::from_xyz(wx, y, wz),
         ));
     }
+
+    spawn_scene_props(&mut commands, &mut meshes, &mut materials);
 
     spawn_visuals_from_entities(
         &mut commands,
@@ -468,60 +512,28 @@ fn spawn_visuals_from_entities(
         if !e.alive && e.kind != EntityKind::Mob && e.kind != EntityKind::Npc {
             continue;
         }
-        spawn_one_visual(commands, meshes, materials, e.id, e.kind, e.alive);
+        spawn_entity_visual(commands, meshes, materials, e);
     }
-}
-
-fn spawn_one_visual(
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    id: EntityId,
-    kind: EntityKind,
-    alive: bool,
-) {
-    let (mesh, color) = match kind {
-        EntityKind::Player => (
-            meshes.add(Capsule3d::new(0.35, 1.0)),
-            Color::srgb(0.25, 0.45, 0.85),
-        ),
-        EntityKind::Mob => (
-            meshes.add(Cuboid::new(0.9, 0.55, 1.3)),
-            if alive {
-                Color::srgb(0.45, 0.35, 0.28)
-            } else {
-                Color::srgb(0.2, 0.2, 0.2)
-            },
-        ),
-        EntityKind::Npc => (
-            meshes.add(Capsule3d::new(0.32, 0.95)),
-            Color::srgb(0.55, 0.75, 0.45),
-        ),
-        EntityKind::Loot => (meshes.add(Sphere::new(0.25)), Color::srgb(0.9, 0.75, 0.2)),
-        EntityKind::Pet => (
-            meshes.add(Cuboid::new(0.7, 0.45, 1.0)),
-            Color::srgb(0.35, 0.55, 0.65),
-        ),
-    };
-    commands.spawn((
-        SimVisual { id },
-        Mesh3d(mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: color,
-            ..default()
-        })),
-        Transform::default(),
-    ));
 }
 
 fn cleanup_world(
     mut commands: Commands,
-    visuals: Query<Entity, Or<(With<SimVisual>, With<TerrainMarker>, With<HudRoot>)>>,
+    visuals: Query<
+        Entity,
+        Or<(
+            With<SimVisual>,
+            With<TerrainMarker>,
+            With<SceneProp>,
+            With<HudRoot>,
+        )>,
+    >,
+    mut atmo: ResMut<ActiveAtmosphere>,
 ) {
     for e in &visuals {
         commands.entity(e).despawn();
     }
     commands.remove_resource::<GameHost>();
+    atmo.zone_tag.clear();
 }
 
 fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
@@ -654,56 +666,66 @@ pub(crate) fn sim_fixed_step(
     let known: HashSet<EntityId> = visuals.iter().map(|v| v.id).collect();
     for e in &host.snapshot.entities {
         if e.alive && !known.contains(&e.id) {
-            spawn_one_visual(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                e.id,
-                e.kind,
-                e.alive,
-            );
+            spawn_entity_visual(&mut commands, &mut meshes, &mut materials, e);
         }
     }
 }
 
 pub(crate) fn sync_visuals(
     host: Res<GameHost>,
-    mut visuals: Query<(
-        &SimVisual,
-        &mut Transform,
-        &MeshMaterial3d<StandardMaterial>,
-    )>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut visuals: Query<(Entity, &mut SimVisual, &mut Transform, Option<&Children>)>,
+    child_mats: Query<&MeshMaterial3d<StandardMaterial>>,
     mut cam: Query<&mut Transform, (With<FollowCam>, Without<SimVisual>)>,
+    mut clear: ResMut<ClearColor>,
+    mut ambient: ResMut<AmbientLight>,
+    mut atmo: ResMut<ActiveAtmosphere>,
 ) {
+    sync_zone_atmosphere(
+        host.snapshot.zone_id.as_str(),
+        &mut atmo,
+        &mut clear,
+        &mut ambient,
+    );
+
     let player = host.player_snap().map(|p| (p.x, p.y, p.z));
-    for (vis, mut tf, mat_h) in &mut visuals {
-        if let Some(e) = host.snapshot.entities.iter().find(|e| e.id == vis.id) {
-            let y_off = match e.kind {
-                EntityKind::Player => 0.9,
-                EntityKind::Npc => 0.9,
-                EntityKind::Mob => 0.3,
-                EntityKind::Loot => 0.25,
-                EntityKind::Pet => 0.35,
-            };
+    for (entity, mut vis, mut tf, children) in &mut visuals {
+        if let Some(e) = host.snapshot.entities.iter().find(|ent| ent.id == vis.id) {
+            visuals::respawn_parts_if_needed(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                entity,
+                &mut vis,
+                e,
+                children,
+            );
+
             if e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc {
-                tf.translation = Vec3::new(e.x, e.y + y_off, e.z);
+                tf.translation = Vec3::new(e.x, e.y, e.z);
                 tf.rotation = Quat::from_rotation_y(e.yaw);
                 tf.scale = Vec3::ONE;
             } else {
                 tf.scale = Vec3::ZERO;
             }
-            if e.kind == EntityKind::Mob {
-                if let Some(mat) = materials.get_mut(&mat_h.0) {
-                    mat.base_color = if e.alive {
-                        Color::srgb(0.45, 0.35, 0.28)
-                    } else {
-                        Color::srgb(0.15, 0.15, 0.15)
-                    };
+
+            if matches!(e.kind, EntityKind::Mob | EntityKind::Npc) {
+                if let Some(children) = children {
+                    let handles = children
+                        .iter()
+                        .filter_map(|c| child_mats.get(c).ok().map(|m| m.0.clone()));
+                    apply_alive_tint(
+                        &mut materials,
+                        handles,
+                        e.kind,
+                        e.alive,
+                        e.template_id.as_deref(),
+                    );
                 }
             }
         } else {
-            // Entity left the snapshot (despawned remote player, etc.).
             tf.scale = Vec3::ZERO;
         }
     }

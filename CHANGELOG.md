@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Procedural character / creature visual catalog (`woc-sim::visual_catalog`): class-, template-, and role-keyed mesh recipes (players, NPCs, mobs, pets, loot).
+- Bevy scene loading: Eastbrook building meshes from physics AABBs, hub beacons, zone-gate portal arches, campfire props; biome-tinted terrain bands + zone sky/ambient on travel.
+- Character create: rotating 3D class preview silhouette behind the UI panel.
+
+### Fixed
+
+- Clippy `too_many_arguments` on mail send / market list (nightly).
+
 ## 1.0.0-pre — 2026-07-28
 
 ### Added

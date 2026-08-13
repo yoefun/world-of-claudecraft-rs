@@ -42,6 +42,7 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | World boss + deeds | done | one-shot deed completion persisted |
 | Client economy/talent chrome | done | N/K/M/U panels |
 | Heightfield terrain | done | Continuous strip seed `20061`; golden ε≈1e-3 vs upstream pin; editor custom maps deferred |
+| Procedural character / scene visuals | done | Class/template mesh recipes; buildings, portals, zone atmosphere; create preview |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 
 ### Explicit deferred / non-goals

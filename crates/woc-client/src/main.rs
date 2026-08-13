@@ -9,6 +9,7 @@ mod login;
 mod menu_ui;
 mod online;
 mod title;
+mod visuals;
 mod world_setup;
 
 use bevy::prelude::*;
