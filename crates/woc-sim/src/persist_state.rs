@@ -309,25 +309,51 @@ mod tests {
         assert!(world.get::<Bags>(1).unwrap().equipment.main_hand.is_some());
     }
 
+    /// Ports base's `non_virgin_restore_roundtrip` forward. Every field here had
+    /// to be re-plumbed from a flat `Entity` field into a specific column during
+    /// the migration — `talents` / `completed_deeds` / `talent_points` / `honor`
+    /// into `Progress`, `zone_id` into `Identity`, position into `Transform`,
+    /// `durable_id` into `Durable` — so this is the remapping regression net.
     #[test]
     fn round_trip_preserves_progression() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Mage, 10.0, 20.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("abc".into());
+        }
         if let Some(h) = world.get_mut::<Health>(1) {
-            h.level = 3;
+            h.level = 5;
+        }
+        if let Some(i) = world.get_mut::<Identity>(1) {
+            i.zone_id = "eastfen".into();
         }
         if let Some(p) = world.get_mut::<Progress>(1) {
-            p.xp = 40;
-            p.copper = 12;
-            p.honor = 7;
+            p.xp = 120;
+            p.copper = 77;
+            p.honor = 10;
+            p.talent_points = 2;
+            p.talents.insert("mage_arcane_power".into(), 2);
+            p.completed_deeds.insert("eastfen_mire_terror".into());
         }
+
         let exported = export_player_state(&world, 1).unwrap();
+        assert!(!exported.is_virgin());
+
         let mut world2 = World::new();
         create_player_from_state(&mut world2, 9, "Ada", PlayerClass::Mage, &exported);
         let restored = export_player_state(&world2, 9).unwrap();
-        assert_eq!(restored.level, 3);
-        assert_eq!(restored.xp, 40);
-        assert_eq!(restored.copper, 12);
-        assert_eq!(restored.honor, 7);
+
+        assert_eq!(restored.durable_id.as_deref(), Some("abc"));
+        assert_eq!(restored.level, 5);
+        assert_eq!(restored.xp, 120);
+        assert_eq!(restored.copper, 77);
+        assert_eq!(restored.honor, 10);
+        assert_eq!(restored.talent_points, 2);
+        assert_eq!(restored.talents.get("mage_arcane_power"), Some(&2));
+        assert!(restored.completed_deeds.contains("eastfen_mire_terror"));
+        assert_eq!(restored.zone_id, "eastfen");
+        assert!((restored.pos_x - 10.0).abs() < 1e-3);
+        assert!((restored.pos_z - 20.0).abs() < 1e-3);
+        assert!(!restored.is_virgin());
     }
 }
