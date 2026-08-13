@@ -558,6 +558,20 @@ mod tests {
         assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
+        assert!(npc("auctioneer_lise").unwrap().is_auctioneer());
+    }
+
+    #[test]
+    fn auctioneer_lise_is_eastbrook_auction_only() {
+        let lise = npc("auctioneer_lise").expect("auctioneer_lise");
+        assert!(lise.is_auctioneer());
+        assert!(!lise.is_vendor());
+        assert!(!lise.can_repair());
+        assert!(lise.vendor_stock.is_empty());
+        assert!(lise.trains.is_empty());
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "auctioneer_lise"
+            && (s.x - 4.0).abs() < f32::EPSILON
+            && (s.z - 6.0).abs() < f32::EPSILON));
     }
 
     #[test]

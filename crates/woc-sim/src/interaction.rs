@@ -1016,6 +1016,7 @@ fn opens_npc_session(def: &NpcDef) -> bool {
         || def.is_profession_trainer()
         || def.is_class_trainer()
         || def.is_innkeeper()
+        || def.is_auctioneer()
 }
 
 fn service_name(service: NpcService) -> &'static str {
@@ -1026,6 +1027,7 @@ fn service_name(service: NpcService) -> &'static str {
         NpcService::ClassTrainer => "class_trainer",
         NpcService::Innkeeper => "innkeeper",
         NpcService::QuestGiver => "quest_giver",
+        NpcService::Auctioneer => "auctioneer",
     }
 }
 
