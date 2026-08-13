@@ -183,6 +183,21 @@ mod tests {
         assert!(w.ids::<Identity>().is_empty());
     }
 
+    /// Factories must adopt in every build. `debug_assert!(world.adopt(id))`
+    /// looks like a guard but elides the adopt under `--release`, so run this
+    /// with `cargo test --release` as well as in debug.
+    #[test]
+    fn factories_make_their_id_live_and_populate_columns() {
+        let mut w = World::new();
+        let id = w.next_id();
+        crate::ecs::spawn::create_loot(&mut w, id, 1.0, 2.0, 5, None);
+
+        assert!(w.contains(id), "factory must adopt the id");
+        assert_eq!(w.spawn_count(), 1);
+        assert!(w.get::<crate::ecs::components::LootPile>(id).is_some());
+        assert_eq!(w.get::<Transform>(id).unwrap().x, 1.0);
+    }
+
     /// Two `next_id()` reads with no adopt between them yield the same id. The
     /// second adopt now reports `false`, which is what the `debug_assert!` at
     /// every factory call site fires on. `insert` cannot catch this case — the

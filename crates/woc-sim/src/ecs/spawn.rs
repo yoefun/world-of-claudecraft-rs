@@ -19,6 +19,21 @@ pub fn ground_at(x: f32, z: f32) -> f32 {
     ground_height(x, z, WORLD_SEED)
 }
 
+/// Adopt a factory's caller-supplied id, which must be fresh.
+///
+/// `World::next_id()` reserves nothing, so two reads with no adopt between them
+/// return the same id and the second `adopt` reports `false`. The assert is
+/// debug-only, but the `adopt` call itself must run in every build — writing
+/// `debug_assert!(world.adopt(id))` would elide the adopt entirely under
+/// `--release`, since `debug_assert!` does not evaluate its expression there.
+pub(crate) fn adopt_fresh_id(world: &mut World, id: EntityId) {
+    let adopted = world.adopt(id);
+    debug_assert!(
+        adopted,
+        "factory id {id} is already live or zero; ids must be fresh"
+    );
+}
+
 fn insert_identity(
     world: &mut World,
     id: EntityId,
@@ -100,10 +115,7 @@ pub fn create_player(
 ) -> EntityId {
     let def = class_def(class);
     let hp = player_hp(def.base_hp, 1);
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    adopt_fresh_id(world, id);
     insert_identity(
         world,
         id,
@@ -184,10 +196,7 @@ pub fn create_mob_from_template(
     z: f32,
 ) -> Option<EntityId> {
     let t = mob(template_id)?;
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    adopt_fresh_id(world, id);
     insert_identity(world, id, EntityKind::Mob, t.name, Some(t.id), "eastbrook");
     insert_transform(world, id, x, z, 0.0);
     insert_health(world, id, t.hp, t.hp, t.level);
@@ -221,10 +230,7 @@ pub fn create_npc_from_template(
     z: f32,
 ) -> Option<EntityId> {
     let t = npc(template_id)?;
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    adopt_fresh_id(world, id);
     insert_identity(world, id, EntityKind::Npc, t.name, Some(t.id), "eastbrook");
     insert_transform(world, id, x, z, 0.0);
     insert_health(world, id, 1000.0, 1000.0, 1);
@@ -239,10 +245,7 @@ pub fn create_loot(
     copper: u32,
     item: Option<String>,
 ) -> EntityId {
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    adopt_fresh_id(world, id);
     insert_identity(world, id, EntityKind::Loot, "Loot", None, "eastbrook");
     insert_transform(world, id, x, z, 0.0);
     world.insert(id, LootPile { copper, item });
@@ -258,10 +261,7 @@ pub fn create_pet(
     x: f32,
     z: f32,
 ) -> EntityId {
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    adopt_fresh_id(world, id);
     insert_identity(
         world,
         id,
@@ -296,10 +296,7 @@ pub fn create_gather_node(
     id: EntityId,
     node: &woc_content::GatherNodeDef,
 ) -> EntityId {
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    adopt_fresh_id(world, id);
     insert_identity(
         world,
         id,

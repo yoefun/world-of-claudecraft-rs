@@ -168,10 +168,7 @@ pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<S
 }
 
 fn spawn_boss_shell(world: &mut World, id: EntityId, def: &DungeonDef, instance_key: &str) {
-    debug_assert!(
-        world.adopt(id),
-        "factory id {id} must be fresh: next_id() reserves nothing, so a double read aliases a live entity"
-    );
+    crate::ecs::spawn::adopt_fresh_id(world, id);
     world.insert(
         id,
         Identity {
