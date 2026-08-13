@@ -118,6 +118,14 @@ pub fn check_compat(client: &ClientIdentity, realm: &RealmIdentity) -> Compat {
     Compat::Compatible
 }
 
+pub fn min_client_version_from_env() -> String {
+    std::env::var("WOC_MIN_CLIENT_VERSION")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| crate::REWRITE_VERSION.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

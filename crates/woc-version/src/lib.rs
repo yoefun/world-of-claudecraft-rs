@@ -2,7 +2,7 @@
 //!
 //! Values are kept in sync with the repo-root `VERSION.toml`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Rewrite crate / product version (semver).
 pub const REWRITE_VERSION: &str = "1.3.0";
@@ -25,30 +25,54 @@ pub fn footer() -> String {
 }
 
 /// JSON-serializable version payload for HTTP `/version`.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VersionInfo {
-    pub rewrite_version: &'static str,
-    pub upstream_version: &'static str,
-    pub upstream_commit: &'static str,
-    pub upstream_repo: &'static str,
-    pub parity_target: &'static str,
+    pub rewrite_version: String,
+    pub upstream_version: String,
+    pub upstream_commit: String,
+    pub upstream_repo: String,
+    pub parity_target: String,
+    #[serde(default)]
+    pub protocol_rev: u32,
+    #[serde(default)]
+    pub min_client_version: String,
 }
 
 impl VersionInfo {
-    pub fn current() -> Self {
+    pub fn current(protocol_rev: u32) -> Self {
         Self {
-            rewrite_version: REWRITE_VERSION,
-            upstream_version: UPSTREAM_VERSION,
-            upstream_commit: UPSTREAM_COMMIT,
-            upstream_repo: UPSTREAM_REPO,
-            parity_target: PARITY_TARGET,
+            rewrite_version: REWRITE_VERSION.to_string(),
+            upstream_version: UPSTREAM_VERSION.to_string(),
+            upstream_commit: UPSTREAM_COMMIT.to_string(),
+            upstream_repo: UPSTREAM_REPO.to_string(),
+            parity_target: PARITY_TARGET.to_string(),
+            protocol_rev,
+            min_client_version: min_client_version_from_env(),
+        }
+    }
+
+    pub fn realm_identity(&self) -> RealmIdentity {
+        let min = if self.min_client_version.is_empty() {
+            self.rewrite_version.clone()
+        } else {
+            self.min_client_version.clone()
+        };
+        RealmIdentity {
+            rewrite_version: self.rewrite_version.clone(),
+            protocol_rev: if self.protocol_rev == 0 {
+                None
+            } else {
+                Some(self.protocol_rev)
+            },
+            min_client_version: min,
         }
     }
 }
 
 mod compat;
 pub use compat::{
-    check_compat, parse_semver, ClientIdentity, Compat, RealmIdentity, SemVer,
+    check_compat, min_client_version_from_env, parse_semver, ClientIdentity, Compat, RealmIdentity,
+    SemVer,
 };
 
 #[cfg(test)]
@@ -78,5 +102,47 @@ mod tests {
         let f = footer();
         assert!(f.contains(REWRITE_VERSION));
         assert!(f.contains(UPSTREAM_VERSION));
+    }
+
+    #[test]
+    fn current_includes_protocol_and_min_client() {
+        let info = VersionInfo::current(6);
+        assert_eq!(info.rewrite_version, REWRITE_VERSION);
+        assert_eq!(info.protocol_rev, 6);
+        assert_eq!(info.min_client_version, REWRITE_VERSION);
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"protocol_rev\":6"));
+        assert!(json.contains("min_client_version"));
+    }
+
+    #[test]
+    fn legacy_version_json_deserializes_with_defaults() {
+        let json = r#"{
+            "rewrite_version": "1.3.0",
+            "upstream_version": "0.31.0",
+            "upstream_commit": "abc",
+            "upstream_repo": "https://example.invalid",
+            "parity_target": "online-hard"
+        }"#;
+        let info: VersionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.rewrite_version, "1.3.0");
+        assert_eq!(info.protocol_rev, 0);
+        assert!(info.min_client_version.is_empty());
+        let realm = info.realm_identity();
+        assert_eq!(realm.protocol_rev, None);
+        assert_eq!(realm.min_client_version, "1.3.0");
+        let c = check_compat(
+            &ClientIdentity {
+                rewrite_version: "1.3.0".into(),
+                protocol_rev: 6,
+            },
+            &realm,
+        );
+        assert!(c.is_ok());
+    }
+
+    #[test]
+    fn min_client_env_defaults_to_rewrite_version() {
+        assert_eq!(min_client_version_from_env(), REWRITE_VERSION);
     }
 }
