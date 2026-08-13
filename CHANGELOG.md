@@ -9,6 +9,13 @@
 - Character create: rotating 3D class preview silhouette behind the UI panel.
 - In-world scene load for NPCs/mobs/herbs: nameplates, quest/vendor overhead markers, target ground ring, idle bob; gather nodes spawned into the realm with herb visuals.
 - Enter-world toast summarizing NPC / foe / herb counts; visual spawn/despawn lifecycle for corpses, loot, and pets.
+- Bevy **minimap** (top-right disc: zone label, coords, terrain, hubs/portals/quests/mobs/allies, facing arrow).
+- Bevy **world map** window (**M**, Esc closes): current zone band terrain, POI legend, player arrow.
+- Pure `woc-sim::map_view` projection + terrain paint (upstream +X-left / +Z-up canvas convention) with unit tests.
+
+### Changed
+
+- Mail panel keybind **M → I** (inbox) so **M** matches upstream World Map.
 
 ### Fixed
 

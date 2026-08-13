@@ -6,6 +6,7 @@ mod char_select;
 mod hud;
 mod input;
 mod login;
+mod map;
 mod menu_ui;
 mod nameplates;
 mod online;
@@ -49,8 +50,8 @@ fn main() {
             world_setup::plugin,
             hud::plugin,
             nameplates::plugin,
-        ))
-        .add_systems(
+            map::plugin,
+        ))        .add_systems(
             Update,
             (
                 input::grab_cursor,

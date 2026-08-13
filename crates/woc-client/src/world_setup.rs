@@ -19,6 +19,7 @@ use crate::hud::{
     HudRoot, HudTargetText, HudToastText, HudVendorOffers, HudVendorPanel, HudVendorTitle,
     HudXpText,
 };
+use crate::map;
 use crate::online;
 use crate::visuals::{
     self, apply_alive_tint, ensure_target_ring, spawn_entity_visual, spawn_scene_props,
@@ -62,8 +63,8 @@ fn setup_world(
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<AmbientLight>,
     mut atmo: ResMut<ActiveAtmosphere>,
-    name: Res<CharName>,
-    class: Res<SelectedClass>,
+    mut images: ResMut<Assets<Image>>,
+    name: Res<CharName>,    class: Res<SelectedClass>,
     play_mode: Res<PlayMode>,
     session: Res<crate::AuthSession>,
 ) {
@@ -231,6 +232,8 @@ fn setup_world(
     }
     commands.insert_resource(host);
 
+    let (minimap, world_map) = map::create_map_textures(&mut commands, &mut images);
+
     commands
         .spawn((
             HudRoot,
@@ -247,6 +250,8 @@ fn setup_world(
             },
         ))
         .with_children(|root| {
+            map::spawn_map_chrome(root, minimap, world_map);
+
             root.spawn((
                 Node {
                     width: Val::Percent(100.0),
@@ -295,7 +300,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · N talents · K bank · M mail · U market · RMB look · Esc",
+                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · N talents · K bank · I mail · M map · U market · RMB look · Esc",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
@@ -567,8 +572,8 @@ fn cleanup_world(
     }
     commands.remove_resource::<GameHost>();
     atmo.zone_tag.clear();
+    commands.remove_resource::<map::MapTextures>();
 }
-
 fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
     for ev in events {
         match ev {

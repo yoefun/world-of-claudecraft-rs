@@ -19,7 +19,7 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 - Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot
 - Bank, mail, auction house (durable across server restart); herbalism → alchemy craft loop
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
-- Client panels: talents / bank / mail / market
+- Client panels: talents / bank / mail / market; **minimap** + **world map** (M)
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Version footer: `WoC-rs 1.0.0-pre · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello
@@ -70,8 +70,7 @@ REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` o
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **M** mail (P collect), **U** market (O buy), **Esc** release cursor. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
-
+Controls: **WASD** move, **mouse** look (hold right), **left click** attack, **1–5** abilities, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (Y/Enter learn, R respec), **K** bank (G deposit / H withdraw), **I** mail (P collect), **M** world map, **U** market (O buy), **Esc** close map / release cursor. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
 ## Architecture
 
 One sim, multiple hosts:
