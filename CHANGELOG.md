@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.11.0 — 2026-08-13
+
+### Added
+
+- NPC services (`1.11.0` / `npc-services`): `NpcService` roster and session snapshot for vendors, repairers, profession trainers, class trainers, and innkeepers.
+- Quest-item vendor sell block plus capped buyback for recently sold items.
+- Gear durability, combat wear, and sim-authoritative `RepairAll` at repair NPCs.
+- NPC-gated profession training, class trainer confirmation, and innkeeper hearth bind/use flow.
+
 ## 1.10.0 — 2026-08-13
 
 ### Added
@@ -25,7 +34,6 @@
 - **1.7.0 `class-identity`:** default bars put warrior Charge, mage Blink, priest Power Word: Shield, and hunter Aspect of the Hawk on slot 5. Rend / Shadow Word: Pain / Counterspell / Multi-Shot stay in `ABILITIES` off-bar. Aspect and Battle Shout auras grant 1.1 outgoing damage. Rogue action bar hints **[Z] Stealth**.
 - **1.8.0 `class-forms`:** warrior **F** battle/defensive stance; shaman Lightning Shield + **F** Ghost Wolf; druid **F** Travel Form (1.4 move, breaks on hit); warlock Life Tap + Fear (breaks on damage); paladin Devotion Aura at spawn and Crusader Strike seal. Travel-form haste stacks with slows via min×max (stealth still `min`). Immolate / Flame Shock stay in `ABILITIES` off-bar.
 - Class-kit identity: per-ability auras (no shared Rend-on-everything), Execute HP gate, Holy Shock heal-or-harm, stun/slow CC, paladin/shaman/druid heals; kits expanded to 4–5 slots.
-
 
 ## 1.5.0 — 2026-08-13
 

@@ -1,19 +1,22 @@
 //! Interaction commands: talk, quests, vendor, equip, use item, loot corpse.
 
 use crate::ecs::components::AuraInstance;
-use crate::ecs::components::{dist2d, Equipment};
-use crate::ecs::components::{Bags, Health, Identity, Progress};
+use crate::ecs::components::{dist2d, Equipment, EquipmentWear, Hearth, InvStack, Transform};
+use crate::ecs::components::{Bags, BuybackEntry, ClassKit, Health, Identity, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, remove_item};
+use crate::inventory::remove_item;
 use crate::inventory::{grant_item, take_item};
 use crate::quests::{
     accept_quest, npc_quest_offers, on_talked_to, quest_log_entries, turn_in_quest,
 };
 use crate::stats::recalc_player_stats;
 use crate::types::INTERACT_RANGE;
-use woc_content::{item, npc, ItemEquipSlot, ItemKind};
+use woc_content::{
+    item, known_abilities_at_level, npc, ItemEquipSlot, ItemKind, NpcDef, NpcService,
+};
 use woc_protocol::{
-    EntityId, EntityKind, EquipSlot, InteractAction, SimEvent, VendorOfferSnapshot,
+    BuybackSnapshot, EntityId, EntityKind, EquipSlot, InteractAction, NpcSessionSnapshot, SimEvent,
+    VendorOfferSnapshot,
 };
 
 fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
@@ -38,6 +41,87 @@ fn equipment_slot_mut(equipment: &mut Equipment, slot: EquipSlot) -> &mut Option
     }
 }
 
+fn equipment_slot(equipment: &Equipment, slot: EquipSlot) -> &Option<String> {
+    match slot {
+        EquipSlot::MainHand => &equipment.main_hand,
+        EquipSlot::OffHand => &equipment.off_hand,
+        EquipSlot::Head => &equipment.head,
+        EquipSlot::Chest => &equipment.chest,
+        EquipSlot::Legs => &equipment.legs,
+        EquipSlot::Feet => &equipment.feet,
+    }
+}
+
+fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> &mut Option<u32> {
+    match slot {
+        EquipSlot::MainHand => &mut wear.main_hand,
+        EquipSlot::OffHand => &mut wear.off_hand,
+        EquipSlot::Head => &mut wear.head,
+        EquipSlot::Chest => &mut wear.chest,
+        EquipSlot::Legs => &mut wear.legs,
+        EquipSlot::Feet => &mut wear.feet,
+    }
+}
+
+fn equipment_wear_slot(wear: &EquipmentWear, slot: EquipSlot) -> Option<u32> {
+    match slot {
+        EquipSlot::MainHand => wear.main_hand,
+        EquipSlot::OffHand => wear.off_hand,
+        EquipSlot::Head => wear.head,
+        EquipSlot::Chest => wear.chest,
+        EquipSlot::Legs => wear.legs,
+        EquipSlot::Feet => wear.feet,
+    }
+}
+
+const EQUIP_SLOTS: [EquipSlot; 6] = [
+    EquipSlot::MainHand,
+    EquipSlot::OffHand,
+    EquipSlot::Head,
+    EquipSlot::Chest,
+    EquipSlot::Legs,
+    EquipSlot::Feet,
+];
+
+fn stack_with_durability(item_id: &str, count: u32, durability: Option<u32>) -> InvStack {
+    let mut stack = InvStack::new(item_id, count);
+    if durability.is_some() {
+        stack.durability = durability;
+    }
+    stack
+}
+
+pub fn repair_cost(world: &World, player_id: EntityId) -> u32 {
+    let Some(bags) = world.get::<Bags>(player_id) else {
+        return 0;
+    };
+    let mut cost = 0u32;
+
+    for slot in EQUIP_SLOTS {
+        let Some(item_id) = equipment_slot(&bags.equipment, slot).as_deref() else {
+            continue;
+        };
+        let Some(max) = EquipmentWear::max_for_item(item_id) else {
+            continue;
+        };
+        let current = equipment_wear_slot(&bags.equipment_wear, slot).unwrap_or(max);
+        cost = cost.saturating_add(max.saturating_sub(current));
+    }
+
+    for stack in bags.inventory.iter().flatten() {
+        let Some(def) = item(&stack.item_id) else {
+            continue;
+        };
+        if def.max_durability == 0 {
+            continue;
+        }
+        let current = stack.durability.unwrap_or(def.max_durability);
+        cost = cost.saturating_add(def.max_durability.saturating_sub(current));
+    }
+
+    cost
+}
+
 pub fn handle_interact(
     world: &mut World,
     player_id: EntityId,
@@ -53,6 +137,7 @@ pub fn handle_interact(
     if matches!(action, InteractAction::CloseVendor) {
         if let Some(bags) = world.get_mut::<Bags>(player_id) {
             bags.open_vendor_npc = None;
+            bags.buyback.clear();
         }
         return;
     }
@@ -130,6 +215,18 @@ pub fn handle_interact(
         InteractAction::Sell { bag_slot, count } => {
             sell(world, player_id, target_id, bag_slot, count, events);
         }
+        InteractAction::Buyback { slot } => {
+            buyback(world, player_id, target_id, slot, events);
+        }
+        InteractAction::RepairAll => {
+            repair_all(world, player_id, target_id, events);
+        }
+        InteractAction::TrainClass => {
+            train_class(world, player_id, target_id, events);
+        }
+        InteractAction::BindHearth => {
+            bind_hearth(world, player_id, target_id, events);
+        }
         _ => {}
     }
 }
@@ -154,10 +251,12 @@ fn talk(world: &mut World, player_id: EntityId, target_id: EntityId, events: &mu
     events.push(SimEvent::Toast { message: text });
 
     if let Some(d) = def {
-        if d.is_vendor {
+        if opens_npc_session(d) {
             if let Some(bags) = world.get_mut::<Bags>(player_id) {
                 bags.open_vendor_npc = Some(target_id);
             }
+        }
+        if d.is_vendor() {
             events.push(SimEvent::VendorOpen {
                 player: player_id,
                 npc_id: target_id,
@@ -167,7 +266,7 @@ fn talk(world: &mut World, player_id: EntityId, target_id: EntityId, events: &mu
         let offers = npc_quest_offers(&template_id, &quest_log_entries(world, player_id));
         let mut names: Vec<&str> = offers.accept.iter().map(|q| q.name).collect();
         names.extend(offers.turn_in.iter().map(|q| q.name));
-        if !names.is_empty() && d.is_quest_giver {
+        if !names.is_empty() && d.is_quest_giver() {
             events.push(SimEvent::Toast {
                 message: format!("Quests: {}", names.join(", ")),
             });
@@ -193,7 +292,7 @@ fn buy(
     let Some(ndef) = npc(&template_id) else {
         return;
     };
-    if !ndef.is_vendor || !ndef.vendor_stock.iter().any(|o| o.item_id == item_id) {
+    if !ndef.is_vendor() || !ndef.vendor_stock.iter().any(|o| o.item_id == item_id) {
         return;
     }
     let Some(idef) = item(item_id) else {
@@ -240,7 +339,10 @@ fn sell(
     let Some(ndef) = npc(&template_id) else {
         return;
     };
-    if !ndef.is_vendor {
+    if !ndef.is_vendor() {
+        return;
+    }
+    if world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) != Some(target_id) {
         return;
     }
     let slot = bag_slot as usize;
@@ -255,16 +357,268 @@ fn sell(
     let Some(idef) = item(&stack.item_id) else {
         return;
     };
+    if idef.kind == ItemKind::Quest {
+        events.push(SimEvent::Toast {
+            message: "This item is needed for a quest.".into(),
+        });
+        return;
+    }
+    let copper = idef.vendor_sell.saturating_mul(take);
+    let durability = stack.durability;
     if take_item(world, player_id, &stack.item_id, take, events).is_err() {
         return;
     }
     let _ = ndef;
     if let Some(p) = world.get_mut::<Progress>(player_id) {
-        p.copper = p
-            .copper
-            .saturating_add(idef.vendor_sell.saturating_mul(take));
+        p.copper = p.copper.saturating_add(copper);
+    }
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        bags.buyback.push(BuybackEntry {
+            item_id: stack.item_id,
+            count: take,
+            durability,
+            copper,
+        });
+        if bags.buyback.len() > 6 {
+            bags.buyback.remove(0);
+        }
     }
     crate::quests::on_inventory_changed(world, player_id, events);
+}
+
+fn buyback(
+    world: &mut World,
+    player_id: EntityId,
+    target_id: EntityId,
+    slot: u8,
+    events: &mut Vec<SimEvent>,
+) {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
+        return;
+    }
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
+    let Some(ndef) = npc(&template_id) else {
+        return;
+    };
+    if !ndef.is_vendor()
+        || world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) != Some(target_id)
+    {
+        return;
+    }
+
+    let copper = world
+        .get::<Progress>(player_id)
+        .map(|p| p.copper)
+        .unwrap_or(0);
+    let slot = slot as usize;
+    let Some(entry_price) = world
+        .get::<Bags>(player_id)
+        .and_then(|b| b.buyback.get(slot))
+        .map(|entry| entry.copper)
+    else {
+        return;
+    };
+    if copper < entry_price {
+        events.push(SimEvent::Toast {
+            message: "Not enough copper.".into(),
+        });
+        return;
+    }
+
+    let entry = {
+        let Some(bags) = world.get_mut::<Bags>(player_id) else {
+            return;
+        };
+        if slot >= bags.buyback.len() {
+            return;
+        }
+        bags.buyback.remove(slot)
+    };
+    let item_id = entry.item_id.clone();
+    let count = entry.count;
+    let price = entry.copper;
+    let durability = entry.durability;
+    let inventory_before = world
+        .get::<Bags>(player_id)
+        .map(|bags| bags.inventory.clone())
+        .unwrap_or_default();
+    let granted = if durability.is_some() {
+        world
+            .get_mut::<Bags>(player_id)
+            .and_then(|bags| bags.inventory.iter_mut().find(|slot| slot.is_none()))
+            .map(|empty| {
+                *empty = Some(stack_with_durability(&item_id, count, durability));
+            })
+            .is_some()
+    } else {
+        grant_item(world, player_id, &item_id, count, events).is_ok()
+    };
+    if !granted {
+        if let Some(bags) = world.get_mut::<Bags>(player_id) {
+            bags.inventory = inventory_before;
+            if slot <= bags.buyback.len() {
+                bags.buyback.insert(slot, entry);
+            } else {
+                bags.buyback.push(entry);
+            }
+        }
+        events.push(SimEvent::Toast {
+            message: "Inventory full.".into(),
+        });
+        return;
+    }
+    if durability.is_some() {
+        events.push(SimEvent::ItemGained {
+            player: player_id,
+            item_id: item_id.clone(),
+            count,
+        });
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper = p.copper.saturating_sub(price);
+    }
+    crate::quests::on_inventory_changed(world, player_id, events);
+}
+
+fn repair_all(
+    world: &mut World,
+    player_id: EntityId,
+    target_id: EntityId,
+    events: &mut Vec<SimEvent>,
+) {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
+        return;
+    }
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
+    let Some(ndef) = npc(&template_id) else {
+        return;
+    };
+    if !ndef.can_repair()
+        || world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) != Some(target_id)
+    {
+        return;
+    }
+
+    let cost = repair_cost(world, player_id);
+    let copper = world
+        .get::<Progress>(player_id)
+        .map(|p| p.copper)
+        .unwrap_or(0);
+    if copper < cost {
+        events.push(SimEvent::Toast {
+            message: "Not enough copper.".into(),
+        });
+        return;
+    }
+
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        for slot in EQUIP_SLOTS {
+            let item_id = equipment_slot(&bags.equipment, slot).clone();
+            let Some(item_id) = item_id else {
+                continue;
+            };
+            let Some(max) = EquipmentWear::max_for_item(&item_id) else {
+                continue;
+            };
+            *equipment_wear_slot_mut(&mut bags.equipment_wear, slot) = Some(max);
+        }
+        for stack in bags.inventory.iter_mut().flatten() {
+            let Some(def) = item(&stack.item_id) else {
+                continue;
+            };
+            if def.max_durability > 0 {
+                stack.durability = Some(def.max_durability);
+            }
+        }
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper = p.copper.saturating_sub(cost);
+    }
+    recalc_player_stats(world, player_id);
+    events.push(SimEvent::Toast {
+        message: format!("Repaired for {cost} copper."),
+    });
+}
+
+fn train_class(
+    world: &mut World,
+    player_id: EntityId,
+    target_id: EntityId,
+    events: &mut Vec<SimEvent>,
+) {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
+        return;
+    }
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
+    let Some(ndef) = npc(&template_id) else {
+        return;
+    };
+    if !ndef.is_class_trainer() {
+        return;
+    }
+
+    let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
+    let Some(class) = class else {
+        return;
+    };
+    let Some(kit) = world.get_mut::<ClassKit>(player_id) else {
+        return;
+    };
+    kit.known_abilities = known_abilities_at_level(class, level)
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    events.push(SimEvent::Toast {
+        message: format!("You are trained through level {level}."),
+    });
+}
+
+fn bind_hearth(
+    world: &mut World,
+    player_id: EntityId,
+    target_id: EntityId,
+    events: &mut Vec<SimEvent>,
+) {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
+        return;
+    }
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
+    let Some(ndef) = npc(&template_id) else {
+        return;
+    };
+    if !ndef.is_innkeeper() {
+        return;
+    }
+
+    let Some((x, z)) = world.get::<Transform>(player_id).map(|t| (t.x, t.z)) else {
+        return;
+    };
+    let zone_id = world
+        .get::<Identity>(player_id)
+        .map(|i| i.zone_id.clone())
+        .unwrap_or_else(|| "eastbrook".into());
+    let Some(hearth) = world.get_mut::<Hearth>(player_id) else {
+        return;
+    };
+    hearth.zone_id = zone_id;
+    hearth.x = x;
+    hearth.z = z;
+    events.push(SimEvent::Toast {
+        message: "Hearthbound.".into(),
+    });
 }
 
 fn equip_from_bag(
@@ -299,13 +653,23 @@ fn equip_from_bag(
     }
     let equip_slot = to_protocol_slot(content_slot);
     if let Some(bags) = world.get_mut::<Bags>(player_id) {
-        if !remove_item(&mut bags.inventory, &stack.item_id, 1) {
+        if slot >= bags.inventory.len() {
             return;
         }
-        let previous =
-            equipment_slot_mut(&mut bags.equipment, equip_slot).replace(stack.item_id.clone());
+        let Some(removed_stack) = bags.inventory[slot].take() else {
+            return;
+        };
+        let durability = removed_stack
+            .durability
+            .or_else(|| EquipmentWear::max_for_item(&removed_stack.item_id));
+        let previous = equipment_slot_mut(&mut bags.equipment, equip_slot)
+            .replace(removed_stack.item_id.clone());
+        let previous_wear = std::mem::replace(
+            equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot),
+            durability,
+        );
         if let Some(prev) = previous {
-            let _ = grant_into(&mut bags.inventory, &prev, 1);
+            bags.inventory[slot] = Some(stack_with_durability(&prev, 1, previous_wear));
         }
     }
     recalc_player_stats(world, player_id);
@@ -322,18 +686,18 @@ fn unequip_to_bag(
     equip_slot: EquipSlot,
     events: &mut Vec<SimEvent>,
 ) {
-    let item_id = world
-        .get_mut::<Bags>(player_id)
-        .and_then(|b| equipment_slot_mut(&mut b.equipment, equip_slot).take());
-    let Some(item_id) = item_id else {
-        return;
-    };
     let mut restored = false;
     if let Some(bags) = world.get_mut::<Bags>(player_id) {
-        if grant_into(&mut bags.inventory, &item_id, 1) {
+        let Some(item_id) = equipment_slot_mut(&mut bags.equipment, equip_slot).take() else {
+            return;
+        };
+        let wear = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot).take();
+        if let Some(empty) = bags.inventory.iter_mut().find(|slot| slot.is_none()) {
+            *empty = Some(stack_with_durability(&item_id, 1, wear));
             restored = true;
         } else {
             *equipment_slot_mut(&mut bags.equipment, equip_slot) = Some(item_id.clone());
+            *equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot) = wear;
         }
     }
     if !restored {
@@ -420,13 +784,27 @@ fn use_item_from_bag(
     crate::quests::on_inventory_changed(world, player_id, events);
 }
 
-pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protocol::VendorSnapshot> {
-    let npc_id = world.get::<Bags>(player_id)?.open_vendor_npc?;
-    let npc_e = world.get::<Identity>(npc_id)?;
-    let template = npc_e.template_id.as_deref()?;
-    let def = npc(template)?;
-    let stock = def
-        .vendor_stock
+fn opens_npc_session(def: &NpcDef) -> bool {
+    def.is_vendor()
+        || def.can_repair()
+        || def.is_profession_trainer()
+        || def.is_class_trainer()
+        || def.is_innkeeper()
+}
+
+fn service_name(service: NpcService) -> &'static str {
+    match service {
+        NpcService::Vendor => "vendor",
+        NpcService::Repair => "repair",
+        NpcService::ProfessionTrainer => "profession_trainer",
+        NpcService::ClassTrainer => "class_trainer",
+        NpcService::Innkeeper => "innkeeper",
+        NpcService::QuestGiver => "quest_giver",
+    }
+}
+
+fn stock_snapshot(def: &NpcDef) -> Vec<VendorOfferSnapshot> {
+    def.vendor_stock
         .iter()
         .filter_map(|o| {
             let price = item(o.item_id)?.vendor_buy;
@@ -436,11 +814,59 @@ pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protoco
                 price,
             })
         })
-        .collect();
+        .collect()
+}
+
+pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protocol::VendorSnapshot> {
+    let npc_id = world.get::<Bags>(player_id)?.open_vendor_npc?;
+    let npc_e = world.get::<Identity>(npc_id)?;
+    let template = npc_e.template_id.as_deref()?;
+    let def = npc(template)?;
+    if !def.is_vendor() {
+        return None;
+    }
+    let stock = stock_snapshot(def);
     Some(woc_protocol::VendorSnapshot {
         npc_id,
         npc_name: npc_e.name.clone(),
         stock,
+    })
+}
+
+pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSessionSnapshot> {
+    let bags = world.get::<Bags>(player_id)?;
+    let npc_id = bags.open_vendor_npc?;
+    let npc_e = world.get::<Identity>(npc_id)?;
+    let template = npc_e.template_id.as_deref()?;
+    let def = npc(template)?;
+    let buyback = bags
+        .buyback
+        .iter()
+        .enumerate()
+        .map(|(slot, entry)| BuybackSnapshot {
+            slot: slot as u8,
+            item_id: entry.item_id.clone(),
+            count: entry.count,
+            price: entry.copper,
+        })
+        .collect();
+    Some(NpcSessionSnapshot {
+        npc_id,
+        npc_name: npc_e.name.clone(),
+        greeting: def.greeting.to_string(),
+        services: def
+            .services
+            .iter()
+            .copied()
+            .map(service_name)
+            .map(str::to_string)
+            .collect(),
+        stock: stock_snapshot(def),
+        train_professions: def.trains.iter().map(|id| id.to_string()).collect(),
+        can_repair: def.can_repair(),
+        repair_cost: repair_cost(world, player_id),
+        can_bind: def.is_innkeeper(),
+        buyback,
     })
 }
 

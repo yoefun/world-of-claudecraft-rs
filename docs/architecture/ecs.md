@@ -25,6 +25,8 @@ woc-sim World  →  TickSnapshot  →  Bevy presentation ECS
 
 See the table in [`docs/superpowers/specs/2026-08-13-sim-ecs-design.md`](../superpowers/specs/2026-08-13-sim-ecs-design.md) §4.4 and `crates/woc-sim/src/ecs/components.rs` module docs.
 
+Player columns include `Hearth` (`zone_id`, bind `x`/`z`, `ready_tick`) for innkeeper binding and tick-based hearthstone cooldowns; see `crates/woc-sim/src/ecs/components.rs`.
+
 ## Status
 
 The ECS column program is **done**. `World` is the actor store; the fat `Entity` / `Sim.entities` path is deleted. New per-actor state is a new column only.

@@ -6,13 +6,14 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, Health, Identity, InstanceAt,
-    InvStack, Progress, QuestLog, QuestProgress, QuestState, Spirit, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, Health, Hearth,
+    Identity, InstanceAt, InvStack, Progress, QuestLog, QuestProgress, QuestState, Spirit,
+    Transform,
 };
 use crate::ecs::World;
 use crate::stats::recalc_player_stats;
 use crate::types::{BACKPACK_SLOTS, BANK_SLOTS};
-use woc_content::PlayerClass;
+use woc_content::{PlayerClass, EASTBROOK};
 use woc_protocol::EntityId;
 
 /// Serializable player progression (mirrors durable character fields).
@@ -26,6 +27,7 @@ pub struct PlayerPersistentState {
     pub pos_z: f32,
     pub inventory: Vec<Option<InvStack>>,
     pub equipment: Equipment,
+    pub equipment_wear: EquipmentWear,
     pub quests: Vec<QuestProgress>,
     pub zone_id: String,
     pub talent_points: u32,
@@ -36,6 +38,10 @@ pub struct PlayerPersistentState {
     pub professions: HashMap<String, u32>,
     pub pvp_flagged: bool,
     pub completed_deeds: BTreeSet<String>,
+    pub hearth_zone_id: String,
+    pub hearth_x: f32,
+    pub hearth_z: f32,
+    pub hearth_ready_tick: u64,
     pub stance_id: String,
 }
 
@@ -54,6 +60,7 @@ impl PlayerPersistentState {
             && self.equipment.chest.is_none()
             && self.equipment.legs.is_none()
             && self.equipment.feet.is_none()
+            && self.equipment_wear == EquipmentWear::default()
             && self.quests.is_empty()
             && self.talents.is_empty()
             && self.professions.is_empty()
@@ -91,6 +98,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
         equipment: world
             .get::<Bags>(player_id)
             .map(|b| b.equipment.clone())
+            .unwrap_or_default(),
+        equipment_wear: world
+            .get::<Bags>(player_id)
+            .map(|b| b.equipment_wear.clone())
             .unwrap_or_default(),
         quests: world
             .get::<QuestLog>(player_id)
@@ -132,6 +143,22 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
             .get::<Progress>(player_id)
             .map(|p| p.completed_deeds.clone())
             .unwrap_or_default(),
+        hearth_zone_id: world
+            .get::<Hearth>(player_id)
+            .map(|h| h.zone_id.clone())
+            .unwrap_or_else(default_hearth_zone_id),
+        hearth_x: world
+            .get::<Hearth>(player_id)
+            .map(|h| h.x)
+            .unwrap_or(EASTBROOK.player_spawn_x),
+        hearth_z: world
+            .get::<Hearth>(player_id)
+            .map(|h| h.z)
+            .unwrap_or(EASTBROOK.player_spawn_z),
+        hearth_ready_tick: world
+            .get::<Hearth>(player_id)
+            .map(|h| h.ready_tick)
+            .unwrap_or(0),
         stance_id: world
             .get::<ClassKit>(player_id)
             .and_then(|k| k.stance_id.clone())
@@ -157,6 +184,16 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     }
     if let Some(q) = world.get_mut::<QuestLog>(player_id) {
         q.quest_log = state.quests.clone();
+    }
+    if let Some(hearth) = world.get_mut::<Hearth>(player_id) {
+        hearth.zone_id = if state.hearth_zone_id.is_empty() {
+            default_hearth_zone_id()
+        } else {
+            state.hearth_zone_id.clone()
+        };
+        hearth.x = state.hearth_x;
+        hearth.z = state.hearth_z;
+        hearth.ready_tick = state.hearth_ready_tick;
     }
 
     if state.is_virgin() {
@@ -196,7 +233,9 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     if let Some(bags) = world.get_mut::<Bags>(player_id) {
         bags.inventory = pad_slots(state.inventory.clone(), BACKPACK_SLOTS);
         bags.equipment = state.equipment.clone();
+        bags.equipment_wear = state.equipment_wear.clone();
         bags.open_vendor_npc = None;
+        bags.buyback.clear();
     }
     if let Some(bank) = world.get_mut::<Bank>(player_id) {
         bank.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
@@ -259,6 +298,10 @@ fn pad_slots(mut slots: Vec<Option<InvStack>>, size: usize) -> Vec<Option<InvSta
     slots
 }
 
+fn default_hearth_zone_id() -> String {
+    "eastbrook".into()
+}
+
 /// Spawn a player from class + durable state into `world`.
 pub fn create_player_from_state(
     world: &mut World,
@@ -313,6 +356,7 @@ mod tests {
             pos_z: 0.0,
             inventory: vec![],
             equipment: Equipment::default(),
+            equipment_wear: EquipmentWear::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 0,
@@ -323,6 +367,10 @@ mod tests {
             professions: Default::default(),
             pvp_flagged: false,
             completed_deeds: Default::default(),
+            hearth_zone_id: default_hearth_zone_id(),
+            hearth_x: EASTBROOK.player_spawn_x,
+            hearth_z: EASTBROOK.player_spawn_z,
+            hearth_ready_tick: 0,
             stance_id: String::new(),
         };
         assert!(state.is_virgin());
@@ -360,6 +408,12 @@ mod tests {
         if let Some(bank) = world.get_mut::<Bank>(1) {
             bank.bank_copper = 30;
         }
+        if let Some(hearth) = world.get_mut::<Hearth>(1) {
+            hearth.zone_id = "eastfen".into();
+            hearth.x = 12.0;
+            hearth.z = 34.0;
+            hearth.ready_tick = 77;
+        }
 
         let exported = export_player_state(&world, 1).unwrap();
         assert!(!exported.is_virgin());
@@ -378,6 +432,10 @@ mod tests {
         assert_eq!(restored.talents.get("mage_arcane_power"), Some(&2));
         assert!(restored.completed_deeds.contains("eastfen_mire_terror"));
         assert_eq!(restored.zone_id, "eastfen");
+        assert_eq!(restored.hearth_zone_id, "eastfen");
+        assert!((restored.hearth_x - 12.0).abs() < 1e-3);
+        assert!((restored.hearth_z - 34.0).abs() < 1e-3);
+        assert_eq!(restored.hearth_ready_tick, 77);
         assert!((restored.pos_x - 10.0).abs() < 1e-3);
         assert!((restored.pos_z - 20.0).abs() < 1e-3);
         assert!(!restored.is_virgin());

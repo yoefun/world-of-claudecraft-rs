@@ -127,6 +127,10 @@ impl MemoryStore {
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            hearth_zone_id: "eastbrook".into(),
+            hearth_x: 2.0,
+            hearth_z: 4.0,
+            hearth_ready_tick: 0,
             stance_id: String::new(),
         };
         g.characters.insert(character.id, character.clone());
@@ -257,6 +261,7 @@ mod tests {
             inventory: vec![Some(InvStackDto {
                 item_id: "wolf_pelt".into(),
                 count: 2,
+                durability: None,
             })],
             equipment: EquipmentDto {
                 main_hand: Some("rusty_sword".into()),
@@ -277,6 +282,7 @@ mod tests {
             bank: vec![Some(InvStackDto {
                 item_id: "silverleaf".into(),
                 count: 8,
+                durability: None,
             })],
             bank_copper: 0,
             honor: 125,
@@ -286,6 +292,10 @@ mod tests {
             }],
             pvp_flagged: true,
             completed_deeds: vec!["eastfen_mire_terror".into()],
+            hearth_zone_id: "eastfen".into(),
+            hearth_x: 12.0,
+            hearth_z: 34.0,
+            hearth_ready_tick: 77,
             stance_id: String::new(),
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();

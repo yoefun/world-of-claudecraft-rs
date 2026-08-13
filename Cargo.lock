@@ -6696,7 +6696,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "woc-client"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "bevy",
  "serde",
@@ -6712,14 +6712,14 @@ dependencies = [
 
 [[package]]
 name = "woc-content"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "woc-persist"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "argon2",
  "serde",
@@ -6733,7 +6733,7 @@ dependencies = [
 
 [[package]]
 name = "woc-protocol"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6741,7 +6741,7 @@ dependencies = [
 
 [[package]]
 name = "woc-server"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -6761,7 +6761,7 @@ dependencies = [
 
 [[package]]
 name = "woc-sim"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6771,7 +6771,7 @@ dependencies = [
 
 [[package]]
 name = "woc-update"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -6787,7 +6787,7 @@ dependencies = [
 
 [[package]]
 name = "woc-version"
-version = "1.10.0"
+version = "1.11.0"
 dependencies = [
  "serde",
  "serde_json",

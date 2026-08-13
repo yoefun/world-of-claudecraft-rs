@@ -243,6 +243,15 @@ fn local_pet_alive(snap: &TickSnapshot) -> bool {
         .any(|e| e.kind == EntityKind::Pet && e.alive)
 }
 
+fn vendor_session_open(snap: &TickSnapshot) -> bool {
+    snap.open_vendor.is_some()
+        || snap.open_npc.as_ref().is_some_and(|npc| {
+            npc.services
+                .iter()
+                .any(|service| service.as_str() == "vendor")
+        })
+}
+
 pub(crate) fn tracked_quest_id(log: &[QuestLogEntry]) -> Option<&str> {
     log.iter()
         .find(|e| e.state.eq_ignore_ascii_case("active") || e.state.eq_ignore_ascii_case("ready"))
@@ -416,6 +425,18 @@ pub(crate) fn handle_interact_keys(
         host.interact(player_id, InteractAction::RespecTalents);
         host.recent_toasts.push(("Respeccing talents.".into(), 2.0));
     }
+    if !ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
+        if let Some(npc) = host
+            .snapshot
+            .open_npc
+            .as_ref()
+            .filter(|npc| npc.can_repair)
+            .cloned()
+        {
+            host.interact(npc.npc_id, InteractAction::RepairAll);
+            host.recent_toasts.push(("Repairing gear.".into(), 2.0));
+        }
+    }
 
     // Pet toggle (hunter/warlock): T — when mail panel is closed so P stays mail-collect.
     if !ui.show_mail && keys.just_pressed(KeyCode::KeyT) {
@@ -476,6 +497,10 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.recent_toasts.push(("Bank is empty.".into(), 2.0));
         }
+    }
+    if !ui.show_bank && keys.just_pressed(KeyCode::KeyH) {
+        host.interact(player_id, InteractAction::UseHearthstone);
+        host.recent_toasts.push(("Using hearthstone.".into(), 2.0));
     }
     if ui.show_bank {
         let bank_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
@@ -614,7 +639,7 @@ pub(crate) fn handle_interact_keys(
                 .push(("No consumable in bags.".into(), 2.0));
         }
     }
-    if ui.show_bags && host.snapshot.open_vendor.is_some() && keys.just_pressed(KeyCode::KeyV) {
+    if ui.show_bags && vendor_session_open(&host.snapshot) && keys.just_pressed(KeyCode::KeyV) {
         if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
             host.interact(player_id, InteractAction::Sell { bag_slot, count });
             host.recent_toasts
@@ -834,9 +859,9 @@ mod tests {
     fn first_available_talent_uses_class_and_skips_max_rank() {
         let mut snap = TickSnapshot::default();
         snap.progress.class_id = "warrior".into();
-        for id in ["warrior_cruelty", "warrior_toughness", "warrior_vitality"] {
+        for def in talents_for_class("warrior") {
             snap.talents.push(TalentRankSnapshot {
-                talent_id: id.into(),
+                talent_id: def.id.into(),
                 rank: 5,
             });
         }
@@ -873,11 +898,13 @@ mod tests {
             slot: 0,
             item_id: "baked_bread".into(),
             count: 2,
+            durability: None,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
             item_id: "wolf_fang".into(),
             count: 3,
+            durability: None,
         });
 
         assert_eq!(

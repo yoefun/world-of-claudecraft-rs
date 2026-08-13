@@ -398,6 +398,7 @@ fn legend_text(markers: &[MapMarker], px: f32, pz: f32) -> String {
     let mut hubs = 0usize;
     let mut portals = 0usize;
     let mut quests = 0usize;
+    let mut npcs = 0usize;
     for m in markers {
         match m.kind {
             MapMarkerKind::Hub if hubs < 4 => {
@@ -417,10 +418,46 @@ fn legend_text(markers: &[MapMarker], px: f32, pz: f32) -> String {
                 lines.push(format!("{tag} {} ({:.0}, {:.0})", m.label, m.x, m.z));
                 quests += 1;
             }
+            MapMarkerKind::Npc if npcs < 6 && m.label.contains('[') => {
+                lines.push(format!("NPC · {} ({:.0}, {:.0})", m.label, m.x, m.z));
+                npcs += 1;
+            }
             _ => {}
         }
     }
     lines.join("\n")
+}
+
+fn npc_service_tags(template_id: Option<&str>) -> String {
+    let Some(def) = template_id.and_then(npc) else {
+        return String::new();
+    };
+    let mut tags = String::new();
+    if def.is_quest_giver() {
+        tags.push_str("[!]");
+    }
+    if def.is_vendor() {
+        tags.push_str("[$]");
+    }
+    if def.can_repair() {
+        tags.push_str("[#]");
+    }
+    if def.is_profession_trainer() || def.is_class_trainer() {
+        tags.push_str("[T]");
+    }
+    if def.is_innkeeper() {
+        tags.push_str("[H]");
+    }
+    tags
+}
+
+fn npc_map_label(name: &str, template_id: Option<&str>) -> String {
+    let tags = npc_service_tags(template_id);
+    if tags.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} {tags}")
+    }
 }
 
 fn collect_dynamic_markers(
@@ -447,7 +484,7 @@ fn collect_dynamic_markers(
                     x: entity.x,
                     z: entity.z,
                     kind: quest_kind.unwrap_or(MapMarkerKind::Npc),
-                    label: entity.name.clone(),
+                    label: npc_map_label(&entity.name, entity.template_id.as_deref()),
                 });
             }
             EntityKind::Mob if entity.alive => out.push(MapMarker {
@@ -465,7 +502,7 @@ fn collect_dynamic_markers(
 fn npc_quest_marker(snap: &TickSnapshot, template_id: Option<&str>) -> Option<MapMarkerKind> {
     let template_id = template_id?;
     let def = npc(template_id)?;
-    if !def.is_quest_giver {
+    if !def.is_quest_giver() {
         return None;
     }
     let offers = npc_quest_offers(template_id, &snap.quest_log);

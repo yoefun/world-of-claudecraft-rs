@@ -1,7 +1,7 @@
 //! Typed sparse-column world. Entity ids are monotonic and never reused.
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Escort, Health, Home, Identity,
+    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Escort, Health, Hearth, Home, Identity,
     InstanceAt, LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit, Threat,
     Transform,
 };
@@ -34,6 +34,7 @@ pub struct World {
     pub spirit: SparseSet<Spirit>,
     pub instance_at: SparseSet<InstanceAt>,
     pub durable: SparseSet<Durable>,
+    pub hearth: SparseSet<Hearth>,
 }
 
 impl World {
@@ -163,5 +164,6 @@ impl World {
         self.spirit.remove(id);
         self.instance_at.remove(id);
         self.durable.remove(id);
+        self.hearth.remove(id);
     }
 }

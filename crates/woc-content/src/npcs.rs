@@ -11,14 +11,54 @@ pub struct VendorOffer {
     pub count: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NpcService {
+    QuestGiver,
+    Vendor,
+    Repair,
+    ProfessionTrainer,
+    ClassTrainer,
+    Innkeeper,
+}
+
 #[derive(Debug, Clone)]
 pub struct NpcDef {
     pub id: &'static str,
     pub name: &'static str,
     pub greeting: &'static str,
-    pub is_quest_giver: bool,
-    pub is_vendor: bool,
+    pub services: &'static [NpcService],
     pub vendor_stock: &'static [VendorOffer],
+    pub trains: &'static [&'static str],
+}
+
+impl NpcDef {
+    pub fn is_quest_giver(&self) -> bool {
+        self.services.contains(&NpcService::QuestGiver)
+    }
+
+    pub fn is_vendor(&self) -> bool {
+        self.services.contains(&NpcService::Vendor)
+    }
+
+    pub fn can_repair(&self) -> bool {
+        self.services.contains(&NpcService::Repair)
+    }
+
+    pub fn is_profession_trainer(&self) -> bool {
+        self.services.contains(&NpcService::ProfessionTrainer)
+    }
+
+    pub fn is_class_trainer(&self) -> bool {
+        self.services.contains(&NpcService::ClassTrainer)
+    }
+
+    pub fn is_innkeeper(&self) -> bool {
+        self.services.contains(&NpcService::Innkeeper)
+    }
+
+    pub fn trains_profession(&self, id: &str) -> bool {
+        self.trains.iter().any(|p| *p == id)
+    }
 }
 
 pub static ZONE1_NPCS: &[NpcDef] = &[
@@ -26,16 +66,15 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         id: "captain_alden",
         name: "Captain Alden",
         greeting: "The north road is thick with wolves. Can you thin the pack?",
-        is_quest_giver: true,
-        is_vendor: false,
+        services: &[NpcService::QuestGiver, NpcService::ClassTrainer],
         vendor_stock: &[],
+        trains: &[],
     },
     NpcDef {
         id: "trader_wilkes",
         name: "Trader Wilkes",
         greeting: "Fresh rations and a fair price, traveler.",
-        is_quest_giver: true,
-        is_vendor: true,
+        services: &[NpcService::QuestGiver, NpcService::Vendor],
         vendor_stock: &[
             VendorOffer {
                 item_id: "travelers_ration",
@@ -50,22 +89,68 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
                 count: 40,
             },
         ],
+        trains: &[],
     },
     NpcDef {
         id: "town_crier",
         name: "Town Crier",
         greeting: "Hear ye! Eastbrook stands, and the Vale endures.",
-        is_quest_giver: true,
-        is_vendor: false,
+        services: &[NpcService::QuestGiver],
         vendor_stock: &[],
+        trains: &[],
     },
     NpcDef {
         id: "eastbrook_courier",
         name: "Eastbrook Courier",
         greeting: "Stay close — the north road is not kind to messengers.",
-        is_quest_giver: false,
-        is_vendor: false,
+        services: &[],
         vendor_stock: &[],
+        trains: &[],
+    },
+    NpcDef {
+        id: "smith_brann",
+        name: "Smith Brann",
+        greeting: "Steel and ore. I can mend what the road breaks.",
+        services: &[
+            NpcService::Vendor,
+            NpcService::Repair,
+            NpcService::ProfessionTrainer,
+        ],
+        vendor_stock: &[
+            VendorOffer {
+                item_id: "worn_sword",
+                count: 1,
+            },
+            VendorOffer {
+                item_id: "wooden_buckler",
+                count: 1,
+            },
+            VendorOffer {
+                item_id: "copper_shortsword",
+                count: 1,
+            },
+            VendorOffer {
+                item_id: "recruit_tunic",
+                count: 1,
+            },
+        ],
+        trains: &["mining", "blacksmithing"],
+    },
+    NpcDef {
+        id: "herbalist_wren",
+        name: "Herbalist Wren",
+        greeting: "The vale still grows, if you know where to kneel.",
+        services: &[NpcService::ProfessionTrainer],
+        vendor_stock: &[],
+        trains: &["herbalism", "alchemy"],
+    },
+    NpcDef {
+        id: "innkeeper_mara",
+        name: "Innkeeper Mara",
+        greeting: "Rest the night. I'll keep the hearth.",
+        services: &[NpcService::Innkeeper],
+        vendor_stock: &[],
+        trains: &[],
     },
 ];
 

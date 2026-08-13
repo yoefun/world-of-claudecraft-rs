@@ -1,9 +1,23 @@
 # Parity status
 
-**Current rewrite:** `1.10.0` / `quest-depth`.  
+**Current rewrite:** `1.11.0` / `npc-services`.
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.  
 **Shipped:** [`quest-loop`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`quest-depth design`](../superpowers/specs/2026-08-13-quest-depth-design.md)
+
+## NPC services (`npc-services`) — done
+
+Design: [`../superpowers/specs/2026-08-13-npc-services-design.md`](../superpowers/specs/2026-08-13-npc-services-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-npc-services.md`](../superpowers/plans/2026-08-13-npc-services.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `NpcService` roster | done | Smith, herbalist, innkeeper; vex trains; Bren repairs |
+| Quest-item sell block + buyback | done | Cap 6; session-only |
+| Durability + RepairAll | done | 40/30; 1c per point at smith/Bren |
+| Profession trainer gate | done | Client Train buttons; `train_profession()` helper unchanged |
+| Class trainer | done | Kit refresh toast; talents stay on N-panel |
+| Hearth | done | Bind at Mara; 18_000 tick cooldown |
 
 ## Client version gate (`client-compat`)
 
@@ -115,7 +129,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.10.0` / quest-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.11.0` / npc-services (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

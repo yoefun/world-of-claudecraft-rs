@@ -208,6 +208,7 @@ mod serialize_tests {
             Some(InvStackDto {
                 item_id: "bread".into(),
                 count: 3,
+                durability: None,
             }),
             None,
         ];

@@ -38,10 +38,7 @@ pub fn grant_into(inv: &mut [Option<InvStack>], item_id: &str, count: u32) -> bo
             return false;
         };
         let add = remaining.min(max_stack);
-        *empty = Some(InvStack {
-            item_id: item_id.to_string(),
-            count: add,
-        });
+        *empty = Some(InvStack::new(item_id, add));
         remaining -= add;
     }
     true

@@ -204,17 +204,29 @@ fn format_label(
         EntityKind::Npc => {
             let role = npc(template_id.unwrap_or(""))
                 .map(|n| {
-                    if n.is_quest_giver && n.is_vendor {
-                        " [!][$]"
-                    } else if n.is_quest_giver {
-                        " [!]"
-                    } else if n.is_vendor {
-                        " [$]"
+                    let mut tags = String::new();
+                    if n.is_quest_giver() {
+                        tags.push_str("[!]");
+                    }
+                    if n.is_vendor() {
+                        tags.push_str("[$]");
+                    }
+                    if n.can_repair() {
+                        tags.push_str("[#]");
+                    }
+                    if n.is_profession_trainer() || n.is_class_trainer() {
+                        tags.push_str("[T]");
+                    }
+                    if n.is_innkeeper() {
+                        tags.push_str("[H]");
+                    }
+                    if tags.is_empty() {
+                        tags
                     } else {
-                        ""
+                        format!(" {tags}")
                     }
                 })
-                .unwrap_or("");
+                .unwrap_or_default();
             format!("{name}{role}")
         }
         EntityKind::Mob => format!("Lv{level} {name}{corpse}"),
@@ -236,9 +248,9 @@ fn label_color(kind: EntityKind, template_id: Option<&str>, alive: bool) -> Colo
     }
     match kind {
         EntityKind::Npc => {
-            if npc(template_id.unwrap_or("")).is_some_and(|n| n.is_quest_giver) {
+            if npc(template_id.unwrap_or("")).is_some_and(|n| n.is_quest_giver()) {
                 Color::srgb(0.95, 0.85, 0.35)
-            } else if npc(template_id.unwrap_or("")).is_some_and(|n| n.is_vendor) {
+            } else if npc(template_id.unwrap_or("")).is_some_and(|n| n.is_vendor()) {
                 Color::srgb(0.45, 0.85, 0.55)
             } else {
                 Color::srgb(0.75, 0.90, 0.70)

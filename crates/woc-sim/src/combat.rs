@@ -2,19 +2,21 @@
 
 use crate::ecs::components::{AuraInstance, CastState};
 use crate::ecs::components::{
-    Auras, ClassKit, Combat, Health, Identity, LootPile, LootTable, Owner, Progress, Threat,
-    Transform,
+    Auras, Bags, ClassKit, Combat, Equipment, EquipmentWear, Health, Identity, LootPile, LootTable,
+    Owner, Progress, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::rng::Rng;
+use crate::stats::recalc_player_stats;
 use crate::types::{
     CRIT_CHANCE, CRIT_MULT, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
     RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT,
 };
 use woc_content::{
-    ability, aura_for_ability, class_ability_for_slot, mob, AbilityDef, AbilityEffect, ResourceType,
+    ability, aura_for_ability, class_ability_for_slot, item, mob, AbilityDef, AbilityEffect,
+    ResourceType,
 };
-use woc_protocol::{AbilitySlot, EntityId, EntityKind, SimEvent, DT};
+use woc_protocol::{AbilitySlot, EntityId, EntityKind, EquipSlot, SimEvent, DT};
 
 /// Global cooldown after starting an ability (seconds).
 pub const GCD_SEC: f32 = 1.5;
@@ -427,6 +429,7 @@ pub fn deal_damage(
     target: EntityId,
     amount: f32,
     ability_name: Option<&str>,
+    melee_swing: bool,
     events: &mut Vec<SimEvent>,
 ) {
     if world.get::<Health>(target).is_none_or(|h| !h.alive) {
@@ -437,6 +440,9 @@ pub fn deal_damage(
         .is_some_and(|i| i.kind == EntityKind::Npc)
     {
         return;
+    }
+    if melee_swing && source != target && world.get::<Bags>(target).is_some() {
+        wear_player_armor(world, target, events);
     }
     let talent_mult = world
         .get::<Progress>(source)
@@ -522,7 +528,88 @@ pub fn deal_damage(
         });
     }
     if rebound > 0.0 && source != target && world.get::<Health>(source).is_some_and(|h| h.alive) {
-        deal_damage(world, target, source, rebound, Some(THORNS_REBOUND), events);
+        deal_damage(
+            world,
+            target,
+            source,
+            rebound,
+            Some(THORNS_REBOUND),
+            false,
+            events,
+        );
+    }
+}
+
+fn equipment_item_id(equipment: &Equipment, slot: EquipSlot) -> Option<&str> {
+    match slot {
+        EquipSlot::MainHand => equipment.main_hand.as_deref(),
+        EquipSlot::OffHand => equipment.off_hand.as_deref(),
+        EquipSlot::Head => equipment.head.as_deref(),
+        EquipSlot::Chest => equipment.chest.as_deref(),
+        EquipSlot::Legs => equipment.legs.as_deref(),
+        EquipSlot::Feet => equipment.feet.as_deref(),
+    }
+}
+
+fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> &mut Option<u32> {
+    match slot {
+        EquipSlot::MainHand => &mut wear.main_hand,
+        EquipSlot::OffHand => &mut wear.off_hand,
+        EquipSlot::Head => &mut wear.head,
+        EquipSlot::Chest => &mut wear.chest,
+        EquipSlot::Legs => &mut wear.legs,
+        EquipSlot::Feet => &mut wear.feet,
+    }
+}
+
+fn decrement_wear(
+    world: &mut World,
+    player_id: EntityId,
+    slot: EquipSlot,
+    events: &mut Vec<SimEvent>,
+) {
+    let mut broken_item_name = None;
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        let Some(item_id) = equipment_item_id(&bags.equipment, slot).map(str::to_string) else {
+            return;
+        };
+        let Some(def) = item(&item_id) else {
+            return;
+        };
+        if def.max_durability == 0 {
+            return;
+        }
+
+        let wear_slot = equipment_wear_slot_mut(&mut bags.equipment_wear, slot);
+        let before = wear_slot.unwrap_or(def.max_durability);
+        let after = before.saturating_sub(1);
+        *wear_slot = Some(after);
+        if before > 0 && after == 0 {
+            broken_item_name = Some(def.name.to_string());
+        }
+    }
+
+    if let Some(item_name) = broken_item_name {
+        events.push(SimEvent::Toast {
+            message: format!("Your {item_name} is broken."),
+        });
+        recalc_player_stats(world, player_id);
+    }
+}
+
+pub fn wear_player_weapon(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
+    decrement_wear(world, player_id, EquipSlot::MainHand, events);
+}
+
+pub fn wear_player_armor(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
+    for slot in [
+        EquipSlot::Head,
+        EquipSlot::Chest,
+        EquipSlot::Legs,
+        EquipSlot::Feet,
+        EquipSlot::OffHand,
+    ] {
+        decrement_wear(world, player_id, slot, events);
     }
 }
 
@@ -623,7 +710,7 @@ fn apply_direct_damage(
             if hit == HitResult::Crit {
                 toast_crit(events, def.name);
             }
-            deal_damage(world, src, tid, amount, Some(def.name), events);
+            deal_damage(world, src, tid, amount, Some(def.name), false, events);
             apply_ability_aura(world, src, tid, def.id, events);
             add_combo_on_hit(world, src, def);
         }
@@ -911,7 +998,7 @@ pub fn apply_ability_effect(
                 if tid == src {
                     continue;
                 }
-                deal_damage(world, src, tid, amount, Some(def.name), events);
+                deal_damage(world, src, tid, amount, Some(def.name), false, events);
                 apply_ability_aura(world, src, tid, def.id, events);
             }
         }
@@ -976,7 +1063,7 @@ pub fn apply_ability_effect(
                         toast_crit(events, def.name);
                     }
                     if def.damage > 0.0 {
-                        deal_damage(world, src, tid, amount, Some(def.name), events);
+                        deal_damage(world, src, tid, amount, Some(def.name), false, events);
                     }
                     apply_ability_aura(world, src, tid, def.id, events);
                     add_combo_on_hit(world, src, def);
@@ -1130,7 +1217,7 @@ pub fn tick_auras(world: &mut World, events: &mut Vec<SimEvent>) {
     }
 
     for (source, target, amount, aura_id) in pending_dots {
-        deal_damage(world, source, target, amount, Some(&aura_id), events);
+        deal_damage(world, source, target, amount, Some(&aura_id), false, events);
     }
     for (target, amount, aura_id) in pending_hots {
         apply_hot_tick(world, target, amount, &aura_id, events);
@@ -1636,7 +1723,8 @@ pub fn update_player_combat(
                 if hit == HitResult::Crit {
                     toast_crit(events, "Auto-attack");
                 }
-                deal_damage(world, player_id, tid, amount, None, events);
+                wear_player_weapon(world, player_id, events);
+                deal_damage(world, player_id, tid, amount, None, true, events);
             }
         }
     }
@@ -1688,13 +1776,13 @@ pub fn update_mob_combat(
         combat.swing_timer = MOB_SWING_SEC;
         combat.attack_damage.max(3.0)
     };
-    deal_damage(world, mob_id, focus, dmg, None, events);
+    deal_damage(world, mob_id, focus, dmg, None, true, events);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Auras, ClassKit, Combat, Health, Transform};
+    use crate::ecs::components::{Auras, Bags, ClassKit, Combat, Health, Transform};
     use woc_content::PlayerClass;
     use woc_protocol::AbilitySlot;
 
@@ -1723,6 +1811,49 @@ mod tests {
             h.hp_max = 500.0;
         }
         world
+    }
+
+    #[test]
+    fn player_swing_wears_main_hand() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Swinger", PlayerClass::Warrior, 0.0, 0.0);
+        let before = world
+            .get::<Bags>(1)
+            .unwrap()
+            .equipment_wear
+            .main_hand
+            .unwrap();
+        let mut events = Vec::new();
+
+        crate::combat::wear_player_weapon(&mut world, 1, &mut events);
+
+        let after = world
+            .get::<Bags>(1)
+            .unwrap()
+            .equipment_wear
+            .main_hand
+            .unwrap();
+        assert_eq!(after, before - 1);
+    }
+
+    #[test]
+    fn mob_hit_wears_armor_not_weapon() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Tank", PlayerClass::Warrior, 0.0, 0.0);
+        let weapon_before = world
+            .get::<Bags>(1)
+            .unwrap()
+            .equipment_wear
+            .main_hand
+            .unwrap();
+        let chest_before = world.get::<Bags>(1).unwrap().equipment_wear.chest.unwrap();
+        let mut events = Vec::new();
+
+        crate::combat::wear_player_armor(&mut world, 1, &mut events);
+
+        let bags = world.get::<Bags>(1).unwrap();
+        assert_eq!(bags.equipment_wear.main_hand.unwrap(), weapon_before);
+        assert_eq!(bags.equipment_wear.chest.unwrap(), chest_before - 1);
     }
 
     #[test]
@@ -2459,7 +2590,7 @@ mod tests {
         );
         let start_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
-        deal_damage(&mut world, 1, 2, 20.0, Some("Smite"), &mut events);
+        deal_damage(&mut world, 1, 2, 20.0, Some("Smite"), false, &mut events);
         assert_eq!(world.get::<Health>(2).unwrap().hp, start_hp);
         let absorb = world.get::<Auras>(2).unwrap().auras[0].absorb;
         assert!(absorb < 30.0 && absorb > 0.0, "partial soak, left {absorb}");
@@ -2508,7 +2639,7 @@ mod tests {
             kit.resource = 0.0;
         }
         let mut events = Vec::new();
-        deal_damage(&mut world, 2, 1, 40.0, None, &mut events);
+        deal_damage(&mut world, 2, 1, 40.0, None, true, &mut events);
         assert!(
             world.get::<ClassKit>(1).unwrap().resource > 0.0,
             "warrior should gain rage from taken damage"
@@ -2883,13 +3014,13 @@ mod tests {
         apply_aura(&mut world, 1, shield, &mut Vec::new());
         let attacker_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
-        deal_damage(&mut world, 2, 1, 12.0, None, &mut events);
+        deal_damage(&mut world, 2, 1, 12.0, None, true, &mut events);
         assert!(
             world.get::<Health>(2).unwrap().hp < attacker_hp,
             "melee attacker should take lightning shield thorns"
         );
         let after_melee = world.get::<Health>(2).unwrap().hp;
-        deal_damage(&mut world, 2, 1, 12.0, Some("Bite"), &mut events);
+        deal_damage(&mut world, 2, 1, 12.0, Some("Bite"), false, &mut events);
         assert_eq!(
             world.get::<Health>(2).unwrap().hp,
             after_melee,
@@ -2907,7 +3038,7 @@ mod tests {
         apply_aura(&mut world, 2, fear, &mut Vec::new());
         assert!(is_stunned(&world, 2));
         let mut events = Vec::new();
-        deal_damage(&mut world, 1, 2, 10.0, Some("Shadow Bolt"), &mut events);
+        deal_damage(&mut world, 1, 2, 10.0, Some("Shadow Bolt"), false, &mut events);
         assert!(
             !is_stunned(&world, 2),
             "fear should break when the target is damaged"
@@ -2927,7 +3058,7 @@ mod tests {
             move_speed_mult(&world, 1)
         );
         let mut events = Vec::new();
-        deal_damage(&mut world, 2, 1, 10.0, None, &mut events);
+        deal_damage(&mut world, 2, 1, 10.0, None, true, &mut events);
         assert!(
             world
                 .get::<Auras>(1)
@@ -2945,7 +3076,7 @@ mod tests {
         let mut world = class_and_mob(PlayerClass::Warrior, 1);
         let baseline = {
             let start = world.get::<Health>(1).unwrap().hp;
-            deal_damage(&mut world, 2, 1, 40.0, Some("Bite"), &mut Vec::new());
+            deal_damage(&mut world, 2, 1, 40.0, Some("Bite"), false, &mut Vec::new());
             start - world.get::<Health>(1).unwrap().hp
         };
         if let Some(h) = world.get_mut::<Health>(1) {
@@ -2958,7 +3089,7 @@ mod tests {
         apply_aura(&mut world, 1, stance, &mut Vec::new());
         let reduced = {
             let start = world.get::<Health>(1).unwrap().hp;
-            deal_damage(&mut world, 2, 1, 40.0, Some("Bite"), &mut Vec::new());
+            deal_damage(&mut world, 2, 1, 40.0, Some("Bite"), false, &mut Vec::new());
             start - world.get::<Health>(1).unwrap().hp
         };
         assert!(

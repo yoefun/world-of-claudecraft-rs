@@ -22,7 +22,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "1.10.0"
+version = "1.11.0"
 edition = "2021"
 license = "MIT"
 authors = ["World of ClaudeCraft Rust rewrite contributors"]

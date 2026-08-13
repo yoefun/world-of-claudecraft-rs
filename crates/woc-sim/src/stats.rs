@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::ecs::components::{Bags, ClassKit, Combat, Health, Progress};
+use crate::ecs::components::{Bags, ClassKit, Combat, Equipment, EquipmentWear, Health, Progress};
 use crate::ecs::World;
 use woc_content::{class_def, item, talent};
 use woc_protocol::EntityId;
@@ -40,10 +40,10 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
         return;
     };
     let def = class_def(class);
-    let equipment = world
+    let (equipment, wear) = world
         .get::<Bags>(player_id)
-        .map(|b| b.equipment.clone())
-        .unwrap_or_default();
+        .map(|b| (b.equipment.clone(), b.equipment_wear.clone()))
+        .unwrap_or_else(|| (Equipment::default(), EquipmentWear::default()));
     let talents = world
         .get::<Progress>(player_id)
         .map(|p| p.talents.clone())
@@ -53,23 +53,35 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
     let mut ap = def.attack_power;
     let mut armor = 0.0_f32;
 
-    if let Some(ref wid) = equipment.main_hand {
-        add_gear_stats(wid, &mut ap, &mut armor, 1.0);
+    if wear.main_hand != Some(0) {
+        if let Some(ref wid) = equipment.main_hand {
+            add_gear_stats(wid, &mut ap, &mut armor, 1.0);
+        }
     }
-    if let Some(ref oid) = equipment.off_hand {
-        add_gear_stats(oid, &mut ap, &mut armor, 0.25);
+    if wear.off_hand != Some(0) {
+        if let Some(ref oid) = equipment.off_hand {
+            add_gear_stats(oid, &mut ap, &mut armor, 0.25);
+        }
     }
-    if let Some(ref hid) = equipment.head {
-        add_gear_stats(hid, &mut ap, &mut armor, 0.0);
+    if wear.head != Some(0) {
+        if let Some(ref hid) = equipment.head {
+            add_gear_stats(hid, &mut ap, &mut armor, 0.0);
+        }
     }
-    if let Some(ref cid) = equipment.chest {
-        add_gear_stats(cid, &mut ap, &mut armor, 0.0);
+    if wear.chest != Some(0) {
+        if let Some(ref cid) = equipment.chest {
+            add_gear_stats(cid, &mut ap, &mut armor, 0.0);
+        }
     }
-    if let Some(ref lid) = equipment.legs {
-        add_gear_stats(lid, &mut ap, &mut armor, 0.0);
+    if wear.legs != Some(0) {
+        if let Some(ref lid) = equipment.legs {
+            add_gear_stats(lid, &mut ap, &mut armor, 0.0);
+        }
     }
-    if let Some(ref fid) = equipment.feet {
-        add_gear_stats(fid, &mut ap, &mut armor, 0.0);
+    if wear.feet != Some(0) {
+        if let Some(ref fid) = equipment.feet {
+            add_gear_stats(fid, &mut ap, &mut armor, 0.0);
+        }
     }
 
     let (max_hp_pct, armor_pct, armor_flat, resource_pct) = talent_sums(&talents);
@@ -102,5 +114,37 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
         if k.resource > k.resource_max {
             k.resource = k.resource_max;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn broken_weapon_adds_no_attack_power() {
+        let mut world = crate::ecs::World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Worn",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        recalc_player_stats(&mut world, 1);
+        let healthy = world
+            .get::<crate::ecs::components::Combat>(1)
+            .unwrap()
+            .attack_damage;
+        if let Some(bags) = world.get_mut::<crate::ecs::components::Bags>(1) {
+            bags.equipment_wear.main_hand = Some(0);
+        }
+        recalc_player_stats(&mut world, 1);
+        let broken = world
+            .get::<crate::ecs::components::Combat>(1)
+            .unwrap()
+            .attack_damage;
+        assert!(broken < healthy);
     }
 }

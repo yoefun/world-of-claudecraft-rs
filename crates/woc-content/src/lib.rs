@@ -43,7 +43,7 @@ pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
 pub use mobs_zone3::ZONE3_MOBS;
-pub use npcs::{npc, NpcDef, VendorOffer, NPCS};
+pub use npcs::{npc, NpcDef, NpcService, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
 pub use pets::{pet, pet_for_class, PetDef, PETS};
@@ -112,6 +112,14 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn gear_has_max_durability() {
+        assert_eq!(item("worn_sword").unwrap().max_durability, 40);
+        assert_eq!(item("recruit_tunic").unwrap().max_durability, 30);
+        assert_eq!(item("baked_bread").unwrap().max_durability, 0);
+        assert_eq!(item("boar_tusk").unwrap().max_durability, 0);
     }
 
     #[test]
@@ -205,7 +213,7 @@ mod tests {
         for q in QUESTS.iter() {
             let giver = npc(q.giver_npc).unwrap_or_else(|| panic!("missing giver {}", q.giver_npc));
             assert!(
-                giver.is_quest_giver,
+                giver.is_quest_giver(),
                 "quest {} giver {} must have is_quest_giver",
                 q.id, q.giver_npc
             );
@@ -213,7 +221,7 @@ mod tests {
             if turn_in != q.giver_npc {
                 let npc_def = npc(turn_in).unwrap_or_else(|| panic!("missing turn-in {turn_in}"));
                 assert!(
-                    npc_def.is_quest_giver,
+                    npc_def.is_quest_giver(),
                     "quest {} turn-in {} must have is_quest_giver",
                     q.id, turn_in
                 );
@@ -356,7 +364,7 @@ mod tests {
             quest("arms_of_the_watch").unwrap().reward.choices,
             &["travelers_ration", "spring_water", "baked_bread"]
         );
-        assert!(npc("trader_wilkes").unwrap().is_quest_giver);
+        assert!(npc("trader_wilkes").unwrap().is_quest_giver());
         assert!(npc("eastbrook_courier").is_some());
     }
 
@@ -457,6 +465,73 @@ mod tests {
                     "vendor {} missing item {}",
                     n.id,
                     offer.item_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn npc_services_roster_locked() {
+        let alden = npc("captain_alden").unwrap();
+        assert!(alden.is_quest_giver());
+        assert!(alden.is_class_trainer());
+        assert!(!alden.is_vendor());
+
+        let smith = npc("smith_brann").unwrap();
+        assert!(smith.is_vendor());
+        assert!(smith.can_repair());
+        assert!(smith.trains_profession("mining"));
+        assert!(smith.trains_profession("blacksmithing"));
+        assert!(!smith.trains_profession("herbalism"));
+        assert!(smith
+            .vendor_stock
+            .iter()
+            .any(|o| o.item_id == "copper_shortsword"));
+
+        let wren = npc("herbalist_wren").unwrap();
+        assert!(wren.trains_profession("herbalism"));
+        assert!(wren.trains_profession("alchemy"));
+        assert!(!wren.is_vendor());
+
+        assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
+        assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
+        assert!(npc("quartermaster_bren").unwrap().can_repair());
+    }
+
+    #[test]
+    fn profession_trainers_reference_known_professions() {
+        use crate::NpcService;
+
+        for n in NPCS.iter() {
+            if n.services.contains(&NpcService::ProfessionTrainer) {
+                assert!(!n.trains.is_empty(), "{} trains nothing", n.id);
+            }
+            for id in n.trains {
+                assert!(profession(id).is_some(), "{} trains unknown {id}", n.id);
+            }
+        }
+    }
+
+    #[test]
+    fn vendors_have_stock_and_buyable_prices() {
+        use crate::NpcService;
+
+        for n in NPCS.iter() {
+            if !n.services.contains(&NpcService::Vendor) {
+                continue;
+            }
+            assert!(
+                !n.vendor_stock.is_empty(),
+                "vendor {} has empty stock",
+                n.id
+            );
+            for o in n.vendor_stock {
+                let def = item(o.item_id).expect(o.item_id);
+                assert!(
+                    def.vendor_buy > 0,
+                    "{} sells {} at vendor_buy 0",
+                    n.id,
+                    o.item_id
                 );
             }
         }
