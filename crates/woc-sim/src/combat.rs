@@ -413,7 +413,7 @@ pub fn try_pickup_loot(
     entities: &mut [Entity],
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
+    let Some(_pi) = entities.iter().position(|e| e.id == player_id) else {
         return;
     };
     let loot_ids: Vec<EntityId> = entities
@@ -451,7 +451,6 @@ pub fn try_pickup_loot(
         if let Some(p) = world.get_mut::<crate::ecs::components::Progress>(player_id) {
             p.copper = p.copper.saturating_add(c);
         }
-        entities[pi].copper = entities[pi].copper.saturating_add(c);
         events.push(SimEvent::Loot {
             player: player_id,
             copper: c,

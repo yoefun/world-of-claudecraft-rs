@@ -570,6 +570,8 @@ impl Sim {
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.entities, &mut self.events);
         self.market
             .tick_expire(self.tick, &mut self.entities, &mut self.mail);
+        // Sync entity-only pvp/market writes before World-based loot pickup.
+        self.rebuild_world();
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
