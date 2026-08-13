@@ -451,12 +451,15 @@ pub(crate) fn handle_interact_keys(
 
     if !ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
         if let Some(tid) = host.snapshot.target_id {
-            if let Some(e) = host.snapshot.entities.iter().find(|e| e.id == tid) {
-                if e.kind == EntityKind::Player && e.id != host.snapshot.player_id {
-                    host.send_party(WsClientMsg::PartyInvite {
-                        name: e.name.clone(),
-                    });
+            let invite_name = host.snapshot.entities.iter().find_map(|e| {
+                if e.id == tid && e.kind == EntityKind::Player && e.id != host.snapshot.player_id {
+                    Some(e.name.clone())
+                } else {
+                    None
                 }
+            });
+            if let Some(name) = invite_name {
+                host.send_party(WsClientMsg::PartyInvite { name });
             }
         }
     }

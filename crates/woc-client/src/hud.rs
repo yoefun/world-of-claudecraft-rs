@@ -722,40 +722,6 @@ pub(crate) fn update_hud(
             Without<HudCastText>,
         ),
     >,
-    mut party_frames: Query<
-        &mut Text,
-        (
-            With<HudPartyFrames>,
-            Without<HudHpText>,
-            Without<HudXpText>,
-            Without<HudTargetText>,
-            Without<HudQuestText>,
-            Without<HudBagText>,
-            Without<HudToastText>,
-            Without<HudNetText>,
-            Without<HudCharText>,
-            Without<HudCastText>,
-            Without<HudActionBarText>,
-        ),
-    >,
-    mut party_text: Query<
-        &mut Text,
-        (
-            With<HudPartyText>,
-            Without<HudHpText>,
-            Without<HudXpText>,
-            Without<HudTargetText>,
-            Without<HudQuestText>,
-            Without<HudBagText>,
-            Without<HudToastText>,
-            Without<HudNetText>,
-            Without<HudCharText>,
-            Without<HudCastText>,
-            Without<HudActionBarText>,
-            Without<HudPartyFrames>,
-        ),
-    >,
-    mut party_panel: Query<&mut Visibility, (With<HudPartyPanel>, Without<HudCharPanel>)>,
 ) {
     let snap = &host.snapshot;
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
@@ -986,18 +952,27 @@ pub(crate) fn update_hud(
     if let Ok(mut t) = action.single_mut() {
         **t = format_action_bar(snap);
     }
+}
 
-    if let Ok(mut t) = party_frames.single_mut() {
+pub(crate) fn update_party_hud(
+    host: Res<GameHost>,
+    ui: Res<UiFlags>,
+    mut frames: Query<&mut Text, With<HudPartyFrames>>,
+    mut panel_text: Query<&mut Text, (With<HudPartyText>, Without<HudPartyFrames>)>,
+    mut panel: Query<&mut Visibility, With<HudPartyPanel>>,
+) {
+    let snap = &host.snapshot;
+    if let Ok(mut t) = frames.single_mut() {
         **t = party_frames_text(snap);
     }
-    if let Ok(mut vis) = party_panel.single_mut() {
+    if let Ok(mut vis) = panel.single_mut() {
         *vis = if ui.show_party {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
     }
-    if let Ok(mut t) = party_text.single_mut() {
+    if let Ok(mut t) = panel_text.single_mut() {
         **t = party_panel_text(snap);
     }
 }

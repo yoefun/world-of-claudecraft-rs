@@ -65,6 +65,7 @@ fn main() {
                 world_setup::sim_fixed_step,
                 world_setup::sync_visuals,
                 hud::update_hud,
+                hud::update_party_hud,
                 hud::update_chrome_panels,
                 hud::sync_vendor_panel,
                 hud::npc_session_clicks,
