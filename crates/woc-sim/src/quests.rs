@@ -316,10 +316,11 @@ pub fn on_talked_to(
     recompute_ready(world, player_id, events);
 }
 
-pub fn recompute_ready(world: &mut World, player_id: EntityId, _events: &mut Vec<SimEvent>) {
+pub fn recompute_ready(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
     let Some(log) = world.get_mut::<QuestLog>(player_id) else {
         return;
     };
+    let mut became_ready: Vec<String> = Vec::new();
     for qp in log.quest_log.iter_mut() {
         if qp.state == QuestState::Completed {
             continue;
@@ -335,11 +336,20 @@ pub fn recompute_ready(world: &mut World, player_id: EntityId, _events: &mut Vec
             };
             qp.counts.get(i).copied().unwrap_or(0) >= need
         });
-        qp.state = if done {
+        let next = if done {
             QuestState::Ready
         } else {
             QuestState::Active
         };
+        if qp.state != QuestState::Ready && next == QuestState::Ready {
+            became_ready.push(def.name.to_string());
+        }
+        qp.state = next;
+    }
+    for name in became_ready {
+        events.push(SimEvent::Toast {
+            message: format!("Ready to turn in: {name}"),
+        });
     }
 }
 
@@ -462,10 +472,10 @@ pub fn quests_for_npc(npc_template_id: &str) -> Vec<&'static woc_content::QuestD
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Identity, Transform};
+    use crate::ecs::components::{Identity, QuestLog, QuestProgress, QuestState, Transform};
     use crate::sim::Sim;
     use woc_content::PlayerClass;
-    use woc_protocol::{InteractAction, QuestLogEntry};
+    use woc_protocol::{InteractAction, QuestLogEntry, SimEvent};
 
     fn find_template(sim: &Sim, template: &str) -> EntityId {
         sim.world
@@ -541,5 +551,129 @@ mod tests {
             },
         );
         assert!(log_entries(&sim).is_empty());
+    }
+
+    #[test]
+    fn talk_quest_accept_talk_turnin() {
+        let mut sim = Sim::new_eastbrook("Qtalk", PlayerClass::Warrior);
+        place_at_template(&mut sim, "town_crier");
+        let crier = find_template(&sim, "town_crier");
+        sim.interact(
+            crier,
+            InteractAction::AcceptQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
+        place_at_template(&mut sim, "captain_alden");
+        let alden = find_template(&sim, "captain_alden");
+        sim.interact(alden, InteractAction::Talk);
+        let ready = log_entries(&sim)
+            .iter()
+            .any(|q| q.quest_id == "report_to_alden" && q.state == "ready");
+        assert!(ready);
+        sim.interact(
+            alden,
+            InteractAction::TurnInQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
+        assert!(log_entries(&sim)
+            .iter()
+            .any(|q| q.quest_id == "report_to_alden" && q.state == "completed"));
+        assert!(sim
+            .snapshot_for_player(sim.player_id)
+            .inventory
+            .iter()
+            .any(|s| s.item_id == "baked_bread"));
+    }
+
+    #[test]
+    fn collect_quest_grant_ready_turnin_consumes() {
+        let mut sim = Sim::new_eastbrook("Qcol", PlayerClass::Warrior);
+        // complete report + wolves via log injection so this test does not fight wolves
+        if let Some(log) = sim.world.get_mut::<QuestLog>(sim.player_id) {
+            log.quest_log.push(QuestProgress {
+                quest_id: "report_to_alden".into(),
+                state: QuestState::Completed,
+                counts: vec![1],
+            });
+            log.quest_log.push(QuestProgress {
+                quest_id: "wolves_at_the_gate".into(),
+                state: QuestState::Completed,
+                counts: vec![3],
+            });
+        }
+        place_at_template(&mut sim, "captain_alden");
+        let alden = find_template(&sim, "captain_alden");
+        sim.interact(
+            alden,
+            InteractAction::AcceptQuest {
+                quest_id: "boar_tusks".into(),
+            },
+        );
+        sim.grant_item(sim.player_id, "boar_tusk", 2).unwrap();
+        let ready = log_entries(&sim)
+            .iter()
+            .any(|q| q.quest_id == "boar_tusks" && q.state == "ready");
+        assert!(ready);
+        sim.interact(
+            alden,
+            InteractAction::TurnInQuest {
+                quest_id: "boar_tusks".into(),
+            },
+        );
+        assert!(log_entries(&sim)
+            .iter()
+            .any(|q| q.quest_id == "boar_tusks" && q.state == "completed"));
+        assert_eq!(
+            crate::inventory::player_item_count(&sim.world, sim.player_id, "boar_tusk"),
+            0
+        );
+    }
+
+    #[test]
+    fn turn_in_rejects_wrong_npc() {
+        let mut sim = Sim::new_eastbrook("Qwrong", PlayerClass::Warrior);
+        if let Some(log) = sim.world.get_mut::<QuestLog>(sim.player_id) {
+            log.quest_log.push(QuestProgress {
+                quest_id: "report_to_alden".into(),
+                state: QuestState::Ready,
+                counts: vec![1],
+            });
+        }
+        place_at_template(&mut sim, "town_crier");
+        let crier = find_template(&sim, "town_crier");
+        sim.interact(
+            crier,
+            InteractAction::TurnInQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
+        assert!(log_entries(&sim)
+            .iter()
+            .any(|q| q.quest_id == "report_to_alden" && q.state == "ready"));
+    }
+
+    #[test]
+    fn ready_toast_on_last_objective() {
+        let mut sim = Sim::new_eastbrook("Qready", PlayerClass::Warrior);
+        if let Some(log) = sim.world.get_mut::<QuestLog>(sim.player_id) {
+            log.quest_log.push(QuestProgress {
+                quest_id: "report_to_alden".into(),
+                state: QuestState::Active,
+                counts: vec![0],
+            });
+        }
+        let mut events = Vec::new();
+        on_talked_to(
+            &mut sim.world,
+            sim.player_id,
+            "captain_alden",
+            &mut events,
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Ready to turn in: Report to Alden"
+        )));
     }
 }
