@@ -128,6 +128,7 @@ pub(crate) enum RealmCompatState {
 pub(crate) struct RealmCompat {
     pub(crate) state: RealmCompatState,
     pub(crate) pending: Option<Mutex<Receiver<Result<VersionInfo, String>>>>,
+    pub(crate) update_manifest_url: String,
 }
 
 impl RealmCompat {
@@ -160,6 +161,7 @@ impl RealmCompat {
         match recv {
             Ok(Ok(info)) => {
                 self.pending = None;
+                self.update_manifest_url = info.update_manifest_url.clone();
                 let client = woc_version::ClientIdentity {
                     rewrite_version: woc_version::REWRITE_VERSION.to_string(),
                     protocol_rev: woc_protocol::PROTOCOL_REV,

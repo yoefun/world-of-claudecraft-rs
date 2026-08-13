@@ -36,6 +36,8 @@ pub struct VersionInfo {
     pub protocol_rev: u32,
     #[serde(default)]
     pub min_client_version: String,
+    #[serde(default)]
+    pub update_manifest_url: String,
 }
 
 impl VersionInfo {
@@ -48,6 +50,10 @@ impl VersionInfo {
             parity_target: PARITY_TARGET.to_string(),
             protocol_rev,
             min_client_version: min_client_version_from_env(),
+            update_manifest_url: std::env::var("WOC_UPDATE_MANIFEST_URL")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_default(),
         }
     }
 
@@ -144,5 +150,12 @@ mod tests {
     #[test]
     fn min_client_env_defaults_to_rewrite_version() {
         assert_eq!(min_client_version_from_env(), REWRITE_VERSION);
+    }
+
+    #[test]
+    fn legacy_json_has_empty_update_manifest_url() {
+        let json = r#"{"rewrite_version":"1.4.0","upstream_version":"0.31.0","upstream_commit":"x","upstream_repo":"x","parity_target":"client-compat","protocol_rev":6,"min_client_version":"1.4.0"}"#;
+        let info: VersionInfo = serde_json::from_str(json).unwrap();
+        assert!(info.update_manifest_url.is_empty());
     }
 }
