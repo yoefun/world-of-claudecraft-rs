@@ -1,8 +1,8 @@
 //! Auction house listings, keyed by durable seller id with offline mail settlement.
 
-use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
+use crate::ecs::components::{Bags, ClassKit, Durable, Identity, InvStack, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, take_from_slot};
+use crate::inventory::{grant_into, grant_stack, take_from_slot};
 use crate::mail::Mailbox;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
@@ -10,6 +10,17 @@ use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 pub const LISTING_TTL_TICKS: u64 = 20 * 60 * 60;
 /// Flat listing fee in copper.
 pub const LISTING_FEE: u32 = 5;
+/// House cut is `price / SALE_CUT_DEN` (5% floored).
+pub const SALE_CUT_NUM: u32 = 1;
+pub const SALE_CUT_DEN: u32 = 20;
+
+pub fn sale_cut(price: u32) -> u32 {
+    price.saturating_mul(SALE_CUT_NUM) / SALE_CUT_DEN
+}
+
+pub fn sale_proceeds(price: u32) -> u32 {
+    price.saturating_sub(sale_cut(price))
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Listing {
@@ -209,41 +220,37 @@ impl AuctionHouse {
             });
             return false;
         }
-        if let Some(bags) = world.get_mut::<Bags>(buyer) {
-            if !grant_into(&mut bags.inventory, &listing.item_id, listing.count) {
-                events.push(SimEvent::Toast {
-                    message: "Bags are full.".into(),
-                });
-                return false;
-            }
+        let granted = if let Some(bags) = world.get_mut::<Bags>(buyer) {
+            grant_stack(
+                &mut bags.inventory,
+                InvStack {
+                    item_id: listing.item_id.clone(),
+                    count: listing.count,
+                    durability: listing.durability,
+                    enchant_id: listing.enchant_id.clone(),
+                },
+            )
         } else {
+            false
+        };
+        if !granted {
+            events.push(SimEvent::Toast {
+                message: "Bags are full.".into(),
+            });
             return false;
         }
         if let Some(progress) = world.get_mut::<Progress>(buyer) {
             progress.copper -= listing.price;
         }
         let seller_name = listing.seller_name.clone();
-        let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
-            world
-                .get::<Durable>(id)
-                .and_then(|d| d.durable_id.as_deref())
-                == Some(listing.seller_durable.as_str())
-                || id == listing.seller_id
-        });
-        if let Some(seller) = seller_online {
-            if let Some(progress) = world.get_mut::<Progress>(seller) {
-                progress.copper = progress.copper.saturating_add(listing.price);
-            }
-        } else {
-            mail.deliver_system(
-                &listing.seller_durable,
-                "Auction House",
-                "Auction sold",
-                listing.price,
-                None,
-                0,
-            );
-        }
+        mail.deliver_system(
+            &listing.seller_durable,
+            "Auction House",
+            "Auction sold",
+            sale_proceeds(listing.price),
+            None,
+            0,
+        );
         self.listings.remove(idx);
         events.push(SimEvent::ItemGained {
             player: buyer,
@@ -430,7 +437,7 @@ mod tests {
         let mut events = Vec::new();
         assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
         assert_eq!(mail.all_mails().len(), 1);
-        assert_eq!(mail.all_mails()[0].copper, 40);
+        assert_eq!(mail.all_mails()[0].copper, 38);
     }
 
     /// A listing left by a pre-restart player with no durable id carries the
@@ -571,5 +578,87 @@ mod tests {
             ah.listings[0].enchant_id.as_deref(),
             Some("coarse_sharpening")
         );
+    }
+
+    #[test]
+    fn sale_cut_is_five_percent_floored() {
+        assert_eq!(sale_cut(50), 2);
+        assert_eq!(sale_proceeds(50), 48);
+        assert_eq!(sale_cut(19), 0);
+        assert_eq!(sale_proceeds(19), 19);
+    }
+
+    #[test]
+    fn buy_always_mails_proceeds_even_when_seller_is_online() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("ada".into());
+        }
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.copper = 200;
+        }
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 1,
+            seller_durable: "ada".into(),
+            seller_name: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            price: 50,
+            expires_tick: 9999,
+        });
+        ah.set_next_id(2);
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, 100);
+        assert_eq!(world.get::<Progress>(2).unwrap().copper, 150);
+        assert_eq!(mail.all_mails().len(), 1);
+        assert_eq!(mail.all_mails()[0].copper, 48);
+        assert_eq!(mail.all_mails()[0].subject, "Auction sold");
+    }
+
+    #[test]
+    fn buy_grants_the_listed_wear_and_enchant() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.copper = 200;
+        }
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 1,
+            seller_durable: "ada".into(),
+            seller_name: "Ada".into(),
+            item_id: "worn_sword".into(),
+            count: 1,
+            durability: Some(7),
+            enchant_id: Some("coarse_sharpening".into()),
+            price: 40,
+            expires_tick: 9999,
+        });
+        ah.set_next_id(2);
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
+        let sword = world
+            .get::<Bags>(2)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "worn_sword")
+            .unwrap();
+        assert_eq!(sword.durability, Some(7));
+        assert_eq!(sword.enchant_id.as_deref(), Some("coarse_sharpening"));
     }
 }

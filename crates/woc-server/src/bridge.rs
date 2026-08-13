@@ -119,6 +119,8 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             seller_name: l.seller_name.clone(),
             item_id: l.item_id.clone(),
             count: l.count,
+            durability: None,
+            enchant_id: None,
             price: l.price,
             expires_tick: l.expires_tick,
         })
