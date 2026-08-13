@@ -2,7 +2,33 @@
 
 **Current rewrite:** `1.13.0` / `gear-slots`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`. Party depth / raid are planned as `1.14.0` / `1.15.0`.
+
+## Party depth (`party-depth`) — planned `1.14.0`
+
+Design: [`../superpowers/specs/2026-08-13-party-raid-design.md`](../superpowers/specs/2026-08-13-party-raid-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-party-raid.md`](../superpowers/plans/2026-08-13-party-raid.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Client invite / accept / decline | planned | **G** on player target; **O**/**P** prompts |
+| Kick / promote / disband | planned | Leader verbs; panel **Y** / **Minus** / **Backspace** |
+| Invite TTL | planned | 600 ticks; pending dropped silently |
+| Snapshot roster + frames | planned | `party_members` even when mate is outside AOI |
+| Park-safe membership | planned | `park_player` must not `on_despawn` |
+| Classic XP split | planned | `group_xp`; n=2 → 75% each |
+| Ready check | planned | 300 ticks; parked do not block early complete |
+| Protocol rev 9 | planned | New WS verbs + additive-looking snapshot fields with a rev bump |
+
+## Raid (`raid`) — planned `1.15.0`
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Convert 5-man → raid | planned | Leader **Equals**; two groups of 5 |
+| Realm cap 10 | planned | `MAX_REALM_PLAYERS` 8 → 10 |
+| Raid chat | planned | `raid` channel; notices still realm-broadcast |
+| Raid frames | planned | `G1` / `G2` prefixes |
+| 10-man encounter content | n/a | Explicit non-goal |
 
 ## Gear slots (`gear-slots`) — done
 
