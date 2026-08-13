@@ -114,13 +114,16 @@ impl ProfessionSession {
             return self.deny(DenyReason::Busy);
         }
         let ready_tick = self.node_ready_tick(node);
-        let node_def = start_gather_node(
-            self.pos,
-            &self.inventory,
-            node,
-            ready_tick,
-            self.tick,
-            false,
+        let node_def = record_deny(
+            &mut self.last_deny,
+            start_gather_node(
+                self.pos,
+                &self.inventory,
+                node,
+                ready_tick,
+                self.tick,
+                false,
+            ),
         )?;
         let profession = profession_for_node(node_def.kind);
         let duration = gather_duration_ticks(
@@ -142,12 +145,15 @@ impl ProfessionSession {
         if self.cast.is_some() {
             return self.deny(DenyReason::Busy);
         }
-        let corpse = self
-            .corpses
-            .get(&corpse_id)
-            .ok_or(DenyReason::CorpseGone)?;
-        start_skin(self.pos, &self.inventory, corpse, false)?;
-        let duration = skin_duration_ticks(&self.inventory, &self.skills, corpse);
+        let corpse = match self.corpses.get(&corpse_id) {
+            Some(corpse) => corpse.clone(),
+            None => return self.deny(DenyReason::CorpseGone),
+        };
+        record_deny(
+            &mut self.last_deny,
+            start_skin(self.pos, &self.inventory, &corpse, false),
+        )?;
+        let duration = skin_duration_ticks(&self.inventory, &self.skills, &corpse);
         self.cast = Some(ActiveCast::Skin {
             corpse: corpse_id,
             complete_tick: self.tick + u64::from(duration),
@@ -160,13 +166,16 @@ impl ProfessionSession {
         if self.cast.is_some() {
             return self.deny(DenyReason::Busy);
         }
-        evaluate_craft_admission(
-            recipe,
-            count,
-            self.pos,
-            &self.inventory,
-            &self.gold,
-            false,
+        record_deny(
+            &mut self.last_deny,
+            evaluate_craft_admission(
+                recipe,
+                count,
+                self.pos,
+                &self.inventory,
+                &self.gold,
+                false,
+            ),
         )?;
         let recipe_def = recipe_by_id(recipe).expect("admission checked recipe");
         let duration = ticks_from_seconds(craft_cast_seconds(recipe_def.skill_req));
@@ -183,7 +192,10 @@ impl ProfessionSession {
         if self.cast.is_some() {
             return self.deny(DenyReason::Busy);
         }
-        evaluate_disenchant(instance, &self.inventory, false)?;
+        record_deny(
+            &mut self.last_deny,
+            evaluate_disenchant(instance, &self.inventory, false),
+        )?;
         let duration = ticks_from_seconds(enchant_family_seconds());
         self.cast = Some(ActiveCast::Disenchant {
             instance,
@@ -202,7 +214,10 @@ impl ProfessionSession {
         if self.cast.is_some() {
             return self.deny(DenyReason::Busy);
         }
-        evaluate_apply_enchant(instance, enchant, confirm, &self.inventory, false)?;
+        record_deny(
+            &mut self.last_deny,
+            evaluate_apply_enchant(instance, enchant, confirm, &self.inventory, false),
+        )?;
         let duration = ticks_from_seconds(enchant_family_seconds());
         self.cast = Some(ActiveCast::ApplyEnchant {
             instance,
@@ -223,30 +238,39 @@ impl ProfessionSession {
         match cast {
             ActiveCast::Gather { node, .. } => {
                 let ready_tick = self.node_ready_tick(node);
-                let node_def = node_by_id(node).ok_or(DenyReason::UnknownNode)?;
-                let grant = complete_gather(
-                    self.pos,
-                    &mut self.inventory,
-                    &mut self.skills,
-                    node_def,
-                    ready_tick,
-                    self.tick,
-                    rng,
+                let node_def = match node_by_id(node) {
+                    Some(node_def) => node_def,
+                    None => return self.deny(DenyReason::UnknownNode),
+                };
+                let grant = record_deny(
+                    &mut self.last_deny,
+                    complete_gather(
+                        self.pos,
+                        &mut self.inventory,
+                        &mut self.skills,
+                        node_def,
+                        ready_tick,
+                        self.tick,
+                        rng,
+                    ),
                 )?;
                 self.node_ready.insert(node, grant.next_ready_tick);
                 self.cast = None;
             }
             ActiveCast::Skin { corpse, .. } => {
-                let corpse_state = self
-                    .corpses
-                    .get_mut(&corpse)
-                    .ok_or(DenyReason::CorpseGone)?;
-                complete_skin(
-                    self.pos,
-                    &mut self.inventory,
-                    &mut self.skills,
-                    corpse_state,
-                    rng,
+                let corpse_state = match self.corpses.get_mut(&corpse) {
+                    Some(corpse_state) => corpse_state,
+                    None => return self.deny(DenyReason::CorpseGone),
+                };
+                record_deny(
+                    &mut self.last_deny,
+                    complete_skin(
+                        self.pos,
+                        &mut self.inventory,
+                        &mut self.skills,
+                        corpse_state,
+                        rng,
+                    ),
                 )?;
                 self.cast = None;
             }
@@ -255,26 +279,32 @@ impl ProfessionSession {
                 remaining,
                 ..
             } => {
-                complete_craft(
-                    recipe,
-                    1,
-                    self.pos,
-                    &mut self.inventory,
-                    &mut self.gold,
-                    &mut self.skills,
-                    false,
-                    &mut self.last_masterwork,
-                    rng,
-                )?;
-                let next_remaining = remaining - 1;
-                if next_remaining > 0 {
-                    evaluate_craft_admission(
+                record_deny(
+                    &mut self.last_deny,
+                    complete_craft(
                         recipe,
                         1,
                         self.pos,
-                        &self.inventory,
-                        &self.gold,
+                        &mut self.inventory,
+                        &mut self.gold,
+                        &mut self.skills,
                         false,
+                        &mut self.last_masterwork,
+                        rng,
+                    ),
+                )?;
+                let next_remaining = remaining - 1;
+                if next_remaining > 0 {
+                    record_deny(
+                        &mut self.last_deny,
+                        evaluate_craft_admission(
+                            recipe,
+                            1,
+                            self.pos,
+                            &self.inventory,
+                            &self.gold,
+                            false,
+                        ),
                     )?;
                     let recipe_def = recipe_by_id(recipe).expect("admission checked recipe");
                     let duration = ticks_from_seconds(craft_cast_seconds(recipe_def.skill_req));
@@ -288,7 +318,15 @@ impl ProfessionSession {
                 }
             }
             ActiveCast::Disenchant { instance, .. } => {
-                complete_disenchant(instance, &mut self.inventory, &mut self.skills, false)?;
+                record_deny(
+                    &mut self.last_deny,
+                    complete_disenchant(
+                        instance,
+                        &mut self.inventory,
+                        &mut self.skills,
+                        false,
+                    ),
+                )?;
                 self.cast = None;
             }
             ActiveCast::ApplyEnchant {
@@ -297,13 +335,16 @@ impl ProfessionSession {
                 confirm,
                 ..
             } => {
-                complete_apply_enchant(
-                    instance,
-                    enchant,
-                    confirm,
-                    &mut self.inventory,
-                    &mut self.skills,
-                    false,
+                record_deny(
+                    &mut self.last_deny,
+                    complete_apply_enchant(
+                        instance,
+                        enchant,
+                        confirm,
+                        &mut self.inventory,
+                        &mut self.skills,
+                        false,
+                    ),
                 )?;
                 self.cast = None;
             }
@@ -319,6 +360,19 @@ impl ProfessionSession {
 
     fn node_ready_tick(&self, node: NodeId) -> u64 {
         self.node_ready.get(&node).copied().unwrap_or(0)
+    }
+}
+
+fn record_deny<T>(
+    last_deny: &mut Option<DenyReason>,
+    result: Result<T, DenyReason>,
+) -> Result<T, DenyReason> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(reason) => {
+            *last_deny = Some(reason);
+            Err(reason)
+        }
     }
 }
 
@@ -373,6 +427,15 @@ mod tests {
         session.start_gather(NodeId(1)).unwrap();
         let err = session.start_gather(NodeId(1)).unwrap_err();
         assert_eq!(err, DenyReason::Busy);
+        assert_eq!(session.last_deny, Some(DenyReason::Busy));
+    }
+
+    #[test]
+    fn start_craft_without_reagents_sets_last_deny() {
+        let mut session = ProfessionSession::new_eastbrook();
+        let err = session.start_craft(RecipeId::SmeltCopper, 1).unwrap_err();
+        assert_eq!(err, DenyReason::MissingReagents);
+        assert_eq!(session.last_deny, Some(DenyReason::MissingReagents));
     }
 
     #[test]
