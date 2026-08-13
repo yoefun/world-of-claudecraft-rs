@@ -66,6 +66,8 @@ pub struct Sim {
     /// Party invite / membership roster for this realm.
     pub parties: PartyRoster,
     pub mail: crate::mail::Mailbox,
+    /// Realm character name → durable mailbox key, for offline `MailSend`.
+    pub directory: crate::mail::CharacterDirectory,
     pub market: crate::market::AuctionHouse,
     pub loot_rules: crate::social::LootRules,
     pub pvp: crate::pvp::PvpState,
@@ -95,6 +97,7 @@ impl Sim {
             intents: HashMap::new(),
             parties: PartyRoster::new(),
             mail: crate::mail::Mailbox::new(),
+            directory: crate::mail::CharacterDirectory::default(),
             market: crate::market::AuctionHouse::new(),
             loot_rules: crate::social::LootRules::default(),
             pvp: crate::pvp::PvpState::default(),
@@ -133,6 +136,8 @@ impl Sim {
         if self.player_id == 0 {
             self.player_id = id;
         }
+        let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
+        self.directory.register(name, key);
         Some(id)
     }
 
@@ -193,6 +198,8 @@ impl Sim {
         if self.player_id == 0 {
             self.player_id = id;
         }
+        let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
+        self.directory.register(name, key);
         Some(id)
     }
 

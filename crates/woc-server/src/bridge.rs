@@ -105,6 +105,10 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             copper: m.copper,
             item_id: m.item_id.clone(),
             item_count: m.item_count,
+            durability: None,
+            enchant_id: None,
+            expires_tick: 0,
+            return_to: None,
         })
         .collect();
     sim.mail.load_mails(mails, economy.next_mail_id);
