@@ -1331,6 +1331,30 @@ mod tests {
     fn wolf_quest_accept_kill_turnin() {
         let mut sim = Sim::new_eastbrook("Q", PlayerClass::Warrior);
         let giver = find_template(&sim, "captain_alden").unwrap();
+        let crier = find_template(&sim, "town_crier").unwrap();
+        let (cx, cz) = {
+            let t = sim.world.get::<Transform>(crier).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, cx, cz);
+        sim.interact(
+            crier,
+            InteractAction::AcceptQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
+        let (gx, gz) = {
+            let t = sim.world.get::<Transform>(giver).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, gx, gz);
+        sim.interact(giver, InteractAction::Talk);
+        sim.interact(
+            giver,
+            InteractAction::TurnInQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
         sim.interact(
             giver,
             InteractAction::AcceptQuest {

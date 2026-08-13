@@ -6,7 +6,7 @@ use crate::ecs::components::{Bags, Health, Identity, Progress};
 use crate::ecs::World;
 use crate::inventory::{grant_into, remove_item};
 use crate::inventory::{grant_item, take_item};
-use crate::quests::{accept_quest, on_talked_to, quests_for_npc, turn_in_quest};
+use crate::quests::{accept_quest, npc_quest_offers, on_talked_to, quest_log_entries, turn_in_quest};
 use crate::stats::recalc_player_stats;
 use crate::types::INTERACT_RANGE;
 use woc_content::{item, npc, ItemEquipSlot, ItemKind};
@@ -93,17 +93,24 @@ pub fn handle_interact(
             if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
                 return;
             }
-            if accept_quest(world, player_id, &quest_id, events) {
-                if let Some(tid) = template.as_deref() {
-                    on_talked_to(world, player_id, tid, events);
-                }
+            let Some(tid) = template.as_deref() else {
+                return;
+            };
+            if accept_quest(world, player_id, &quest_id, tid, events) {
+                on_talked_to(world, player_id, tid, events);
             }
         }
         InteractAction::TurnInQuest { quest_id } => {
             if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
                 return;
             }
-            let _ = turn_in_quest(world, player_id, &quest_id, events);
+            let Some(tid) = world
+                .get::<Identity>(target_id)
+                .and_then(|i| i.template_id.clone())
+            else {
+                return;
+            };
+            let _ = turn_in_quest(world, player_id, &quest_id, &tid, events);
         }
         InteractAction::Buy { item_id, count } => {
             buy(world, player_id, target_id, &item_id, count, events);
@@ -145,9 +152,10 @@ fn talk(world: &mut World, player_id: EntityId, target_id: EntityId, events: &mu
             });
         }
         on_talked_to(world, player_id, &template_id, events);
-        let available = quests_for_npc(&template_id);
-        if !available.is_empty() && d.is_quest_giver {
-            let names: Vec<&str> = available.iter().map(|q| q.name).collect();
+        let offers = npc_quest_offers(&template_id, &quest_log_entries(world, player_id));
+        let mut names: Vec<&str> = offers.accept.iter().map(|q| q.name).collect();
+        names.extend(offers.turn_in.iter().map(|q| q.name));
+        if !names.is_empty() && d.is_quest_giver {
             events.push(SimEvent::Toast {
                 message: format!("Quests: {}", names.join(", ")),
             });
