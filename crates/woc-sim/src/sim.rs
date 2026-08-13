@@ -21,8 +21,8 @@ use crate::combat::{
 };
 use crate::context::SimContext;
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootPile, LootTable,
-    Motion, Owner, Progress, QuestLog, QuestState, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootPile, LootTable, Motion,
+    Owner, Progress, QuestLog, QuestState, Transform,
 };
 use crate::ecs::World;
 use crate::interaction::vendor_snapshot;
@@ -532,8 +532,7 @@ impl Sim {
                     }
                 }
             }
-            let loot_before: HashSet<EntityId> =
-                self.world.ids::<LootPile>().into_iter().collect();
+            let loot_before: HashSet<EntityId> = self.world.ids::<LootPile>().into_iter().collect();
             let _first = spawn_mob_loot(
                 &mut self.world,
                 &mut self.rng,
@@ -2040,16 +2039,10 @@ mod tests {
             .into_iter()
             .filter_map(|id| {
                 let item = sim.world.get::<LootPile>(id)?.item.clone();
-                let inst = sim
-                    .world
-                    .get::<InstanceAt>(id)?
-                    .instance_id
-                    .clone();
+                let inst = sim.world.get::<InstanceAt>(id)?.instance_id.clone();
                 Some((item, inst))
             })
-            .filter(|(item, _)| {
-                matches!(item.as_deref(), Some("hag_claw") | Some("hag_focus"))
-            })
+            .filter(|(item, _)| matches!(item.as_deref(), Some("hag_claw") | Some("hag_focus")))
             .collect();
         assert_eq!(piles.len(), 2, "expected two independent loot piles");
         assert!(

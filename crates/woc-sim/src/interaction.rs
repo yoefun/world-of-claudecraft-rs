@@ -9,7 +9,9 @@ use crate::inventory::{grant_item, take_item};
 use crate::quests::{accept_quest, on_talked_to, quests_for_npc, turn_in_quest};
 use crate::stats::recalc_player_stats;
 use crate::types::INTERACT_RANGE;
-use woc_content::{can_equip, item, npc, EquipDeny, ItemEquipSlot, ItemKind, PlayerClass, WeaponStyle};
+use woc_content::{
+    can_equip, item, npc, EquipDeny, ItemEquipSlot, ItemKind, PlayerClass, WeaponStyle,
+};
 use woc_protocol::{
     EntityId, EntityKind, EquipSlot, InteractAction, SimEvent, VendorOfferSnapshot,
 };

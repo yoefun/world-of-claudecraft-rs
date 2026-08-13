@@ -52,13 +52,11 @@ const YOUNG_BOAR_LOOT: &[LootEntry] = &[
     },
 ];
 
-const CRYPT_WARDEN_LOOT: &[LootEntry] = &[
-    LootEntry {
-        item_id: "crypt_cleaver",
-        chance: 1.0,
-        count: 1,
-    },
-];
+const CRYPT_WARDEN_LOOT: &[LootEntry] = &[LootEntry {
+    item_id: "crypt_cleaver",
+    chance: 1.0,
+    count: 1,
+}];
 
 pub static ZONE1_MOBS: &[MobTemplate] = &[
     MobTemplate {

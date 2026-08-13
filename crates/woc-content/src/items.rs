@@ -317,7 +317,14 @@ const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell:
 }
 
 pub static ZONE1_ITEMS: &[ItemDef] = &[
-    weapon("worn_sword", "Worn Sword", 5, 8.0, WeaponStyle::OneHand, WARRIOR),
+    weapon(
+        "worn_sword",
+        "Worn Sword",
+        5,
+        8.0,
+        WeaponStyle::OneHand,
+        WARRIOR,
+    ),
     weapon(
         "worn_mace",
         "Worn Mace",
