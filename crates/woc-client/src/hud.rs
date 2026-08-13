@@ -261,26 +261,42 @@ fn bag_stack_label(item_id: &str, count: u32, durability: Option<u32>) -> String
     format!("{count}×{item_id}")
 }
 
-fn equipment_label(item_id: Option<&str>, durability: Option<u32>) -> String {
+fn quality_prefix(instance: Option<&str>, item_id: Option<&str>) -> &'static str {
+    let q = instance
+        .and_then(ItemQuality::parse)
+        .or_else(|| item_id.and_then(item).map(|d| d.quality));
+    match q {
+        Some(ItemQuality::Uncommon) => "Uncommon ",
+        Some(ItemQuality::Rare) => "Rare ",
+        Some(ItemQuality::Poor) => "Poor ",
+        _ => "",
+    }
+}
+
+fn equipment_label(
+    item_id: Option<&str>,
+    durability: Option<u32>,
+    instance_quality: Option<&str>,
+) -> String {
     match item_id {
         Some(id) => {
             let base = gear_durability_text(id, durability)
                 .or_else(|| item(id).map(|d| d.name.to_string()))
                 .unwrap_or_else(|| id.to_string());
-            match item(id).map(|d| d.quality) {
-                Some(ItemQuality::Uncommon) => format!("Uncommon {base}"),
-                Some(ItemQuality::Rare) => format!("Rare {base}"),
-                Some(ItemQuality::Poor) => format!("Poor {base}"),
-                _ => base,
-            }
+            format!("{}{base}", quality_prefix(instance_quality, Some(id)))
         }
         None => "—".into(),
     }
 }
 
-fn main_hand_label(eq: &woc_protocol::EquipmentSnapshot) -> String {
-    let mut label = equipment_label(eq.main_hand.as_deref(), eq.main_hand_durability);
-    if let Some(eid) = eq.main_hand_enchant.as_deref() {
+fn weapon_label(
+    item_id: Option<&str>,
+    durability: Option<u32>,
+    instance_quality: Option<&str>,
+    enchant_id: Option<&str>,
+) -> String {
+    let mut label = equipment_label(item_id, durability, instance_quality);
+    if let Some(eid) = enchant_id {
         if let Some(def) = enchant(eid) {
             label = format!("{label} [{}]", def.name);
         }
@@ -845,22 +861,43 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip slot",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\n  Shoulder: {}\n  Back: {}\n  Wrist: {}\n  Hands: {}\n  Waist: {}\n  Trinket: {}\n  Trinket2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip  [0-=[]';] Extra slots",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
             snap.progress.copper,
             snap.talent_points,
             talent_bonus_summary(snap),
-            main_hand_label(eq),
-            equipment_label(eq.off_hand.as_deref(), eq.off_hand_durability),
-            equipment_label(eq.head.as_deref(), eq.head_durability),
-            equipment_label(eq.chest.as_deref(), eq.chest_durability),
-            equipment_label(eq.legs.as_deref(), eq.legs_durability),
-            equipment_label(eq.feet.as_deref(), eq.feet_durability),
-            equipment_label(eq.neck.as_deref(), None),
-            equipment_label(eq.finger.as_deref(), None),
-            equipment_label(eq.finger2.as_deref(), None),
+            weapon_label(
+                eq.main_hand.as_deref(),
+                eq.main_hand_durability,
+                eq.main_hand_quality.as_deref(),
+                eq.main_hand_enchant.as_deref(),
+            ),
+            weapon_label(
+                eq.off_hand.as_deref(),
+                eq.off_hand_durability,
+                eq.off_hand_quality.as_deref(),
+                eq.off_hand_enchant.as_deref(),
+            ),
+            equipment_label(eq.head.as_deref(), eq.head_durability, eq.head_quality.as_deref()),
+            equipment_label(eq.chest.as_deref(), eq.chest_durability, eq.chest_quality.as_deref()),
+            equipment_label(eq.legs.as_deref(), eq.legs_durability, eq.legs_quality.as_deref()),
+            equipment_label(eq.feet.as_deref(), eq.feet_durability, eq.feet_quality.as_deref()),
+            equipment_label(eq.neck.as_deref(), None, eq.neck_quality.as_deref()),
+            equipment_label(eq.finger.as_deref(), None, eq.finger_quality.as_deref()),
+            equipment_label(eq.finger2.as_deref(), None, eq.finger2_quality.as_deref()),
+            equipment_label(
+                eq.shoulder.as_deref(),
+                eq.shoulder_durability,
+                eq.shoulder_quality.as_deref(),
+            ),
+            equipment_label(eq.back.as_deref(), eq.back_durability, eq.back_quality.as_deref()),
+            equipment_label(eq.wrist.as_deref(), eq.wrist_durability, eq.wrist_quality.as_deref()),
+            equipment_label(eq.hands.as_deref(), eq.hands_durability, eq.hands_quality.as_deref()),
+            equipment_label(eq.waist.as_deref(), eq.waist_durability, eq.waist_quality.as_deref()),
+            equipment_label(eq.trinket.as_deref(), None, eq.trinket_quality.as_deref()),
+            equipment_label(eq.trinket2.as_deref(), None, eq.trinket2_quality.as_deref()),
             snap.attack_power,
             snap.armor,
             snap.spell_power,
@@ -1209,6 +1246,7 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            quality: None,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
@@ -1216,6 +1254,7 @@ mod tests {
             count: 4,
             durability: None,
             enchant_id: None,
+            quality: None,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1413,8 +1452,16 @@ mod tests {
     #[test]
     fn jewelry_equipment_label_uses_quality_and_name() {
         assert_eq!(
-            equipment_label(Some("fang_pendant"), None),
+            equipment_label(Some("fang_pendant"), None, None),
             "Uncommon Fang Pendant"
+        );
+        assert_eq!(
+            weapon_label(Some("worn_sword"), None, None, Some("coarse_sharpening"),),
+            "Worn Sword [Coarse Sharpening]"
+        );
+        assert_eq!(
+            equipment_label(Some("wool_cloak"), None, None),
+            "Uncommon Wool Cloak"
         );
     }
 }
