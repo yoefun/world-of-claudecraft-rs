@@ -242,6 +242,8 @@ pub struct Respawn {
 pub struct LootPile {
     pub copper: u32,
     pub item: Option<String>,
+    pub count: u32,
+    pub expires_tick: u64,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -1311,30 +1311,62 @@ pub fn spawn_mob_loot(
     template_id: Option<&str>,
     x: f32,
     z: f32,
+    zone_id: &str,
+    expires_tick: u64,
 ) -> EntityId {
     let Some(tid) = template_id.and_then(mob) else {
         let copper = rng.gen_range_u32(3, 8);
         let id = world.next_id();
-        return crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
+        return crate::ecs::spawn::create_loot_ex(
+            world,
+            id,
+            x,
+            z,
+            copper,
+            None,
+            1,
+            expires_tick,
+            zone_id,
+        );
     };
     let copper = rng.gen_range_u32(tid.copper_min, tid.copper_max);
-    let mut dropped: Vec<String> = Vec::new();
+    let mut dropped: Vec<(String, u32)> = Vec::new();
     for entry in tid.loot {
         if rng.next_f32() < entry.chance {
-            dropped.push(entry.item_id.to_string());
+            dropped.push((entry.item_id.to_string(), entry.count));
         }
     }
     if dropped.is_empty() {
         let id = world.next_id();
-        let loot_id = crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
+        let loot_id = crate::ecs::spawn::create_loot_ex(
+            world,
+            id,
+            x,
+            z,
+            copper,
+            None,
+            1,
+            expires_tick,
+            zone_id,
+        );
         crate::ecs::spawn::maybe_mark_skinnable(world, loot_id, tid.id);
         return loot_id;
     }
     let mut first = 0;
-    for (i, item_id) in dropped.into_iter().enumerate() {
+    for (i, (item_id, count)) in dropped.into_iter().enumerate() {
         let id = world.next_id();
         let c = if i == 0 { copper } else { 0 };
-        crate::ecs::spawn::create_loot(world, id, x + i as f32 * 0.4, z, c, Some(item_id));
+        crate::ecs::spawn::create_loot_ex(
+            world,
+            id,
+            x + i as f32 * 0.4,
+            z,
+            c,
+            Some(item_id),
+            count,
+            expires_tick,
+            zone_id,
+        );
         if i == 0 {
             first = id;
         }
@@ -1507,7 +1539,7 @@ fn grant_loot_pile(
         return false;
     };
     if let Some(ref it) = pile.item {
-        if crate::inventory::grant_item(world, player_id, it, 1, events).is_err() {
+        if crate::inventory::grant_item(world, player_id, it, pile.count.max(1), events).is_err() {
             events.push(SimEvent::Toast {
                 message: "Inventory full.".into(),
             });
@@ -1523,6 +1555,7 @@ fn grant_loot_pile(
         player: player_id,
         copper: pile.copper,
         item: pile.item,
+        count: pile.count,
     });
     true
 }
@@ -3222,10 +3255,34 @@ mod tests {
     }
 
     #[test]
+    fn loot_entry_count_is_granted() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", woc_content::PlayerClass::Warrior, 0.0, 0.0);
+        // Force a known count by spawning a pile directly, then claiming.
+        let lid = crate::ecs::spawn::create_loot_ex(
+            &mut world,
+            9,
+            0.0,
+            0.0,
+            0,
+            Some("wolf_fang".into()),
+            2,
+            0,
+            "eastbrook",
+        );
+        assert_eq!(world.get::<LootPile>(9).unwrap().count, 2);
+        let mut events = Vec::new();
+        let pending = crate::social::LootRules::default();
+        assert!(claim_loot_target(1, lid, &mut world, &mut events, &pending));
+        let n = crate::inventory::count_item(&world.get::<Bags>(1).unwrap().inventory, "wolf_fang");
+        assert_eq!(n, 2);
+    }
+
+    #[test]
     fn independent_loot_can_drop_two_items() {
         let mut world = World::new();
         let mut rng = Rng::new(1);
-        let _ = spawn_mob_loot(&mut world, &mut rng, Some("barrow_hag"), 0.0, 0.0);
+        let _ = spawn_mob_loot(&mut world, &mut rng, Some("barrow_hag"), 0.0, 0.0, "eastbrook", 0);
         let piles: Vec<_> = world
             .ids::<LootPile>()
             .into_iter()
@@ -3239,7 +3296,7 @@ mod tests {
     fn crypt_warden_drops_cleaver() {
         let mut world = World::new();
         let mut rng = Rng::new(1);
-        spawn_mob_loot(&mut world, &mut rng, Some("crypt_warden"), 1.0, 1.0);
+        spawn_mob_loot(&mut world, &mut rng, Some("crypt_warden"), 1.0, 1.0, "eastbrook", 0);
         let items: Vec<_> = world
             .ids::<LootPile>()
             .into_iter()

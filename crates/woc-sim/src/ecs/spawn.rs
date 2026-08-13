@@ -274,10 +274,33 @@ pub fn create_loot(
     copper: u32,
     item: Option<String>,
 ) -> EntityId {
+    create_loot_ex(world, id, x, z, copper, item, 1, 0, "eastbrook")
+}
+
+pub fn create_loot_ex(
+    world: &mut World,
+    id: EntityId,
+    x: f32,
+    z: f32,
+    copper: u32,
+    item: Option<String>,
+    count: u32,
+    expires_tick: u64,
+    zone_id: &str,
+) -> EntityId {
     adopt_fresh_id(world, id);
-    insert_identity(world, id, EntityKind::Loot, "Loot", None, "eastbrook");
+    insert_identity(world, id, EntityKind::Loot, "Loot", None, zone_id);
     insert_transform(world, id, x, z, 0.0);
-    world.insert(id, LootPile { copper, item });
+    let count = if count == 0 { 1 } else { count };
+    world.insert(
+        id,
+        LootPile {
+            copper,
+            item,
+            count,
+            expires_tick,
+        },
+    );
     world.insert(id, InstanceAt::default());
     id
 }
@@ -342,6 +365,8 @@ pub fn create_gather_node(
         LootPile {
             copper: 0,
             item: Some(node.item_id.to_string()),
+            count: 1,
+            expires_tick: 0,
         },
     );
     world.insert(id, GatherNodeState { ready_tick: 0 });

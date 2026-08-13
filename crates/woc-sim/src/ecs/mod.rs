@@ -223,6 +223,8 @@ mod tests {
             crate::ecs::components::LootPile {
                 copper: 5,
                 item: None,
+                count: 1,
+                expires_tick: 0,
             },
         );
         w.insert(

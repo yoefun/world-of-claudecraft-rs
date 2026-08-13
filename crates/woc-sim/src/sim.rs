@@ -540,6 +540,12 @@ impl Sim {
                     }
                 }
             }
+            let zone = self
+                .world
+                .get::<Identity>(reward.victim)
+                .map(|i| i.zone_id.clone())
+                .unwrap_or_else(|| "eastbrook".into());
+            let expires = self.tick.saturating_add(crate::types::LOOT_PILE_TTL_TICKS);
             let loot_before: HashSet<EntityId> = self.world.ids::<LootPile>().into_iter().collect();
             let _first = spawn_mob_loot(
                 &mut self.world,
@@ -547,6 +553,8 @@ impl Sim {
                 reward.template_id.as_deref(),
                 reward.x,
                 reward.z,
+                &zone,
+                expires,
             );
             let killer_inst = self
                 .world

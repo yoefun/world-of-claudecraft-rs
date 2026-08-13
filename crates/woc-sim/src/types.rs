@@ -9,6 +9,7 @@ pub const AGGRO_RANGE: f32 = 18.0;
 pub const LEASH_RANGE: f32 = 40.0;
 pub const INTERACT_RANGE: f32 = 4.0;
 pub const LOOT_RANGE: f32 = 2.0;
+pub const LOOT_PILE_TTL_TICKS: u64 = 2_400;
 pub const HEARTH_COOLDOWN_TICKS: u64 = 18_000;
 pub const BACKPACK_SLOTS: usize = 16;
 pub const BANK_SLOTS: usize = 24;
