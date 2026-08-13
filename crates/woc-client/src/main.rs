@@ -127,7 +127,7 @@ pub(crate) enum RealmCompatState {
 #[derive(Resource, Default)]
 pub(crate) struct RealmCompat {
     pub(crate) state: RealmCompatState,
-    pub(crate) pending: Option<Receiver<Result<VersionInfo, String>>>,
+    pub(crate) pending: Option<Mutex<Receiver<Result<VersionInfo, String>>>>,
 }
 
 impl RealmCompat {
@@ -149,14 +149,15 @@ impl RealmCompat {
             return;
         }
         self.state = RealmCompatState::Checking;
-        self.pending = Some(crate::api::spawn_fetch_version());
+        self.pending = Some(Mutex::new(crate::api::spawn_fetch_version()));
     }
 
     pub(crate) fn poll(&mut self) {
-        let Some(rx) = self.pending.as_mut() else {
+        let Some(rx) = self.pending.as_ref() else {
             return;
         };
-        match rx.try_recv() {
+        let recv = rx.lock().expect("version receiver mutex").try_recv();
+        match recv {
             Ok(Ok(info)) => {
                 self.pending = None;
                 let client = woc_version::ClientIdentity {
