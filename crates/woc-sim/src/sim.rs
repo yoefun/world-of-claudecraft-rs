@@ -1115,6 +1115,70 @@ mod tests {
     }
 
     #[test]
+    fn pvp_honor_survives_phase5_loot_apply() {
+        let mut sim = Sim::new_eastbrook("Winner", PlayerClass::Warrior);
+        let winner = sim.player_id;
+        let loser = sim.spawn_player("Loser", PlayerClass::Mage).unwrap();
+        if let Some(p) = sim.entity_mut_ref(winner) {
+            p.x = 0.0;
+            p.z = 0.0;
+            p.y = Entity::ground_at(p.x, p.z);
+        }
+        if let Some(p) = sim.entity_mut_ref(loser) {
+            p.x = 1.0;
+            p.z = 0.0;
+            p.y = Entity::ground_at(p.x, p.z);
+            p.hp = 1.0;
+        }
+        sim.rebuild_world();
+
+        let mut duel_events = Vec::new();
+        crate::pvp::challenge_duel(&mut sim.pvp, &sim.entities, winner, loser).unwrap();
+        crate::pvp::accept_duel(
+            &mut sim.pvp,
+            &sim.entities,
+            loser,
+            winner,
+            &mut duel_events,
+        )
+        .unwrap();
+
+        let (wx, wz) = {
+            let w = sim.entity_ref(winner).unwrap();
+            (w.x, w.z)
+        };
+        let loot_id = sim.next_id;
+        sim.next_id += 1;
+        sim.push_entity(crate::entity::create_loot(loot_id, wx, wz, 7, None));
+
+        assert_eq!(sim.entity_ref(winner).unwrap().honor, 0);
+
+        let (_snap, events) = sim.tick(PlayerIntent::default());
+
+        assert_eq!(
+            sim.entity_ref(winner).unwrap().honor,
+            crate::pvp::HONOR_PER_KILL,
+            "entity-only pvp honor must survive Phase 5 apply_world_to_entities"
+        );
+        assert_eq!(sim.copper(), 7, "loot copper should apply in the same tick");
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::HonorGained {
+                player,
+                amount: crate::pvp::HONOR_PER_KILL
+            } if *player == winner
+        )));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Loot {
+                player,
+                copper: 7,
+                ..
+            } if *player == winner
+        )));
+    }
+
+    #[test]
     fn wolf_quest_accept_kill_turnin() {
         let mut sim = Sim::new_eastbrook("Q", PlayerClass::Warrior);
         let giver = sim
