@@ -31,6 +31,7 @@ pub struct PlayerPersistentState {
     pub talent_points: u32,
     pub talents: HashMap<String, u32>,
     pub bank: Vec<Option<InvStack>>,
+    pub bank_copper: u32,
     pub honor: u32,
     pub professions: HashMap<String, u32>,
     pub pvp_flagged: bool,
@@ -45,6 +46,7 @@ impl PlayerPersistentState {
             && self.copper == 0
             && self.inventory.iter().all(|s| s.is_none())
             && self.bank.iter().all(|s| s.is_none())
+            && self.bank_copper == 0
             && self.equipment.main_hand.is_none()
             && self.equipment.off_hand.is_none()
             && self.equipment.head.is_none()
@@ -109,6 +111,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
             .get::<Bank>(player_id)
             .map(|b| b.bank.clone())
             .unwrap_or_default(),
+        bank_copper: world
+            .get::<Bank>(player_id)
+            .map(|b| b.bank_copper)
+            .unwrap_or(0),
         honor: world
             .get::<Progress>(player_id)
             .map(|p| p.honor)
@@ -189,6 +195,7 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     }
     if let Some(bank) = world.get_mut::<Bank>(player_id) {
         bank.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
+        bank.bank_copper = state.bank_copper;
     }
     let y = crate::ecs::spawn::ground_at(state.pos_x, state.pos_z);
     if let Some(t) = world.get_mut::<Transform>(player_id) {
@@ -298,6 +305,7 @@ mod tests {
             talent_points: 0,
             talents: Default::default(),
             bank: vec![],
+            bank_copper: 0,
             honor: 0,
             professions: Default::default(),
             pvp_flagged: false,
@@ -314,6 +322,7 @@ mod tests {
     /// the migration — `talents` / `completed_deeds` / `talent_points` / `honor`
     /// into `Progress`, `zone_id` into `Identity`, position into `Transform`,
     /// `durable_id` into `Durable` — so this is the remapping regression net.
+    #[test]
     #[test]
     fn round_trip_preserves_progression() {
         let mut world = World::new();
@@ -335,6 +344,9 @@ mod tests {
             p.talents.insert("mage_arcane_power".into(), 2);
             p.completed_deeds.insert("eastfen_mire_terror".into());
         }
+        if let Some(bank) = world.get_mut::<Bank>(1) {
+            bank.bank_copper = 30;
+        }
 
         let exported = export_player_state(&world, 1).unwrap();
         assert!(!exported.is_virgin());
@@ -347,6 +359,7 @@ mod tests {
         assert_eq!(restored.level, 5);
         assert_eq!(restored.xp, 120);
         assert_eq!(restored.copper, 77);
+        assert_eq!(restored.bank_copper, 30);
         assert_eq!(restored.honor, 10);
         assert_eq!(restored.talent_points, 2);
         assert_eq!(restored.talents.get("mage_arcane_power"), Some(&2));

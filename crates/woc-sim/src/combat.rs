@@ -384,14 +384,22 @@ pub fn spawn_mob_loot(
     crate::ecs::spawn::create_loot(world, id, x, z, copper, item)
 }
 
-pub fn try_pickup_loot(player_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>) {
-    if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
+pub fn try_pickup_loot(
+    player_id: EntityId,
+    world: &mut World,
+    events: &mut Vec<SimEvent>,
+    pending: &crate::social::LootRules,
+) {
+    if world.get::<ClassKit>(player_id).is_none() {
         return;
     }
     let loot_ids: Vec<EntityId> = world
         .ids::<LootPile>()
         .into_iter()
         .filter(|&id| {
+            if pending.is_pending(id) {
+                return false;
+            }
             let Some(identity) = world.get::<Identity>(id) else {
                 return false;
             };
@@ -410,28 +418,154 @@ pub fn try_pickup_loot(player_id: EntityId, world: &mut World, events: &mut Vec<
         })
         .collect();
     for lid in loot_ids {
-        let Some(pile) = world.get::<LootPile>(lid).cloned() else {
-            continue;
-        };
-        if let Some(ref it) = pile.item {
-            if crate::inventory::grant_item(world, player_id, it, 1, events).is_err() {
-                events.push(SimEvent::Toast {
-                    message: "Inventory full.".into(),
-                });
-                continue;
-            }
-            crate::quests::on_inventory_changed(world, player_id, events);
-        }
-        world.despawn(lid);
-        if let Some(p) = world.get_mut::<Progress>(player_id) {
-            p.copper = p.copper.saturating_add(pile.copper);
-        }
-        events.push(SimEvent::Loot {
-            player: player_id,
-            copper: pile.copper,
-            item: pile.item,
-        });
+        let _ = grant_loot_pile(world, player_id, lid, events);
     }
+}
+
+/// Claim a specific loot pile (or loot near a corpse) via Interact.
+pub fn claim_loot_target(
+    player_id: EntityId,
+    target_id: EntityId,
+    world: &mut World,
+    events: &mut Vec<SimEvent>,
+    pending: &crate::social::LootRules,
+) -> bool {
+    if !world
+        .get::<Health>(player_id)
+        .map(|h| h.alive)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    if world.get::<LootPile>(target_id).is_some() {
+        if crate::ecs::components::dist2d(world, player_id, target_id)
+            .map(|d| d > crate::types::INTERACT_RANGE)
+            .unwrap_or(true)
+        {
+            events.push(SimEvent::Toast {
+                message: "Too far to loot.".into(),
+            });
+            return false;
+        }
+        if pending.is_pending(target_id) {
+            events.push(SimEvent::Toast {
+                message: "Need/Greed roll in progress (1 Need / 2 Greed / 3 Pass).".into(),
+            });
+            return false;
+        }
+        if world
+            .get::<Identity>(target_id)
+            .and_then(|i| i.template_id.as_deref())
+            .and_then(woc_content::gather_node)
+            .is_some()
+        {
+            return false;
+        }
+        return grant_loot_pile(world, player_id, target_id, events);
+    }
+
+    // Dead mob corpse: vacuum nearby loot piles.
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Mob)
+        || world.get::<Health>(target_id).is_some_and(|h| h.alive)
+    {
+        return false;
+    }
+    if crate::ecs::components::dist2d(world, player_id, target_id)
+        .map(|d| d > crate::types::INTERACT_RANGE)
+        .unwrap_or(true)
+    {
+        events.push(SimEvent::Toast {
+            message: "Too far to loot.".into(),
+        });
+        return false;
+    }
+    let Some(corpse) = world.get::<Transform>(target_id).cloned() else {
+        return false;
+    };
+    let loot_ids: Vec<EntityId> = world
+        .ids::<LootPile>()
+        .into_iter()
+        .filter(|&id| {
+            if pending.is_pending(id) {
+                return false;
+            }
+            if world
+                .get::<Identity>(id)
+                .and_then(|i| i.template_id.as_deref())
+                .and_then(woc_content::gather_node)
+                .is_some()
+            {
+                return false;
+            }
+            world
+                .get::<Transform>(id)
+                .map(|t| {
+                    let dx = t.x - corpse.x;
+                    let dz = t.z - corpse.z;
+                    (dx * dx + dz * dz).sqrt() < crate::types::LOOT_RANGE
+                })
+                .unwrap_or(false)
+        })
+        .collect();
+    if loot_ids.is_empty() {
+        let pending_near = world.ids::<LootPile>().into_iter().any(|id| {
+            pending.is_pending(id)
+                && world
+                    .get::<Transform>(id)
+                    .map(|t| {
+                        let dx = t.x - corpse.x;
+                        let dz = t.z - corpse.z;
+                        (dx * dx + dz * dz).sqrt() < crate::types::LOOT_RANGE
+                    })
+                    .unwrap_or(false)
+        });
+        if pending_near {
+            events.push(SimEvent::Toast {
+                message: "Need/Greed roll in progress (1 Need / 2 Greed / 3 Pass).".into(),
+            });
+        } else {
+            events.push(SimEvent::Toast {
+                message: "Nothing to loot.".into(),
+            });
+        }
+        return false;
+    }
+    let before = events.len();
+    for lid in loot_ids {
+        let _ = grant_loot_pile(world, player_id, lid, events);
+    }
+    events.len() > before
+}
+
+fn grant_loot_pile(
+    world: &mut World,
+    player_id: EntityId,
+    lid: EntityId,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let Some(pile) = world.get::<LootPile>(lid).cloned() else {
+        return false;
+    };
+    if let Some(ref it) = pile.item {
+        if crate::inventory::grant_item(world, player_id, it, 1, events).is_err() {
+            events.push(SimEvent::Toast {
+                message: "Inventory full.".into(),
+            });
+            return false;
+        }
+        crate::quests::on_inventory_changed(world, player_id, events);
+    }
+    world.despawn(lid);
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper = p.copper.saturating_add(pile.copper);
+    }
+    events.push(SimEvent::Loot {
+        player: player_id,
+        copper: pile.copper,
+        item: pile.item,
+    });
+    true
 }
 
 fn ability_range(kit: &ClassKit) -> f32 {

@@ -9,7 +9,7 @@ pub type EntityId = u32;
 /// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
 /// Rev 4: jump / swim / flight intent + motion snapshot flags.
 /// Rev 5: clear_target intent + ability_bar kit slots for combat HUD.
-pub const PROTOCOL_REV: u32 = 5;
+pub const PROTOCOL_REV: u32 = 6;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -98,6 +98,14 @@ pub enum InteractAction {
     BankWithdraw {
         bank_slot: u8,
         count: u32,
+    },
+    /// Deposit copper from wallet into the bank vault.
+    BankDepositCopper {
+        amount: u32,
+    },
+    /// Withdraw copper from the bank vault into the wallet.
+    BankWithdrawCopper {
+        amount: u32,
     },
     /// Summon the class pet (hunter / warlock).
     SummonPet,
@@ -401,6 +409,23 @@ pub struct TickSnapshot {
     /// Party loot mode when in a party (`ffa` | `need_greed`).
     #[serde(default)]
     pub loot_mode: Option<String>,
+    /// Pending Need/Greed rolls the local player may still vote on.
+    #[serde(default)]
+    pub pending_loot: Vec<PendingLootSnapshot>,
+    /// Copper stored in the personal bank vault.
+    #[serde(default)]
+    pub bank_copper: u32,
+}
+
+/// A party loot roll awaiting Need / Greed / Pass.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PendingLootSnapshot {
+    pub loot_id: EntityId,
+    pub item_id: String,
+    pub copper: u32,
+    /// True when the local player already submitted a roll.
+    #[serde(default)]
+    pub rolled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -426,6 +451,9 @@ pub struct MarketListingSnapshot {
     pub item_id: String,
     pub count: u32,
     pub price: u32,
+    /// True when this listing belongs to the viewing player.
+    #[serde(default)]
+    pub mine: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -485,6 +513,8 @@ impl Default for TickSnapshot {
             pvp_flagged: false,
             professions: Vec::new(),
             loot_mode: None,
+            pending_loot: Vec::new(),
+            bank_copper: 0,
         }
     }
 }
@@ -807,6 +837,8 @@ mod tests {
         assert!(!snap.auto_attack);
         assert!(!snap.is_dead);
         assert!(snap.party_id.is_none());
+        assert!(snap.pending_loot.is_empty());
+        assert_eq!(snap.bank_copper, 0);
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
     }
 
@@ -868,6 +900,13 @@ mod tests {
             pvp_flagged: false,
             professions: vec![],
             loot_mode: Some("need_greed".into()),
+            pending_loot: vec![PendingLootSnapshot {
+                loot_id: 99,
+                item_id: "wolf_fang".into(),
+                copper: 5,
+                rolled: false,
+            }],
+            bank_copper: 40,
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -888,6 +927,8 @@ mod tests {
         assert_eq!(back.talent_points, 2);
         assert_eq!(back.honor, 10);
         assert_eq!(back.loot_mode.as_deref(), Some("need_greed"));
+        assert_eq!(back.pending_loot.len(), 1);
+        assert_eq!(back.bank_copper, 40);
     }
 
     #[test]
@@ -997,6 +1038,8 @@ mod tests {
                 bank_slot: 0,
                 count: 2,
             },
+            InteractAction::BankDepositCopper { amount: 25 },
+            InteractAction::BankWithdrawCopper { amount: 10 },
             InteractAction::SummonPet,
             InteractAction::DismissPet,
             InteractAction::LearnTalent {

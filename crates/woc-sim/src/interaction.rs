@@ -67,8 +67,8 @@ pub fn handle_interact(
             use_item_from_bag(world, player_id, *bag_slot, events);
             return;
         }
-        InteractAction::LootCorpse { target_id: corpse } => {
-            loot_corpse(world, player_id, *corpse, events);
+        // LootCorpse is handled in WorldHost (needs loot_rules for Need/Greed).
+        InteractAction::LootCorpse { .. } => {
             return;
         }
         _ => {}
@@ -391,27 +391,6 @@ fn use_item_from_bag(
         message: format!("You restore {:.0} health.", healed),
     });
     crate::quests::on_inventory_changed(world, player_id, events);
-}
-
-fn loot_corpse(
-    world: &World,
-    player_id: EntityId,
-    corpse_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) {
-    if world.get::<Identity>(corpse_id).map(|i| i.kind) != Some(EntityKind::Mob) {
-        return;
-    }
-    if world.get::<Health>(corpse_id).is_some_and(|h| h.alive) {
-        return;
-    }
-    if dist2d(world, player_id, corpse_id)
-        .map(|d| d > INTERACT_RANGE)
-        .unwrap_or(true)
-    {
-        return;
-    }
-    let _ = events;
 }
 
 pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protocol::VendorSnapshot> {

@@ -204,6 +204,8 @@ pub struct Progress {
 #[derive(Debug, Clone)]
 pub struct Bank {
     pub bank: Vec<Option<InvStack>>,
+    /// Copper stored in the personal bank vault.
+    pub bank_copper: u32,
 }
 
 #[derive(Debug, Clone)]

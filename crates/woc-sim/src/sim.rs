@@ -452,12 +452,28 @@ impl Sim {
                     }
                 }
             }
-            spawn_mob_loot(
+            let loot_id = spawn_mob_loot(
                 &mut self.world,
                 &mut self.rng,
                 reward.template_id.as_deref(),
                 reward.x,
                 reward.z,
+            );
+            if let Some(killer_inst) = self
+                .world
+                .get::<InstanceAt>(reward.killer)
+                .and_then(|i| i.instance_id.clone())
+            {
+                if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
+                    loot.instance_id = Some(killer_inst);
+                }
+            }
+            self.loot_rules.maybe_start_party_roll(
+                &self.parties,
+                &self.world,
+                reward.killer,
+                loot_id,
+                &mut self.events,
             );
         }
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
@@ -470,7 +486,7 @@ impl Sim {
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
-            try_pickup_loot(pid, &mut self.world, &mut self.events);
+            try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
         }
 
         // Phase 6: snapshot
@@ -697,7 +713,7 @@ impl Sim {
                 })
                 .unwrap_or_default(),
             mail: self.mail.snapshot_for_entity(player_id, world),
-            market: self.market.snapshot_public(),
+            market: self.market.snapshot_for(player_id, world),
             honor: world
                 .get::<Progress>(player_id)
                 .map(|p| p.honor)
@@ -719,6 +735,11 @@ impl Sim {
                 })
                 .unwrap_or_default(),
             loot_mode: self.parties.loot_mode(player_id),
+            pending_loot: self.loot_rules.snapshot_for(player_id),
+            bank_copper: world
+                .get::<Bank>(player_id)
+                .map(|b| b.bank_copper)
+                .unwrap_or(0),
         }
     }
 }

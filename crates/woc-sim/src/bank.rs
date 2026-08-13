@@ -1,6 +1,6 @@
-//! Personal bank deposit / withdraw.
+//! Personal bank deposit / withdraw (items + copper vault).
 
-use crate::ecs::components::{Bags, Bank};
+use crate::ecs::components::{Bags, Bank, Progress};
 use crate::ecs::World;
 use crate::inventory::{grant_into, remove_item};
 use crate::types::BANK_SLOTS;
@@ -25,6 +25,7 @@ pub fn deposit(
             player_id,
             Bank {
                 bank: vec![None; BANK_SLOTS],
+                bank_copper: 0,
             },
         );
     }
@@ -114,10 +115,76 @@ pub fn withdraw(
     true
 }
 
+pub fn deposit_copper(
+    world: &mut World,
+    player_id: EntityId,
+    amount: u32,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let copper = world
+        .get::<Progress>(player_id)
+        .map(|p| p.copper)
+        .unwrap_or(0);
+    let take = amount.min(copper);
+    if take == 0 {
+        events.push(SimEvent::Toast {
+            message: "No copper to deposit.".into(),
+        });
+        return false;
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper -= take;
+    }
+    if let Some(bank) = world.get_mut::<Bank>(player_id) {
+        bank.bank_copper = bank.bank_copper.saturating_add(take);
+    } else {
+        world.insert(
+            player_id,
+            Bank {
+                bank: vec![None; BANK_SLOTS],
+                bank_copper: take,
+            },
+        );
+    }
+    events.push(SimEvent::Toast {
+        message: format!("Deposited {take}c to bank."),
+    });
+    true
+}
+
+pub fn withdraw_copper(
+    world: &mut World,
+    player_id: EntityId,
+    amount: u32,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let vault = world
+        .get::<Bank>(player_id)
+        .map(|b| b.bank_copper)
+        .unwrap_or(0);
+    let take = amount.min(vault);
+    if take == 0 {
+        events.push(SimEvent::Toast {
+            message: "Bank vault is empty.".into(),
+        });
+        return false;
+    }
+    if let Some(bank) = world.get_mut::<Bank>(player_id) {
+        bank.bank_copper -= take;
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper = p.copper.saturating_add(take);
+    }
+    events.push(SimEvent::Toast {
+        message: format!("Withdrew {take}c from bank."),
+    });
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Bank};
+    use crate::ecs::components::{Bags, Bank, Progress};
     use crate::inventory::grant_into;
     use woc_content::PlayerClass;
 
@@ -157,5 +224,21 @@ mod tests {
             .position(|s| s.as_ref().map(|x| x.item_id.as_str()) == Some("silverleaf"))
             .unwrap();
         assert!(withdraw(&mut world, 1, bank_slot as u8, 2, &mut events));
+    }
+
+    #[test]
+    fn copper_vault_roundtrip() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        let mut events = Vec::new();
+        assert!(deposit_copper(&mut world, 1, 40, &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, 60);
+        assert_eq!(world.get::<Bank>(1).unwrap().bank_copper, 40);
+        assert!(withdraw_copper(&mut world, 1, 25, &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, 85);
+        assert_eq!(world.get::<Bank>(1).unwrap().bank_copper, 15);
     }
 }

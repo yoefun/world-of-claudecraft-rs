@@ -52,6 +52,12 @@ impl WorldHost for Sim {
                     &mut self.events,
                 );
             }
+            InteractAction::BankDepositCopper { amount } => {
+                let _ = bank::deposit_copper(&mut self.world, player_id, amount, &mut self.events);
+            }
+            InteractAction::BankWithdrawCopper { amount } => {
+                let _ = bank::withdraw_copper(&mut self.world, player_id, amount, &mut self.events);
+            }
             InteractAction::MailSend {
                 to_name,
                 copper,
@@ -148,8 +154,24 @@ impl WorldHost for Sim {
             }
             InteractAction::SetLootMode { mode } => {
                 if let Some(m) = LootMode::parse(&mode) {
-                    let _ = self.parties.set_loot_mode(player_id, m);
+                    if self.parties.set_loot_mode(player_id, m) {
+                        if let Some(pid) = self.parties.party_id(player_id) {
+                            self.loot_rules.set_mode(pid, m);
+                        }
+                        self.events.push(SimEvent::Toast {
+                            message: format!("Loot mode: {}.", m.as_str()),
+                        });
+                    }
                 }
+            }
+            InteractAction::LootCorpse { target_id } => {
+                let _ = crate::combat::claim_loot_target(
+                    player_id,
+                    target_id,
+                    &mut self.world,
+                    &mut self.events,
+                    &self.loot_rules,
+                );
             }
             ref other
                 if matches!(

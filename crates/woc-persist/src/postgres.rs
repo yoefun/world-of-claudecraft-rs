@@ -318,6 +318,7 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         talent_points: completion.talent_points,
         talents: completion.talents,
         bank: completion.bank,
+        bank_copper: completion.bank_copper,
         honor: completion.honor,
         professions: completion.professions,
         pvp_flagged: completion.pvp_flagged,
@@ -383,6 +384,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
             })],
+            bank_copper: 0,
             honor: 125,
             professions: vec![ProfessionSkillDto {
                 id: "herbalism".into(),

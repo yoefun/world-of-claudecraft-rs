@@ -442,6 +442,7 @@ mod tests {
             talent_points: 1,
             talents: Default::default(),
             bank: vec![],
+            bank_copper: 0,
             honor: 5,
             professions: Default::default(),
             pvp_flagged: false,

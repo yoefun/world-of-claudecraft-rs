@@ -34,11 +34,11 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Pets | done | hunter/warlock |
 | Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen + Thornpeak quests/mobs |
 | Party + chat | done | kill credit within 40 yd + same instance |
-| Group loot rules | done | FFA + Need/Greed |
+| Group loot rules | done | FFA + Need/Greed; rolls start on mob loot; pending in snapshot |
 | Dungeons / instances | done | unique instance keys; party share; overworld preserved |
 | Delves | done | eastbrook_hollow 3-room loop + reward |
-| Bank + mail | done | durable character bank; mail keyed by character UUID |
-| Auction market | done | durable listings; offline proceed/return via mail |
+| Bank + mail | done | durable character bank + copper vault; mail keyed by character UUID |
+| Auction market | done | durable listings; list/buy/cancel from client; offline proceed/return via mail |
 | Professions gather/craft | done | herbalism → alchemy salve |
 | Duel + PvP honor | done | |
 | World boss + deeds | done | one-shot deed completion persisted |

@@ -7,7 +7,10 @@ use woc_content::talents::talents_for_class;
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, TickSnapshot};
 use woc_sim::targeting::tab_target_pose;
 
-use crate::hud::{first_junk_bag_stack, UiFlags};
+use crate::hud::{
+    first_consumable_bag_stack, first_equippable_bag_stack, first_junk_bag_stack,
+    first_listable_bag_stack, UiFlags,
+};
 use crate::GameHost;
 
 pub(crate) fn grab_cursor(
@@ -124,11 +127,12 @@ pub(crate) fn collect_intent(
     if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
         intent.descend = true;
     }
-    if keys.just_pressed(KeyCode::KeyV) {
+    if keys.just_pressed(KeyCode::KeyV) && !ui.show_bags {
         intent.fly_toggle = true;
     }
-    // When the talent panel is open, digit keys spend points instead of casting.
-    if !ui.show_talents {
+    // Digit keys: talents, loot rolls, bank withdraw, or abilities.
+    let loot_rolling = host.snapshot.pending_loot.iter().any(|p| !p.rolled);
+    if !ui.show_talents && !ui.show_bank && !loot_rolling && !ui.show_bags {
         intent.ability = ability_slot_from_keys(&keys);
     }
 
@@ -144,7 +148,8 @@ pub(crate) fn collect_intent(
         }
     }
 
-    if mouse.just_pressed(MouseButton::Left) || keys.pressed(KeyCode::KeyF) {
+    let bags_consume_f = ui.show_bags;
+    if mouse.just_pressed(MouseButton::Left) || (keys.pressed(KeyCode::KeyF) && !bags_consume_f) {
         intent.attack = true;
         host.local_auto_attack = true;
         if let Some(p) = host.player_snap() {
@@ -238,7 +243,7 @@ pub(crate) fn handle_interact_keys(
     if keys.just_pressed(KeyCode::KeyB) {
         ui.show_bags = !ui.show_bags;
     }
-    if keys.just_pressed(KeyCode::KeyL) {
+    if keys.just_pressed(KeyCode::KeyL) && !ui.show_market {
         ui.show_quests = !ui.show_quests;
     }
     if keys.just_pressed(KeyCode::KeyC) {
@@ -370,6 +375,57 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Bank is empty.".into(), 2.0));
         }
     }
+    if ui.show_bank {
+        let bank_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
+        {
+            Some(0usize)
+        } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+            Some(1)
+        } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+            Some(2)
+        } else if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+            Some(3)
+        } else if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+            Some(4)
+        } else if keys.just_pressed(KeyCode::Digit6) || keys.just_pressed(KeyCode::Numpad6) {
+            Some(5)
+        } else if keys.just_pressed(KeyCode::Digit7) || keys.just_pressed(KeyCode::Numpad7) {
+            Some(6)
+        } else if keys.just_pressed(KeyCode::Digit8) || keys.just_pressed(KeyCode::Numpad8) {
+            Some(7)
+        } else if keys.just_pressed(KeyCode::Digit9) || keys.just_pressed(KeyCode::Numpad9) {
+            Some(8)
+        } else {
+            None
+        };
+        if let Some(idx) = bank_idx {
+            if let Some(stack) = host.snapshot.bank.get(idx).cloned() {
+                host.interact(
+                    player_id,
+                    InteractAction::BankWithdraw {
+                        bank_slot: stack.slot,
+                        count: stack.count,
+                    },
+                );
+                host.recent_toasts.push((
+                    format!("Withdrawing {}×{}.", stack.count, stack.item_id),
+                    2.0,
+                ));
+            }
+        }
+    }
+    if ui.show_bank && keys.just_pressed(KeyCode::KeyJ) {
+        let amount = host.snapshot.progress.copper;
+        host.interact(player_id, InteractAction::BankDepositCopper { amount });
+        host.recent_toasts
+            .push((format!("Depositing {amount}c to vault."), 2.0));
+    }
+    if ui.show_bank && keys.just_pressed(KeyCode::KeyY) {
+        let amount = host.snapshot.bank_copper;
+        host.interact(player_id, InteractAction::BankWithdrawCopper { amount });
+        host.recent_toasts
+            .push((format!("Withdrawing {amount}c from vault."), 2.0));
+    }
     if ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
         if let Some(mail) = host.snapshot.mail.first() {
             let mail_id = mail.id;
@@ -381,24 +437,143 @@ pub(crate) fn handle_interact_keys(
         }
     }
     if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
-        if let Some(listing) = host.snapshot.market.first().cloned() {
-            if listing.price <= host.snapshot.progress.copper {
+        if let Some(listing) = host
+            .snapshot
+            .market
+            .iter()
+            .find(|l| !l.mine && l.price <= host.snapshot.progress.copper)
+            .cloned()
+        {
+            host.interact(
+                player_id,
+                InteractAction::MarketBuy {
+                    listing_id: listing.id,
+                },
+            );
+            host.recent_toasts.push((
+                format!("Buying listing #{} for {}c.", listing.id, listing.price),
+                2.0,
+            ));
+        } else {
+            host.recent_toasts
+                .push(("No affordable market listings.".into(), 2.0));
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::KeyL) {
+        if let Some((bag_slot, count, item_id, price)) = first_listable_bag_stack(&host.snapshot) {
+            host.interact(
+                player_id,
+                InteractAction::MarketList {
+                    bag_slot,
+                    count,
+                    price,
+                },
+            );
+            host.recent_toasts
+                .push((format!("Listing 1×{item_id} for {price}c."), 2.0));
+        } else {
+            host.recent_toasts
+                .push(("Nothing listable in bags.".into(), 2.0));
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::KeyX) {
+        if let Some(listing) = host.snapshot.market.iter().find(|l| l.mine).cloned() {
+            host.interact(
+                player_id,
+                InteractAction::MarketCancel {
+                    listing_id: listing.id,
+                },
+            );
+            host.recent_toasts
+                .push((format!("Cancelling listing #{}.", listing.id), 2.0));
+        } else {
+            host.recent_toasts
+                .push(("You have no listings.".into(), 2.0));
+        }
+    }
+
+    // Bags: equip / use / sell junk while vendor open.
+    if ui.show_bags && keys.just_pressed(KeyCode::KeyQ) {
+        if let Some((bag_slot, item_id)) = first_equippable_bag_stack(&host.snapshot) {
+            host.interact(player_id, InteractAction::Equip { bag_slot });
+            host.recent_toasts
+                .push((format!("Equipping {item_id}."), 2.0));
+        } else {
+            host.recent_toasts
+                .push(("No equippable item in bags.".into(), 2.0));
+        }
+    }
+    if ui.show_bags && keys.just_pressed(KeyCode::KeyF) {
+        if let Some((bag_slot, item_id)) = first_consumable_bag_stack(&host.snapshot) {
+            host.interact(player_id, InteractAction::UseItem { bag_slot });
+            host.recent_toasts.push((format!("Using {item_id}."), 2.0));
+        } else {
+            host.recent_toasts
+                .push(("No consumable in bags.".into(), 2.0));
+        }
+    }
+    if ui.show_bags && host.snapshot.open_vendor.is_some() && keys.just_pressed(KeyCode::KeyV) {
+        if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
+            host.interact(player_id, InteractAction::Sell { bag_slot, count });
+            host.recent_toasts
+                .push((format!("Selling {count}×{item_id}."), 2.0));
+        } else {
+            host.recent_toasts.push(("No junk to sell.".into(), 2.0));
+        }
+    }
+
+    // Need/Greed: 1/2/3 when a roll is pending (and bank/talents closed).
+    let pending = host
+        .snapshot
+        .pending_loot
+        .iter()
+        .find(|p| !p.rolled)
+        .cloned();
+    if let Some(pending) = pending {
+        if !ui.show_talents && !ui.show_bank {
+            if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
                 host.interact(
                     player_id,
-                    InteractAction::MarketBuy {
-                        listing_id: listing.id,
+                    InteractAction::LootNeed {
+                        loot_id: pending.loot_id,
                     },
                 );
-                host.recent_toasts.push((
-                    format!("Buying listing #{} for {}c.", listing.id, listing.price),
-                    2.0,
-                ));
-            } else {
-                host.recent_toasts
-                    .push(("Not enough copper for first listing.".into(), 2.0));
+                host.recent_toasts.push(("Rolling Need…".into(), 1.5));
+            } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+                host.interact(
+                    player_id,
+                    InteractAction::LootGreed {
+                        loot_id: pending.loot_id,
+                    },
+                );
+                host.recent_toasts.push(("Rolling Greed…".into(), 1.5));
+            } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+                host.interact(
+                    player_id,
+                    InteractAction::LootPass {
+                        loot_id: pending.loot_id,
+                    },
+                );
+                host.recent_toasts.push(("Passing on loot…".into(), 1.5));
             }
-        } else {
-            host.recent_toasts.push(("No market listings.".into(), 2.0));
+        }
+    }
+
+    // Party leader loot mode: [ = FFA, ] = Need/Greed
+    if host.snapshot.party_id.is_some() {
+        if keys.just_pressed(KeyCode::BracketLeft) {
+            host.interact(
+                player_id,
+                InteractAction::SetLootMode { mode: "ffa".into() },
+            );
+        }
+        if keys.just_pressed(KeyCode::BracketRight) {
+            host.interact(
+                player_id,
+                InteractAction::SetLootMode {
+                    mode: "need_greed".into(),
+                },
+            );
         }
     }
 
@@ -410,6 +585,28 @@ pub(crate) fn handle_interact_keys(
             .push(("No player yet (waiting for snapshot).".into(), 2.0));
         return;
     };
+
+    // Prefer looting nearby piles / corpses, then NPCs.
+    let mut best_loot: Option<(EntityId, f32)> = None;
+    for e in &host.snapshot.entities {
+        let is_loot = e.kind == EntityKind::Loot && e.alive;
+        let is_corpse = e.kind == EntityKind::Mob && !e.alive;
+        if !is_loot && !is_corpse {
+            continue;
+        }
+        let dx = e.x - player.x;
+        let dz = e.z - player.z;
+        let d = (dx * dx + dz * dz).sqrt();
+        if d < 5.0 && best_loot.map(|(_, bd)| d < bd).unwrap_or(true) {
+            best_loot = Some((e.id, d));
+        }
+    }
+    if let Some((lid, _)) = best_loot {
+        host.interact(lid, InteractAction::LootCorpse { target_id: lid });
+        host.recent_toasts.push(("Looting…".into(), 1.5));
+        return;
+    }
+
     let mut best: Option<(EntityId, f32, bool)> = None;
     for e in &host.snapshot.entities {
         if e.kind != EntityKind::Npc || !e.alive {

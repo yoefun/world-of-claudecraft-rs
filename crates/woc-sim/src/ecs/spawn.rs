@@ -165,6 +165,7 @@ pub fn create_player(
         id,
         Bank {
             bank: vec![None; BANK_SLOTS],
+            bank_copper: 0,
         },
     );
     let y = ground_at(x, z);
