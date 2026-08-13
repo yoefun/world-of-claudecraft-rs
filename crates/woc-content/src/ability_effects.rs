@@ -140,6 +140,8 @@ pub struct AuraDef {
     pub move_mult: f32,
     pub absorb: f32,
     pub breaks_on_damage: bool,
+    /// Outgoing damage multiplier while the aura remains (`1.0` = none).
+    pub damage_mult: f32,
 }
 
 const fn dot(id: &'static str, duration: f32, tick_interval: f32, tick_damage: f32) -> AuraDef {
@@ -153,6 +155,7 @@ const fn dot(id: &'static str, duration: f32, tick_interval: f32, tick_damage: f
         move_mult: 1.0,
         absorb: 0.0,
         breaks_on_damage: false,
+        damage_mult: 1.0,
     }
 }
 
@@ -167,6 +170,7 @@ const fn hot(id: &'static str, duration: f32, tick_interval: f32, tick_heal: f32
         move_mult: 1.0,
         absorb: 0.0,
         breaks_on_damage: false,
+        damage_mult: 1.0,
     }
 }
 
@@ -181,6 +185,7 @@ const fn slow(id: &'static str, duration: f32, move_mult: f32) -> AuraDef {
         move_mult,
         absorb: 0.0,
         breaks_on_damage: false,
+        damage_mult: 1.0,
     }
 }
 
@@ -195,6 +200,7 @@ const fn stun(id: &'static str, duration: f32) -> AuraDef {
         move_mult: 0.0,
         absorb: 0.0,
         breaks_on_damage: false,
+        damage_mult: 1.0,
     }
 }
 
@@ -209,10 +215,11 @@ const fn absorb(id: &'static str, duration: f32, amount: f32) -> AuraDef {
         move_mult: 1.0,
         absorb: amount,
         breaks_on_damage: false,
+        damage_mult: 1.0,
     }
 }
 
-const fn buff(id: &'static str, duration: f32) -> AuraDef {
+const fn buff(id: &'static str, duration: f32, damage_mult: f32) -> AuraDef {
     AuraDef {
         id,
         duration,
@@ -223,6 +230,7 @@ const fn buff(id: &'static str, duration: f32) -> AuraDef {
         move_mult: 1.0,
         absorb: 0.0,
         breaks_on_damage: false,
+        damage_mult,
     }
 }
 
@@ -241,8 +249,8 @@ pub static AURAS: &[AuraDef] = &[
     stun("cheap_shot", 2.0),
     stun("hammer_of_justice", 3.0),
     absorb("power_word_shield", 15.0, 45.0),
-    buff("battle_shout", 120.0),
-    buff("aspect_of_the_hawk", 120.0),
+    buff("battle_shout", 120.0, 1.1),
+    buff("aspect_of_the_hawk", 120.0, 1.1),
 ];
 
 pub fn aura(id: &str) -> Option<&'static AuraDef> {
@@ -270,6 +278,7 @@ mod tests {
         assert!(aura("cheap_shot").unwrap().stun);
         assert!(aura("rejuvenation").unwrap().is_hot());
         assert!(aura("power_word_shield").unwrap().absorb > 0.0);
+        assert!((aura("aspect_of_the_hawk").unwrap().damage_mult - 1.1).abs() < f32::EPSILON);
         assert!(aura("missing").is_none());
     }
 

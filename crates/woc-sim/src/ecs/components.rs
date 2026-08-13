@@ -57,6 +57,8 @@ pub struct AuraInstance {
     pub absorb: f32,
     /// Removed when the bearer takes a hit (fear, travel form).
     pub breaks_on_damage: bool,
+    /// Outgoing damage multiplier (`1.0` = unchanged).
+    pub damage_mult: f32,
 }
 
 /// In-progress ability cast.

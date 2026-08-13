@@ -383,6 +383,7 @@ fn use_item_from_bag(
             move_mult: 1.0,
             absorb: 0.0,
             breaks_on_damage: false,
+            damage_mult: 1.0,
         },
         events,
     );

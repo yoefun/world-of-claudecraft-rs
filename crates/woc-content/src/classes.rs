@@ -103,7 +103,7 @@ const WARRIOR_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 5,
-        ability_id: "rend",
+        ability_id: "charge",
     },
 ];
 
@@ -149,7 +149,7 @@ const HUNTER_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 5,
-        ability_id: "multi_shot",
+        ability_id: "aspect_of_the_hawk",
     },
 ];
 
@@ -191,7 +191,7 @@ const PRIEST_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 5,
-        ability_id: "shadow_word_pain",
+        ability_id: "power_word_shield",
     },
 ];
 
@@ -237,7 +237,7 @@ const MAGE_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 5,
-        ability_id: "counterspell",
+        ability_id: "blink",
     },
 ];
 

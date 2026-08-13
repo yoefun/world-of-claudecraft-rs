@@ -788,7 +788,22 @@ fn format_action_bar(snap: &TickSnapshot) -> String {
             .join(" · ");
         format!("   | Auras: {list}")
     };
-    format!("{}{auras}", parts.join("   "))
+    format!(
+        "{}{auras}{stealth}",
+        parts.join("   "),
+        stealth = rogue_stealth_hint(snap)
+    )
+}
+
+fn rogue_stealth_hint(snap: &TickSnapshot) -> &'static str {
+    if snap.progress.class_id != "rogue" {
+        return "";
+    }
+    if snap.stealthed {
+        "   [Z] STEALTH"
+    } else {
+        "   [Z] Stealth"
+    }
 }
 
 /// Show vendor panel when `open_vendor` is set; rebuild buy buttons as stock changes.
@@ -1050,5 +1065,25 @@ mod tests {
         assert!(text.contains("[1] Heroic Strike READY"));
         assert!(text.contains("[2] Cleave locked"));
         assert!(text.contains("Auras: rend 6s"));
+        assert!(!text.contains("[Z] Stealth"));
+    }
+
+    #[test]
+    fn rogue_action_bar_hints_stealth_key() {
+        let mut snap = chrome_snapshot();
+        snap.progress.class_id = "rogue".into();
+        snap.ability_bar = vec![woc_protocol::AbilityBarSlot {
+            slot: 1,
+            ability_id: "sinister_strike".into(),
+            name: "Sinister Strike".into(),
+            known: true,
+            ready: true,
+            cooldown: 0.0,
+        }];
+        let text = format_action_bar(&snap);
+        assert!(text.contains("[Z] Stealth"));
+        snap.stealthed = true;
+        let stealthed = format_action_bar(&snap);
+        assert!(stealthed.contains("[Z] STEALTH"));
     }
 }

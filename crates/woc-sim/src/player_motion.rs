@@ -555,6 +555,7 @@ mod tests {
                     move_mult: 0.0,
                     absorb: 0.0,
                     breaks_on_damage: false,
+                    damage_mult: 1.0,
                 }],
             },
         );

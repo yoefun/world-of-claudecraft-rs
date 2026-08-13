@@ -441,6 +441,38 @@ mod tests {
     }
 
     #[test]
+    fn class_identity_slot5_signatures() {
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Priest, 5)
+                .expect("priest 5")
+                .id,
+            "power_word_shield"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Warrior, 5)
+                .expect("warrior 5")
+                .id,
+            "charge"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Mage, 5)
+                .expect("mage 5")
+                .id,
+            "blink"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Hunter, 5)
+                .expect("hunter 5")
+                .id,
+            "aspect_of_the_hawk"
+        );
+        assert!(ability("rend").is_some());
+        assert!(ability("shadow_word_pain").is_some());
+        assert!(ability("counterspell").is_some());
+        assert!(ability("multi_shot").is_some());
+    }
+
+    #[test]
     fn every_class_kit_has_distinct_effects() {
         use std::mem::discriminant;
         for class in CLASSES {

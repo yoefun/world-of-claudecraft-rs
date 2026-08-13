@@ -266,8 +266,19 @@ pub fn deal_damage(
         .get::<Progress>(source)
         .map(|p| crate::talents::damage_multiplier_from_ranks(&p.talents))
         .unwrap_or(1.0);
+    let aura_mult = world
+        .get::<Auras>(source)
+        .map(|store| {
+            store
+                .auras
+                .iter()
+                .filter(|a| a.remaining > 0.0)
+                .map(|a| a.damage_mult)
+                .fold(1.0_f32, |acc, m| acc * m)
+        })
+        .unwrap_or(1.0);
     let armor = world.get::<Combat>(target).map(|c| c.armor).unwrap_or(0.0);
-    let mitigated = (amount * talent_mult - armor * 0.05).max(1.0);
+    let mitigated = (amount * talent_mult * aura_mult - armor * 0.05).max(1.0);
 
     let mut remaining = mitigated;
     let mut popped = Vec::new();
@@ -352,6 +363,7 @@ pub fn apply_aura(
             existing.move_mult = aura.move_mult;
             existing.absorb = existing.absorb.max(aura.absorb);
             existing.breaks_on_damage = aura.breaks_on_damage;
+            existing.damage_mult = aura.damage_mult;
         } else {
             store.auras.push(aura);
         }
@@ -395,6 +407,7 @@ fn apply_ability_aura(
             move_mult: def.move_mult,
             absorb: def.absorb,
             breaks_on_damage: def.breaks_on_damage,
+            damage_mult: def.damage_mult,
         },
         events,
     );
@@ -1635,6 +1648,7 @@ mod tests {
                     move_mult: 1.0,
                     absorb: 0.0,
                     breaks_on_damage: false,
+                    damage_mult: 1.0,
                 }],
             },
         );
@@ -1666,6 +1680,7 @@ mod tests {
                     move_mult: 1.0,
                     absorb: 0.0,
                     breaks_on_damage: false,
+                    damage_mult: 1.0,
                 }],
             },
         );
@@ -2264,6 +2279,7 @@ mod tests {
                     move_mult: 1.0,
                     absorb: 30.0,
                     breaks_on_damage: false,
+                    damage_mult: 1.0,
                 }],
             },
         );
@@ -2476,5 +2492,192 @@ mod tests {
         fire_slot(&mut world, AbilitySlot::Slot3);
         assert!(is_stunned(&world, 2));
         assert!(!world.get::<ClassKit>(1).unwrap().stealthed);
+    }
+
+    #[test]
+    fn rogue_cheap_shot_fails_without_stealth() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 6);
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.stealthed = false;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot3);
+        assert!(!is_stunned(&world, 2));
+    }
+
+    #[test]
+    fn rogue_eviscerate_scales_with_combo() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 3);
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 800.0;
+            h.hp_max = 800.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.combo_points = 0;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot2);
+        let zero_combo_hp = world.get::<Health>(2).unwrap().hp;
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 800.0;
+            h.alive = true;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 200.0;
+            kit.ability_cds.clear();
+            kit.combo_points = 5;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot2);
+        let five_combo_hp = world.get::<Health>(2).unwrap().hp;
+        assert!(
+            five_combo_hp < zero_combo_hp,
+            "eviscerate should scale with combo ({five_combo_hp} vs {zero_combo_hp})"
+        );
+        assert_eq!(world.get::<ClassKit>(1).unwrap().combo_points, 0);
+    }
+
+    #[test]
+    fn priest_shield_on_slot5() {
+        let mut world = class_and_mob(PlayerClass::Priest, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        let absorb = remaining_absorb(&world, 1);
+        assert!(
+            absorb > 0.0,
+            "priest slot 5 should apply Power Word: Shield absorb, got {absorb}"
+        );
+    }
+
+    #[test]
+    fn warrior_charge_from_eight_yards() {
+        let mut world = class_and_mob(PlayerClass::Warrior, 1);
+        if let Some(t) = world.get_mut::<Transform>(1) {
+            t.x = 0.0;
+            t.z = 0.0;
+        }
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 8.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        let start_x = world.get::<Transform>(1).unwrap().x;
+        let start_hp = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        assert!(
+            world.get::<Transform>(1).unwrap().x > start_x + 0.5,
+            "charge on slot 5 should close from eight yards"
+        );
+        assert!(world.get::<Health>(2).unwrap().hp < start_hp);
+    }
+
+    #[test]
+    fn mage_frost_nova_without_target() {
+        let mut world = class_and_mob(PlayerClass::Mage, 3);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        let start = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Slot4);
+        assert!(world.get::<Health>(2).unwrap().hp < start);
+    }
+
+    #[test]
+    fn mage_blink_on_slot5() {
+        let mut world = class_and_mob(PlayerClass::Mage, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        if let Some(t) = world.get_mut::<Transform>(1) {
+            t.yaw = 0.0;
+        }
+        let start_z = world.get::<Transform>(1).unwrap().z;
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        assert!(
+            (world.get::<Transform>(1).unwrap().z - start_z).abs() > 5.0,
+            "mage slot 5 should blink along facing"
+        );
+    }
+
+    #[test]
+    fn hunter_spends_mana_not_energy() {
+        let mut world = class_and_mob(PlayerClass::Hunter, 1);
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().resource_type,
+            Some(woc_content::ResourceType::Mana)
+        );
+        let before = world.get::<ClassKit>(1).unwrap().resource;
+        fire_slot(&mut world, AbilitySlot::Primary);
+        let after = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            after < before,
+            "arcane shot should spend hunter mana ({after} vs {before})"
+        );
+    }
+
+    #[test]
+    fn hunter_aspect_buffs_outgoing_damage() {
+        let mut world = class_and_mob(PlayerClass::Hunter, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        assert!(
+            world
+                .get::<Auras>(1)
+                .unwrap()
+                .auras
+                .iter()
+                .any(|a| a.id == "aspect_of_the_hawk"),
+            "hunter slot 5 should apply Aspect of the Hawk"
+        );
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 500.0;
+            h.hp_max = 500.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 200.0;
+            kit.ability_cds.clear();
+        }
+        let with_aspect = {
+            let start = world.get::<Health>(2).unwrap().hp;
+            fire_slot(&mut world, AbilitySlot::Primary);
+            start - world.get::<Health>(2).unwrap().hp
+        };
+        if let Some(store) = world.get_mut::<Auras>(1) {
+            store.auras.clear();
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 500.0;
+            h.alive = true;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 200.0;
+            kit.ability_cds.clear();
+        }
+        let without_aspect = {
+            let start = world.get::<Health>(2).unwrap().hp;
+            fire_slot(&mut world, AbilitySlot::Primary);
+            start - world.get::<Health>(2).unwrap().hp
+        };
+        assert!(
+            with_aspect > without_aspect + 0.5,
+            "aspect should raise outgoing damage ({with_aspect} vs {without_aspect})"
+        );
     }
 }
