@@ -4,6 +4,12 @@
 
 ### Added
 
+- **1.6.0 `class-engine`:** protocol rev **7** snapshot fields (`combo_points`, `stealthed`, `stance_id`, `absorb`) and `ToggleStealth` / `CycleStance` / `ToggleForm`.
+- Absorb shields soak damage before HP; interrupt lockout on Kick / Earth Shock / Counterspell; rogue combo builder/spend; Execute dumps leftover rage.
+- Stealth: rogue **Z**, aggro skip until melee, 0.7 move, breaks on hit or most abilities.
+- Charge / Blink / Life Tap / Power Word: Shield engine verbs (stubs off-kit until 1.7). Frost Nova self-AoE. Hunter spends mana.
+- Warrior rage from damage taken.
+
 - Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
 - Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.

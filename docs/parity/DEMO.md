@@ -10,6 +10,6 @@ Manual. Requires a GPU client. CI does not run this.
 6. Bank an item and copper; mail copper; list then buy/cancel on the AH; gather + craft a salve or copper shortsword.
 7. Duel a player; honor increments.
 
-Footer reads `WoC-rs 1.3.0 · upstream 0.31.0` (`VERSION.toml`).
+Footer reads `WoC-rs 1.6.0 · upstream 0.31.0` (`VERSION.toml`). Rogue **Z** toggles stealth (engine); kit swaps for Charge/Blink/Shield wait for 1.7.
 
 Actors live in the sim `World` columns (`AGENTS.md`). The Bevy client only presents snapshots.

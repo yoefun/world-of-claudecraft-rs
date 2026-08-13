@@ -1,7 +1,23 @@
 # Parity status
 
-**Current rewrite:** `1.3.0` / `online-hard`.  
-**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).
+**Current rewrite:** `1.6.0` / `class-engine`.  
+**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md). Class identity continues as `1.6.0`–`1.8.0`.
+
+## Class identity (`class-engine` → `class-forms`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Protocol rev 7 identity snapshot | done | `combo_points` / `stealthed` / `stance_id` / `absorb`; `ToggleStealth` / `CycleStance` / `ToggleForm`. |
+| Absorb before HP | done | Shield auras soak; depleted shields pop. |
+| Interrupt lockout | done | Kick / Earth Shock / Counterspell set `cast_lockout` (≥1.5s). |
+| Combo points | done | Sinister Strike builds; Eviscerate spends (`combo_per_point`). |
+| Stealth | done | Rogue **Z**; aggro skip until melee; 0.7 move; breaks on damage / ability. |
+| Charge / Blink / Convert | done | Engine verbs; Charge/Blink/Life Tap stubs off-kit until 1.7. |
+| Hunter mana | done | Hunter `resource_type` is Mana. |
+| Self-AoE | done | Frost Nova fires without a hostile target. |
+| Rage from taken + Execute dump | done | Warriors gain rage when hit; Execute dumps leftover rage into damage. |
+| 1.7 kit swaps (Charge/Blink/Shield on bar) | planned | After this engine gate. |
+| 1.8 stance / form / shout / fear | planned | **F** CycleStance / ToggleForm. |
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -38,7 +54,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.3.0` / online-hard (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.6.0` / class-engine (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
