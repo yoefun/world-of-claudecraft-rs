@@ -74,6 +74,39 @@ pub enum DenyReason {
     NotInstanced,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct NodeId(pub u16);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Vec2 {
+    pub x: f32,
+    pub z: f32,
+}
+
+impl Vec2 {
+    pub fn distance(self, other: Vec2) -> f32 {
+        let dx = self.x - other.x;
+        let dz = self.z - other.z;
+        (dx * dx + dz * dz).sqrt()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NodeKind {
+    Ore,
+    Herb,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GatherNodeDef {
+    pub id: NodeId,
+    pub kind: NodeKind,
+    pub pos: Vec2,
+    pub tier: u8,
+    pub skill_req: u16,
+    pub respawn_seconds: u32,
+}
+
 pub const TIER_SKILL_STEP: u16 = 25;
 pub const HARVEST_RANGE: f32 = 5.0;
 pub const STATION_RADIUS: f32 = 20.0;
