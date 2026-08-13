@@ -4,6 +4,11 @@
 
 ### Added
 
+- Protocol rev **6**: pending Need/Greed loot snapshot, bank copper vault, market `mine` flag; `BankDepositCopper` / `BankWithdrawCopper`.
+- Party Need/Greed is wired into mob loot spawn (eligible mates within 40 yd); pending piles skip FFA auto-pickup.
+- `LootCorpse` interact claims ground piles / corpse-adjacent loot (respects rolls).
+- Bank copper vault (deposit/withdraw) with durable persist (`bank_copper`).
+- Client economy UX: bags equip/use/sell; bank numbered withdraw + copper vault; market list/buy/cancel; loot roll keys **1/2/3**; party loot mode **[** / **]**.
 - Basic combat UX polish: keys **1–5** fire class kit slots; **Tab** cycles hostile targets; **Esc** clears target and stops auto-attack.
 - Protocol rev **5**: intent `clear_target`; snapshot `ability_bar` / `gcd` / `auto_attack` for the action-bar HUD.
 - Action bar shows known/locked kit abilities with CD/GCD state; aura strip on the bar; ability-hit / damage-taken combat toasts.
@@ -32,6 +37,8 @@
 
 - Clippy `too_many_arguments` on mail send / market list (nightly).
 - Gather nodes are not auto-looted on proximity (Interact / Gather only).
+- Need/Greed loot rules were implemented but never started on mob kills; FFA pickup no longer steals rolling piles.
+- `LootCorpse` was a no-op stub.
 
 ## 1.0.0-pre — 2026-07-28
 

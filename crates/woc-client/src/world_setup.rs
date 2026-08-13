@@ -306,7 +306,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB/F attack · Tab target · 1–5 abilities · T pet · E interact · B bags · L quests · C sheet · N talents (1–3 spend) · K bank · I mail · M map · U market · RMB look · Esc clear",
+                        "LMB/F attack · Tab target · 1–5 abilities · T pet · E interact/loot · B bags (Q/F) · L quests · C sheet · N talents · K bank (G/H/J/Y) · I mail · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),

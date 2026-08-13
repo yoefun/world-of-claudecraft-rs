@@ -4,7 +4,8 @@ use std::collections::HashMap;
 
 use crate::entity::{grant_into, Entity};
 use crate::rng::Rng;
-use woc_protocol::{EntityId, EntityKind, SimEvent};
+use crate::social::party::{PartyRoster, PARTY_CREDIT_RANGE};
+use woc_protocol::{EntityId, EntityKind, PendingLootSnapshot, SimEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LootMode {
@@ -47,7 +48,7 @@ pub struct PendingLoot {
 
 #[derive(Debug, Default)]
 pub struct LootRules {
-    /// party_id → mode
+    /// party_id → mode (mirrored from party leader SetLootMode for convenience)
     pub modes: HashMap<u32, LootMode>,
     pub pending: Vec<PendingLoot>,
 }
@@ -59,6 +60,75 @@ impl LootRules {
 
     pub fn set_mode(&mut self, party_id: u32, mode: LootMode) {
         self.modes.insert(party_id, mode);
+    }
+
+    pub fn is_pending(&self, loot_id: EntityId) -> bool {
+        self.pending.iter().any(|p| p.loot_id == loot_id)
+    }
+
+    /// Snapshot pending rolls relevant to `player` (eligible only).
+    pub fn snapshot_for(&self, player: EntityId) -> Vec<PendingLootSnapshot> {
+        self.pending
+            .iter()
+            .filter(|p| p.eligible.contains(&player))
+            .map(|p| PendingLootSnapshot {
+                loot_id: p.loot_id,
+                item_id: p.item_id.clone(),
+                copper: p.copper,
+                rolled: p.rolls.contains_key(&player),
+            })
+            .collect()
+    }
+
+    /// After a loot pile spawns from a mob kill, start Need/Greed when the
+    /// killer's party is in that mode and at least two eligible members are near.
+    pub fn maybe_start_party_roll(
+        &mut self,
+        parties: &PartyRoster,
+        entities: &[Entity],
+        killer: EntityId,
+        loot_id: EntityId,
+        events: &mut Vec<SimEvent>,
+    ) {
+        let Some(party_id) = parties.party_id(killer) else {
+            return;
+        };
+        let mode = parties
+            .loot_mode(killer)
+            .and_then(|s| LootMode::parse(&s))
+            .or_else(|| self.modes.get(&party_id).copied())
+            .unwrap_or(LootMode::Ffa);
+        self.modes.insert(party_id, mode);
+        if mode != LootMode::NeedGreed {
+            return;
+        }
+        let Some(loot) = entities
+            .iter()
+            .find(|e| e.id == loot_id && e.kind == EntityKind::Loot && e.alive)
+        else {
+            return;
+        };
+        let item_id = loot.loot_item.clone().unwrap_or_default();
+        let copper = loot.loot_copper;
+        if item_id.is_empty() && copper == 0 {
+            return;
+        }
+        let eligible = eligible_near_loot(parties, entities, killer, loot);
+        if eligible.len() < 2 {
+            return;
+        }
+        events.push(SimEvent::Toast {
+            message: format!(
+                "Need/Greed: {} ({}c) — press 1 Need / 2 Greed / 3 Pass",
+                if item_id.is_empty() {
+                    "copper".into()
+                } else {
+                    item_id.clone()
+                },
+                copper
+            ),
+        });
+        self.start_roll(loot_id, item_id, copper, eligible);
     }
 
     /// Start a Need/Greed roll for a loot entity among eligible party members.
@@ -131,6 +201,9 @@ impl LootRules {
             if let Some(loot) = entities.iter_mut().find(|e| e.id == pending.loot_id) {
                 loot.alive = false;
             }
+            events.push(SimEvent::Toast {
+                message: "Everyone passed — loot discarded.".into(),
+            });
             return;
         };
         if let Some(player) = entities.iter_mut().find(|e| e.id == winner) {
@@ -150,6 +223,33 @@ impl LootRules {
             item_id: pending.item_id,
         });
     }
+}
+
+fn eligible_near_loot(
+    parties: &PartyRoster,
+    entities: &[Entity],
+    killer: EntityId,
+    loot: &Entity,
+) -> Vec<EntityId> {
+    let Some(mut members) = parties.members_of(killer) else {
+        return vec![killer];
+    };
+    members.retain(|id| {
+        entities
+            .iter()
+            .find(|e| e.id == *id && e.kind == EntityKind::Player && e.alive)
+            .map(|mate| {
+                let dx = mate.x - loot.x;
+                let dz = mate.z - loot.z;
+                (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
+                    && mate.instance_id == loot.instance_id
+            })
+            .unwrap_or(false)
+    });
+    if !members.contains(&killer) {
+        members.push(killer);
+    }
+    members
 }
 
 fn pick_winner(pending: &PendingLoot) -> Option<EntityId> {
@@ -182,6 +282,7 @@ mod tests {
     use super::*;
     use crate::entity::create_player;
     use crate::rng::Rng;
+    use crate::social::party::PartyRoster;
     use woc_content::PlayerClass;
     use woc_protocol::EntityKind;
 
@@ -218,5 +319,48 @@ mod tests {
             .iter()
             .any(|e| matches!(e, SimEvent::LootAwarded { winner: 2, .. })));
         assert!(!entities[2].alive);
+    }
+
+    #[test]
+    fn need_greed_party_starts_roll_for_two() {
+        let mut entities = vec![
+            create_player(1, "A", PlayerClass::Warrior, 0.0, 0.0),
+            create_player(2, "B", PlayerClass::Mage, 1.0, 0.0),
+            Entity::blank(50, EntityKind::Loot, "loot", None, 0.5, 0.0),
+        ];
+        entities[2].alive = true;
+        entities[2].loot_item = Some("wolf_fang".into());
+        entities[2].loot_copper = 4;
+        let mut roster = PartyRoster::new();
+        roster.invite(1, "B", &entities);
+        roster.accept(2, &entities);
+        assert!(roster.set_loot_mode(1, LootMode::NeedGreed));
+        let mut rules = LootRules::default();
+        let mut events = Vec::new();
+        rules.maybe_start_party_roll(&roster, &entities, 1, 50, &mut events);
+        assert_eq!(rules.pending.len(), 1);
+        assert_eq!(rules.pending[0].eligible.len(), 2);
+        assert!(rules.is_pending(50));
+        let snap = rules.snapshot_for(1);
+        assert_eq!(snap.len(), 1);
+        assert!(!snap[0].rolled);
+    }
+
+    #[test]
+    fn ffa_does_not_start_roll() {
+        let mut entities = vec![
+            create_player(1, "A", PlayerClass::Warrior, 0.0, 0.0),
+            create_player(2, "B", PlayerClass::Mage, 1.0, 0.0),
+            Entity::blank(50, EntityKind::Loot, "loot", None, 0.5, 0.0),
+        ];
+        entities[2].alive = true;
+        entities[2].loot_item = Some("wolf_fang".into());
+        let mut roster = PartyRoster::new();
+        roster.invite(1, "B", &entities);
+        roster.accept(2, &entities);
+        let mut rules = LootRules::default();
+        let mut events = Vec::new();
+        rules.maybe_start_party_roll(&roster, &entities, 1, 50, &mut events);
+        assert!(rules.pending.is_empty());
     }
 }

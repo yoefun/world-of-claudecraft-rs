@@ -27,6 +27,8 @@ pub struct Character {
     #[serde(default)]
     pub bank: Vec<Option<InvStackDto>>,
     #[serde(default)]
+    pub bank_copper: u32,
+    #[serde(default)]
     pub honor: u32,
     #[serde(default)]
     pub professions: Vec<ProfessionSkillDto>,
@@ -56,6 +58,8 @@ pub struct CharacterSave {
     #[serde(default)]
     pub bank: Vec<Option<InvStackDto>>,
     #[serde(default)]
+    pub bank_copper: u32,
+    #[serde(default)]
     pub honor: u32,
     #[serde(default)]
     pub professions: Vec<ProfessionSkillDto>,
@@ -80,6 +84,7 @@ impl Default for CharacterSave {
             talent_points: 0,
             talents: Vec::new(),
             bank: Vec::new(),
+            bank_copper: 0,
             honor: 0,
             professions: Vec::new(),
             pvp_flagged: false,
@@ -104,6 +109,8 @@ pub(crate) struct CharacterCompletionDto {
     #[serde(default)]
     pub bank: Vec<Option<InvStackDto>>,
     #[serde(default)]
+    pub bank_copper: u32,
+    #[serde(default)]
     pub honor: u32,
     #[serde(default)]
     pub professions: Vec<ProfessionSkillDto>,
@@ -121,6 +128,7 @@ impl From<&CharacterSave> for CharacterCompletionDto {
             talent_points: save.talent_points,
             talents: save.talents.clone(),
             bank: save.bank.clone(),
+            bank_copper: save.bank_copper,
             honor: save.honor,
             professions: save.professions.clone(),
             pvp_flagged: save.pvp_flagged,
@@ -151,6 +159,7 @@ impl Character {
             talent_points: self.talent_points,
             talents: self.talents.clone(),
             bank: self.bank.clone(),
+            bank_copper: self.bank_copper,
             honor: self.honor,
             professions: self.professions.clone(),
             pvp_flagged: self.pvp_flagged,
@@ -171,6 +180,7 @@ impl Character {
         self.talent_points = save.talent_points;
         self.talents = save.talents;
         self.bank = save.bank;
+        self.bank_copper = save.bank_copper;
         self.honor = save.honor;
         self.professions = save.professions;
         self.pvp_flagged = save.pvp_flagged;
@@ -282,6 +292,7 @@ pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, se
             talent_points: 0,
             talents: Vec::new(),
             bank: Vec::new(),
+            bank_copper: 0,
             honor: 0,
             professions: Vec::new(),
             pvp_flagged: false,
@@ -366,6 +377,7 @@ mod tests {
             talent_points: 0,
             talents: Vec::new(),
             bank: Vec::new(),
+            bank_copper: 0,
             honor: 0,
             professions: Vec::new(),
             pvp_flagged: false,
@@ -382,6 +394,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
             })],
+            bank_copper: 0,
             honor: 125,
             professions: vec![ProfessionSkillDto {
                 id: "herbalism".into(),
@@ -431,6 +444,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
             })],
+            bank_copper: 0,
             honor: 125,
             professions: vec![ProfessionSkillDto {
                 id: "herbalism".into(),

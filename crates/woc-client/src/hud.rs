@@ -127,12 +127,58 @@ pub(crate) fn first_junk_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, Stri
     })
 }
 
+pub(crate) fn first_equippable_bag_stack(snap: &TickSnapshot) -> Option<(u8, String)> {
+    snap.inventory.iter().find_map(|stack| {
+        item(&stack.item_id)
+            .filter(|def| def.equip_slot.is_some())
+            .map(|_| (stack.slot, stack.item_id.clone()))
+    })
+}
+
+pub(crate) fn first_consumable_bag_stack(snap: &TickSnapshot) -> Option<(u8, String)> {
+    snap.inventory.iter().find_map(|stack| {
+        item(&stack.item_id)
+            .filter(|def| def.kind == ItemKind::Consumable)
+            .map(|_| (stack.slot, stack.item_id.clone()))
+    })
+}
+
+pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String, u32)> {
+    snap.inventory.iter().find_map(|stack| {
+        let def = item(&stack.item_id)?;
+        if matches!(def.kind, ItemKind::Junk | ItemKind::Consumable) {
+            let price = def.vendor_sell.max(1).saturating_mul(5);
+            Some((
+                stack.slot,
+                stack.count.min(1).max(1),
+                stack.item_id.clone(),
+                price,
+            ))
+        } else {
+            None
+        }
+    })
+}
+
 fn zone_name(snap: &TickSnapshot) -> &str {
     if snap.zone_id.is_empty() {
         "—"
     } else {
         &snap.zone_id
     }
+}
+
+fn pending_loot_line(snap: &TickSnapshot) -> Option<String> {
+    let pending = snap.pending_loot.iter().find(|p| !p.rolled)?;
+    let item = if pending.item_id.is_empty() {
+        "copper".into()
+    } else {
+        pending.item_id.clone()
+    };
+    Some(format!(
+        "Loot roll: {item} (+{}c)  [1] Need  [2] Greed  [3] Pass",
+        pending.copper
+    ))
 }
 
 fn talent_panel_text(snap: &TickSnapshot) -> String {
@@ -247,18 +293,26 @@ fn talent_bonus_summary(snap: &TickSnapshot) -> String {
 fn bank_panel_text(snap: &TickSnapshot) -> String {
     let mut lines = vec![
         "Bank [K]".to_string(),
-        format!("Zone: {}", zone_name(snap)),
+        format!(
+            "Zone: {}   Wallet: {}c   Vault: {}c",
+            zone_name(snap),
+            snap.progress.copper,
+            snap.bank_copper
+        ),
         "Stored:".into(),
     ];
     if snap.bank.is_empty() {
         lines.push("  (empty)".into());
     } else {
-        lines.extend(
-            snap.bank
-                .iter()
-                .enumerate()
-                .map(|(slot, stack)| format!("  [{slot}] {}×{}", stack.count, stack.item_id)),
-        );
+        lines.extend(snap.bank.iter().enumerate().map(|(i, stack)| {
+            format!(
+                "  [{}] slot {} — {}×{}",
+                i + 1,
+                stack.slot,
+                stack.count,
+                stack.item_id
+            )
+        }));
     }
     match first_junk_bag_stack(snap) {
         Some((_, count, item_id)) => {
@@ -273,6 +327,8 @@ fn bank_panel_text(snap: &TickSnapshot) -> String {
         )),
         None => lines.push("[H] Withdraw first bank slot (empty)".into()),
     }
+    lines.push("[1–9] Withdraw numbered bank stack".into());
+    lines.push("[J] Deposit all wallet copper · [Y] Withdraw all vault copper".into());
     lines.join("\n")
 }
 
@@ -318,13 +374,21 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
         lines.push("  (no listings)".into());
     } else {
         lines.extend(snap.market.iter().map(|listing| {
+            let mine = if listing.mine { " [yours]" } else { "" };
             format!(
-                "  #{} {}×{} — {}c ({})",
+                "  #{} {}×{} — {}c ({}){mine}",
                 listing.id, listing.count, listing.item_id, listing.price, listing.seller
             )
         }));
     }
-    lines.push("[O] Buy first listing (if affordable)".into());
+    match first_listable_bag_stack(snap) {
+        Some((_, _, item_id, price)) => {
+            lines.push(format!("[L] List 1×{item_id} for {price}c (+5c fee)"));
+        }
+        None => lines.push("[L] List first junk/consumable (none)".into()),
+    }
+    lines.push("[O] Buy first affordable listing (not yours)".into());
+    lines.push("[X] Cancel your first listing".into());
     lines.join("\n")
 }
 
@@ -529,25 +593,38 @@ pub(crate) fn update_hud(
     if let Ok(mut t) = bags.single_mut() {
         if ui.show_bags {
             if snap.inventory.is_empty() {
-                **t = "Bags: empty".into();
+                **t = "Bags: empty\n[Q] Equip · [F] Use consumable · [V] Sell junk (vendor open)"
+                    .into();
             } else {
-                let items: Vec<String> = snap
-                    .inventory
-                    .iter()
-                    .map(|s| format!("{}×{}", s.count, s.item_id))
-                    .collect();
-                **t = format!("Bags: {}", items.join(", "));
+                let mut lines = vec!["Bags [B]".to_string()];
+                for (i, s) in snap.inventory.iter().enumerate() {
+                    let kind = item(&s.item_id)
+                        .map(|d| format!("{:?}", d.kind))
+                        .unwrap_or_else(|| "?".into());
+                    lines.push(format!("  [{}] {}×{} ({kind})", i + 1, s.count, s.item_id));
+                }
+                lines.push("[Q] Equip first gear · [F] Use first consumable".into());
+                if snap.open_vendor.is_some() {
+                    lines.push("[V] Sell first junk to vendor".into());
+                }
+                **t = lines.join("\n");
             }
+        } else if let Some(loot) = pending_loot_line(snap) {
+            **t = format!("Bags: {} slots · {loot}", snap.inventory.len());
         } else {
             **t = format!("Bags: {} slots used (B)", snap.inventory.len());
         }
     }
     if let Ok(mut t) = toast.single_mut() {
-        **t = host
-            .recent_toasts
-            .last()
-            .map(|(m, _)| m.clone())
-            .unwrap_or_default();
+        if let Some(loot) = pending_loot_line(snap) {
+            **t = loot;
+        } else {
+            **t = host
+                .recent_toasts
+                .last()
+                .map(|(m, _)| m.clone())
+                .unwrap_or_default();
+        }
     }
     if let Ok(mut t) = net.single_mut() {
         **t = match host.play_mode {
@@ -847,6 +924,7 @@ mod tests {
             item_id: "peacebloom".into(),
             count: 5,
             price: 30,
+            mine: false,
         });
         snap
     }
@@ -871,9 +949,11 @@ mod tests {
     fn bank_panel_formats_slots_and_action_targets() {
         let text = bank_panel_text(&chrome_snapshot());
 
-        assert!(text.contains("[0] 4×silverleaf"));
+        assert!(text.contains("Vault:"));
+        assert!(text.contains("slot 0 — 4×silverleaf") || text.contains("4×silverleaf"));
         assert!(text.contains("[G] Deposit 3×wolf_fang"));
         assert!(text.contains("[H] Withdraw 4×silverleaf"));
+        assert!(text.contains("[J] Deposit all wallet copper"));
     }
 
     #[test]
@@ -891,7 +971,9 @@ mod tests {
 
         assert!(text.contains("Copper: 75"));
         assert!(text.contains("#11 5×peacebloom — 30c (Grace)"));
-        assert!(text.contains("[O] Buy first listing"));
+        assert!(text.contains("[O] Buy first affordable listing"));
+        assert!(text.contains("[L] List"));
+        assert!(text.contains("[X] Cancel"));
     }
 
     #[test]

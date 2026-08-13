@@ -29,6 +29,7 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
             .map(|t| (t.talent_id.clone(), t.rank))
             .collect(),
         bank: inv_from_dto(&character.bank),
+        bank_copper: character.bank_copper,
         honor: character.honor,
         professions: character
             .professions
@@ -61,6 +62,7 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
             })
             .collect(),
         bank: inv_to_dto(&state.bank),
+        bank_copper: state.bank_copper,
         honor: state.honor,
         professions: state
             .professions

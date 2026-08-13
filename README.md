@@ -16,10 +16,10 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
 - Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; dungeon crypt + 3-room delve
-- Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot
-- Bank, mail, auction house (durable across server restart); herbalism → alchemy craft loop
+- Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
+- Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy craft loop
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
-- Client panels: talents / bank / mail / market; **minimap** + **world map** (M)
+- Client panels: talents / bank / mail / market / bags (equip·use·sell); **minimap** + **world map** (M)
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
@@ -72,7 +72,7 @@ REST: `http://127.0.0.1:8787/api/{register,login,characters}` (blocking `ureq` o
 Default WS: `ws://127.0.0.1:8787/ws/game` (`ONLINE_WS_URL` in `crates/woc-client/src/online.rs`).
 Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `std::sync::mpsc`.
 
-Controls: **WASD** move, **Space** jump / swim hop / fly up, **Ctrl** descend (swim/fly), **V** travel flight toggle, **mouse** look (hold right), **left click** / **F** attack, **Tab** cycle target, **1–5** abilities, **T** pet summon/dismiss (hunter/warlock), **Esc** clear target / stop attack / release cursor, **E** interact, **B** bags, **L** quests, **C** character, **N** talents (**1–3** spend / Y first available / R respec), **K** bank (G deposit / H withdraw), **I** mail (P collect), **M** world map, **U** market (O buy). Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
+Controls: **WASD** move, **Space** jump / swim hop / fly up, **Ctrl** descend (swim/fly), **V** travel flight toggle, **mouse** look (hold right), **left click** / **F** attack, **Tab** cycle target, **1–5** abilities (or Need/Greed/Pass while rolling), **T** pet summon/dismiss (hunter/warlock), **Esc** clear target / stop attack / release cursor, **E** interact/loot, **B** bags (**Q** equip / **F** use / **V** sell junk at vendor), **L** quests, **C** character, **N** talents (**1–3** spend / Y first available / R respec), **K** bank (**G** deposit junk / **H**/**1–9** withdraw / **J**/**Y** copper vault), **I** mail (**P** collect), **M** world map, **U** market (**L** list / **O** buy / **X** cancel), **[**/**]** party loot mode. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
 ## Architecture
 
 One sim, multiple hosts:
