@@ -377,10 +377,11 @@ fn listing_stack(listing: &Listing) -> InvStack {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Durable, InvStack, Progress};
+    use crate::ecs::components::{Bags, Durable, Identity, InvStack, Progress};
     use crate::inventory::grant_into;
     use crate::mail::Mailbox;
     use woc_content::PlayerClass;
+    use woc_protocol::EntityId;
 
     #[test]
     fn list_buy_and_cancel_flow() {
@@ -666,5 +667,79 @@ mod tests {
             .unwrap();
         assert_eq!(sword.durability, Some(7));
         assert_eq!(sword.enchant_id.as_deref(), Some("coarse_sharpening"));
+    }
+
+    fn npc_id_by_template(world: &World, template: &str) -> EntityId {
+        world
+            .ids::<Identity>()
+            .into_iter()
+            .find(|&id| {
+                world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some(template)
+            })
+            .expect(template)
+    }
+
+    #[test]
+    fn interact_market_list_requires_auctioneer_session() {
+        use woc_protocol::{InteractAction, WorldHost};
+        let mut sim = crate::sim::Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        if let Some(p) = sim.world.get_mut::<Progress>(pid) {
+            p.copper = 100;
+        }
+        if let Some(bags) = sim.world.get_mut::<Bags>(pid) {
+            assert!(grant_into(&mut bags.inventory, "silverleaf", 1));
+        }
+        let slot = sim
+            .world
+            .get::<Bags>(pid)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "silverleaf"))
+            .unwrap() as u8;
+        WorldHost::interact(
+            &mut sim,
+            pid,
+            0,
+            InteractAction::MarketList {
+                bag_slot: slot,
+                count: 1,
+                price: 12,
+            },
+        );
+        assert!(sim.market.listings.is_empty());
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Talk to an auctioneer first."
+        )));
+
+        let lise = npc_id_by_template(&sim.world, "auctioneer_lise");
+        if let Some(nt) = sim
+            .world
+            .get::<crate::ecs::components::Transform>(lise)
+            .cloned()
+        {
+            if let Some(p) = sim.world.get_mut::<crate::ecs::components::Transform>(pid) {
+                p.x = nt.x;
+                p.z = nt.z;
+            }
+        }
+        WorldHost::interact(&mut sim, pid, lise, InteractAction::Talk);
+        sim.events.clear();
+        WorldHost::interact(
+            &mut sim,
+            pid,
+            lise,
+            InteractAction::MarketList {
+                bag_slot: slot,
+                count: 1,
+                price: 12,
+            },
+        );
+        assert_eq!(sim.market.listings.len(), 1);
     }
 }

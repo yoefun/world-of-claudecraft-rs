@@ -2,6 +2,7 @@
 
 use crate::bank;
 use crate::delves::{enter_delve, try_advance_delve};
+use crate::ecs::components::{dist2d, Bags, Identity};
 use crate::instances::{enter_dungeon, leave_instance};
 use crate::interaction::handle_interact;
 use crate::pet::{dismiss_pet, summon_pet};
@@ -10,8 +11,47 @@ use crate::pvp::{accept_pending_duel, challenge_duel, toggle_pvp};
 use crate::sim::Sim;
 use crate::social::{LootMode, RollChoice};
 use crate::talents;
+use crate::types::INTERACT_RANGE;
 use crate::zones::enter_portal;
-use woc_protocol::{EntityId, InteractAction, PlayerIntent, SimEvent, TickSnapshot, WorldHost};
+use woc_content::npc;
+use woc_protocol::{
+    EntityId, EntityKind, InteractAction, PlayerIntent, SimEvent, TickSnapshot, WorldHost,
+};
+
+fn require_auctioneer(
+    world: &crate::ecs::World,
+    player_id: EntityId,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let Some(npc_id) = world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) else {
+        events.push(SimEvent::Toast {
+            message: "Talk to an auctioneer first.".into(),
+        });
+        return false;
+    };
+    let is_auctioneer = world
+        .get::<Identity>(npc_id)
+        .and_then(|i| {
+            (i.kind == EntityKind::Npc).then(|| {
+                i.template_id
+                    .as_deref()
+                    .and_then(npc)
+                    .map(|d| d.is_auctioneer())
+            })
+        })
+        .flatten()
+        .unwrap_or(false);
+    let in_range = dist2d(world, player_id, npc_id)
+        .map(|d| d <= INTERACT_RANGE)
+        .unwrap_or(false);
+    if !is_auctioneer || !in_range {
+        events.push(SimEvent::Toast {
+            message: "Talk to an auctioneer first.".into(),
+        });
+        return false;
+    }
+    true
+}
 
 impl WorldHost for Sim {
     fn push_intent(&mut self, player_id: EntityId, intent: PlayerIntent) {
@@ -109,33 +149,39 @@ impl WorldHost for Sim {
                 count,
                 price,
             } => {
-                let _ = self.market.list_item(
-                    &mut self.world,
-                    player_id,
-                    bag_slot,
-                    count,
-                    price,
-                    self.tick,
-                    &mut self.events,
-                );
+                if require_auctioneer(&self.world, player_id, &mut self.events) {
+                    let _ = self.market.list_item(
+                        &mut self.world,
+                        player_id,
+                        bag_slot,
+                        count,
+                        price,
+                        self.tick,
+                        &mut self.events,
+                    );
+                }
             }
             InteractAction::MarketBuy { listing_id } => {
-                let _ = self.market.buy(
-                    &mut self.world,
-                    &mut self.mail,
-                    player_id,
-                    listing_id,
-                    &mut self.events,
-                );
+                if require_auctioneer(&self.world, player_id, &mut self.events) {
+                    let _ = self.market.buy(
+                        &mut self.world,
+                        &mut self.mail,
+                        player_id,
+                        listing_id,
+                        &mut self.events,
+                    );
+                }
             }
             InteractAction::MarketCancel { listing_id } => {
-                let _ = self.market.cancel(
-                    &mut self.world,
-                    &mut self.mail,
-                    player_id,
-                    listing_id,
-                    &mut self.events,
-                );
+                if require_auctioneer(&self.world, player_id, &mut self.events) {
+                    let _ = self.market.cancel(
+                        &mut self.world,
+                        &mut self.mail,
+                        player_id,
+                        listing_id,
+                        &mut self.events,
+                    );
+                }
             }
             InteractAction::DuelChallenge => {
                 let _ = challenge_duel(&mut self.pvp, &self.world, player_id, target_id);
