@@ -25,7 +25,7 @@ edition = "2021"
 license = "MIT"
 authors = ["World of ClaudeCraft Rust rewrite contributors"]
 repository = "https://github.com/yoefun/world-of-claudecraft-rs"
-description = "Rust rewrite of World of ClaudeCraft (framework slice)"
+description = "Rust rewrite of World of ClaudeCraft"
 
 [workspace.dependencies]
 woc-version = { path = "crates/woc-version" }

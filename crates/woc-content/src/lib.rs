@@ -2,6 +2,7 @@
 //! Pure data: no Bevy, no networking, no wall clock.
 
 pub mod abilities;
+pub mod ability_effects;
 pub mod classes;
 pub mod delves;
 pub mod dungeons;
@@ -28,6 +29,7 @@ pub mod zone2;
 pub mod zone3;
 
 pub use abilities::{ability, AbilityDef, ABILITIES};
+pub use ability_effects::{aura_for_ability, AbilityEffect, AuraDef, DamageSchool};
 pub use classes::{
     class_ability_for_slot, class_def, known_abilities_at_level, ClassDef, ClassKitEntry,
     PlayerClass, ResourceType, CLASSES,
@@ -375,6 +377,30 @@ mod tests {
         assert!(talent("missing_talent").is_none());
         assert!(dungeon("eastbrook_crypt").is_some());
         assert!(dungeon("missing_dungeon").is_none());
+    }
+
+    #[test]
+    fn every_ability_declares_an_effect() {
+        assert_eq!(ABILITIES.len(), 29);
+        for def in ABILITIES {
+            let _ = def.effect;
+        }
+        assert!(matches!(
+            ability("cleave").unwrap().effect,
+            AbilityEffect::AoeDamage { .. }
+        ));
+        assert!(matches!(
+            ability("flash_heal").unwrap().effect,
+            AbilityEffect::Heal { .. }
+        ));
+        assert!(matches!(
+            ability("taunt").unwrap().effect,
+            AbilityEffect::Taunt { .. }
+        ));
+        assert!(matches!(
+            ability("earth_shock").unwrap().effect,
+            AbilityEffect::Interrupt
+        ));
     }
 
     #[test]

@@ -1,5 +1,7 @@
 //! Ability definitions for class kits (slots 1–5).
 
+use crate::ability_effects::{AbilityEffect, DamageSchool};
+
 #[derive(Debug, Clone)]
 pub struct AbilityDef {
     pub id: &'static str,
@@ -12,6 +14,7 @@ pub struct AbilityDef {
     pub cast_time: f32,
     /// Minimum player level required to know / use this ability.
     pub min_level: u32,
+    pub effect: AbilityEffect,
 }
 
 pub static ABILITIES: &[AbilityDef] = &[
@@ -25,6 +28,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
     },
     AbilityDef {
         id: "cleave",
@@ -35,6 +39,10 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::AoeDamage {
+            radius: 4.0,
+            max_targets: 3,
+        },
     },
     AbilityDef {
         id: "execute",
@@ -45,6 +53,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 6,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
     },
     // —— Paladin ——
     AbilityDef {
@@ -56,6 +65,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
     },
     AbilityDef {
         id: "judgment",
@@ -66,6 +76,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 12.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Holy,
+        },
     },
     AbilityDef {
         id: "holy_shock",
@@ -76,6 +89,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Holy,
+        },
     },
     // —— Hunter ——
     AbilityDef {
@@ -87,6 +103,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Arcane,
+        },
     },
     AbilityDef {
         id: "serpent_sting",
@@ -97,6 +116,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Nature,
+        },
     },
     AbilityDef {
         id: "aimed_shot",
@@ -107,6 +129,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 22.0,
         cast_time: 1.5,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Physical,
+        },
     },
     // —— Rogue ——
     AbilityDef {
@@ -118,6 +143,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
     },
     AbilityDef {
         id: "eviscerate",
@@ -128,6 +154,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
     },
     AbilityDef {
         id: "cheap_shot",
@@ -138,6 +165,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 6,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
     },
     // —— Priest ——
     AbilityDef {
@@ -149,6 +177,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Holy,
+        },
     },
     AbilityDef {
         id: "holy_fire",
@@ -159,6 +190,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Holy,
+        },
     },
     AbilityDef {
         id: "mind_blast",
@@ -169,6 +203,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 1.0,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Shadow,
+        },
     },
     // —— Shaman ——
     AbilityDef {
@@ -180,6 +217,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Nature,
+        },
     },
     AbilityDef {
         id: "earth_shock",
@@ -190,6 +230,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 14.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::Interrupt,
     },
     AbilityDef {
         id: "lava_burst",
@@ -200,6 +241,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 1.2,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Fire,
+        },
     },
     // —— Mage ——
     AbilityDef {
@@ -211,6 +255,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 1.5,
         min_level: 1,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Fire,
+        },
     },
     AbilityDef {
         id: "frostbolt",
@@ -221,6 +268,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 1.0,
         min_level: 3,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Frost,
+        },
     },
     AbilityDef {
         id: "arcane_missiles",
@@ -231,6 +281,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 0.0,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Arcane,
+        },
     },
     // —— Warlock ——
     AbilityDef {
@@ -242,6 +295,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Shadow,
+        },
     },
     AbilityDef {
         id: "corruption",
@@ -252,6 +308,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::ApplyAura,
     },
     AbilityDef {
         id: "incinerate",
@@ -262,6 +319,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 1.2,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Fire,
+        },
     },
     // —— Druid ——
     AbilityDef {
@@ -273,6 +333,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Nature,
+        },
     },
     AbilityDef {
         id: "moonfire",
@@ -283,6 +346,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Arcane,
+        },
     },
     AbilityDef {
         id: "starfire",
@@ -293,6 +359,31 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 1.5,
         min_level: 6,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Arcane,
+        },
+    },
+    AbilityDef {
+        id: "flash_heal",
+        name: "Flash Heal",
+        damage: 36.0,
+        cost: 30.0,
+        cooldown: 2.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 1,
+        effect: AbilityEffect::Heal { coefficient: 1.0 },
+    },
+    AbilityDef {
+        id: "taunt",
+        name: "Taunt",
+        damage: 0.0,
+        cost: 0.0,
+        cooldown: 8.0,
+        range: 8.0,
+        cast_time: 0.0,
+        min_level: 1,
+        effect: AbilityEffect::Taunt { threat: 80.0 },
     },
 ];
 

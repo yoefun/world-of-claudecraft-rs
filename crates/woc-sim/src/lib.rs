@@ -1,4 +1,4 @@
-//! Deterministic World of ClaudeCraft sim (framework slice).
+//! Deterministic World of ClaudeCraft sim.
 //!
 //! Host-agnostic: no Bevy, no networking, no wall clock.
 //!

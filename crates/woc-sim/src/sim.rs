@@ -2,13 +2,16 @@
 //!
 //! # Tick phases (locked order — do not reorder)
 //!
-//! See [`crate::context::TICK_PHASES`]. Actual `tick` execution:
+//! See [`crate::context::TICK_PHASES`]. Actual `tick_all` execution:
 //! 1. `apply_intents_motion` — per-player intent + motion
 //! 2. `player_combat` — per-player combat
-//! 3. `mob_ai_combat` — mob AI (nearest living player) + mob combat
-//! 4. `kill_rewards` — XP/quest credit to killer + loot spawn
-//! 5. `loot_pickup` — proximity pickup for all players
-//! 6. `build_snapshot` — snapshot for primary/`snapshot_for` viewer
+//! 3. `pet_ai` — summoned pet follow / attack
+//! 4. `mob_ai_combat` — mob AI + mob combat
+//! 5. `aura_decay` — DoT/HoT ticks, aura expiry, mob respawn timers
+//! 6. `kill_rewards` — XP/quest/deed credit, loot spawn, Need/Greed, death finalize
+//! 7. `pvp_and_market` — duel resolve + auction expiry
+//! 8. `loot_pickup` — proximity pickup for all players
+//! 9. `build_snapshot` — snapshot for primary/`snapshot_for` viewer
 
 use std::collections::HashMap;
 
@@ -254,6 +257,28 @@ impl Sim {
             .unwrap_or(0)
     }
 
+    /// Offline client: sticky auto-attack flag on the primary player's Combat column.
+    pub fn player_auto_attack(&self) -> bool {
+        self.world
+            .get::<Combat>(self.player_id)
+            .map(|c| c.auto_attack)
+            .unwrap_or(false)
+    }
+
+    /// Offline client: current target from the Combat column.
+    pub fn player_target(&self) -> Option<EntityId> {
+        self.world
+            .get::<Combat>(self.player_id)
+            .and_then(|c| c.target)
+    }
+
+    /// Offline client: write Tab-cycle target into the Combat column.
+    pub fn set_player_target(&mut self, target: Option<EntityId>) {
+        if let Some(c) = self.world.get_mut::<Combat>(self.player_id) {
+            c.target = target;
+        }
+    }
+
     pub fn interact(&mut self, target_id: EntityId, action: InteractAction) {
         woc_protocol::WorldHost::interact(self, self.player_id, target_id, action);
     }
@@ -388,16 +413,22 @@ impl Sim {
                 }
             }
         }
-        // Phase 2: player combat
+        // Phase 2: player_combat
         for &pid in &player_ids {
             let ability = self.intents.get(&pid).and_then(|i| i.ability);
-            update_player_combat(pid, &mut self.world, ability, &mut self.events);
+            update_player_combat(
+                pid,
+                &mut self.world,
+                ability,
+                &mut self.rng,
+                &mut self.events,
+            );
         }
 
-        // Pet AI (after player combat; keeps TICK_PHASES fingerprint stable).
+        // Phase 3: pet_ai
         let _dropped = tick_pets(&mut self.world, &mut self.events);
 
-        // Phase 3: mob AI + combat (focus nearest living player)
+        // Phase 4: mob_ai_combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
             .world
             .ids::<LootTable>()
@@ -425,11 +456,11 @@ impl Sim {
             }
         }
 
-        // Aura/timer decay (hook into tick after combat; keeps TICK_PHASES fingerprint stable).
+        // Phase 5: aura_decay
         tick_auras(&mut self.world, &mut self.events);
         tick_mob_respawns(&mut self.world, DT);
 
-        // Phase 4: kill rewards → killer (+ party share stub)
+        // Phase 6: kill_rewards → killer (+ party share)
         let rewards = collect_pending_mob_kills(&self.events, &self.world);
         for reward in rewards {
             let mut recipients = vec![reward.killer];
@@ -479,17 +510,17 @@ impl Sim {
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
         crate::death::on_player_death_check(&mut self.world, &mut self.events);
 
-        // PvP duel resolve + honor (does not add a locked tick phase).
+        // Phase 7: pvp_and_market
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
             .tick_expire(self.tick, &mut self.world, &mut self.mail);
 
-        // Phase 5: loot pickup for all players
+        // Phase 8: loot_pickup
         for &pid in &player_ids {
             try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
         }
 
-        // Phase 6: snapshot
+        // Phase 9: build_snapshot
         let viewer = if self.player_id != 0 {
             self.player_id
         } else {
@@ -1024,10 +1055,12 @@ mod tests {
 
     #[test]
     fn tick_phase_order_fingerprint_locked() {
-        assert_eq!(TICK_PHASES.len(), 6);
+        assert_eq!(TICK_PHASES.len(), 9);
         assert_eq!(TICK_PHASES[0], "apply_intents_motion");
-        assert_eq!(TICK_PHASES[5], "build_snapshot");
-        assert_eq!(tick_phase_fingerprint(), 1724209595281213949u64);
+        assert_eq!(TICK_PHASES[2], "pet_ai");
+        assert_eq!(TICK_PHASES[6], "pvp_and_market");
+        assert_eq!(TICK_PHASES[8], "build_snapshot");
+        assert_eq!(tick_phase_fingerprint(), 15038642330132466611u64);
     }
 
     #[test]

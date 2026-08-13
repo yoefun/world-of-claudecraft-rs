@@ -7,8 +7,8 @@
 | **0.3.0** (shipped) | `online-alive` | SimContext + multi-player Entity; online client; death; combat/motion/bags core |
 | **0.4–0.9** (folded into 1.0-pre) | persist → professions-pvp | Landed via R1–R3 parallel batches on `develop` |
 | **1.0.0-pre** (shipped) | `completion` | Talents, loot rules, bank/mail/market, professions, zones, dungeon, PvP, deeds |
-| **1.0.0** (next) | `stable` | Tick-phase contract, CI on `develop`, docs/demo hygiene — no gameplay expand |
-| **1.1.0** | `combat-depth` | Data-driven ability effects: heal, AoE, miss/crit, interrupt, taunt |
+| **1.0.0** (this branch) | `stable` | Tick-phase contract, CI on `develop`, docs/demo hygiene |
+| **1.1.0** (this branch) | `combat-depth` | Data-driven ability effects: heal, AoE, miss/crit, interrupt, taunt |
 | **1.2.0** | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
 | **1.3.0** | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
 

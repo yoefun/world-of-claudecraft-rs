@@ -2,34 +2,40 @@
 
 use crate::ecs::components::{AuraInstance, CastState};
 use crate::ecs::components::{
-    Auras, ClassKit, Combat, Health, Identity, LootPile, LootTable, Progress, Threat, Transform,
+    Auras, ClassKit, Combat, Health, Identity, LootPile, LootTable, Owner, Progress, Threat,
+    Transform,
 };
 use crate::ecs::World;
 use crate::rng::Rng;
-use crate::types::{MELEE_RANGE, MOB_SWING_SEC, PLAYER_SWING_SEC, RANGED_FALLBACK};
-use woc_content::{ability, class_ability_for_slot, mob, AbilityDef, ResourceType};
+use crate::types::{
+    CRIT_CHANCE, CRIT_MULT, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
+    RANGED_FALLBACK,
+};
+use woc_content::{
+    ability, aura_for_ability, class_ability_for_slot, mob, AbilityDef, AbilityEffect, ResourceType,
+};
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, SimEvent, DT};
 
 /// Global cooldown after starting an ability (seconds).
 pub const GCD_SEC: f32 = 1.5;
 
-/// Default DoT applied by melee kit hits (Rend).
-const REND_ID: &str = "rend";
-const REND_DURATION: f32 = 9.0;
-const REND_TICK_INTERVAL: f32 = 3.0;
-const REND_TICK_DAMAGE: f32 = 4.0;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitResult {
+    Miss,
+    Hit,
+    Crit,
+}
 
-/// DoT applied when Fireball / incinerate lands (Ignite).
-const IGNITE_ID: &str = "ignite";
-const IGNITE_DURATION: f32 = 8.0;
-const IGNITE_TICK_INTERVAL: f32 = 2.0;
-const IGNITE_TICK_DAMAGE: f32 = 6.0;
-
-/// Nature / shadow DoT from sting / corruption / moonfire / holy fire.
-const STING_ID: &str = "sting";
-const STING_DURATION: f32 = 12.0;
-const STING_TICK_INTERVAL: f32 = 3.0;
-const STING_TICK_DAMAGE: f32 = 5.0;
+pub fn roll_hit(rng: &mut Rng) -> HitResult {
+    let r = rng.next_f32();
+    if r < MISS_CHANCE {
+        HitResult::Miss
+    } else if r < MISS_CHANCE + CRIT_CHANCE {
+        HitResult::Crit
+    } else {
+        HitResult::Hit
+    }
+}
 
 pub fn dist2d_pose(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
     let dx = ax - bx;
@@ -188,7 +194,7 @@ pub fn apply_aura(
     });
 }
 
-fn apply_primary_dot(
+fn apply_ability_aura(
     world: &mut World,
     source: EntityId,
     target: EntityId,
@@ -198,42 +204,283 @@ fn apply_primary_dot(
     if !world.get::<Health>(target).is_some_and(|h| h.alive) {
         return;
     }
-    let aura = match ability_id {
-        "fireball" | "incinerate" | "lava_burst" => AuraInstance {
-            id: IGNITE_ID.into(),
-            remaining: IGNITE_DURATION,
+    let Some(def) = aura_for_ability(ability_id) else {
+        return;
+    };
+    apply_aura(
+        world,
+        target,
+        AuraInstance {
+            id: def.id.into(),
+            remaining: def.duration,
             stacks: 1,
-            tick_timer: IGNITE_TICK_INTERVAL,
-            tick_interval: IGNITE_TICK_INTERVAL,
-            tick_damage: IGNITE_TICK_DAMAGE,
-            tick_heal: 0.0,
+            tick_timer: def.tick_interval,
+            tick_interval: def.tick_interval,
+            tick_damage: def.tick_damage,
+            tick_heal: def.tick_heal,
             source,
         },
-        "heroic_strike" | "cleave" | "crusader_strike" | "sinister_strike" | "eviscerate" => {
-            AuraInstance {
-                id: REND_ID.into(),
-                remaining: REND_DURATION,
-                stacks: 1,
-                tick_timer: REND_TICK_INTERVAL,
-                tick_interval: REND_TICK_INTERVAL,
-                tick_damage: REND_TICK_DAMAGE,
-                tick_heal: 0.0,
-                source,
+        events,
+    );
+}
+
+fn scale_hit(amount: f32, hit: HitResult) -> Option<f32> {
+    match hit {
+        HitResult::Miss => None,
+        HitResult::Hit => Some(amount),
+        HitResult::Crit => Some(amount * CRIT_MULT),
+    }
+}
+
+fn toast_miss(events: &mut Vec<SimEvent>, name: &str) {
+    events.push(SimEvent::Toast {
+        message: format!("{name} misses."),
+    });
+}
+
+fn toast_crit(events: &mut Vec<SimEvent>, name: &str) {
+    events.push(SimEvent::Toast {
+        message: format!("{name} crits!"),
+    });
+}
+
+fn apply_direct_damage(
+    world: &mut World,
+    rng: &mut Rng,
+    src: EntityId,
+    tid: EntityId,
+    def: &AbilityDef,
+    base: f32,
+    events: &mut Vec<SimEvent>,
+) {
+    let hit = roll_hit(rng);
+    match scale_hit(base, hit) {
+        None => toast_miss(events, def.name),
+        Some(amount) => {
+            if hit == HitResult::Crit {
+                toast_crit(events, def.name);
+            }
+            deal_damage(world, src, tid, amount, Some(def.name), events);
+            apply_ability_aura(world, src, tid, def.id, events);
+        }
+    }
+}
+
+fn aoe_targets(
+    world: &World,
+    src: EntityId,
+    primary: EntityId,
+    radius: f32,
+    max_targets: u32,
+) -> Vec<EntityId> {
+    let origin = world
+        .get::<Transform>(primary)
+        .copied()
+        .or_else(|| world.get::<Transform>(src).copied());
+    let Some(origin) = origin else {
+        return Vec::new();
+    };
+    let mut ids: Vec<(f32, EntityId)> = world
+        .ids::<LootTable>()
+        .into_iter()
+        .filter(|&id| world.get::<Health>(id).is_some_and(|h| h.alive))
+        .filter_map(|id| {
+            let t = world.get::<Transform>(id)?;
+            let d = dist2d_pose(origin.x, origin.z, t.x, t.z);
+            (d <= radius).then_some((d, id))
+        })
+        .collect();
+    ids.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    if let Some(pos) = ids.iter().position(|(_, id)| *id == primary) {
+        ids.swap(0, pos);
+    } else if is_living_mob(world, primary) {
+        ids.insert(0, (0.0, primary));
+    }
+    ids.into_iter()
+        .map(|(_, id)| id)
+        .take(max_targets as usize)
+        .collect()
+}
+
+fn heal_target(world: &World, src: EntityId, requested: Option<EntityId>) -> EntityId {
+    if let Some(tid) = requested {
+        if is_living_friendly(world, src, tid) {
+            return tid;
+        }
+    }
+    src
+}
+
+fn is_living_hostile(world: &World, src: EntityId, tid: EntityId) -> bool {
+    if tid == src {
+        return false;
+    }
+    if !world.get::<Health>(tid).is_some_and(|h| h.alive) {
+        return false;
+    }
+    if world.get::<LootTable>(tid).is_some() {
+        return true;
+    }
+    if world.get::<ClassKit>(tid).is_some() {
+        let src_flag = world
+            .get::<Progress>(src)
+            .map(|p| p.pvp_flagged)
+            .unwrap_or(false);
+        let tid_flag = world
+            .get::<Progress>(tid)
+            .map(|p| p.pvp_flagged)
+            .unwrap_or(false);
+        return src_flag && tid_flag;
+    }
+    false
+}
+
+fn is_living_friendly(world: &World, src: EntityId, tid: EntityId) -> bool {
+    if !world.get::<Health>(tid).is_some_and(|h| h.alive) {
+        return false;
+    }
+    if tid == src {
+        return true;
+    }
+    if world.get::<Owner>(tid).is_some_and(|o| o.owner_id == src) {
+        return true;
+    }
+    world.get::<ClassKit>(tid).is_some() && !is_living_hostile(world, src, tid)
+}
+
+pub fn apply_ability_effect(
+    world: &mut World,
+    rng: &mut Rng,
+    src: EntityId,
+    def: &AbilityDef,
+    events: &mut Vec<SimEvent>,
+) {
+    let attack = world
+        .get::<Combat>(src)
+        .map(|c| c.attack_damage)
+        .unwrap_or(0.0);
+    let requested = world.get::<Combat>(src).and_then(|c| c.target);
+    let weapon = def.damage + attack * 0.35;
+    let rage = world
+        .get::<ClassKit>(src)
+        .and_then(|k| k.resource_type)
+        .is_some_and(|rt| matches!(rt, ResourceType::Rage));
+    if rage {
+        if let Some(kit) = world.get_mut::<ClassKit>(src) {
+            gain_resource(kit, 5.0);
+        }
+    }
+
+    match def.effect {
+        AbilityEffect::WeaponDamage { coefficient } => {
+            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            apply_direct_damage(world, rng, src, tid, def, weapon * coefficient, events);
+        }
+        AbilityEffect::SpellDamage { .. } => {
+            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            apply_direct_damage(world, rng, src, tid, def, weapon, events);
+        }
+        AbilityEffect::AoeDamage {
+            radius,
+            max_targets,
+        } => {
+            let Some(primary) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            let hit = roll_hit(rng);
+            let Some(amount) = scale_hit(weapon, hit) else {
+                toast_miss(events, def.name);
+                return;
+            };
+            if hit == HitResult::Crit {
+                toast_crit(events, def.name);
+            }
+            for tid in aoe_targets(world, src, primary, radius, max_targets) {
+                deal_damage(world, src, tid, amount, Some(def.name), events);
+                apply_ability_aura(world, src, tid, def.id, events);
             }
         }
-        "serpent_sting" | "corruption" | "moonfire" | "holy_fire" => AuraInstance {
-            id: STING_ID.into(),
-            remaining: STING_DURATION,
-            stacks: 1,
-            tick_timer: STING_TICK_INTERVAL,
-            tick_interval: STING_TICK_INTERVAL,
-            tick_damage: STING_TICK_DAMAGE,
-            tick_heal: 0.0,
-            source,
-        },
-        _ => return,
+        AbilityEffect::Heal { coefficient } => {
+            let tid = heal_target(world, src, requested);
+            let hit = roll_hit(rng);
+            let amount = match hit {
+                HitResult::Miss | HitResult::Hit => def.damage * coefficient,
+                HitResult::Crit => {
+                    toast_crit(events, def.name);
+                    def.damage * coefficient * CRIT_MULT
+                }
+            };
+            apply_heal(world, tid, amount, def.name, events);
+        }
+        AbilityEffect::ApplyAura => {
+            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            let hit = roll_hit(rng);
+            if let Some(amount) = scale_hit(weapon.max(1.0), hit) {
+                if hit == HitResult::Crit {
+                    toast_crit(events, def.name);
+                }
+                if def.damage > 0.0 {
+                    deal_damage(world, src, tid, amount, Some(def.name), events);
+                }
+                apply_ability_aura(world, src, tid, def.id, events);
+            } else {
+                toast_miss(events, def.name);
+            }
+        }
+        AbilityEffect::Interrupt => {
+            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            if let Some(c) = world.get_mut::<Combat>(tid) {
+                c.cast = None;
+            }
+            events.push(SimEvent::Toast {
+                message: format!("{name} interrupts!", name = def.name),
+            });
+            apply_direct_damage(world, rng, src, tid, def, weapon, events);
+        }
+        AbilityEffect::Taunt { threat } => {
+            let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
+                return;
+            };
+            add_threat(world, tid, src, threat);
+            if let Some(c) = world.get_mut::<Combat>(tid) {
+                c.target = Some(src);
+            }
+            events.push(SimEvent::Toast {
+                message: format!("{name} taunts.", name = def.name),
+            });
+        }
+    }
+}
+
+fn apply_heal(
+    world: &mut World,
+    target: EntityId,
+    amount: f32,
+    ability_name: &str,
+    events: &mut Vec<SimEvent>,
+) {
+    let Some(health) = world.get_mut::<Health>(target) else {
+        return;
     };
-    apply_aura(world, target, aura, events);
+    if !health.alive {
+        return;
+    }
+    let before = health.hp;
+    health.hp = (health.hp + amount).min(health.hp_max);
+    let healed = health.hp - before;
+    if healed > 0.0 {
+        events.push(SimEvent::Toast {
+            message: format!("{ability_name} heals for {:.0}.", healed),
+        });
+    }
 }
 
 /// Tick all entity auras: DoT damage, HoT heals, and expiry.
@@ -622,33 +869,6 @@ fn ability_on_cd(kit: &ClassKit, abil_id: &str) -> bool {
     kit.ability_cds.get(abil_id).copied().unwrap_or(0.0) > 0.0
 }
 
-fn resolve_ability_hit(
-    world: &mut World,
-    src: EntityId,
-    tid: EntityId,
-    abil_id: &str,
-    def_name: &str,
-    def_damage: f32,
-    events: &mut Vec<SimEvent>,
-) {
-    let attack = world
-        .get::<Combat>(src)
-        .map(|c| c.attack_damage)
-        .unwrap_or(0.0);
-    let rage = world
-        .get::<ClassKit>(src)
-        .and_then(|k| k.resource_type)
-        .is_some_and(|rt| matches!(rt, ResourceType::Rage));
-    if rage {
-        if let Some(kit) = world.get_mut::<ClassKit>(src) {
-            gain_resource(kit, 5.0);
-        }
-    }
-    let dmg = def_damage + attack * 0.35;
-    deal_damage(world, src, tid, dmg, Some(def_name), events);
-    apply_primary_dot(world, src, tid, abil_id, events);
-}
-
 fn is_living_mob(world: &World, id: EntityId) -> bool {
     world.get::<LootTable>(id).is_some() && world.get::<Health>(id).is_some_and(|h| h.alive)
 }
@@ -657,6 +877,7 @@ pub fn update_player_combat(
     player_id: EntityId,
     world: &mut World,
     ability_slot: Option<AbilitySlot>,
+    rng: &mut Rng,
     events: &mut Vec<SimEvent>,
 ) {
     if !world.get::<Health>(player_id).is_some_and(|h| h.alive) {
@@ -681,31 +902,28 @@ pub fn update_player_combat(
         combat.gcd = (combat.gcd - DT).max(0.0);
     }
 
-    let target_id = combat.target;
-    let Some(tid) = target_id else {
-        combat.swing_timer = 0.0;
-        combat.cast = None;
-        world.insert(player_id, combat);
-        world.insert(player_id, kit);
-        return;
-    };
-    if !is_living_mob(world, tid) {
+    if combat
+        .target
+        .is_some_and(|tid| !world.get::<Health>(tid).is_some_and(|h| h.alive))
+    {
         combat.target = None;
         combat.auto_attack = false;
         combat.cast = None;
-        world.insert(player_id, combat);
-        world.insert(player_id, kit);
-        return;
+    }
+
+    let tid = combat.target;
+    let hostile = tid.filter(|&t| is_living_hostile(world, player_id, t));
+    let d_hostile = hostile.map(|t| dist2d_ids(world, player_id, t));
+
+    if let Some(t) = hostile {
+        let yaw = face_toward_ids(world, player_id, t);
+        if let Some(tr) = world.get_mut::<Transform>(player_id) {
+            tr.yaw = yaw;
+        }
     }
 
     let range = ability_range(&kit).max(MELEE_RANGE);
-    let d = dist2d_ids(world, player_id, tid);
-    let in_melee = d <= MELEE_RANGE;
-
-    let yaw = face_toward_ids(world, player_id, tid);
-    if let Some(t) = world.get_mut::<Transform>(player_id) {
-        t.yaw = yaw;
-    }
+    let in_melee = d_hostile.map(|d| d <= MELEE_RANGE).unwrap_or(false);
 
     if combat.cast.is_some() {
         let cast_range = combat
@@ -714,9 +932,13 @@ pub fn update_player_combat(
             .and_then(|c| ability(&c.ability_id))
             .map(|a| a.range)
             .unwrap_or(range);
-        let in_cast_range = d <= cast_range.max(RANGED_FALLBACK.min(cast_range));
         let cast_target = combat.cast.as_ref().map(|c| c.target);
-        if cast_target != Some(tid) || !in_cast_range {
+        let in_cast_range = cast_target
+            .map(|ct| {
+                dist2d_ids(world, player_id, ct) <= cast_range.max(RANGED_FALLBACK.min(cast_range))
+            })
+            .unwrap_or(false);
+        if !in_cast_range {
             combat.cast = None;
             world.insert(player_id, combat.clone());
             world.insert(player_id, kit.clone());
@@ -727,9 +949,7 @@ pub fn update_player_combat(
                 world.insert(player_id, combat.clone());
                 world.insert(player_id, kit.clone());
                 if let Some(def) = ability(&abil_id) {
-                    resolve_ability_hit(
-                        world, player_id, tid, &abil_id, def.name, def.damage, events,
-                    );
+                    apply_ability_effect(world, rng, player_id, def, events);
                 }
                 combat = world.get::<Combat>(player_id).cloned().unwrap_or(combat);
                 kit = world.get::<ClassKit>(player_id).cloned().unwrap_or(kit);
@@ -741,28 +961,39 @@ pub fn update_player_combat(
         if combat.gcd <= 0.0 {
             if let Some(def) = resolve_slot_ability(&kit, slot) {
                 let abil_id = def.id;
+                let is_heal = matches!(def.effect, AbilityEffect::Heal { .. });
                 let abil_range = def.range.max(RANGED_FALLBACK.min(def.range));
-                let in_slot_range = d <= abil_range;
+                let in_slot_range = if is_heal {
+                    let ht = heal_target(world, player_id, tid);
+                    dist2d_ids(world, player_id, ht) <= abil_range || ht == player_id
+                } else {
+                    d_hostile.map(|d| d <= abil_range).unwrap_or(false)
+                };
                 if in_slot_range
                     && !ability_on_cd(&kit, abil_id)
                     && spend_resource(&mut kit, def.cost)
                 {
                     start_ability_cd(&mut kit, &mut combat, abil_id, def.cooldown);
                     combat.gcd = GCD_SEC;
-                    combat.auto_attack = true;
+                    if !is_heal {
+                        combat.auto_attack = true;
+                    }
+                    let cast_tid = if is_heal {
+                        heal_target(world, player_id, tid)
+                    } else {
+                        hostile.unwrap_or(0)
+                    };
                     if def.cast_time > 0.0 {
                         combat.cast = Some(CastState {
                             ability_id: abil_id.to_string(),
                             elapsed: 0.0,
                             duration: def.cast_time,
-                            target: tid,
+                            target: cast_tid,
                         });
                     } else {
                         world.insert(player_id, combat.clone());
                         world.insert(player_id, kit.clone());
-                        resolve_ability_hit(
-                            world, player_id, tid, abil_id, def.name, def.damage, events,
-                        );
+                        apply_ability_effect(world, rng, player_id, def, events);
                         return;
                     }
                 }
@@ -789,7 +1020,18 @@ pub fn update_player_combat(
     }
     world.insert(player_id, combat);
     world.insert(player_id, kit);
-    deal_damage(world, player_id, tid, dmg, None, events);
+    if let Some(tid) = hostile {
+        let hit = roll_hit(rng);
+        match scale_hit(dmg, hit) {
+            None => toast_miss(events, "Auto-attack"),
+            Some(amount) => {
+                if hit == HitResult::Crit {
+                    toast_crit(events, "Auto-attack");
+                }
+                deal_damage(world, player_id, tid, amount, None, events);
+            }
+        }
+    }
 }
 
 pub fn update_mob_combat(
@@ -840,6 +1082,10 @@ mod tests {
     use woc_content::PlayerClass;
     use woc_protocol::AbilitySlot;
 
+    fn hit_rng() -> Rng {
+        Rng::new(1)
+    }
+
     fn player_and_mob() -> World {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Tester", PlayerClass::Warrior, 0.0, 0.0);
@@ -869,7 +1115,13 @@ mod tests {
         let mob_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
 
-        update_player_combat(1, &mut world, Some(AbilitySlot::Primary), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Primary),
+            &mut hit_rng(),
+            &mut events,
+        );
         let after_first = world.get::<Health>(2).unwrap().hp;
         assert!(after_first < mob_hp, "first cast should deal damage");
         assert!(
@@ -889,7 +1141,13 @@ mod tests {
         let hp_before_second = world.get::<Health>(2).unwrap().hp;
         let auras_before = world.get::<Auras>(2).map(|a| a.auras.len()).unwrap_or(0);
         events.clear();
-        update_player_combat(1, &mut world, Some(AbilitySlot::Primary), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Primary),
+            &mut hit_rng(),
+            &mut events,
+        );
         assert_eq!(world.get::<Health>(2).unwrap().hp, hp_before_second);
         assert_eq!(
             world.get::<Auras>(2).map(|a| a.auras.len()).unwrap_or(0),
@@ -912,7 +1170,13 @@ mod tests {
             kit.ability_cds.clear();
             kit.resource = 100.0;
         }
-        update_player_combat(1, &mut world, Some(AbilitySlot::Primary), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Primary),
+            &mut hit_rng(),
+            &mut events,
+        );
         assert!(world.get::<Health>(2).unwrap().hp < hp_before_second);
     }
 
@@ -988,7 +1252,13 @@ mod tests {
         }
         let start_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
-        update_player_combat(1, &mut world, Some(AbilitySlot::Primary), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Primary),
+            &mut hit_rng(),
+            &mut events,
+        );
         assert!(world.get::<Combat>(1).unwrap().cast.is_some());
         assert_eq!(world.get::<Health>(2).unwrap().hp, start_hp);
         assert!(world.get::<Combat>(1).unwrap().gcd > 0.0);
@@ -1001,7 +1271,7 @@ mod tests {
             .duration;
         let ticks = (duration / DT).ceil() as u32 + 1;
         for _ in 0..ticks {
-            update_player_combat(1, &mut world, None, &mut events);
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
         }
         assert!(world.get::<Combat>(1).unwrap().cast.is_none());
         assert!(world.get::<Health>(2).unwrap().hp < start_hp);
@@ -1010,7 +1280,7 @@ mod tests {
             .unwrap()
             .auras
             .iter()
-            .any(|a| a.id == IGNITE_ID));
+            .any(|a| a.id == "ignite"));
     }
 
     #[test]
@@ -1055,7 +1325,13 @@ mod tests {
         }
         let start_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
-        update_player_combat(1, &mut world, Some(AbilitySlot::Slot2), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot2),
+            &mut hit_rng(),
+            &mut events,
+        );
         assert!(world.get::<Health>(2).unwrap().hp < start_hp);
         assert!(events
             .iter()
@@ -1072,7 +1348,13 @@ mod tests {
         assert_eq!(world.get::<Health>(1).unwrap().level, 1);
         let start_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
-        update_player_combat(1, &mut world, Some(AbilitySlot::Slot2), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot2),
+            &mut hit_rng(),
+            &mut events,
+        );
         assert_eq!(world.get::<Health>(2).unwrap().hp, start_hp);
     }
 
@@ -1087,7 +1369,13 @@ mod tests {
             kit.resource = 100.0;
         }
         let mut events = Vec::new();
-        update_player_combat(1, &mut world, Some(AbilitySlot::Primary), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Primary),
+            &mut hit_rng(),
+            &mut events,
+        );
         let after_primary = world.get::<Health>(2).unwrap().hp;
         assert!(after_primary < 500.0);
         if let Some(c) = world.get_mut::<Combat>(1) {
@@ -1099,7 +1387,169 @@ mod tests {
             kit.resource = 100.0;
         }
         events.clear();
-        update_player_combat(1, &mut world, Some(AbilitySlot::Slot3), &mut events);
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot3),
+            &mut hit_rng(),
+            &mut events,
+        );
         assert!(world.get::<Health>(2).unwrap().hp < after_primary);
+    }
+
+    #[test]
+    fn seeded_hit_table_yields_miss_and_crit() {
+        let mut rng = Rng::new(1);
+        let mut miss = 0;
+        let mut crit = 0;
+        let mut hit = 0;
+        for _ in 0..200 {
+            match roll_hit(&mut rng) {
+                HitResult::Miss => miss += 1,
+                HitResult::Crit => crit += 1,
+                HitResult::Hit => hit += 1,
+            }
+        }
+        assert!(miss >= 1, "expected a miss in 200 rolls, got {miss}");
+        assert!(crit >= 1, "expected a crit in 200 rolls, got {crit}");
+        assert!(hit >= 1, "expected a hit in 200 rolls, got {hit}");
+    }
+
+    #[test]
+    fn cleave_damages_two_wolves_in_radius() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 1.0, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 2.0, 0.0).unwrap();
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.level = 3;
+        }
+        crate::ecs::spawn::refresh_known_abilities(&mut world, 1);
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        let hp2 = world.get::<Health>(2).unwrap().hp;
+        let hp3 = world.get::<Health>(3).unwrap().hp;
+        let mut events = Vec::new();
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot2),
+            &mut hit_rng(),
+            &mut events,
+        );
+        assert!(world.get::<Health>(2).unwrap().hp < hp2, "primary wolf");
+        assert!(world.get::<Health>(3).unwrap().hp < hp3, "cleave splash");
+    }
+
+    #[test]
+    fn priest_heal_restores_party_member() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Priest", PlayerClass::Priest, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Warrior", PlayerClass::Warrior, 1.0, 0.0);
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 10.0;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.gcd = 0.0;
+            c.auto_attack = false;
+        }
+        let mut events = Vec::new();
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot4),
+            &mut hit_rng(),
+            &mut events,
+        );
+        assert!(
+            world.get::<Health>(2).unwrap().hp > 10.0,
+            "flash heal should land on the targeted player"
+        );
+    }
+
+    #[test]
+    fn interrupt_cancels_mob_cast() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Shaman", PlayerClass::Shaman, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 1.0, 0.0).unwrap();
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.level = 3;
+        }
+        crate::ecs::spawn::refresh_known_abilities(&mut world, 1);
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.cast = Some(CastState {
+                ability_id: "bite".into(),
+                elapsed: 0.2,
+                duration: 2.0,
+                target: 1,
+            });
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        let mut events = Vec::new();
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot2),
+            &mut hit_rng(),
+            &mut events,
+        );
+        assert!(
+            world.get::<Combat>(2).unwrap().cast.is_none(),
+            "earth shock interrupts"
+        );
+    }
+
+    #[test]
+    fn taunt_sets_mob_target_and_threat() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Tank", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Dps", PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 1.5, 0.0).unwrap();
+        add_threat(&mut world, 3, 2, 40.0);
+        if let Some(c) = world.get_mut::<Combat>(3) {
+            c.target = Some(2);
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(3);
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        let mut events = Vec::new();
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot4),
+            &mut hit_rng(),
+            &mut events,
+        );
+        assert_eq!(world.get::<Combat>(3).unwrap().target, Some(1));
+        let threat = &world
+            .get::<crate::ecs::components::Threat>(3)
+            .unwrap()
+            .threat;
+        assert!(threat.get(&1).copied().unwrap_or(0.0) >= 80.0);
     }
 }

@@ -6,6 +6,8 @@
 
 - Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
+- Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.
+- Wave 1 `combat-depth` on ECS columns: `AbilityEffect` (heal, cleave AoE, interrupt, taunt), miss/crit hit table, priest `flash_heal`, warrior `taunt`.
 - Protocol rev **6**: pending Need/Greed loot snapshot, bank copper vault, market `mine` flag; `BankDepositCopper` / `BankWithdrawCopper`.
 - Party Need/Greed is wired into mob loot spawn (eligible mates within 40 yd); pending piles skip FFA auto-pickup.
 - `LootCorpse` interact claims ground piles / corpse-adjacent loot (respects rolls).

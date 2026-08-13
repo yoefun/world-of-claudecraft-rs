@@ -35,8 +35,11 @@ impl<'a> SimContext<'a> {
 pub const TICK_PHASES: &[&str] = &[
     "apply_intents_motion",
     "player_combat",
+    "pet_ai",
     "mob_ai_combat",
+    "aura_decay",
     "kill_rewards",
+    "pvp_and_market",
     "loot_pickup",
     "build_snapshot",
 ];

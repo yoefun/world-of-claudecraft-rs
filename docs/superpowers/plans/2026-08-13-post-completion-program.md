@@ -330,12 +330,12 @@ Targeting rules:
 
 ```rust
 pub fn apply_ability_effect(
-    entities: &mut [Entity],
+    world: &mut crate::ecs::World,
     rng: &mut crate::rng::Rng,
-    src: EntityId,
+    src: woc_protocol::EntityId,
     abil: &woc_content::AbilityDef,
     events: &mut Vec<SimEvent>,
-) { /* dispatch on abil.effect */ }
+) { /* dispatch on abil.effect; query Health / Combatant / ClassKit / Auras columns */ }
 ```
 
 Tests (each in `combat.rs` `#[cfg(test)]`):

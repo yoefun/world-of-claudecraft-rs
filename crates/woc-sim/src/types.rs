@@ -15,6 +15,11 @@ pub const PLAYER_SWING_SEC: f32 = 2.0;
 pub const MOB_SWING_SEC: f32 = 2.0;
 pub const MOB_SPEED: f32 = 5.5;
 
+/// White-hit table (player auto-attack and damaging abilities).
+pub const MISS_CHANCE: f32 = 0.05;
+pub const CRIT_CHANCE: f32 = 0.10;
+pub const CRIT_MULT: f32 = 2.0;
+
 /// Upstream-aligned vertical motion constants (player_motion.ts).
 pub const GRAVITY: f32 = 16.0;
 pub const JUMP_VELOCITY: f32 = 6.0;

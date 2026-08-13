@@ -79,13 +79,13 @@ pub enum InteractAction {
         target_id: EntityId,
     },
     CloseVendor,
-    /// Release spirit while dead (Wave 1 stub).
+    /// Release spirit while dead and begin the corpse run.
     ReleaseSpirit,
-    /// Train a profession by content id (stub).
+    /// Train a profession by content id.
     TrainProfession {
         id: String,
     },
-    /// Gather from a world node (stub).
+    /// Gather from a world node.
     Gather {
         node_id: EntityId,
     },

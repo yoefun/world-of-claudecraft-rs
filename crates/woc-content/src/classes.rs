@@ -97,6 +97,10 @@ const WARRIOR_KIT: &[ClassKitEntry] = &[
         slot: 3,
         ability_id: "execute",
     },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "taunt",
+    },
 ];
 
 const PALADIN_KIT: &[ClassKitEntry] = &[
@@ -156,6 +160,10 @@ const PRIEST_KIT: &[ClassKitEntry] = &[
     ClassKitEntry {
         slot: 3,
         ability_id: "mind_blast",
+    },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "flash_heal",
     },
 ];
 

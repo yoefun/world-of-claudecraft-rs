@@ -9,13 +9,13 @@ Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Tick-phase contract vs `tick_all` | planned | Six named phases; pets/auras/PvP/market run unnamed. Wave 0. |
-| CI on `develop` | planned | Workflow currently `main` + `cursor/**` only. |
-| Protocol/crate “stub” / “framework slice” copy | planned | Shipped actions still documented as stubs. |
-| 1.0.0 acceptance demo doc | planned | Completion §8 script → `docs/parity/DEMO.md`. |
-| Data-driven `AbilityEffect` | planned | Hits are damage + hardcoded DoT ids. 1.1. |
-| Heal / AoE / interrupt / taunt | planned | Cleave is single-target; heals require a mob target. |
-| Miss / crit hit table | planned | Always hit. |
+| Tick-phase contract vs `tick_all` | done | Nine named phases matching `tick_all` (pets/auras/PvP/market). |
+| CI on `develop` | done | Workflow push/PR includes `develop`. |
+| Protocol/crate “stub” / “framework slice” copy | done | Shipped interact actions; crate blurbs. |
+| 1.0.0 acceptance demo doc | done | `docs/parity/DEMO.md`. |
+| Data-driven `AbilityEffect` | done | Content tables; combat dispatches on the enum. |
+| Heal / AoE / interrupt / taunt | done | Priest `flash_heal`; warrior cleave AoE + `taunt`; shaman `earth_shock` interrupt. |
+| Miss / crit hit table | done | 5% miss / 10% crit via sim RNG; heals do not miss. |
 | Mining + blacksmithing | planned | Herbalism → alchemy only. 1.2. |
 | Dungeon trash packs | planned | Crypt is a boss shell. |
 | Second dungeon or delve | planned | One crypt + one hollow. |

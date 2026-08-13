@@ -141,9 +141,7 @@ pub(crate) fn collect_intent(
             intent.target_id = Some(id);
             host.snapshot.target_id = Some(id);
             if let Some(sim) = host.sim.as_mut() {
-                if let Some(p) = sim.player_mut() {
-                    p.target = Some(id);
-                }
+                sim.set_player_target(Some(id));
             }
         }
     }
@@ -174,11 +172,9 @@ pub(crate) fn collect_intent(
     // Offline: sticky auto-attack lives on the sim entity.
     if !host.is_online() {
         if let Some(sim) = host.sim.as_ref() {
-            if sim.player().map(|p| p.auto_attack).unwrap_or(false) {
+            if sim.player_auto_attack() {
                 intent.attack = true;
-                intent.target_id = intent
-                    .target_id
-                    .or_else(|| sim.player().and_then(|p| p.target));
+                intent.target_id = intent.target_id.or_else(|| sim.player_target());
             }
         }
     } else if host.local_auto_attack {
