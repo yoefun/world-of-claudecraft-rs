@@ -380,8 +380,12 @@ mod tests {
             &mut events,
         );
         assert_eq!(
-            world.get::<Bags>(1).unwrap().equipment.main_hand.as_deref(),
+            world.get::<Bags>(1).unwrap().equipment.off_hand.as_deref(),
             Some("copper_shortsword")
+        );
+        assert_eq!(
+            world.get::<Bags>(1).unwrap().equipment.main_hand.as_deref(),
+            Some("worn_sword")
         );
         assert!(events.iter().any(|event| matches!(
             event,
