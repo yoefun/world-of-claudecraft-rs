@@ -227,7 +227,13 @@ impl AuctionHouse {
         listing_id: u32,
         events: &mut Vec<SimEvent>,
     ) -> bool {
-        let seller_key = Some(Mailbox::mailbox_key(world, seller));
+        // Only a live player can own a listing. Without this guard the durable-key
+        // comparison below degrades to matching a synthesized `local:{id}` string,
+        // which a recycled id can satisfy after a restart.
+        let seller_key = world
+            .get::<ClassKit>(seller)
+            .is_some()
+            .then(|| Mailbox::mailbox_key(world, seller));
         let Some(idx) = self.listings.iter().position(|l| l.id == listing_id) else {
             return false;
         };
@@ -384,5 +390,58 @@ mod tests {
         assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
         assert_eq!(mail.all_mails().len(), 1);
         assert_eq!(mail.all_mails()[0].copper, 40);
+    }
+
+    /// A listing left by a pre-restart player with no durable id carries the
+    /// synthesized key `local:{id}`. After the restart that id can be handed to a
+    /// different entity, so cancel must require the caller to be a live player.
+    #[test]
+    fn cancel_rejects_absent_seller_matching_a_synthesized_key() {
+        let mut world = World::new();
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 99,
+            seller_durable: "local:7".into(),
+            seller_name: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            price: 40,
+            expires_tick: 9999,
+        });
+        ah.next_id = 2;
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+
+        // Entity 7 does not exist at all.
+        assert!(!ah.cancel(&mut world, &mut mail, 7, 1, &mut events));
+        assert_eq!(ah.listings.len(), 1);
+
+        // Entity 7 exists but is a mob, not a player, so it holds no ClassKit.
+        crate::ecs::spawn::create_mob_from_template(&mut world, 7, "meadow_wolf", 0.0, 0.0);
+        assert!(!ah.cancel(&mut world, &mut mail, 7, 1, &mut events));
+        assert_eq!(ah.listings.len(), 1);
+    }
+
+    #[test]
+    fn cancel_succeeds_for_the_live_player_holding_the_key() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 7, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 99,
+            seller_durable: "local:7".into(),
+            seller_name: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            price: 40,
+            expires_tick: 9999,
+        });
+        ah.next_id = 2;
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(ah.cancel(&mut world, &mut mail, 7, 1, &mut events));
+        assert!(ah.listings.is_empty());
     }
 }
