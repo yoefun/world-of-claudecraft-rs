@@ -20,3 +20,7 @@ zstd = "0.13"
 qbsdiff = "1.4"
 
 [dev-dependencies]
+
+[[bin]]
+name = "woc-pack"
+path = "src/bin/woc-pack.rs"
