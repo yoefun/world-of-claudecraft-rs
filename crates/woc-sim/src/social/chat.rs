@@ -1,7 +1,8 @@
-//! Say and party chat routing.
+//! Say, party, guild, and officer chat routing.
 
 use crate::ecs::components::{ClassKit, Identity};
 use crate::ecs::World;
+use crate::social::guild::{GuildRank, GuildRoster, GUILD_MESSAGE_MAX};
 use crate::social::party::PartyRoster;
 use woc_protocol::EntityId;
 
@@ -18,9 +19,10 @@ pub enum ChatEffect {
     },
 }
 
-/// Handle a chat request. Channels: `say` (realm-wide scaffold), `party` (party only).
+/// Handle a chat request. Channels: `say`, `party`, `guild`, `officer`.
 pub fn handle_chat(
     roster: &PartyRoster,
+    guilds: &GuildRoster,
     world: &World,
     speaker: EntityId,
     channel: &str,
@@ -30,6 +32,11 @@ pub fn handle_chat(
     if trimmed.is_empty() {
         return vec![ChatEffect::Error {
             message: "Chat message is empty.".into(),
+        }];
+    }
+    if trimmed.len() > GUILD_MESSAGE_MAX {
+        return vec![ChatEffect::Error {
+            message: "Chat message is too long.".into(),
         }];
     }
     let Some(from) = world
@@ -60,6 +67,40 @@ pub fn handle_chat(
                 text: trimmed.to_string(),
             }]
         }
+        "guild" => {
+            let key = GuildRoster::member_key(world, speaker);
+            if guilds.guild_id_of(&key).is_none() {
+                return vec![ChatEffect::Error {
+                    message: "You are not in a guild.".into(),
+                }];
+            }
+            vec![ChatEffect::Message {
+                channel: "guild".into(),
+                from,
+                text: trimmed.to_string(),
+            }]
+        }
+        "officer" => {
+            let key = GuildRoster::member_key(world, speaker);
+            if guilds.guild_id_of(&key).is_none() {
+                return vec![ChatEffect::Error {
+                    message: "You are not in a guild.".into(),
+                }];
+            }
+            match guilds.rank_of(&key) {
+                Some(GuildRank::Leader) | Some(GuildRank::Officer) => {}
+                _ => {
+                    return vec![ChatEffect::Error {
+                        message: "Only officers and the Guild Master can use officer chat.".into(),
+                    }];
+                }
+            }
+            vec![ChatEffect::Message {
+                channel: "officer".into(),
+                from,
+                text: trimmed.to_string(),
+            }]
+        }
         other => vec![ChatEffect::Error {
             message: format!("Unknown chat channel '{other}'."),
         }],
@@ -69,6 +110,7 @@ pub fn handle_chat(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::social::guild::GuildRoster;
     use crate::social::party::PartyRoster;
     use woc_content::PlayerClass;
 
@@ -85,7 +127,8 @@ mod tests {
     #[test]
     fn say_emits_chat_message() {
         let (roster, world) = duo();
-        let effects = handle_chat(&roster, &world, 1, "say", "hello");
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&roster, &guilds, &world, 1, "say", "hello");
         assert_eq!(
             effects,
             vec![ChatEffect::Message {
@@ -101,14 +144,16 @@ mod tests {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Solo", PlayerClass::Warrior, 0.0, 0.0);
         let roster = PartyRoster::new();
-        let effects = handle_chat(&roster, &world, 1, "party", "psst");
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&roster, &guilds, &world, 1, "party", "psst");
         assert!(matches!(effects.as_slice(), [ChatEffect::Error { .. }]));
     }
 
     #[test]
     fn party_channel_emits_when_grouped() {
         let (roster, world) = duo();
-        let effects = handle_chat(&roster, &world, 2, "party", "ready");
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&roster, &guilds, &world, 2, "party", "ready");
         assert_eq!(
             effects,
             vec![ChatEffect::Message {
@@ -122,7 +167,51 @@ mod tests {
     #[test]
     fn empty_text_rejected() {
         let (roster, world) = duo();
-        let effects = handle_chat(&roster, &world, 1, "say", "   ");
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&roster, &guilds, &world, 1, "say", "   ");
         assert!(matches!(effects.as_slice(), [ChatEffect::Error { .. }]));
+    }
+
+    #[test]
+    fn guild_channel_requires_membership() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Solo", PlayerClass::Warrior, 0.0, 0.0);
+        let parties = PartyRoster::new();
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&parties, &guilds, &world, 1, "guild", "hi");
+        assert_eq!(
+            effects,
+            vec![ChatEffect::Error {
+                message: "You are not in a guild.".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn officer_channel_rejects_members() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        let parties = PartyRoster::new();
+        let mut guilds = GuildRoster::new();
+        let _ = guilds.create(1, "Vale Watch", &world);
+        let _ = guilds.invite(1, "Bob", 0, &world);
+        let _ = guilds.accept(2, 1, &world);
+        let denied = handle_chat(&parties, &guilds, &world, 2, "officer", "secret");
+        assert_eq!(
+            denied,
+            vec![ChatEffect::Error {
+                message: "Only officers and the Guild Master can use officer chat.".into(),
+            }]
+        );
+        let ok = handle_chat(&parties, &guilds, &world, 1, "officer", "secret");
+        assert_eq!(
+            ok,
+            vec![ChatEffect::Message {
+                channel: "officer".into(),
+                from: "Alice".into(),
+                text: "secret".into(),
+            }]
+        );
     }
 }

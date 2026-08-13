@@ -35,6 +35,7 @@ use crate::quests::{
 };
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
+use crate::social::guild::GuildRoster;
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
 use crate::world::WORLD_SEED;
@@ -65,6 +66,8 @@ pub struct Sim {
     pub intents: HashMap<EntityId, PlayerIntent>,
     /// Party invite / membership roster for this realm.
     pub parties: PartyRoster,
+    /// Persistent guild roster for this realm.
+    pub guilds: GuildRoster,
     pub mail: crate::mail::Mailbox,
     pub market: crate::market::AuctionHouse,
     pub loot_rules: crate::social::LootRules,
@@ -94,6 +97,7 @@ impl Sim {
             events: Vec::new(),
             intents: HashMap::new(),
             parties: PartyRoster::new(),
+            guilds: GuildRoster::new(),
             mail: crate::mail::Mailbox::new(),
             market: crate::market::AuctionHouse::new(),
             loot_rules: crate::social::LootRules::default(),
@@ -277,6 +281,7 @@ impl Sim {
     pub fn chat(&mut self, player_id: EntityId, channel: &str, text: &str) -> Vec<WsServerMsg> {
         map_chat_effects(handle_chat(
             &self.parties,
+            &self.guilds,
             &self.world,
             player_id,
             channel,

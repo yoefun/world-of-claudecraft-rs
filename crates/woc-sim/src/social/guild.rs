@@ -128,6 +128,16 @@ impl GuildRoster {
         self.membership.get(durable).copied()
     }
 
+    pub fn rank_of(&self, durable: &str) -> Option<GuildRank> {
+        let gid = self.guild_id_of(durable)?;
+        self.guilds
+            .get(&gid)?
+            .members
+            .iter()
+            .find(|m| m.durable_id == durable)
+            .map(|m| m.rank)
+    }
+
     pub fn guild(&self, id: u32) -> Option<&Guild> {
         self.guilds.get(&id)
     }
