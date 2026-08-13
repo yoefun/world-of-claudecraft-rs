@@ -9,7 +9,9 @@ pub type EntityId = u32;
 /// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
 /// Rev 4: jump / swim / flight intent + motion snapshot flags.
 /// Rev 5: clear_target intent + ability_bar kit slots for combat HUD.
-pub const PROTOCOL_REV: u32 = 6;
+/// Rev 6: pending loot / bank copper / market `mine`.
+/// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
+pub const PROTOCOL_REV: u32 = 7;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -168,6 +170,12 @@ pub enum InteractAction {
     AdvanceDelve,
     /// Leave the current instance back to the overworld zone.
     LeaveInstance,
+    /// Toggle rogue stealth (Z). Other classes toast.
+    ToggleStealth,
+    /// Cycle warrior stance (F). Reserved until class-forms.
+    CycleStance,
+    /// Toggle shaman/druid form (F). Reserved until class-forms.
+    ToggleForm,
     /// Need roll on pending party loot.
     LootNeed {
         loot_id: EntityId,
@@ -415,6 +423,18 @@ pub struct TickSnapshot {
     /// Copper stored in the personal bank vault.
     #[serde(default)]
     pub bank_copper: u32,
+    /// Rogue combo points (0–5).
+    #[serde(default)]
+    pub combo_points: u8,
+    /// True while the local player is stealthed.
+    #[serde(default)]
+    pub stealthed: bool,
+    /// Warrior stance / form id; empty when none.
+    #[serde(default)]
+    pub stance_id: String,
+    /// Remaining absorb on the local player.
+    #[serde(default)]
+    pub absorb: f32,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -515,6 +535,10 @@ impl Default for TickSnapshot {
             loot_mode: None,
             pending_loot: Vec::new(),
             bank_copper: 0,
+            combo_points: 0,
+            stealthed: false,
+            stance_id: String::new(),
+            absorb: 0.0,
         }
     }
 }
@@ -839,6 +863,10 @@ mod tests {
         assert!(snap.party_id.is_none());
         assert!(snap.pending_loot.is_empty());
         assert_eq!(snap.bank_copper, 0);
+        assert_eq!(snap.combo_points, 0);
+        assert!(!snap.stealthed);
+        assert!(snap.stance_id.is_empty());
+        assert_eq!(snap.absorb, 0.0);
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
     }
 
@@ -907,6 +935,10 @@ mod tests {
                 rolled: false,
             }],
             bank_copper: 40,
+            combo_points: 3,
+            stealthed: true,
+            stance_id: "battle".into(),
+            absorb: 25.0,
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -929,6 +961,10 @@ mod tests {
         assert_eq!(back.loot_mode.as_deref(), Some("need_greed"));
         assert_eq!(back.pending_loot.len(), 1);
         assert_eq!(back.bank_copper, 40);
+        assert_eq!(back.combo_points, 3);
+        assert!(back.stealthed);
+        assert_eq!(back.stance_id, "battle");
+        assert!((back.absorb - 25.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -1083,6 +1119,9 @@ mod tests {
             InteractAction::SetLootMode {
                 mode: "need_greed".into(),
             },
+            InteractAction::ToggleStealth,
+            InteractAction::CycleStance,
+            InteractAction::ToggleForm,
         ];
         for a in actions {
             let v = serde_json::to_value(&a).unwrap();
