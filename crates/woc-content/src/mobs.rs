@@ -72,8 +72,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         attack_damage: 6.0,
         loot: &[LootEntry {
             item_id: "wolf_fang",
-            chance: 0.55,
-            count: 1,
+            chance: 1.0,
+            count: 2,
         }],
         respawn_seconds: 30.0,
         ability_id: None,

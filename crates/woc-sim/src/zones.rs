@@ -352,7 +352,10 @@ mod tests {
             .ids::<Identity>()
             .into_iter()
             .filter(|&id| {
-                world.get::<Identity>(id).and_then(|i| i.template_id.as_deref()) == Some("young_wolf")
+                world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some("young_wolf")
                     && world.get::<Identity>(id).map(|i| i.zone_id.as_str()) == Some("eastbrook")
                     && world.get::<Health>(id).is_some_and(|h| h.alive)
             })

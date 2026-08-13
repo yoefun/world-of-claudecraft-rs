@@ -545,39 +545,44 @@ impl Sim {
                 .get::<Identity>(reward.victim)
                 .map(|i| i.zone_id.clone())
                 .unwrap_or_else(|| "eastbrook".into());
-            let expires = self.tick.saturating_add(crate::types::LOOT_PILE_TTL_TICKS);
-            let loot_before: HashSet<EntityId> = self.world.ids::<LootPile>().into_iter().collect();
-            let _first = spawn_mob_loot(
-                &mut self.world,
-                &mut self.rng,
-                reward.template_id.as_deref(),
-                reward.x,
-                reward.z,
-                &zone,
-                expires,
-            );
-            let killer_inst = self
-                .world
-                .get::<InstanceAt>(reward.killer)
-                .and_then(|i| i.instance_id.clone());
-            for loot_id in self
-                .world
-                .ids::<LootPile>()
-                .into_iter()
-                .filter(|id| !loot_before.contains(id))
-            {
-                if let Some(ref inst) = killer_inst {
-                    if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
-                        loot.instance_id = Some(inst.clone());
-                    }
-                }
-                self.loot_rules.maybe_start_party_roll(
-                    &self.parties,
-                    &self.world,
-                    reward.killer,
-                    loot_id,
-                    &mut self.events,
+            let killer_is_player = self.world.get::<Identity>(reward.killer).map(|i| i.kind)
+                == Some(EntityKind::Player);
+            if killer_is_player {
+                let expires = self.tick.saturating_add(crate::types::LOOT_PILE_TTL_TICKS);
+                let loot_before: HashSet<EntityId> =
+                    self.world.ids::<LootPile>().into_iter().collect();
+                let _first = spawn_mob_loot(
+                    &mut self.world,
+                    &mut self.rng,
+                    reward.template_id.as_deref(),
+                    reward.x,
+                    reward.z,
+                    &zone,
+                    expires,
                 );
+                let killer_inst = self
+                    .world
+                    .get::<InstanceAt>(reward.killer)
+                    .and_then(|i| i.instance_id.clone());
+                for loot_id in self
+                    .world
+                    .ids::<LootPile>()
+                    .into_iter()
+                    .filter(|id| !loot_before.contains(id))
+                {
+                    if let Some(ref inst) = killer_inst {
+                        if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
+                            loot.instance_id = Some(inst.clone());
+                        }
+                    }
+                    self.loot_rules.maybe_start_party_roll(
+                        &self.parties,
+                        &self.world,
+                        reward.killer,
+                        loot_id,
+                        &mut self.events,
+                    );
+                }
             }
         }
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
@@ -1267,7 +1272,10 @@ mod tests {
         let mut saw_kill = false;
         for _ in 0..80 {
             let (_snap, ev) = sim.tick_all();
-            if ev.iter().any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob)) {
+            if ev
+                .iter()
+                .any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob))
+            {
                 saw_kill = true;
                 break;
             }

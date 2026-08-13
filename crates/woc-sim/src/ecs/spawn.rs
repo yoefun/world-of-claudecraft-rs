@@ -277,6 +277,7 @@ pub fn create_loot(
     create_loot_ex(world, id, x, z, copper, item, 1, 0, "eastbrook")
 }
 
+#[allow(clippy::too_many_arguments)] // YAGNI: late kill-loop helper; no new param struct
 pub fn create_loot_ex(
     world: &mut World,
     id: EntityId,

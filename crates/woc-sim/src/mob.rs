@@ -292,7 +292,14 @@ mod tests {
     #[test]
     fn leash_restores_hp_and_clears_auras() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Kite", woc_content::PlayerClass::Warrior, 80.0, 0.0);
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Kite",
+            woc_content::PlayerClass::Warrior,
+            80.0,
+            0.0,
+        );
         crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
         if let Some(h) = world.get_mut::<Health>(2) {
             h.hp = 5.0;
@@ -324,7 +331,11 @@ mod tests {
         }
         update_mob_ai(&mut world, 2, 1);
         let h = world.get::<Health>(2).unwrap();
-        assert!((h.hp - h.hp_max).abs() < 0.1, "leash must heal, hp={}", h.hp);
+        assert!(
+            (h.hp - h.hp_max).abs() < 0.1,
+            "leash must heal, hp={}",
+            h.hp
+        );
         assert!(world.get::<Combat>(2).unwrap().target.is_none());
         assert!(world.get::<Auras>(2).unwrap().auras.is_empty());
     }

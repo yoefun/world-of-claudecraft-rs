@@ -44,12 +44,13 @@ pub fn roll_hit_with_crit(rng: &mut Rng, crit_chance: f32) -> HitResult {
 }
 
 fn roll_player_hit(world: &World, rng: &mut Rng, src: EntityId) -> HitResult {
-    if world.get::<LootTable>(src).is_some() && world.get::<ClassKit>(src).is_none() {
-        return HitResult::Hit;
-    }
     let crit = (CRIT_CHANCE + crate::talents::talent_bonus(world, src, "crit_pct"))
         .clamp(0.0, 1.0 - MISS_CHANCE);
     roll_hit_with_crit(rng, crit)
+}
+
+fn is_mob_attacker(world: &World, src: EntityId) -> bool {
+    world.get::<LootTable>(src).is_some() && world.get::<ClassKit>(src).is_none()
 }
 
 pub fn dist2d_pose(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
@@ -398,7 +399,7 @@ pub fn add_threat(world: &mut World, mob_id: EntityId, source: EntityId, amount:
     *threat.threat.entry(source).or_insert(0.0) += amount;
 }
 
-/// Prefer current living target; else highest threat in range; else `None`.
+/// Switch to another living player in range when their threat exceeds current × 1.1; else keep current.
 pub fn prefer_mob_target(world: &World, mob_id: EntityId, max_range: f32) -> Option<EntityId> {
     let current = world.get::<Combat>(mob_id).and_then(|c| c.target);
     let Some(threat) = world.get::<Threat>(mob_id).map(|t| t.threat.clone()) else {
@@ -717,6 +718,18 @@ fn toast_crit(events: &mut Vec<SimEvent>, name: &str) {
     });
 }
 
+fn maybe_toast_miss(world: &World, events: &mut Vec<SimEvent>, src: EntityId, name: &str) {
+    if !is_mob_attacker(world, src) {
+        toast_miss(events, name);
+    }
+}
+
+fn maybe_toast_crit(world: &World, events: &mut Vec<SimEvent>, src: EntityId, name: &str) {
+    if !is_mob_attacker(world, src) {
+        toast_crit(events, name);
+    }
+}
+
 fn apply_direct_damage(
     world: &mut World,
     rng: &mut Rng,
@@ -728,10 +741,10 @@ fn apply_direct_damage(
 ) {
     let hit = roll_player_hit(world, rng, src);
     match scale_hit(base, hit) {
-        None => toast_miss(events, def.name),
+        None => maybe_toast_miss(world, events, src, def.name),
         Some(amount) => {
             if hit == HitResult::Crit {
-                toast_crit(events, def.name);
+                maybe_toast_crit(world, events, src, def.name);
             }
             deal_damage(world, src, tid, amount, Some(def.name), false, events);
             apply_ability_aura(world, src, tid, def.id, events);
@@ -754,10 +767,16 @@ fn aoe_targets(
     let Some(origin) = origin else {
         return Vec::new();
     };
-    let mut ids: Vec<(f32, EntityId)> = world
-        .ids::<LootTable>()
+    let src_is_player = world.get::<ClassKit>(src).is_some();
+    let candidates: Vec<EntityId> = if src_is_player {
+        world.ids::<LootTable>()
+    } else {
+        world.ids::<ClassKit>()
+    };
+    let mut ids: Vec<(f32, EntityId)> = candidates
         .into_iter()
         .filter(|&id| world.get::<Health>(id).is_some_and(|h| h.alive))
+        .filter(|&id| is_living_hostile(world, src, id))
         .filter_map(|id| {
             let t = world.get::<Transform>(id)?;
             let d = dist2d_pose(origin.x, origin.z, t.x, t.z);
@@ -767,8 +786,13 @@ fn aoe_targets(
     ids.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     if let Some(pos) = ids.iter().position(|(_, id)| *id == primary) {
         ids.swap(0, pos);
-    } else if is_living_mob(world, primary) {
-        ids.insert(0, (0.0, primary));
+    } else if is_living_hostile(world, src, primary) {
+        if let Some(t) = world.get::<Transform>(primary) {
+            let d = dist2d_pose(origin.x, origin.z, t.x, t.z);
+            if d <= radius {
+                ids.insert(0, (d, primary));
+            }
+        }
     }
     ids.into_iter()
         .map(|(_, id)| id)
@@ -1016,17 +1040,20 @@ pub fn apply_ability_effect(
             };
             let hit = roll_player_hit(world, rng, src);
             let Some(amount) = scale_hit(melee * dmg_scale, hit) else {
-                toast_miss(events, def.name);
+                maybe_toast_miss(world, events, src, def.name);
                 return;
             };
             if hit == HitResult::Crit {
-                toast_crit(events, def.name);
+                maybe_toast_crit(world, events, src, def.name);
             }
             let extra =
                 crate::talents::talent_bonus(world, src, "cleave_targets_plus").max(0.0) as u32;
             let cap = max_targets.saturating_add(extra);
             for tid in aoe_targets(world, src, primary, radius, cap) {
                 if tid == src {
+                    continue;
+                }
+                if !is_living_hostile(world, src, tid) {
                     continue;
                 }
                 deal_damage(world, src, tid, amount, Some(def.name), false, events);
@@ -1091,7 +1118,7 @@ pub fn apply_ability_effect(
                 let hit = roll_player_hit(world, rng, src);
                 if let Some(amount) = scale_hit(melee.max(1.0) * dmg_scale, hit) {
                     if hit == HitResult::Crit {
-                        toast_crit(events, def.name);
+                        maybe_toast_crit(world, events, src, def.name);
                     }
                     if def.damage > 0.0 {
                         deal_damage(world, src, tid, amount, Some(def.name), false, events);
@@ -1099,7 +1126,7 @@ pub fn apply_ability_effect(
                     apply_ability_aura(world, src, tid, def.id, events);
                     add_combo_on_hit(world, src, def);
                 } else {
-                    toast_miss(events, def.name);
+                    maybe_toast_miss(world, events, src, def.name);
                 }
             }
         }
@@ -1170,7 +1197,7 @@ fn apply_direct_heal(
     let amount = match hit {
         HitResult::Miss | HitResult::Hit => (def.damage + sp * 0.5) * coefficient * heal_mult,
         HitResult::Crit => {
-            toast_crit(events, def.name);
+            maybe_toast_crit(world, events, src, def.name);
             (def.damage + sp * 0.5) * coefficient * CRIT_MULT * heal_mult
         }
     };
@@ -1413,11 +1440,13 @@ pub fn tick_loot_expiry(
         if pile.expires_tick == 0 || tick < pile.expires_tick {
             continue;
         }
-        rules.drop_pending(id);
+        let had_pending = rules.drop_pending(id);
         world.despawn(id);
-        events.push(SimEvent::Toast {
-            message: "Loot expired.".into(),
-        });
+        if had_pending {
+            events.push(SimEvent::Toast {
+                message: "Loot expired.".into(),
+            });
+        }
     }
 }
 
@@ -2653,18 +2682,88 @@ mod tests {
     #[test]
     fn scarred_wolf_casts_bite() {
         let mut world = World::new();
-        let mut rng = Rng::new(7);
-        crate::ecs::spawn::create_player(&mut world, 1, "Tank", woc_content::PlayerClass::Warrior, 0.0, 0.0);
-        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "scarred_wolf", 1.0, 0.0).unwrap();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Tank",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "scarred_wolf", 1.0, 0.0)
+            .unwrap();
         if let Some(c) = world.get_mut::<Combat>(2) {
             c.target = Some(1);
             c.ability_cd = 0.0;
             c.swing_timer = 99.0; // suppress white hit
         }
+        let player_hp = world.get::<Health>(1).unwrap().hp;
+        let mut events = Vec::new();
+        let mut hit = false;
+        for seed in 1..=50 {
+            if let Some(h) = world.get_mut::<Health>(1) {
+                h.hp = player_hp;
+            }
+            if let Some(c) = world.get_mut::<Combat>(2) {
+                c.ability_cd = 0.0;
+            }
+            events.clear();
+            let mut rng = Rng::new(seed);
+            update_mob_combat(2, 1, &mut world, &mut rng, &mut events);
+            if events.iter().any(|e| {
+                matches!(e, SimEvent::Damage { ability: Some(name), .. } if name == "Wolf Bite")
+            }) {
+                hit = true;
+                break;
+            }
+        }
+        assert!(hit, "expected Wolf Bite damage within 50 seeds: {events:?}");
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Toast { message } if message.contains("misses") || message.contains("crits"))),
+            "mob abilities must not spam miss/crit toasts: {events:?}"
+        );
+    }
+
+    #[test]
+    fn crypt_warden_smash_hits_player_not_ally() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Tank",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "crypt_warden", 1.5, 0.0)
+            .unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.5, 1.0).unwrap();
+        add_threat(&mut world, 2, 1, 50.0);
+        let player_hp = world.get::<Health>(1).unwrap().hp;
+        let ally_hp = world.get::<Health>(3).unwrap().hp;
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = Some(1);
+            c.ability_cd = 0.0;
+            c.swing_timer = 99.0;
+        }
         let mut events = Vec::new();
         update_mob_combat(2, 1, &mut world, &mut rng, &mut events);
         assert!(
-            events.iter().any(|e| matches!(e, SimEvent::Damage { ability: Some(name), .. } if name == "Wolf Bite")),
+            world.get::<Health>(1).unwrap().hp < player_hp,
+            "player should take Warden Smash damage"
+        );
+        assert_eq!(
+            world.get::<Health>(3).unwrap().hp,
+            ally_hp,
+            "ally mob must not be hit by warden smash"
+        );
+        assert!(
+            events.iter().any(|e| {
+                matches!(e, SimEvent::Damage { ability: Some(name), .. } if name == "Warden Smash")
+            }),
             "{events:?}"
         );
     }
@@ -2672,8 +2771,22 @@ mod tests {
     #[test]
     fn threat_switches_at_ratio() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "A", woc_content::PlayerClass::Warrior, 0.0, 0.0);
-        crate::ecs::spawn::create_player(&mut world, 2, "B", woc_content::PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "A",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        crate::ecs::spawn::create_player(
+            &mut world,
+            2,
+            "B",
+            woc_content::PlayerClass::Mage,
+            1.0,
+            0.0,
+        );
         crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.5, 0.0).unwrap();
         add_threat(&mut world, 3, 1, 10.0);
         add_threat(&mut world, 3, 2, 12.0); // 1.2× > 1.1
@@ -3366,7 +3479,14 @@ mod tests {
     #[test]
     fn loot_entry_count_is_granted() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Ada", woc_content::PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Ada",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
         // Force a known count by spawning a pile directly, then claiming.
         let lid = crate::ecs::spawn::create_loot_ex(
             &mut world,
@@ -3391,7 +3511,15 @@ mod tests {
     fn independent_loot_can_drop_two_items() {
         let mut world = World::new();
         let mut rng = Rng::new(1);
-        let _ = spawn_mob_loot(&mut world, &mut rng, Some("barrow_hag"), 0.0, 0.0, "eastbrook", 0);
+        let _ = spawn_mob_loot(
+            &mut world,
+            &mut rng,
+            Some("barrow_hag"),
+            0.0,
+            0.0,
+            "eastbrook",
+            0,
+        );
         let piles: Vec<_> = world
             .ids::<LootPile>()
             .into_iter()
@@ -3405,7 +3533,15 @@ mod tests {
     fn crypt_warden_drops_cleaver() {
         let mut world = World::new();
         let mut rng = Rng::new(1);
-        spawn_mob_loot(&mut world, &mut rng, Some("crypt_warden"), 1.0, 1.0, "eastbrook", 0);
+        spawn_mob_loot(
+            &mut world,
+            &mut rng,
+            Some("crypt_warden"),
+            1.0,
+            1.0,
+            "eastbrook",
+            0,
+        );
         let items: Vec<_> = world
             .ids::<LootPile>()
             .into_iter()
@@ -3418,12 +3554,158 @@ mod tests {
     fn kill_loot_expires_after_ttl() {
         let mut world = World::new();
         let lid = crate::ecs::spawn::create_loot_ex(
-            &mut world, 9, 0.0, 0.0, 3, Some("wolf_fang".into()), 1, 10, "eastbrook",
+            &mut world,
+            9,
+            0.0,
+            0.0,
+            3,
+            Some("wolf_fang".into()),
+            1,
+            10,
+            "eastbrook",
         );
-        tick_loot_expiry(&mut world, 9, &mut crate::social::LootRules::default(), &mut Vec::new());
+        tick_loot_expiry(
+            &mut world,
+            9,
+            &mut crate::social::LootRules::default(),
+            &mut Vec::new(),
+        );
         assert!(world.get::<LootPile>(lid).is_some());
-        tick_loot_expiry(&mut world, 10, &mut crate::social::LootRules::default(), &mut Vec::new());
+        tick_loot_expiry(
+            &mut world,
+            10,
+            &mut crate::social::LootRules::default(),
+            &mut Vec::new(),
+        );
         assert!(world.get::<LootPile>(lid).is_none());
+    }
+
+    #[test]
+    fn loot_expiry_toast_only_when_pending() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "A",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        crate::ecs::spawn::create_player(
+            &mut world,
+            2,
+            "B",
+            woc_content::PlayerClass::Mage,
+            1.0,
+            0.0,
+        );
+        let ordinary = crate::ecs::spawn::create_loot_ex(
+            &mut world,
+            9,
+            0.0,
+            0.0,
+            3,
+            Some("wolf_fang".into()),
+            1,
+            10,
+            "eastbrook",
+        );
+        let pending = crate::ecs::spawn::create_loot_ex(
+            &mut world,
+            10,
+            1.0,
+            0.0,
+            0,
+            Some("wolf_fang".into()),
+            1,
+            10,
+            "eastbrook",
+        );
+        let mut rules = crate::social::LootRules::default();
+        rules.start_roll(pending, "wolf_fang".into(), 0, 1, vec![1, 2]);
+        let mut events = Vec::new();
+        tick_loot_expiry(&mut world, 10, &mut rules, &mut events);
+        assert!(world.get::<LootPile>(ordinary).is_none());
+        assert!(world.get::<LootPile>(pending).is_none());
+        let toasts: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                SimEvent::Toast { message } => Some(message.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(toasts, vec!["Loot expired."]);
+    }
+
+    #[test]
+    fn young_wolf_spawn_loot_grants_count_two() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        spawn_mob_loot(
+            &mut world,
+            &mut rng,
+            Some("young_wolf"),
+            0.0,
+            0.0,
+            "eastbrook",
+            0,
+        );
+        let pile = world
+            .ids::<LootPile>()
+            .into_iter()
+            .find_map(|id| world.get::<LootPile>(id).map(|p| (id, p)))
+            .expect("young_wolf should drop loot at 1.0 chance");
+        assert_eq!(pile.1.item.as_deref(), Some("wolf_fang"));
+        assert_eq!(pile.1.count, 2);
+        assert!(item("wolf_fang").is_some());
+    }
+
+    #[test]
+    fn mob_killer_does_not_spawn_loot() {
+        let mut world = World::new();
+        let killer = world.next_id();
+        crate::ecs::spawn::create_mob_from_template(&mut world, killer, "scarred_wolf", 0.0, 0.0)
+            .unwrap();
+        assert!(
+            world.get::<ClassKit>(killer).is_none(),
+            "mob killer has no ClassKit"
+        );
+        assert!(
+            world.get::<Identity>(killer).unwrap().kind != EntityKind::Player,
+            "mob killer is not a Player"
+        );
+        let piles_before = world.ids::<LootPile>().len();
+        let victim = world.next_id();
+        crate::ecs::spawn::create_mob_from_template(&mut world, victim, "young_wolf", 1.0, 0.0)
+            .unwrap();
+        if let Some(h) = world.get_mut::<Health>(victim) {
+            h.hp = 1.0;
+        }
+        let mut events = Vec::new();
+        deal_damage(&mut world, killer, victim, 99.0, None, true, &mut events);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Kill { victim: v, .. } if *v == victim)),
+            "mob should kill mob"
+        );
+        let rewards = collect_pending_mob_kills(&events, &world);
+        assert_eq!(rewards.len(), 1);
+        let killer_is_player =
+            world.get::<Identity>(rewards[0].killer).map(|i| i.kind) == Some(EntityKind::Player);
+        assert!(!killer_is_player);
+        if killer_is_player {
+            spawn_mob_loot(
+                &mut world,
+                &mut Rng::new(1),
+                rewards[0].template_id.as_deref(),
+                rewards[0].x,
+                rewards[0].z,
+                "eastbrook",
+                0,
+            );
+        }
+        assert_eq!(world.ids::<LootPile>().len(), piles_before);
     }
 
     #[test]
@@ -3432,9 +3714,19 @@ mod tests {
         crate::zones::spawn_gather_nodes(&mut world);
         let ids: Vec<_> = world.ids::<LootPile>();
         assert!(!ids.is_empty());
-        tick_loot_expiry(&mut world, 100_000, &mut crate::social::LootRules::default(), &mut Vec::new());
+        tick_loot_expiry(
+            &mut world,
+            100_000,
+            &mut crate::social::LootRules::default(),
+            &mut Vec::new(),
+        );
         for id in ids {
-            if world.get::<Identity>(id).and_then(|i| i.template_id.as_deref()).and_then(woc_content::gather_node).is_some() {
+            if world
+                .get::<Identity>(id)
+                .and_then(|i| i.template_id.as_deref())
+                .and_then(woc_content::gather_node)
+                .is_some()
+            {
                 assert!(world.get::<LootPile>(id).is_some());
             }
         }

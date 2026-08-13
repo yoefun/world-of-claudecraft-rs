@@ -313,15 +313,31 @@ mod tests {
     #[test]
     fn crypt_trash_does_not_respawn_inside_instance() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Tank", woc_content::PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Tank",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
         let parties = PartyRoster::new();
-        assert!(enter_dungeon(&mut world, &parties, 1, "eastbrook_crypt", &mut Vec::new()));
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut Vec::new()
+        ));
         let trash: Vec<_> = world
             .ids::<LootTable>()
             .into_iter()
             .filter(|&id| {
                 world.get::<Respawn>(id).is_some()
-                    && world.get::<Identity>(id).and_then(|i| i.template_id.as_deref()) == Some("young_wolf")
+                    && world
+                        .get::<Identity>(id)
+                        .and_then(|i| i.template_id.as_deref())
+                        == Some("young_wolf")
             })
             .collect();
         assert!(!trash.is_empty());

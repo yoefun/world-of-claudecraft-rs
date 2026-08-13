@@ -71,8 +71,10 @@ impl LootRules {
         self.pending.iter().any(|p| p.loot_id == loot_id)
     }
 
-    pub fn drop_pending(&mut self, loot_id: EntityId) {
+    pub fn drop_pending(&mut self, loot_id: EntityId) -> bool {
+        let before = self.pending.len();
         self.pending.retain(|p| p.loot_id != loot_id);
+        before != self.pending.len()
     }
 
     /// Snapshot pending rolls relevant to `player` (eligible only).
