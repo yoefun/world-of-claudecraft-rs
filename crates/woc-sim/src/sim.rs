@@ -17,6 +17,7 @@ use crate::combat::{
     update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
+use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Motion, Owner, Transform};
 use crate::ecs::World;
 use crate::entity::{create_player, Entity, QuestState};
 use crate::interaction::vendor_snapshot;
@@ -312,10 +313,12 @@ impl Sim {
 
     /// Tab-cycle living hostile mobs for the primary player.
     pub fn tab_target(&mut self) -> Option<EntityId> {
-        let id = crate::targeting::tab_target(self.player_id, &self.entities)?;
-        if let Some(p) = self.player_mut() {
-            p.target = Some(id);
+        self.rebuild_world();
+        let id = crate::targeting::tab_target(&self.world, self.player_id)?;
+        if let Some(c) = self.world.get_mut::<Combat>(self.player_id) {
+            c.target = Some(id);
         }
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
         Some(id)
     }
 
@@ -348,7 +351,10 @@ impl Sim {
     /// Call from the interact/toast UI path when the player confirms release.
     /// Returns `false` if the player is missing or still alive.
     pub fn release_spirit(&mut self, player_id: EntityId) -> bool {
-        crate::spirit::release_spirit(&mut self.entities, player_id, &mut self.events)
+        self.rebuild_world();
+        let ok = crate::spirit::release_spirit(&mut self.world, player_id, &mut self.events);
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
+        ok
     }
 
     /// Build a context bag for leaf modules (emit / lookup / mutate).
@@ -383,23 +389,32 @@ impl Sim {
             .map(|e| e.id)
             .collect();
 
-        // Phase 1: apply intents + motion
+        self.rebuild_world();
+        // Phase 1: apply intents + motion (World is source of truth this phase)
         for &pid in &player_ids {
             let intent = self.intents.get(&pid).copied().unwrap_or_default();
-            let Some(pi) = self.entity_index(pid) else {
-                continue;
-            };
-            if !self.entities[pi].alive {
+            let alive = self
+                .world
+                .get::<Health>(pid)
+                .map(|h| h.alive)
+                .unwrap_or(false);
+            if !alive {
                 continue;
             }
             if intent.clear_target {
-                self.entities[pi].target = None;
-                self.entities[pi].auto_attack = false;
-                self.entities[pi].cast = None;
+                if let Some(c) = self.world.get_mut::<Combat>(pid) {
+                    c.target = None;
+                    c.auto_attack = false;
+                    c.cast = None;
+                }
             }
-            let effect = step_player_motion(&mut self.entities[pi], &intent);
+            let effect = step_player_motion(&mut self.world, pid, &intent);
             if intent.fly_toggle {
-                let flying = self.entities[pi].flying;
+                let flying = self
+                    .world
+                    .get::<Motion>(pid)
+                    .map(|m| m.flying)
+                    .unwrap_or(false);
                 self.events.push(woc_protocol::SimEvent::Toast {
                     message: if flying {
                         "Travel flight engaged (Space up · Ctrl down · V land).".into()
@@ -410,30 +425,43 @@ impl Sim {
             }
             if let Some(effect) = effect {
                 if effect.fall_damage > 0.0 {
-                    let p = &mut self.entities[pi];
-                    p.hp = (p.hp - effect.fall_damage).max(0.0);
+                    let mut died = false;
+                    if let Some(h) = self.world.get_mut::<Health>(pid) {
+                        h.hp = (h.hp - effect.fall_damage).max(0.0);
+                        died = h.hp <= 0.0;
+                    }
                     self.events.push(woc_protocol::SimEvent::Toast {
                         message: format!("Falling deals {} damage.", effect.fall_damage as i32),
                     });
-                    if p.hp <= 0.0 {
-                        crate::death::on_player_death_check(&mut self.entities, &mut self.events);
+                    if died {
+                        crate::death::on_player_death_check(&mut self.world, &mut self.events);
                     }
                 }
             }
             if let Some(tid) = intent.target_id {
-                self.entities[pi].target = Some(tid);
+                if let Some(c) = self.world.get_mut::<Combat>(pid) {
+                    c.target = Some(tid);
+                }
             }
             if intent.attack {
-                self.entities[pi].auto_attack = true;
-                if self.entities[pi].target.is_none() {
-                    if let Some(tid) = nearest_mob(&self.entities, &self.entities[pi], 30.0) {
-                        self.entities[pi].target = Some(tid);
+                let need_acquire = self
+                    .world
+                    .get::<Combat>(pid)
+                    .map(|c| c.target.is_none())
+                    .unwrap_or(false);
+                let acquired = if need_acquire {
+                    nearest_mob(&self.world, pid, 30.0)
+                } else {
+                    None
+                };
+                if let Some(c) = self.world.get_mut::<Combat>(pid) {
+                    c.auto_attack = true;
+                    if c.target.is_none() {
+                        c.target = acquired;
                     }
                 }
             }
         }
-
-        self.rebuild_world();
         // Phase 2: player combat
         for &pid in &player_ids {
             let ability = self.intents.get(&pid).and_then(|i| i.ability);
@@ -513,8 +541,10 @@ impl Sim {
             );
         }
         self.reindex();
+        self.rebuild_world();
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
-        crate::death::on_player_death_check(&mut self.entities, &mut self.events);
+        crate::death::on_player_death_check(&mut self.world, &mut self.events);
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
 
         // PvP duel resolve + honor (does not add a locked tick phase).
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.entities, &mut self.events);
@@ -858,20 +888,30 @@ fn map_chat_effects(effects: Vec<ChatEffect>) -> Vec<WsServerMsg> {
         .collect()
 }
 
-fn nearest_mob(entities: &[Entity], from: &Entity, max_range: f32) -> Option<EntityId> {
+fn nearest_mob(world: &World, from: EntityId, max_range: f32) -> Option<EntityId> {
+    let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
-    for e in entities {
-        if e.kind != EntityKind::Mob || !e.alive {
+    for id in world.ids::<LootTable>() {
+        if world.get::<Owner>(id).is_some() || world.get::<ClassKit>(id).is_some() {
             continue;
         }
-        let dx = e.x - from.x;
-        let dz = e.z - from.z;
+        let Some(h) = world.get::<Health>(id) else {
+            continue;
+        };
+        if !h.alive {
+            continue;
+        }
+        let Some(t) = world.get::<Transform>(id) else {
+            continue;
+        };
+        let dx = t.x - from_t.x;
+        let dz = t.z - from_t.z;
         let d = (dx * dx + dz * dz).sqrt();
         if d > max_range {
             continue;
         }
         if best.map(|(_, bd)| d < bd).unwrap_or(true) {
-            best = Some((e.id, d));
+            best = Some((id, d));
         }
     }
     best.map(|(id, _)| id)

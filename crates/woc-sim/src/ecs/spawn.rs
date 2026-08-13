@@ -322,3 +322,12 @@ pub fn apply_world_to_entities(world: &World, entities: &mut [Entity]) {
         apply_world_to_entity(world, entity);
     }
 }
+
+/// Dual-write helper: adopt every fat entity into a fresh `World`.
+pub fn world_from_entities(entities: &[Entity]) -> World {
+    let mut world = World::new();
+    for entity in entities {
+        sync_entity_to_world(&mut world, entity);
+    }
+    world
+}

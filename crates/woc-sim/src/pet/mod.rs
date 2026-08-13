@@ -205,7 +205,7 @@ fn tick_one_pet(pet_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimE
 }
 
 fn move_toward(pet: &mut Entity, tx: f32, tz: f32, speed: f32) {
-    let _ = crate::entity_motion::step_toward(pet, tx, tz, speed);
+    let _ = crate::entity_motion::step_toward_entity(pet, tx, tz, speed);
 }
 
 /// True when `class` can summon.

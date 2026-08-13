@@ -2,7 +2,7 @@
 
 use crate::combat::dist2d;
 use crate::entity::Entity;
-use crate::entity_motion::{step_toward, step_toward_home};
+use crate::entity_motion::{step_toward_entity, step_toward_home_entity};
 use crate::types::{AGGRO_RANGE, LEASH_RANGE, MELEE_RANGE, MOB_SPEED};
 use crate::world::{ground_height, WORLD_SEED};
 use woc_protocol::{EntityId, EntityKind};
@@ -153,11 +153,11 @@ pub fn update_mob_ai(mob_id: EntityId, player_id: EntityId, entities: &mut [Enti
 }
 
 fn move_toward(mob: &mut Entity, tx: f32, tz: f32, speed: f32) {
-    let _ = step_toward(mob, tx, tz, speed);
+    let _ = step_toward_entity(mob, tx, tz, speed);
 }
 
 fn move_toward_home(mob: &mut Entity) {
-    if step_toward_home(mob, MOB_SPEED * 0.85, 0.2) {
+    if step_toward_home_entity(mob, MOB_SPEED * 0.85, 0.2) {
         // Reset after leash / idle return.
         mob.hp = mob.hp_max;
         mob.threat.clear();
