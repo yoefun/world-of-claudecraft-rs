@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use woc_content::{item, talents::talents_for_class, ItemKind};
+use woc_content::{can_equip, item, talents::talents_for_class, ItemKind, PlayerClass};
 use woc_protocol::{EntityId, InteractAction, TickSnapshot, VendorSnapshot};
 
 use crate::{GameHost, NetStatus, PlayMode};
@@ -128,10 +128,12 @@ pub(crate) fn first_junk_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, Stri
 }
 
 pub(crate) fn first_equippable_bag_stack(snap: &TickSnapshot) -> Option<(u8, String)> {
+    let class = PlayerClass::parse(&snap.progress.class_id)?;
+    let level = snap.progress.level;
     snap.inventory.iter().find_map(|stack| {
-        item(&stack.item_id)
-            .filter(|def| def.equip_slot.is_some())
-            .map(|_| (stack.slot, stack.item_id.clone()))
+        let def = item(&stack.item_id)?;
+        can_equip(def, class, level).ok()?;
+        Some((stack.slot, stack.item_id.clone()))
     })
 }
 
@@ -629,17 +631,23 @@ pub(crate) fn update_hud(
     if let Ok(mut t) = bags.single_mut() {
         if ui.show_bags {
             if snap.inventory.is_empty() {
-                **t = "Bags: empty\n[Q] Equip · [F] Use consumable · [V] Sell junk (vendor open)"
+                **t = "Bags: empty\n[1-9] Equip/Use slot · [Q] first legal gear · [F] Use consumable · [V] Sell junk (vendor open)"
                     .into();
             } else {
                 let mut lines = vec!["Bags [B]".to_string()];
-                for (i, s) in snap.inventory.iter().enumerate() {
+                for s in &snap.inventory {
                     let kind = item(&s.item_id)
                         .map(|d| format!("{:?}", d.kind))
                         .unwrap_or_else(|| "?".into());
-                    lines.push(format!("  [{}] {}×{} ({kind})", i + 1, s.count, s.item_id));
+                    lines.push(format!(
+                        "  [{}] {}×{} ({kind})",
+                        s.slot + 1,
+                        s.count,
+                        s.item_id
+                    ));
                 }
-                lines.push("[Q] Equip first gear · [F] Use first consumable".into());
+                lines.push("[1-9] Equip/Use slot · [Q] first legal gear".into());
+                lines.push("[F] Use first consumable".into());
                 if snap.open_vendor.is_some() {
                     lines.push("[V] Sell first junk to vendor".into());
                 }
@@ -694,7 +702,7 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-8] Unequip slot",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
@@ -707,6 +715,11 @@ pub(crate) fn update_hud(
             eq.chest.as_deref().unwrap_or("—"),
             eq.legs.as_deref().unwrap_or("—"),
             eq.feet.as_deref().unwrap_or("—"),
+            eq.neck.as_deref().unwrap_or("—"),
+            eq.finger.as_deref().unwrap_or("—"),
+            snap.attack_power,
+            snap.armor,
+            snap.spell_power,
         );
     }
 

@@ -4,7 +4,10 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
-use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, TickSnapshot};
+use woc_content::{can_equip, item, ItemKind, PlayerClass};
+use woc_protocol::{
+    AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, TickSnapshot,
+};
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
@@ -132,7 +135,7 @@ pub(crate) fn collect_intent(
     }
     // Digit keys: talents, loot rolls, bank withdraw, or abilities.
     let loot_rolling = host.snapshot.pending_loot.iter().any(|p| !p.rolled);
-    if !ui.show_talents && !ui.show_bank && !loot_rolling && !ui.show_bags {
+    if !ui.show_talents && !ui.show_bank && !loot_rolling && !ui.show_bags && !ui.show_character {
         intent.ability = ability_slot_from_keys(&keys);
     }
 
@@ -517,6 +520,108 @@ pub(crate) fn handle_interact_keys(
         }
     }
 
+    if ui.show_bags {
+        let bag_slot = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
+        {
+            Some(0u8)
+        } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+            Some(1)
+        } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+            Some(2)
+        } else if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+            Some(3)
+        } else if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+            Some(4)
+        } else if keys.just_pressed(KeyCode::Digit6) || keys.just_pressed(KeyCode::Numpad6) {
+            Some(5)
+        } else if keys.just_pressed(KeyCode::Digit7) || keys.just_pressed(KeyCode::Numpad7) {
+            Some(6)
+        } else if keys.just_pressed(KeyCode::Digit8) || keys.just_pressed(KeyCode::Numpad8) {
+            Some(7)
+        } else if keys.just_pressed(KeyCode::Digit9) || keys.just_pressed(KeyCode::Numpad9) {
+            Some(8)
+        } else {
+            None
+        };
+        if let Some(slot) = bag_slot {
+            if let Some(stack) = host
+                .snapshot
+                .inventory
+                .iter()
+                .find(|s| s.slot == slot)
+                .cloned()
+            {
+                if let Some(def) = item(&stack.item_id) {
+                    let level = host.snapshot.progress.level;
+                    let can_equip_ok = PlayerClass::parse(&host.snapshot.progress.class_id)
+                        .map(|class| can_equip(def, class, level).is_ok())
+                        .unwrap_or(false);
+                    if can_equip_ok {
+                        host.interact(
+                            player_id,
+                            InteractAction::Equip {
+                                bag_slot: stack.slot,
+                            },
+                        );
+                        host.recent_toasts
+                            .push((format!("Equipping {}.", stack.item_id), 2.0));
+                    } else if def.kind == ItemKind::Consumable {
+                        host.interact(
+                            player_id,
+                            InteractAction::UseItem {
+                                bag_slot: stack.slot,
+                            },
+                        );
+                        host.recent_toasts
+                            .push((format!("Using {}.", stack.item_id), 2.0));
+                    } else {
+                        host.recent_toasts.push(("Cannot use that.".into(), 2.0));
+                    }
+                } else {
+                    host.recent_toasts.push(("Cannot use that.".into(), 2.0));
+                }
+            }
+        }
+    }
+    if ui.show_character {
+        let equip_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
+        {
+            Some(0usize)
+        } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+            Some(1)
+        } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+            Some(2)
+        } else if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+            Some(3)
+        } else if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+            Some(4)
+        } else if keys.just_pressed(KeyCode::Digit6) || keys.just_pressed(KeyCode::Numpad6) {
+            Some(5)
+        } else if keys.just_pressed(KeyCode::Digit7) || keys.just_pressed(KeyCode::Numpad7) {
+            Some(6)
+        } else if keys.just_pressed(KeyCode::Digit8) || keys.just_pressed(KeyCode::Numpad8) {
+            Some(7)
+        } else {
+            None
+        };
+        if let Some(idx) = equip_idx {
+            const SLOTS: [EquipSlot; 8] = [
+                EquipSlot::MainHand,
+                EquipSlot::OffHand,
+                EquipSlot::Head,
+                EquipSlot::Chest,
+                EquipSlot::Legs,
+                EquipSlot::Feet,
+                EquipSlot::Neck,
+                EquipSlot::Finger,
+            ];
+            let equip_slot = SLOTS[idx];
+            host.interact(player_id, InteractAction::Unequip { equip_slot });
+            host.recent_toasts
+                .push((format!("Unequipping {equip_slot:?}."), 2.0));
+        }
+    }
+
     // Bags: equip / use / sell junk while vendor open.
     if ui.show_bags && keys.just_pressed(KeyCode::KeyQ) {
         if let Some((bag_slot, item_id)) = first_equippable_bag_stack(&host.snapshot) {
@@ -555,7 +660,7 @@ pub(crate) fn handle_interact_keys(
         .find(|p| !p.rolled)
         .cloned();
     if let Some(pending) = pending {
-        if !ui.show_talents && !ui.show_bank {
+        if !ui.show_talents && !ui.show_bank && !ui.show_bags && !ui.show_character {
             if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
                 host.interact(
                     player_id,
