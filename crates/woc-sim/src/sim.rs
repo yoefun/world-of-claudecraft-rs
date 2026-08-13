@@ -17,7 +17,11 @@ use crate::combat::{
     update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
-use crate::entity::{create_player, Entity, QuestState};
+use crate::ecs::components::{
+    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootTable, Motion, Owner,
+    Progress, QuestLog, QuestState, Transform,
+};
+use crate::ecs::World;
 use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
@@ -43,8 +47,8 @@ pub struct Sim {
     pub tick: u64,
     pub seed: u32,
     pub rng: Rng,
-    pub entities: Vec<Entity>,
-    pub next_id: EntityId,
+    /// Authoritative actor store (typed sparse columns).
+    pub world: World,
     /// Primary / local player id (offline host). `0` when the realm has no players yet.
     pub player_id: EntityId,
     pub events: Vec<SimEvent>,
@@ -59,20 +63,24 @@ pub struct Sim {
 }
 
 impl Sim {
+    /// Every player in the realm, dead or alive. See [`crate::ecs::living_player_ids`]
+    /// for the alive-only variant.
+    pub fn player_ids(&self) -> Vec<EntityId> {
+        crate::ecs::player_ids(&self.world)
+    }
+
     /// Continuous overworld (all zone bands) with no player. Online sticky realm.
     pub fn new_empty_eastbrook() -> Self {
         let seed = WORLD_SEED;
         let mut rng = Rng::new(seed);
-        let mut next_id = 1u32;
-        let mut entities = Vec::new();
-        populate_all_overworld(&mut entities, &mut next_id, &mut rng);
+        let mut world = World::new();
+        populate_all_overworld(&mut world, &mut rng);
 
         Self {
             tick: 0,
             seed,
             rng,
-            entities,
-            next_id,
+            world,
             player_id: 0,
             events: Vec::new(),
             intents: HashMap::new(),
@@ -98,26 +106,20 @@ impl Sim {
 
     /// Spawn a player into the existing realm without resetting NPCs/mobs.
     pub fn spawn_player(&mut self, name: &str, class: PlayerClass) -> Option<EntityId> {
-        let players = self
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Player)
-            .count();
+        let players = self.player_count();
         if players >= MAX_REALM_PLAYERS {
             return None;
         }
-        let id = self.next_id;
-        self.next_id += 1;
+        let id = self.world.next_id();
         let offset = players as f32 * 1.5;
-        let mut player = create_player(
+        crate::ecs::spawn::create_player(
+            &mut self.world,
             id,
             name,
             class,
             EASTBROOK.player_spawn_x + offset,
             EASTBROOK.player_spawn_z,
         );
-        player.y = Entity::ground_at(player.x, player.z);
-        self.entities.push(player);
         self.intents.insert(id, PlayerIntent::default());
         if self.player_id == 0 {
             self.player_id = id;
@@ -132,41 +134,47 @@ impl Sim {
         class: PlayerClass,
         state: &crate::persist_state::PlayerPersistentState,
     ) -> Option<EntityId> {
-        let players = self
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Player)
-            .count();
+        let players = self.player_count();
         if players >= MAX_REALM_PLAYERS {
             return None;
         }
-        // Reject duplicate durable character already in realm.
         if let Some(ref did) = state.durable_id {
-            if self.entities.iter().any(|e| {
-                e.kind == EntityKind::Player && e.durable_id.as_deref() == Some(did.as_str())
-            }) {
+            let dup = self
+                .world
+                .ids::<crate::ecs::components::Durable>()
+                .into_iter()
+                .any(|id| {
+                    self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
+                        && self
+                            .world
+                            .get::<crate::ecs::components::Durable>(id)
+                            .and_then(|d| d.durable_id.as_deref())
+                            == Some(did.as_str())
+                });
+            if dup {
                 return None;
             }
         }
-        let id = self.next_id;
-        self.next_id += 1;
-        let mut player = crate::persist_state::create_player_from_state(id, name, class, state);
-        // Virgin / eastbrook spawn: slight offset so multiplayer doesn't stack.
+        let id = self.world.next_id();
+        crate::persist_state::create_player_from_state(&mut self.world, id, name, class, state);
+        let zone = self
+            .world
+            .get::<Identity>(id)
+            .map(|i| i.zone_id.clone())
+            .unwrap_or_default();
         if state.is_virgin()
-            || (player.zone_id == "eastbrook"
-                && state.pos_x.abs() < 0.01
-                && state.pos_z.abs() < 0.01)
+            || (zone == "eastbrook" && state.pos_x.abs() < 0.01 && state.pos_z.abs() < 0.01)
         {
             let offset = players as f32 * 1.5;
-            player.x = EASTBROOK.player_spawn_x + offset;
-            player.z = EASTBROOK.player_spawn_z;
-            player.y = Entity::ground_at(player.x, player.z);
-            player.home_x = player.x;
-            player.home_z = player.z;
-        } else {
-            player.y = Entity::ground_at(player.x, player.z);
+            let x = EASTBROOK.player_spawn_x + offset;
+            let z = EASTBROOK.player_spawn_z;
+            let y = crate::ecs::spawn::ground_at(x, z);
+            if let Some(t) = self.world.get_mut::<Transform>(id) {
+                t.x = x;
+                t.z = z;
+                t.y = y;
+            }
         }
-        self.entities.push(player);
         self.intents.insert(id, PlayerIntent::default());
         if self.player_id == 0 {
             self.player_id = id;
@@ -179,35 +187,30 @@ impl Sim {
         &self,
         player_id: EntityId,
     ) -> Option<crate::persist_state::PlayerPersistentState> {
-        let player = self.entities.iter().find(|e| e.id == player_id)?;
-        crate::persist_state::export_player_state(player)
+        crate::persist_state::export_player_state(&self.world, player_id)
     }
 
     /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
     pub fn despawn_player(&mut self, player_id: EntityId) {
-        let _ = dismiss_pet(&mut self.entities, player_id, &mut self.events);
+        let _ = dismiss_pet(&mut self.world, player_id, &mut self.events);
         let _ = self.parties.on_despawn(player_id);
-        self.entities
-            .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
+        self.world.despawn(player_id);
         self.intents.remove(&player_id);
         if self.player_id == player_id {
-            self.player_id = self
-                .entities
-                .iter()
-                .find(|e| e.kind == EntityKind::Player)
-                .map(|e| e.id)
-                .unwrap_or(0);
+            self.player_id = self.player_ids().into_iter().next().unwrap_or(0);
         }
     }
 
     /// Party invite by target player name.
     pub fn party_invite(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
-        map_party_effects(self.parties.invite(player_id, name, &self.entities))
+        let effects = self.parties.invite(player_id, name, &self.world);
+        map_party_effects(effects)
     }
 
     /// Accept a pending party invite.
     pub fn party_accept(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
-        map_party_effects(self.parties.accept(player_id, &self.entities))
+        let effects = self.parties.accept(player_id, &self.world);
+        map_party_effects(effects)
     }
 
     /// Leave the current party (dissolves when size drops below 2).
@@ -219,7 +222,7 @@ impl Sim {
     pub fn chat(&mut self, player_id: EntityId, channel: &str, text: &str) -> Vec<WsServerMsg> {
         map_chat_effects(handle_chat(
             &self.parties,
-            &self.entities,
+            &self.world,
             player_id,
             channel,
             text,
@@ -232,29 +235,23 @@ impl Sim {
     }
 
     pub fn player_count(&self) -> usize {
-        self.entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Player)
-            .count()
-    }
-
-    pub fn player(&self) -> Option<&Entity> {
-        self.entities.iter().find(|e| e.id == self.player_id)
-    }
-
-    pub fn player_mut(&mut self) -> Option<&mut Entity> {
-        let id = self.player_id;
-        self.entities.iter_mut().find(|e| e.id == id)
+        self.player_ids().len()
     }
 
     /// Convenience: primary player copper (0 if none).
     pub fn copper(&self) -> u32 {
-        self.player().map(|p| p.copper).unwrap_or(0)
+        self.world
+            .get::<Progress>(self.player_id)
+            .map(|p| p.copper)
+            .unwrap_or(0)
     }
 
     /// Convenience: primary player XP (0 if none).
     pub fn player_xp(&self) -> u32 {
-        self.player().map(|p| p.xp).unwrap_or(0)
+        self.world
+            .get::<Progress>(self.player_id)
+            .map(|p| p.xp)
+            .unwrap_or(0)
     }
 
     pub fn interact(&mut self, target_id: EntityId, action: InteractAction) {
@@ -263,19 +260,19 @@ impl Sim {
 
     /// Tab-cycle living hostile mobs for the primary player.
     pub fn tab_target(&mut self) -> Option<EntityId> {
-        let id = crate::targeting::tab_target(self.player_id, &self.entities)?;
-        if let Some(p) = self.player_mut() {
-            p.target = Some(id);
+        let id = crate::targeting::tab_target(&self.world, self.player_id)?;
+        if let Some(c) = self.world.get_mut::<Combat>(self.player_id) {
+            c.target = Some(id);
         }
         Some(id)
     }
 
     /// Clear the primary player's current target and stop auto-attack (Esc).
     pub fn clear_target(&mut self) {
-        if let Some(p) = self.player_mut() {
-            p.target = None;
-            p.auto_attack = false;
-            p.cast = None;
+        if let Some(c) = self.world.get_mut::<Combat>(self.player_id) {
+            c.target = None;
+            c.auto_attack = false;
+            c.cast = None;
         }
     }
 
@@ -285,29 +282,22 @@ impl Sim {
         item_id: &str,
         count: u32,
     ) -> Result<(), &'static str> {
-        let Some(p) = self.entities.iter_mut().find(|e| e.id == player_id) else {
-            return Err("no player");
-        };
-        crate::inventory::grant_item(p, item_id, count, &mut self.events)?;
-        crate::quests::on_inventory_changed(p, &mut self.events);
+        crate::inventory::grant_item(&mut self.world, player_id, item_id, count, &mut self.events)?;
+        crate::quests::on_inventory_changed(&mut self.world, player_id, &mut self.events);
         Ok(())
     }
 
     /// Release a dead player's spirit: respawn at the Eastbrook graveyard.
-    ///
-    /// Call from the interact/toast UI path when the player confirms release.
-    /// Returns `false` if the player is missing or still alive.
     pub fn release_spirit(&mut self, player_id: EntityId) -> bool {
-        crate::spirit::release_spirit(&mut self.entities, player_id, &mut self.events)
+        crate::spirit::release_spirit(&mut self.world, player_id, &mut self.events)
     }
 
     /// Build a context bag for leaf modules (emit / lookup / mutate).
     pub fn context(&mut self) -> SimContext<'_> {
         SimContext {
             events: &mut self.events,
-            entities: &mut self.entities,
+            world: &mut self.world,
             rng: &mut self.rng,
-            next_id: &mut self.next_id,
         }
     }
 
@@ -324,30 +314,33 @@ impl Sim {
         self.events.clear();
         self.tick += 1;
 
-        let player_ids: Vec<EntityId> = self
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Player)
-            .map(|e| e.id)
-            .collect();
+        let player_ids = self.player_ids();
 
         // Phase 1: apply intents + motion
         for &pid in &player_ids {
             let intent = self.intents.get(&pid).copied().unwrap_or_default();
-            let Some(pi) = self.entities.iter().position(|e| e.id == pid) else {
-                continue;
-            };
-            if !self.entities[pi].alive {
+            let alive = self
+                .world
+                .get::<Health>(pid)
+                .map(|h| h.alive)
+                .unwrap_or(false);
+            if !alive {
                 continue;
             }
             if intent.clear_target {
-                self.entities[pi].target = None;
-                self.entities[pi].auto_attack = false;
-                self.entities[pi].cast = None;
+                if let Some(c) = self.world.get_mut::<Combat>(pid) {
+                    c.target = None;
+                    c.auto_attack = false;
+                    c.cast = None;
+                }
             }
-            let effect = step_player_motion(&mut self.entities[pi], &intent);
+            let effect = step_player_motion(&mut self.world, pid, &intent);
             if intent.fly_toggle {
-                let flying = self.entities[pi].flying;
+                let flying = self
+                    .world
+                    .get::<Motion>(pid)
+                    .map(|m| m.flying)
+                    .unwrap_or(false);
                 self.events.push(woc_protocol::SimEvent::Toast {
                     message: if flying {
                         "Travel flight engaged (Space up · Ctrl down · V land).".into()
@@ -358,136 +351,142 @@ impl Sim {
             }
             if let Some(effect) = effect {
                 if effect.fall_damage > 0.0 {
-                    let p = &mut self.entities[pi];
-                    p.hp = (p.hp - effect.fall_damage).max(0.0);
+                    let mut died = false;
+                    if let Some(h) = self.world.get_mut::<Health>(pid) {
+                        h.hp = (h.hp - effect.fall_damage).max(0.0);
+                        died = h.hp <= 0.0;
+                    }
                     self.events.push(woc_protocol::SimEvent::Toast {
                         message: format!("Falling deals {} damage.", effect.fall_damage as i32),
                     });
-                    if p.hp <= 0.0 {
-                        crate::death::on_player_death_check(&mut self.entities, &mut self.events);
+                    if died {
+                        crate::death::on_player_death_check(&mut self.world, &mut self.events);
                     }
                 }
             }
             if let Some(tid) = intent.target_id {
-                self.entities[pi].target = Some(tid);
+                if let Some(c) = self.world.get_mut::<Combat>(pid) {
+                    c.target = Some(tid);
+                }
             }
             if intent.attack {
-                self.entities[pi].auto_attack = true;
-                if self.entities[pi].target.is_none() {
-                    if let Some(tid) = nearest_mob(&self.entities, &self.entities[pi], 30.0) {
-                        self.entities[pi].target = Some(tid);
+                let need_acquire = self
+                    .world
+                    .get::<Combat>(pid)
+                    .map(|c| c.target.is_none())
+                    .unwrap_or(false);
+                let acquired = if need_acquire {
+                    nearest_mob(&self.world, pid, 30.0)
+                } else {
+                    None
+                };
+                if let Some(c) = self.world.get_mut::<Combat>(pid) {
+                    c.auto_attack = true;
+                    if c.target.is_none() {
+                        c.target = acquired;
                     }
                 }
             }
         }
-
         // Phase 2: player combat
         for &pid in &player_ids {
             let ability = self.intents.get(&pid).and_then(|i| i.ability);
-            update_player_combat(pid, &mut self.entities, ability, &mut self.events);
+            update_player_combat(pid, &mut self.world, ability, &mut self.events);
         }
 
         // Pet AI (after player combat; keeps TICK_PHASES fingerprint stable).
-        tick_pets(&mut self.entities, &mut self.events);
+        let _dropped = tick_pets(&mut self.world, &mut self.events);
 
         // Phase 3: mob AI + combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Mob && e.alive)
-            .map(|e| e.id)
+            .world
+            .ids::<LootTable>()
+            .into_iter()
+            .filter(|&id| {
+                self.world
+                    .get::<Health>(id)
+                    .map(|h| h.alive)
+                    .unwrap_or(false)
+            })
             .collect();
         for mid in &mob_ids {
-            let focus = {
-                let Some(mob) = self.entities.iter().find(|e| e.id == *mid) else {
-                    continue;
-                };
-                nearest_alive_player(&self.entities, mob, 40.0)
-            };
-            if let Some(pid) = focus {
-                update_mob_ai(*mid, pid, &mut self.entities);
+            if let Some(pid) = nearest_alive_player(&self.world, *mid, 40.0) {
+                update_mob_ai(&mut self.world, *mid, pid);
             }
         }
         for mid in &mob_ids {
             let focus = self
-                .entities
-                .iter()
-                .find(|e| e.id == *mid)
-                .and_then(|m| m.target)
-                .or_else(|| {
-                    let mob = self.entities.iter().find(|e| e.id == *mid)?;
-                    nearest_alive_player(&self.entities, mob, 40.0)
-                });
+                .world
+                .get::<Combat>(*mid)
+                .and_then(|c| c.target)
+                .or_else(|| nearest_alive_player(&self.world, *mid, 40.0));
             if let Some(pid) = focus {
-                update_mob_combat(*mid, pid, &mut self.entities, &mut self.events);
+                update_mob_combat(*mid, pid, &mut self.world, &mut self.events);
             }
         }
 
         // Aura/timer decay (hook into tick after combat; keeps TICK_PHASES fingerprint stable).
-        tick_auras(&mut self.entities, &mut self.events);
-        tick_mob_respawns(&mut self.entities, DT);
+        tick_auras(&mut self.world, &mut self.events);
+        tick_mob_respawns(&mut self.world, DT);
 
         // Phase 4: kill rewards → killer (+ party share stub)
-        let rewards = collect_pending_mob_kills(&self.events, &self.entities);
+        let rewards = collect_pending_mob_kills(&self.events, &self.world);
         for reward in rewards {
             let mut recipients = vec![reward.killer];
-            for mate in kill_credit_share(&self.parties, &self.entities, reward.killer) {
+            for mate in kill_credit_share(&self.parties, &self.world, reward.killer) {
                 if !recipients.contains(&mate) {
                     recipients.push(mate);
                 }
             }
             for rid in recipients {
-                if let Some(pi) = self.entities.iter().position(|e| e.id == rid) {
-                    if self.entities[pi].kind == EntityKind::Player {
-                        grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
-                        if let Some(ref tid) = reward.template_id {
-                            on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
-                            crate::worldboss::on_boss_killed(
-                                &mut self.entities[pi],
-                                tid,
-                                &mut self.events,
-                            );
-                        }
+                if self.world.get::<Identity>(rid).map(|i| i.kind) == Some(EntityKind::Player) {
+                    grant_xp(&mut self.world, rid, reward.xp, &mut self.events);
+                    if let Some(ref tid) = reward.template_id {
+                        on_mob_killed(&mut self.world, rid, tid, &mut self.events);
+                        crate::worldboss::on_boss_killed(
+                            &mut self.world,
+                            rid,
+                            tid,
+                            &mut self.events,
+                        );
                     }
                 }
             }
             let loot_id = spawn_mob_loot(
-                &mut self.next_id,
-                &mut self.entities,
+                &mut self.world,
                 &mut self.rng,
                 reward.template_id.as_deref(),
                 reward.x,
                 reward.z,
             );
             if let Some(killer_inst) = self
-                .entities
-                .iter()
-                .find(|e| e.id == reward.killer)
-                .and_then(|e| e.instance_id.clone())
+                .world
+                .get::<InstanceAt>(reward.killer)
+                .and_then(|i| i.instance_id.clone())
             {
-                if let Some(loot) = self.entities.iter_mut().find(|e| e.id == loot_id) {
+                if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
                     loot.instance_id = Some(killer_inst);
                 }
             }
             self.loot_rules.maybe_start_party_roll(
                 &self.parties,
-                &self.entities,
+                &self.world,
                 reward.killer,
                 loot_id,
                 &mut self.events,
             );
         }
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
-        crate::death::on_player_death_check(&mut self.entities, &mut self.events);
+        crate::death::on_player_death_check(&mut self.world, &mut self.events);
 
         // PvP duel resolve + honor (does not add a locked tick phase).
-        crate::pvp::tick_pvp(&mut self.pvp, &mut self.entities, &mut self.events);
+        crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
-            .tick_expire(self.tick, &mut self.entities, &mut self.mail);
+            .tick_expire(self.tick, &mut self.world, &mut self.mail);
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
-            try_pickup_loot(pid, &mut self.entities, &mut self.events, &self.loot_rules);
+            try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
         }
 
         // Phase 6: snapshot
@@ -506,26 +505,34 @@ impl Sim {
     }
 
     pub fn snapshot_for_player(&self, player_id: EntityId) -> TickSnapshot {
-        let player = self.entities.iter().find(|e| e.id == player_id);
-        let level = player.map(|p| p.level).unwrap_or(1);
-        let target_id = player.and_then(|p| p.target);
-        let ability_cd = player.map(|p| p.ability_cd).unwrap_or(0.0);
-        let ability_name = player
-            .and_then(|p| p.primary_ability.as_deref())
+        let world = &self.world;
+        let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
+        let target_id = world.get::<Combat>(player_id).and_then(|c| c.target);
+        let ability_cd = world
+            .get::<Combat>(player_id)
+            .map(|c| c.ability_cd)
+            .unwrap_or(0.0);
+        let primary_ability = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.primary_ability.clone());
+        let ability_name = primary_ability
+            .as_deref()
             .and_then(ability)
             .map(|a| a.name.to_string())
             .unwrap_or_default();
-        let cd_max = player
-            .and_then(|p| p.primary_ability.as_deref())
+        let cd_max = primary_ability
+            .as_deref()
             .and_then(ability)
             .map(|a| a.cooldown)
             .unwrap_or(3.0);
-        let class_id = player
-            .and_then(|p| p.class_id)
+        let class_id = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.class_id)
             .map(|c| c.as_str().to_string())
             .unwrap_or_default();
-        let resource_type = player
-            .and_then(|p| p.class_id)
+        let resource_type = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.class_id)
             .map(|c| class_def(c).resource_type)
             .map(|rt| match rt {
                 woc_content::ResourceType::Rage => "rage",
@@ -535,9 +542,10 @@ impl Sim {
             .unwrap_or("")
             .to_string();
 
-        let inventory = player
-            .map(|p| {
-                p.inventory
+        let inventory = world
+            .get::<Bags>(player_id)
+            .map(|bags| {
+                bags.inventory
                     .iter()
                     .enumerate()
                     .filter_map(|(i, s)| {
@@ -551,100 +559,82 @@ impl Sim {
             })
             .unwrap_or_default();
 
-        let equipment = player
-            .map(|p| EquipmentSnapshot {
-                main_hand: p.equipment.main_hand.clone(),
-                off_hand: p.equipment.off_hand.clone(),
-                head: p.equipment.head.clone(),
-                chest: p.equipment.chest.clone(),
-                legs: p.equipment.legs.clone(),
-                feet: p.equipment.feet.clone(),
+        let equipment = world
+            .get::<Bags>(player_id)
+            .map(|bags| EquipmentSnapshot {
+                main_hand: bags.equipment.main_hand.clone(),
+                off_hand: bags.equipment.off_hand.clone(),
+                head: bags.equipment.head.clone(),
+                chest: bags.equipment.chest.clone(),
+                legs: bags.equipment.legs.clone(),
+                feet: bags.equipment.feet.clone(),
             })
             .unwrap_or_default();
 
-        let quest_log = player
-            .map(|p| {
-                p.quest_log
+        let quest_log = world
+            .get::<QuestLog>(player_id)
+            .map(|q| {
+                q.quest_log
                     .iter()
-                    .map(|q| QuestLogEntry {
-                        quest_id: q.quest_id.clone(),
-                        state: match q.state {
+                    .map(|quest| QuestLogEntry {
+                        quest_id: quest.quest_id.clone(),
+                        state: match quest.state {
                             QuestState::Active => "active",
                             QuestState::Ready => "ready",
                             QuestState::Completed => "completed",
                         }
                         .to_string(),
-                        counts: q.counts.clone(),
+                        counts: quest.counts.clone(),
                     })
                     .collect()
             })
             .unwrap_or_default();
 
-        let open_vendor = player.and_then(|p| vendor_snapshot(&self.entities, p));
+        let open_vendor = vendor_snapshot(world, player_id);
 
-        let auras = player
-            .map(|p| {
-                p.auras
+        let auras = world
+            .get::<Auras>(player_id)
+            .map(|a| {
+                a.auras
                     .iter()
-                    .map(|a| AuraSnapshot {
-                        id: a.id.clone(),
-                        remaining: a.remaining.max(0.0),
-                        stacks: a.stacks,
+                    .map(|aura| AuraSnapshot {
+                        id: aura.id.clone(),
+                        remaining: aura.remaining.max(0.0),
+                        stacks: aura.stacks,
                     })
                     .collect()
             })
             .unwrap_or_default();
 
-        let cast = player.and_then(|p| {
-            p.cast.as_ref().map(|c| CastSnapshot {
-                ability_id: c.ability_id.clone(),
-                progress: if c.duration > 0.0 {
-                    (c.elapsed / c.duration).clamp(0.0, 1.0)
+        let cast = world.get::<Combat>(player_id).and_then(|c| {
+            c.cast.as_ref().map(|cast_state| CastSnapshot {
+                ability_id: cast_state.ability_id.clone(),
+                progress: if cast_state.duration > 0.0 {
+                    (cast_state.elapsed / cast_state.duration).clamp(0.0, 1.0)
                 } else {
                     1.0
                 },
             })
         });
 
-        let gcd = player.map(|p| p.gcd).unwrap_or(0.0);
-        let casting = player.map(|p| p.cast.is_some()).unwrap_or(false);
-        let auto_attack = player.map(|p| p.auto_attack).unwrap_or(false);
-        let ability_bar = player
-            .map(|p| build_ability_bar(p, gcd, casting))
-            .unwrap_or_default();
+        let gcd = world.get::<Combat>(player_id).map(|c| c.gcd).unwrap_or(0.0);
+        let casting = world
+            .get::<Combat>(player_id)
+            .map(|c| c.cast.is_some())
+            .unwrap_or(false);
+        let auto_attack = world
+            .get::<Combat>(player_id)
+            .map(|c| c.auto_attack)
+            .unwrap_or(false);
+        let ability_bar = build_ability_bar(world, player_id, gcd, casting);
 
-        let viewer_instance = player.and_then(|p| p.instance_id.clone());
-        let entities = self
-            .entities
-            .iter()
-            .filter(|e| e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc)
-            .filter(|e| match (&viewer_instance, &e.instance_id) {
-                (None, None) => true,
-                (Some(a), Some(b)) => a == b,
-                // Overworld viewers see overworld actors; instance players see
-                // their instance plus other players (for co-presence at portals).
-                (Some(_), None) => e.kind == EntityKind::Player,
-                (None, Some(_)) => e.kind == EntityKind::Player,
-            })
-            .map(|e| EntitySnapshot {
-                id: e.id,
-                kind: e.kind,
-                x: e.x,
-                y: e.y,
-                z: e.z,
-                yaw: e.yaw,
-                hp: e.hp,
-                hp_max: e.hp_max,
-                level: e.level,
-                name: e.name.clone(),
-                resource: e.resource,
-                resource_max: e.resource_max,
-                alive: e.alive,
-                template_id: e.template_id.clone(),
-                on_ground: e.on_ground,
-                flying: e.flying,
-                swimming: crate::player_motion::is_swimming(e),
-            })
+        let viewer_instance = world
+            .get::<InstanceAt>(player_id)
+            .and_then(|i| i.instance_id.clone());
+        let entities = world
+            .live_ids()
+            .filter(|&id| snapshot_includes_entity(world, viewer_instance.as_deref(), id))
+            .filter_map(|id| entity_snapshot(world, id))
             .collect();
 
         TickSnapshot {
@@ -652,10 +642,13 @@ impl Sim {
             player_id,
             entities,
             progress: PlayerProgress {
-                xp: player.map(|p| p.xp).unwrap_or(0),
+                xp: world.get::<Progress>(player_id).map(|p| p.xp).unwrap_or(0),
                 xp_to_level: xp_to_next(level),
                 level,
-                copper: player.map(|p| p.copper).unwrap_or(0),
+                copper: world
+                    .get::<Progress>(player_id)
+                    .map(|p| p.copper)
+                    .unwrap_or(0),
                 bag_item: None,
                 class_id,
                 resource_type,
@@ -678,13 +671,21 @@ impl Sim {
             ability_bar,
             gcd,
             auto_attack,
-            is_dead: player.map(|p| !p.alive).unwrap_or(false),
+            is_dead: world
+                .get::<Health>(player_id)
+                .map(|h| !h.alive)
+                .unwrap_or(false),
             party_id: self.parties.party_id(player_id),
-            zone_id: player
-                .map(|p| p.zone_id.clone())
+            zone_id: world
+                .get::<Identity>(player_id)
+                .map(|i| i.zone_id.clone())
                 .unwrap_or_else(|| "eastbrook".into()),
-            talent_points: player.map(|p| p.talent_points).unwrap_or(0),
-            talents: player
+            talent_points: world
+                .get::<Progress>(player_id)
+                .map(|p| p.talent_points)
+                .unwrap_or(0),
+            talents: world
+                .get::<Progress>(player_id)
                 .map(|p| {
                     p.talents
                         .iter()
@@ -695,9 +696,10 @@ impl Sim {
                         .collect()
                 })
                 .unwrap_or_default(),
-            bank: player
-                .map(|p| {
-                    p.bank
+            bank: world
+                .get::<Bank>(player_id)
+                .map(|bank| {
+                    bank.bank
                         .iter()
                         .enumerate()
                         .filter_map(|(i, s)| {
@@ -710,11 +712,18 @@ impl Sim {
                         .collect()
                 })
                 .unwrap_or_default(),
-            mail: self.mail.snapshot_for_entity(player_id, &self.entities),
-            market: self.market.snapshot_for(player_id, &self.entities),
-            honor: player.map(|p| p.honor).unwrap_or(0),
-            pvp_flagged: player.map(|p| p.pvp_flagged).unwrap_or(false),
-            professions: player
+            mail: self.mail.snapshot_for_entity(player_id, world),
+            market: self.market.snapshot_for(player_id, world),
+            honor: world
+                .get::<Progress>(player_id)
+                .map(|p| p.honor)
+                .unwrap_or(0),
+            pvp_flagged: world
+                .get::<Progress>(player_id)
+                .map(|p| p.pvp_flagged)
+                .unwrap_or(false),
+            professions: world
+                .get::<Progress>(player_id)
                 .map(|p| {
                     p.professions
                         .iter()
@@ -727,15 +736,76 @@ impl Sim {
                 .unwrap_or_default(),
             loot_mode: self.parties.loot_mode(player_id),
             pending_loot: self.loot_rules.snapshot_for(player_id),
-            bank_copper: player.map(|p| p.bank_copper).unwrap_or(0),
+            bank_copper: world
+                .get::<Bank>(player_id)
+                .map(|b| b.bank_copper)
+                .unwrap_or(0),
         }
     }
 }
 
-fn build_ability_bar(player: &Entity, gcd: f32, casting: bool) -> Vec<AbilityBarSlot> {
-    let Some(class) = player.class_id else {
+fn entity_snapshot(world: &World, id: EntityId) -> Option<EntitySnapshot> {
+    let identity = world.get::<Identity>(id)?;
+    let t = world.get::<Transform>(id)?;
+    let health = world.get::<Health>(id);
+    let motion = world.get::<Motion>(id);
+    let kit = world.get::<ClassKit>(id);
+    Some(EntitySnapshot {
+        id,
+        kind: identity.kind,
+        x: t.x,
+        y: t.y,
+        z: t.z,
+        yaw: t.yaw,
+        hp: health.map(|h| h.hp).unwrap_or(0.0),
+        hp_max: health.map(|h| h.hp_max).unwrap_or(0.0),
+        level: health.map(|h| h.level).unwrap_or(1),
+        name: identity.name.clone(),
+        resource: kit.map(|k| k.resource).unwrap_or(0.0),
+        resource_max: kit.map(|k| k.resource_max).unwrap_or(0.0),
+        alive: health.map(|h| h.alive).unwrap_or(true),
+        template_id: identity.template_id.clone(),
+        on_ground: motion.map(|m| m.on_ground).unwrap_or(true),
+        flying: motion.map(|m| m.flying).unwrap_or(false),
+        swimming: crate::player_motion::is_swimming_at(t.x, t.y, t.z),
+    })
+}
+
+fn snapshot_includes_entity(world: &World, viewer_instance: Option<&str>, id: EntityId) -> bool {
+    let Some(identity) = world.get::<Identity>(id) else {
+        return false;
+    };
+    let alive = world.get::<Health>(id).map(|h| h.alive).unwrap_or(true);
+    if !alive && identity.kind != EntityKind::Mob && identity.kind != EntityKind::Npc {
+        return false;
+    }
+    let entity_instance = world
+        .get::<InstanceAt>(id)
+        .and_then(|i| i.instance_id.as_deref());
+    match (viewer_instance, entity_instance) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a == b,
+        (Some(_), None) => identity.kind == EntityKind::Player,
+        (None, Some(_)) => identity.kind == EntityKind::Player,
+    }
+}
+
+fn build_ability_bar(
+    world: &World,
+    player_id: EntityId,
+    gcd: f32,
+    casting: bool,
+) -> Vec<AbilityBarSlot> {
+    let Some(kit) = world.get::<ClassKit>(player_id) else {
         return Vec::new();
     };
+    let Some(class) = kit.class_id else {
+        return Vec::new();
+    };
+    let ability_cd = world
+        .get::<Combat>(player_id)
+        .map(|c| c.ability_cd)
+        .unwrap_or(0.0);
     let def = class_def(class);
     def.kit
         .iter()
@@ -756,22 +826,15 @@ fn build_ability_bar(player: &Entity, gcd: f32, casting: bool) -> Vec<AbilityBar
                     .collect::<Vec<_>>()
                     .join(" ")
             });
-            let known = player
-                .known_abilities
-                .iter()
-                .any(|id| id == entry.ability_id);
-            let cd = player
+            let known = kit.known_abilities.iter().any(|id| id == entry.ability_id);
+            let cd = kit
                 .ability_cds
                 .get(entry.ability_id)
                 .copied()
                 .unwrap_or(0.0)
-                .max(if entry.slot == 1 {
-                    player.ability_cd
-                } else {
-                    0.0
-                });
+                .max(if entry.slot == 1 { ability_cd } else { 0.0 });
             let cost = abil.map(|a| a.cost).unwrap_or(0.0);
-            let affordable = player.resource + 1e-3 >= cost;
+            let affordable = kit.resource + 1e-3 >= cost;
             let ready = known && cd <= 0.0 && gcd <= 0.0 && !casting && affordable;
             AbilityBarSlot {
                 slot: entry.slot,
@@ -822,39 +885,56 @@ fn map_chat_effects(effects: Vec<ChatEffect>) -> Vec<WsServerMsg> {
         .collect()
 }
 
-fn nearest_mob(entities: &[Entity], from: &Entity, max_range: f32) -> Option<EntityId> {
+fn nearest_mob(world: &World, from: EntityId, max_range: f32) -> Option<EntityId> {
+    let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
-    for e in entities {
-        if e.kind != EntityKind::Mob || !e.alive {
+    for id in world.ids::<LootTable>() {
+        if world.get::<Owner>(id).is_some() || world.get::<ClassKit>(id).is_some() {
             continue;
         }
-        let dx = e.x - from.x;
-        let dz = e.z - from.z;
+        let Some(h) = world.get::<Health>(id) else {
+            continue;
+        };
+        if !h.alive {
+            continue;
+        }
+        let Some(t) = world.get::<Transform>(id) else {
+            continue;
+        };
+        let dx = t.x - from_t.x;
+        let dz = t.z - from_t.z;
         let d = (dx * dx + dz * dz).sqrt();
         if d > max_range {
             continue;
         }
         if best.map(|(_, bd)| d < bd).unwrap_or(true) {
-            best = Some((e.id, d));
+            best = Some((id, d));
         }
     }
     best.map(|(id, _)| id)
 }
 
-fn nearest_alive_player(entities: &[Entity], from: &Entity, max_range: f32) -> Option<EntityId> {
+fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option<EntityId> {
+    let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
-    for e in entities {
-        if e.kind != EntityKind::Player || !e.alive {
+    for id in world.ids::<ClassKit>() {
+        let Some(h) = world.get::<Health>(id) else {
+            continue;
+        };
+        if !h.alive {
             continue;
         }
-        let dx = e.x - from.x;
-        let dz = e.z - from.z;
+        let Some(t) = world.get::<Transform>(id) else {
+            continue;
+        };
+        let dx = t.x - from_t.x;
+        let dz = t.z - from_t.z;
         let d = (dx * dx + dz * dz).sqrt();
         if d > max_range {
             continue;
         }
         if best.map(|(_, bd)| d < bd).unwrap_or(true) {
-            best = Some((e.id, d));
+            best = Some((id, d));
         }
     }
     best.map(|(id, _)| id)
@@ -864,97 +944,181 @@ fn nearest_alive_player(entities: &[Entity], from: &Entity, max_range: f32) -> O
 mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
-    use woc_protocol::{AbilitySlot, InteractAction, WorldHost, WsServerMsg};
+    use crate::ecs::components::{Bags, Bank, ClassKit, LootPile, Owner, Threat, Transform};
+    use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
+
+    fn kind_count(sim: &Sim, kind: EntityKind) -> usize {
+        sim.world
+            .live_ids()
+            .filter(|&id| sim.world.get::<Identity>(id).map(|i| i.kind) == Some(kind))
+            .count()
+    }
+
+    fn find_template(sim: &Sim, template: &str) -> Option<EntityId> {
+        sim.world.live_ids().find(|&id| {
+            sim.world
+                .get::<Identity>(id)
+                .and_then(|i| i.template_id.as_deref())
+                == Some(template)
+        })
+    }
+
+    fn place_player_at(sim: &mut Sim, x: f32, z: f32) {
+        let y = crate::ecs::spawn::ground_at(x, z);
+        if let Some(t) = sim.world.get_mut::<Transform>(sim.player_id) {
+            t.x = x;
+            t.z = z;
+            t.y = y;
+        }
+    }
+
+    #[test]
+    fn catalog_sparsity_by_kind() {
+        let sim = Sim::new_eastbrook("Sparse", woc_content::PlayerClass::Warrior);
+        for id in sim.world.live_ids() {
+            let kind = sim.world.get::<Identity>(id).unwrap().kind;
+            match kind {
+                EntityKind::Loot => {
+                    assert!(sim.world.get::<Bags>(id).is_none());
+                    assert!(sim.world.get::<Bank>(id).is_none());
+                    assert!(sim.world.get::<LootPile>(id).is_some());
+                }
+                EntityKind::Npc => {
+                    assert!(sim.world.get::<Bags>(id).is_none());
+                    assert!(sim.world.get::<Combat>(id).is_none());
+                }
+                EntityKind::Mob => {
+                    assert!(sim.world.get::<Bags>(id).is_none());
+                    assert!(sim.world.get::<Threat>(id).is_some());
+                }
+                EntityKind::Player => {
+                    assert!(sim.world.get::<Bags>(id).is_some());
+                    assert!(sim.world.get::<ClassKit>(id).is_some());
+                }
+                EntityKind::Pet => {
+                    assert!(sim.world.get::<Owner>(id).is_some());
+                    assert!(sim.world.get::<Bags>(id).is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn snapshot_entity_ids_match_live_ids() {
+        let sim = Sim::new_eastbrook("Snap", PlayerClass::Warrior);
+        let snap = sim.snapshot_for_player(sim.player_id);
+        let viewer_instance = sim
+            .world
+            .get::<InstanceAt>(sim.player_id)
+            .and_then(|i| i.instance_id.clone());
+        let expected: Vec<EntityId> = sim
+            .world
+            .live_ids()
+            .filter(|&id| snapshot_includes_entity(&sim.world, viewer_instance.as_deref(), id))
+            .filter(|&id| entity_snapshot(&sim.world, id).is_some())
+            .collect();
+        let snap_ids: Vec<EntityId> = snap.entities.iter().map(|e| e.id).collect();
+        assert_eq!(snap_ids, expected);
+        assert_eq!(snap.entities.len(), expected.len());
+    }
 
     #[test]
     fn tick_phase_order_fingerprint_locked() {
         assert_eq!(TICK_PHASES.len(), 6);
         assert_eq!(TICK_PHASES[0], "apply_intents_motion");
         assert_eq!(TICK_PHASES[5], "build_snapshot");
-        // Locked fingerprint — update deliberately if phases change.
         assert_eq!(tick_phase_fingerprint(), 1724209595281213949u64);
     }
 
     #[test]
     fn sim_context_emit_and_lookup() {
         let mut sim = Sim::new_eastbrook("Ctx", PlayerClass::Warrior);
-        let pid = sim.player_id;
         {
             let mut ctx = sim.context();
-            assert!(ctx.entity(pid).is_some());
             ctx.emit(SimEvent::Toast {
                 message: "hi".into(),
             });
             assert_eq!(ctx.player_ids().len(), 1);
+            assert_eq!(ctx.living_player_ids().len(), 1);
         }
         assert_eq!(sim.events.len(), 1);
     }
 
     #[test]
+    fn player_ids_keeps_the_dead_and_living_player_ids_does_not() {
+        let mut sim = Sim::new_eastbrook("Ghost", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        sim.world.get_mut::<Health>(pid).unwrap().alive = false;
+
+        assert_eq!(sim.player_ids(), vec![pid]);
+        let ctx = sim.context();
+        assert_eq!(ctx.player_ids(), vec![pid]);
+        assert!(ctx.living_player_ids().is_empty());
+    }
+
+    #[test]
+    fn player_ids_excludes_npcs_mobs_and_loot_in_a_populated_realm() {
+        let mut sim = Sim::new_eastbrook("Solo", PlayerClass::Warrior);
+        assert!(kind_count(&sim, EntityKind::Npc) >= 3);
+        assert!(kind_count(&sim, EntityKind::Mob) >= 3);
+        let loot_id = sim.world.next_id();
+        crate::ecs::spawn::create_loot(&mut sim.world, loot_id, 0.0, 0.0, 5, None);
+
+        assert_eq!(sim.player_ids(), vec![sim.player_id]);
+    }
+
+    #[test]
+    fn loot_has_no_bags_column() {
+        let mut sim = Sim::new_eastbrook("LootCol", PlayerClass::Warrior);
+        let id = sim.world.next_id();
+        crate::ecs::spawn::create_loot(&mut sim.world, id, 0.0, 0.0, 5, None);
+        assert!(sim.world.get::<LootPile>(id).is_some());
+        assert!(sim.world.get::<Bags>(id).is_none());
+        assert!(sim.world.get::<Bank>(id).is_none());
+        assert!(sim.world.get::<ClassKit>(id).is_none());
+        let player_id = sim.player_id;
+        assert!(sim.world.get::<Bags>(player_id).is_some());
+        assert!(sim.world.get::<LootPile>(player_id).is_none());
+    }
+
+    #[test]
     fn eastbrook_spawns_npcs_and_mobs_from_content() {
         let sim = Sim::new_eastbrook("Tester", PlayerClass::Warrior);
-        let npc_count = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Npc)
-            .count();
-        let mob_count = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Mob)
-            .count();
-        assert!(npc_count >= 3, "expected town NPCs, got {npc_count}");
-        assert!(mob_count >= 4, "expected camps, got {mob_count}");
+        assert!(kind_count(&sim, EntityKind::Npc) >= 3);
+        assert!(kind_count(&sim, EntityKind::Mob) >= 4);
     }
 
     #[test]
     fn sticky_spawn_does_not_reset_npcs() {
         let mut sim = Sim::new_empty_eastbrook();
-        let npc_before = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Npc)
-            .count();
-        let mob_before = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Mob)
-            .count();
+        let npc_before = kind_count(&sim, EntityKind::Npc);
+        let mob_before = kind_count(&sim, EntityKind::Mob);
         let a = sim.spawn_player("A", PlayerClass::Warrior).unwrap();
         let b = sim.spawn_player("B", PlayerClass::Mage).unwrap();
         assert_ne!(a, b);
         assert_eq!(sim.player_count(), 2);
-        let npc_after = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Npc)
-            .count();
-        let mob_after = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Mob)
-            .count();
-        assert_eq!(npc_before, npc_after);
-        assert_eq!(mob_before, mob_after);
+        assert_eq!(kind_count(&sim, EntityKind::Npc), npc_before);
+        assert_eq!(kind_count(&sim, EntityKind::Mob), mob_before);
         sim.despawn_player(a);
         assert_eq!(sim.player_count(), 1);
-        assert_eq!(
-            sim.entities
-                .iter()
-                .filter(|e| e.kind == EntityKind::Npc)
-                .count(),
-            npc_before
-        );
+        assert_eq!(kind_count(&sim, EntityKind::Npc), npc_before);
+        assert!(sim.world.contains(b));
     }
 
     #[test]
     fn all_nine_classes_spawn() {
         for class in PlayerClass::ALL {
             let sim = Sim::new_eastbrook("C", class);
-            let p = sim.player().unwrap();
-            assert!(p.alive);
-            assert!(p.hp_max > 0.0);
-            assert!(p.equipment.main_hand.is_some());
+            let h = sim.world.get::<Health>(sim.player_id).unwrap();
+            assert!(h.alive);
+            assert!(h.hp_max > 0.0);
+            assert!(sim
+                .world
+                .get::<Bags>(sim.player_id)
+                .unwrap()
+                .equipment
+                .main_hand
+                .is_some());
         }
     }
 
@@ -970,14 +1134,64 @@ mod tests {
     }
 
     #[test]
+    fn pvp_honor_survives_phase5_loot_apply() {
+        let mut sim = Sim::new_eastbrook("Winner", PlayerClass::Warrior);
+        let winner = sim.player_id;
+        let loser = sim.spawn_player("Loser", PlayerClass::Mage).unwrap();
+        place_player_at(&mut sim, 0.0, 0.0);
+        {
+            let y = crate::ecs::spawn::ground_at(1.0, 0.0);
+            if let Some(t) = sim.world.get_mut::<Transform>(loser) {
+                t.x = 1.0;
+                t.z = 0.0;
+                t.y = y;
+            }
+            if let Some(h) = sim.world.get_mut::<Health>(loser) {
+                h.hp = 1.0;
+            }
+        }
+
+        let mut duel_events = Vec::new();
+        crate::pvp::challenge_duel(&mut sim.pvp, &sim.world, winner, loser).unwrap();
+        crate::pvp::accept_duel(&mut sim.pvp, &sim.world, loser, winner, &mut duel_events).unwrap();
+
+        let (wx, wz) = {
+            let t = sim.world.get::<Transform>(winner).unwrap();
+            (t.x, t.z)
+        };
+        let loot_id = sim.world.next_id();
+        crate::ecs::spawn::create_loot(&mut sim.world, loot_id, wx, wz, 7, None);
+
+        assert_eq!(sim.world.get::<Progress>(winner).unwrap().honor, 0);
+
+        let (_snap, events) = sim.tick(PlayerIntent::default());
+
+        assert_eq!(
+            sim.world.get::<Progress>(winner).unwrap().honor,
+            crate::pvp::HONOR_PER_KILL
+        );
+        assert_eq!(sim.copper(), 7);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::HonorGained {
+                player,
+                amount: crate::pvp::HONOR_PER_KILL
+            } if *player == winner
+        )));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Loot {
+                player,
+                copper: 7,
+                ..
+            } if *player == winner
+        )));
+    }
+
+    #[test]
     fn wolf_quest_accept_kill_turnin() {
         let mut sim = Sim::new_eastbrook("Q", PlayerClass::Warrior);
-        let giver = sim
-            .entities
-            .iter()
-            .find(|e| e.template_id.as_deref() == Some("captain_alden"))
-            .unwrap()
-            .id;
+        let giver = find_template(&sim, "captain_alden").unwrap();
         sim.interact(
             giver,
             InteractAction::AcceptQuest {
@@ -986,26 +1200,35 @@ mod tests {
         );
 
         let wolf_ids: Vec<EntityId> = sim
-            .entities
-            .iter()
-            .filter(|e| e.template_id.as_deref() == Some("young_wolf") && e.alive)
-            .map(|e| e.id)
+            .world
+            .live_ids()
+            .filter(|&id| {
+                sim.world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some("young_wolf")
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
+            })
             .take(3)
             .collect();
         assert_eq!(wolf_ids.len(), 3);
 
         for wid in wolf_ids {
             let (wx, wz) = {
-                let w = sim.entities.iter().find(|e| e.id == wid).unwrap();
-                (w.x, w.z)
+                let t = sim.world.get::<Transform>(wid).unwrap();
+                (t.x, t.z)
             };
-            if let Some(p) = sim.player_mut() {
-                p.x = wx;
-                p.z = wz;
-                p.y = Entity::ground_at(p.x, p.z);
-                p.resource = 100.0;
-                p.target = Some(wid);
-                p.auto_attack = true;
+            place_player_at(&mut sim, wx, wz);
+            if let Some(kit) = sim.world.get_mut::<ClassKit>(sim.player_id) {
+                kit.resource = 100.0;
+            }
+            if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
+                c.target = Some(wid);
+                c.auto_attack = true;
             }
             let intent = PlayerIntent {
                 attack: true,
@@ -1025,7 +1248,8 @@ mod tests {
         }
 
         let ready = sim
-            .player()
+            .world
+            .get::<QuestLog>(sim.player_id)
             .unwrap()
             .quest_log
             .iter()
@@ -1033,15 +1257,10 @@ mod tests {
         assert!(ready, "quest should be ready after 3 kills");
 
         let (gx, gz) = {
-            let g = sim.entities.iter().find(|e| e.id == giver).unwrap();
-            (g.x, g.z)
+            let t = sim.world.get::<Transform>(giver).unwrap();
+            (t.x, t.z)
         };
-        if let Some(p) = sim.player_mut() {
-            p.x = gx;
-            p.z = gz;
-            p.y = Entity::ground_at(p.x, p.z);
-        }
-
+        place_player_at(&mut sim, gx, gz);
         sim.interact(
             giver,
             InteractAction::TurnInQuest {
@@ -1057,22 +1276,15 @@ mod tests {
     #[test]
     fn vendor_buy_spend_copper() {
         let mut sim = Sim::new_eastbrook("V", PlayerClass::Warrior);
-        sim.player_mut().unwrap().copper = 100;
-        let vendor = sim
-            .entities
-            .iter()
-            .find(|e| e.template_id.as_deref() == Some("trader_wilkes"))
-            .unwrap()
-            .id;
-        let (vx, vz) = {
-            let v = sim.entities.iter().find(|e| e.id == vendor).unwrap();
-            (v.x, v.z)
-        };
-        if let Some(p) = sim.player_mut() {
-            p.x = vx;
-            p.z = vz;
-            p.y = Entity::ground_at(p.x, p.z);
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 100;
         }
+        let vendor = find_template(&sim, "trader_wilkes").unwrap();
+        let (vx, vz) = {
+            let t = sim.world.get::<Transform>(vendor).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, vx, vz);
         sim.interact(vendor, InteractAction::Talk);
         sim.interact(
             vendor,
@@ -1092,47 +1304,36 @@ mod tests {
     #[test]
     fn combat_slice_spawns_wolves() {
         let sim = Sim::new_combat_slice("Test");
-        let wolves = sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Mob)
-            .count();
-        assert!(wolves >= 4);
-        assert!(sim.player().unwrap().alive);
+        assert!(kind_count(&sim, EntityKind::Mob) >= 4);
+        assert!(sim.world.get::<Health>(sim.player_id).unwrap().alive);
     }
 
     #[test]
     fn kill_wolf_grants_xp_and_loot() {
         let mut sim = Sim::new_combat_slice("Hero");
         let wolf_id = sim
-            .entities
-            .iter()
-            .find(|e| e.kind == EntityKind::Mob)
-            .unwrap()
-            .id;
+            .world
+            .live_ids()
+            .find(|&id| sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob))
+            .unwrap();
         let (wx, wz) = {
-            let w = sim.entities.iter().find(|e| e.id == wolf_id).unwrap();
-            (w.x, w.z)
+            let t = sim.world.get::<Transform>(wolf_id).unwrap();
+            (t.x, t.z)
         };
-        if let Some(p) = sim.player_mut() {
-            p.x = wx;
-            p.z = wz;
-            p.y = Entity::ground_at(p.x, p.z);
-            p.resource = 100.0;
-            p.target = Some(wolf_id);
-            p.auto_attack = true;
+        place_player_at(&mut sim, wx, wz);
+        if let Some(kit) = sim.world.get_mut::<ClassKit>(sim.player_id) {
+            kit.resource = 100.0;
         }
-
+        if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
+            c.target = Some(wolf_id);
+            c.auto_attack = true;
+        }
         let intent = PlayerIntent {
-            move_x: 0.0,
-            move_z: 0.0,
-            facing: 0.0,
             attack: true,
             ability: Some(AbilitySlot::Primary),
             target_id: Some(wolf_id),
             ..Default::default()
         };
-
         let mut saw_kill = false;
         let mut saw_loot = false;
         for _ in 0..400 {
@@ -1145,43 +1346,97 @@ mod tests {
                     saw_loot = true;
                 }
             }
-            if saw_kill && (sim.player_xp() > 0 || sim.player().map(|p| p.level).unwrap_or(1) > 1) {
+            let level = sim
+                .world
+                .get::<Health>(sim.player_id)
+                .map(|h| h.level)
+                .unwrap_or(1);
+            if saw_kill && (sim.player_xp() > 0 || level > 1) {
                 break;
             }
         }
-        assert!(saw_kill, "expected a wolf kill within 400 ticks");
-        assert!(
-            sim.player_xp() > 0 || sim.player().map(|p| p.level).unwrap_or(1) > 1,
-            "expected XP or level-up after kill"
-        );
-        assert!(
-            saw_loot || sim.copper() > 0 || !sim.snapshot().inventory.is_empty(),
-            "expected loot drop or auto-pickup"
-        );
+        assert!(saw_kill);
+        let level = sim
+            .world
+            .get::<Health>(sim.player_id)
+            .map(|h| h.level)
+            .unwrap_or(1);
+        assert!(sim.player_xp() > 0 || level > 1);
+        assert!(saw_loot || sim.copper() > 0 || !sim.snapshot().inventory.is_empty());
     }
 
     #[test]
     fn clear_target_intent_stops_auto_attack() {
         let mut sim = Sim::new_eastbrook("Clearer", PlayerClass::Warrior);
         let wolf_id = sim
-            .entities
-            .iter()
-            .find(|e| e.kind == EntityKind::Mob && e.alive)
-            .unwrap()
-            .id;
-        if let Some(p) = sim.player_mut() {
-            p.target = Some(wolf_id);
-            p.auto_attack = true;
+            .world
+            .live_ids()
+            .find(|&id| {
+                sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
+            })
+            .unwrap();
+        if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
+            c.target = Some(wolf_id);
+            c.auto_attack = true;
         }
-
-        let (snap, _) = sim.tick(PlayerIntent {
+        let _ = sim.tick(PlayerIntent {
             clear_target: true,
             ..Default::default()
         });
-        assert!(sim.player().unwrap().target.is_none());
-        assert!(!sim.player().unwrap().auto_attack);
-        assert!(snap.target_id.is_none());
-        assert!(!snap.auto_attack);
+        let c = sim.world.get::<Combat>(sim.player_id).unwrap();
+        assert!(c.target.is_none());
+        assert!(!c.auto_attack);
+    }
+
+    #[test]
+    fn party_invite_accept_leave_and_chat_roundtrip() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let outs = sim.party_invite(a, "Bob");
+        assert!(
+            outs.iter()
+                .any(|m| matches!(m, WsServerMsg::Chat { channel, .. } if channel == "system")),
+            "invite notice: {outs:?}"
+        );
+        let outs = sim.party_accept(b);
+        assert!(
+            outs.iter().any(|m| matches!(
+                m,
+                WsServerMsg::PartyUpdate { members } if members.len() == 2
+            )),
+            "party update: {outs:?}"
+        );
+        assert_eq!(sim.party_members(a), Some(vec![a, b]));
+        let snap = sim.snapshot_for_player(a);
+        assert_eq!(snap.party_id, sim.parties.party_id(a));
+        assert!(snap.party_id.is_some());
+
+        let outs = sim.chat(a, "party", "pulling");
+        assert!(matches!(
+            outs.as_slice(),
+            [WsServerMsg::Chat {
+                channel,
+                from,
+                text
+            }] if channel == "party" && from == "Alice" && text == "pulling"
+        ));
+
+        let outs = sim.party_leave(b);
+        assert!(
+            outs.iter().any(|m| matches!(
+                m,
+                WsServerMsg::PartyUpdate { members } if members.is_empty()
+            )),
+            "dissolve: {outs:?}"
+        );
+        assert!(sim.party_members(a).is_none());
+        assert!(sim.snapshot_for_player(a).party_id.is_none());
     }
 
     #[test]
@@ -1207,13 +1462,13 @@ mod tests {
         let pid = sim.player_id;
         let death_x = 22.0;
         let death_z = -20.0;
-        if let Some(p) = sim.player_mut() {
-            p.x = death_x;
-            p.z = death_z;
-            p.y = Entity::ground_at(p.x, p.z);
-            p.hp = 0.0;
-            p.auto_attack = true;
-            p.target = Some(99);
+        place_player_at(&mut sim, death_x, death_z);
+        if let Some(h) = sim.world.get_mut::<Health>(pid) {
+            h.hp = 0.0;
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(pid) {
+            c.auto_attack = true;
+            c.target = Some(99);
         }
 
         let (_snap, events) = sim.tick(PlayerIntent::default());
@@ -1225,17 +1480,19 @@ mod tests {
         );
         let snap = sim.snapshot_for_player(pid);
         assert!(snap.is_dead, "snapshot must reflect is_dead");
-        assert!(!sim.player().unwrap().alive);
-        assert!(!sim.player().unwrap().auto_attack);
+        assert!(!sim.world.get::<Health>(pid).unwrap().alive);
+        assert!(!sim.world.get::<Combat>(pid).unwrap().auto_attack);
 
-        // Dead player cannot deal damage even with attack intent.
-        let wolf_id = sim
-            .entities
-            .iter()
-            .find(|e| e.kind == EntityKind::Mob && e.alive)
-            .map(|e| e.id);
+        let wolf_id = sim.world.live_ids().find(|&id| {
+            sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                && sim
+                    .world
+                    .get::<Health>(id)
+                    .map(|h| h.alive)
+                    .unwrap_or(false)
+        });
         if let Some(wid) = wolf_id {
-            let hp_before = sim.entities.iter().find(|e| e.id == wid).unwrap().hp;
+            let hp_before = sim.world.get::<Health>(wid).unwrap().hp;
             let intent = PlayerIntent {
                 attack: true,
                 ability: Some(AbilitySlot::Primary),
@@ -1243,7 +1500,7 @@ mod tests {
                 ..Default::default()
             };
             let (_s, ev) = sim.tick(intent);
-            let hp_after = sim.entities.iter().find(|e| e.id == wid).unwrap().hp;
+            let hp_after = sim.world.get::<Health>(wid).unwrap().hp;
             assert_eq!(hp_before, hp_after, "dead player must not deal damage");
             assert!(
                 !ev.iter().any(|e| matches!(
@@ -1255,31 +1512,14 @@ mod tests {
         }
 
         assert!(sim.release_spirit(pid), "release_spirit should succeed");
-        let p = sim.player().unwrap();
-        assert!(p.alive);
-        assert!((p.x - gy.x).abs() < 1e-5, "x {} vs gy {}", p.x, gy.x);
-        assert!((p.z - gy.z).abs() < 1e-5, "z {} vs gy {}", p.z, gy.z);
-        assert!((p.hp - p.hp_max).abs() < 1e-5);
+        let t = sim.world.get::<Transform>(pid).unwrap();
+        let h = sim.world.get::<Health>(pid).unwrap();
+        assert!(h.alive);
+        assert!((t.x - gy.x).abs() < 1e-5, "x {} vs gy {}", t.x, gy.x);
+        assert!((t.z - gy.z).abs() < 1e-5, "z {} vs gy {}", t.z, gy.z);
+        assert!((h.hp - h.hp_max).abs() < 1e-5);
         let snap = sim.snapshot_for_player(pid);
         assert!(!snap.is_dead);
-    }
-
-    #[test]
-    fn death_release_spirit_is_deterministic() {
-        let mut a = Sim::new_eastbrook("Twin", PlayerClass::Mage);
-        let mut b = Sim::new_eastbrook("Twin", PlayerClass::Mage);
-        for sim in [&mut a, &mut b] {
-            if let Some(p) = sim.player_mut() {
-                p.hp = 0.0;
-            }
-            let _ = sim.tick(PlayerIntent::default());
-            assert!(sim.release_spirit(sim.player_id));
-        }
-        let pa = a.player().unwrap();
-        let pb = b.player().unwrap();
-        assert!((pa.x - pb.x).abs() < 1e-5);
-        assert!((pa.z - pb.z).abs() < 1e-5);
-        assert!((pa.hp - pb.hp).abs() < 1e-5);
     }
 
     #[test]
@@ -1332,33 +1572,41 @@ mod tests {
         let mut sim = Sim::new_eastbrook("Hunt", PlayerClass::Hunter);
         let pid = sim.player_id;
         let mob_id = sim
-            .entities
-            .iter()
-            .find(|e| e.kind == EntityKind::Mob && e.alive)
-            .map(|e| e.id)
+            .world
+            .live_ids()
+            .find(|&id| {
+                sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
+            })
             .expect("mob");
-        // Pull mob near player and pet into melee.
         let (px, pz) = {
-            let p = sim.player().unwrap();
-            (p.x, p.z)
+            let t = sim.world.get::<Transform>(pid).unwrap();
+            (t.x, t.z)
         };
-        if let Some(m) = sim.entities.iter_mut().find(|e| e.id == mob_id) {
-            m.x = px + 1.5;
-            m.z = pz;
+        if let Some(t) = sim.world.get_mut::<Transform>(mob_id) {
+            t.x = px + 1.5;
+            t.z = pz;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
         }
         sim.interact(pid, InteractAction::SummonPet);
         let pet_id = sim
-            .entities
-            .iter()
-            .find(|e| e.kind == EntityKind::Pet)
-            .map(|e| e.id)
-            .unwrap();
-        if let Some(pet) = sim.entities.iter_mut().find(|e| e.id == pet_id) {
-            pet.x = px + 1.5;
-            pet.z = pz;
-            pet.swing_timer = 0.0;
+            .world
+            .live_ids()
+            .find(|&id| sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Pet))
+            .expect("pet");
+        if let Some(t) = sim.world.get_mut::<Transform>(pet_id) {
+            t.x = px + 1.5;
+            t.z = pz;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
         }
-        let hp_before = sim.entities.iter().find(|e| e.id == mob_id).unwrap().hp;
+        if let Some(c) = sim.world.get_mut::<Combat>(pet_id) {
+            c.swing_timer = 0.0;
+        }
+        let hp_before = sim.world.get::<Health>(mob_id).unwrap().hp;
         let intent = PlayerIntent {
             attack: true,
             target_id: Some(mob_id),
@@ -1367,56 +1615,10 @@ mod tests {
         for _ in 0..40 {
             let _ = sim.tick(intent);
         }
-        let hp_after = sim.entities.iter().find(|e| e.id == mob_id).unwrap().hp;
+        let hp_after = sim.world.get::<Health>(mob_id).unwrap().hp;
         assert!(
             hp_after < hp_before,
             "expected pet+player damage ({hp_after} < {hp_before})"
         );
-    }
-
-    #[test]
-    fn party_invite_accept_leave_and_chat_roundtrip() {
-        let mut sim = Sim::new_empty_eastbrook();
-        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
-        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
-        let outs = sim.party_invite(a, "Bob");
-        assert!(
-            outs.iter()
-                .any(|m| matches!(m, WsServerMsg::Chat { channel, .. } if channel == "system")),
-            "invite notice: {outs:?}"
-        );
-        let outs = sim.party_accept(b);
-        assert!(
-            outs.iter().any(|m| matches!(
-                m,
-                WsServerMsg::PartyUpdate { members } if members.len() == 2
-            )),
-            "party update: {outs:?}"
-        );
-        assert_eq!(sim.party_members(a), Some(vec![a, b]));
-        let snap = sim.snapshot_for_player(a);
-        assert_eq!(snap.party_id, sim.parties.party_id(a));
-        assert!(snap.party_id.is_some());
-
-        let outs = sim.chat(a, "party", "pulling");
-        assert!(matches!(
-            outs.as_slice(),
-            [WsServerMsg::Chat {
-                channel,
-                from,
-                text
-            }] if channel == "party" && from == "Alice" && text == "pulling"
-        ));
-
-        let outs = sim.party_leave(b);
-        assert!(
-            outs.iter().any(|m| matches!(
-                m,
-                WsServerMsg::PartyUpdate { members } if members.is_empty()
-            )),
-            "dissolve: {outs:?}"
-        );
-        assert!(sim.party_members(a).is_none());
-        assert!(sim.snapshot_for_player(a).party_id.is_none());
     }
 }

@@ -1,10 +1,12 @@
 //! Hunter / warlock pet summon, dismiss, and combat AI.
 
-use crate::combat::{deal_damage, dist2d, face_toward};
-use crate::entity::Entity;
+use crate::combat::{deal_damage, dist2d_ids, face_toward_ids};
+use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Owner, Transform};
+use crate::ecs::World;
+use crate::entity_motion::step_toward;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
-use woc_content::{pet_for_class, PetDef, PlayerClass};
-use woc_protocol::{EntityId, EntityKind, SimEvent, DT};
+use woc_content::{pet_for_class, PlayerClass};
+use woc_protocol::{EntityId, SimEvent, DT};
 
 /// Offset from owner when the pet is summoned.
 const SUMMON_OFFSET: f32 = 1.5;
@@ -12,29 +14,26 @@ const SUMMON_OFFSET: f32 = 1.5;
 const FOLLOW_RANGE: f32 = 3.0;
 
 /// Living pet owned by `owner_id`, if any.
-pub fn find_pet(entities: &[Entity], owner_id: EntityId) -> Option<EntityId> {
-    entities
-        .iter()
-        .find(|e| e.kind == EntityKind::Pet && e.alive && e.owner_id == Some(owner_id))
-        .map(|e| e.id)
+pub fn find_pet(world: &World, owner_id: EntityId) -> Option<EntityId> {
+    world.ids::<Owner>().into_iter().find(|&id| {
+        world.get::<Owner>(id).map(|o| o.owner_id) == Some(owner_id)
+            && world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+    })
 }
 
 /// Summon the class default pet beside the player. Replaces an existing pet.
-///
-/// Returns `false` if the player is missing, dead, or not a summoning class.
-pub fn summon_pet(
-    entities: &mut Vec<Entity>,
-    next_id: &mut EntityId,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
-        return false;
-    };
-    if entities[pi].kind != EntityKind::Player || !entities[pi].alive {
+pub fn summon_pet(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
+    if world.get::<ClassKit>(player_id).is_none() {
         return false;
     }
-    let Some(class) = entities[pi].class_id else {
+    if !world
+        .get::<Health>(player_id)
+        .map(|h| h.alive)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    let Some(class) = world.get::<ClassKit>(player_id).and_then(|k| k.class_id) else {
         return false;
     };
     let Some(def) = pet_for_class(class) else {
@@ -44,168 +43,142 @@ pub fn summon_pet(
         return false;
     };
 
-    let _ = dismiss_pet(entities, player_id, events);
+    let _ = dismiss_pet(world, player_id, events);
 
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
+    let Some(t) = world.get::<Transform>(player_id).copied() else {
         return false;
     };
-    let (px, pz, yaw) = (entities[pi].x, entities[pi].z, entities[pi].yaw);
-    let ox = px + yaw.sin() * SUMMON_OFFSET;
-    let oz = pz + yaw.cos() * SUMMON_OFFSET;
+    let ox = t.x + t.yaw.sin() * SUMMON_OFFSET;
+    let oz = t.z + t.yaw.cos() * SUMMON_OFFSET;
 
-    let id = *next_id;
-    *next_id += 1;
-    let pet = create_pet(id, def, player_id, ox, oz);
-    entities.push(pet);
+    let id = world.next_id();
+    crate::ecs::spawn::create_pet(world, id, def, player_id, ox, oz);
     events.push(SimEvent::Toast {
         message: format!("{} joins the fight!", def.name),
     });
     true
 }
 
-/// Remove the player's active pet.
-pub fn dismiss_pet(
-    entities: &mut Vec<Entity>,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
-    let Some(pet_id) = find_pet(entities, player_id) else {
+/// Remove the player's active pet from columns.
+pub fn dismiss_pet(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
+    let Some(pet_id) = find_pet(world, player_id) else {
         return false;
     };
-    entities.retain(|e| e.id != pet_id);
+    world.despawn(pet_id);
     events.push(SimEvent::Toast {
         message: "Pet dismissed.".into(),
     });
     true
 }
 
-fn create_pet(id: EntityId, def: &PetDef, owner_id: EntityId, x: f32, z: f32) -> Entity {
-    let mut e = Entity::blank(id, EntityKind::Pet, def.name, Some(def.id), x, z);
-    e.hp = def.hp;
-    e.hp_max = def.hp;
-    e.level = def.level;
-    e.attack_damage = def.attack_damage;
-    e.owner_id = Some(owner_id);
-    e.auto_attack = true;
-    e
-}
-
 /// Pet AI: follow owner; attack the owner's current living target.
 ///
 /// Call once per sim tick (after player combat). Does not alter `TICK_PHASES`.
-pub fn tick_pets(entities: &mut Vec<Entity>, events: &mut Vec<SimEvent>) {
-    let pet_ids: Vec<EntityId> = entities
-        .iter()
-        .filter(|e| e.kind == EntityKind::Pet && e.alive)
-        .map(|e| e.id)
-        .collect();
-
+/// Returns pet ids that were despawned (dead / owner gone).
+pub fn tick_pets(world: &mut World, events: &mut Vec<SimEvent>) -> Vec<EntityId> {
+    let pet_ids = world.ids::<Owner>();
     for pet_id in pet_ids {
-        tick_one_pet(pet_id, entities, events);
+        if world
+            .get::<Health>(pet_id)
+            .map(|h| h.alive)
+            .unwrap_or(false)
+        {
+            tick_one_pet(pet_id, world, events);
+        }
     }
 
-    let drop_ids: Vec<EntityId> = entities
-        .iter()
-        .filter(|e| e.kind == EntityKind::Pet)
-        .filter(|e| {
-            if !e.alive {
+    let drop_ids: Vec<EntityId> = world
+        .ids::<Owner>()
+        .into_iter()
+        .filter(|&id| {
+            if !world.get::<Health>(id).map(|h| h.alive).unwrap_or(false) {
                 return true;
             }
-            let Some(oid) = e.owner_id else {
+            let Some(oid) = world.get::<Owner>(id).map(|o| o.owner_id) else {
                 return true;
             };
-            !entities
-                .iter()
-                .any(|o| o.id == oid && o.kind == EntityKind::Player && o.alive)
+            !(world.get::<ClassKit>(oid).is_some()
+                && world.get::<Health>(oid).map(|h| h.alive).unwrap_or(false))
         })
-        .map(|e| e.id)
         .collect();
-    if !drop_ids.is_empty() {
-        entities.retain(|e| !drop_ids.contains(&e.id));
+    for id in &drop_ids {
+        world.despawn(*id);
     }
+    drop_ids
 }
 
-fn tick_one_pet(pet_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimEvent>) {
-    let Some(pi) = entities.iter().position(|e| e.id == pet_id) else {
+fn tick_one_pet(pet_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>) {
+    let Some(owner_id) = world.get::<Owner>(pet_id).map(|o| o.owner_id) else {
         return;
     };
-    let Some(owner_id) = entities[pi].owner_id else {
-        return;
-    };
-    let Some(oi) = entities.iter().position(|e| e.id == owner_id) else {
-        // Owner gone — pet despawns next dismiss; mark dead.
-        entities[pi].alive = false;
-        return;
-    };
-    if entities[oi].kind != EntityKind::Player || !entities[oi].alive {
-        entities[pi].alive = false;
+    if world.get::<ClassKit>(owner_id).is_none()
+        || !world
+            .get::<Health>(owner_id)
+            .map(|h| h.alive)
+            .unwrap_or(false)
+    {
+        if let Some(h) = world.get_mut::<Health>(pet_id) {
+            h.alive = false;
+        }
         return;
     }
 
-    let owner_target = entities[oi].target;
-    let (ox, oz) = (entities[oi].x, entities[oi].z);
+    let owner_target = world.get::<Combat>(owner_id).and_then(|c| c.target);
+    let Some(ot) = world.get::<Transform>(owner_id).copied() else {
+        return;
+    };
 
-    // Resolve attack target: owner's living mob/player target (not the pet itself).
-    let attack_tid = owner_target.and_then(|tid| {
-        entities
-            .iter()
-            .find(|e| {
-                e.id == tid
-                    && e.alive
-                    && e.id != pet_id
-                    && e.id != owner_id
-                    && matches!(e.kind, EntityKind::Mob | EntityKind::Player)
-            })
-            .map(|e| e.id)
+    let attack_tid = owner_target.filter(|&tid| {
+        tid != pet_id
+            && tid != owner_id
+            && world.get::<Health>(tid).map(|h| h.alive).unwrap_or(false)
+            && (world.get::<LootTable>(tid).is_some() || world.get::<ClassKit>(tid).is_some())
     });
 
-    entities[pi].target = attack_tid;
+    if let Some(c) = world.get_mut::<Combat>(pet_id) {
+        c.target = attack_tid;
+    }
 
     if let Some(tid) = attack_tid {
-        let Some(ti) = entities.iter().position(|e| e.id == tid) else {
-            return;
-        };
-        let (tx, tz) = (entities[ti].x, entities[ti].z);
-        let d = dist2d(&entities[pi], &entities[ti]);
+        let d = dist2d_ids(world, pet_id, tid);
         if d > MELEE_RANGE * 0.85 {
-            move_toward(&mut entities[pi], tx, tz, MOB_SPEED * 1.05);
+            let Some(tt) = world.get::<Transform>(tid).copied() else {
+                return;
+            };
+            let _ = step_toward(world, pet_id, tt.x, tt.z, MOB_SPEED * 1.05);
         } else {
-            entities[pi].yaw = face_toward(&entities[pi], &entities[ti]);
+            let yaw = face_toward_ids(world, pet_id, tid);
+            if let Some(t) = world.get_mut::<Transform>(pet_id) {
+                t.yaw = yaw;
+            }
         }
 
-        // Re-resolve after move.
-        let Some(pi) = entities.iter().position(|e| e.id == pet_id) else {
-            return;
-        };
-        let Some(ti) = entities.iter().position(|e| e.id == tid) else {
-            return;
-        };
-        if dist2d(&entities[pi], &entities[ti]) <= MELEE_RANGE {
-            entities[pi].swing_timer -= DT;
-            if entities[pi].swing_timer <= 0.0 {
-                entities[pi].swing_timer = PLAYER_SWING_SEC;
-                let dmg = entities[pi].attack_damage;
-                // Attribute kill credit to the owner for XP/loot.
-                deal_damage(entities, owner_id, tid, dmg, Some("pet"), events);
-                // Still show pet as damage source in a second event? Keep single event with owner.
+        if dist2d_ids(world, pet_id, tid) <= MELEE_RANGE {
+            let mut swing = false;
+            let mut dmg = 0.0;
+            if let Some(c) = world.get_mut::<Combat>(pet_id) {
+                c.swing_timer -= DT;
+                if c.swing_timer <= 0.0 {
+                    c.swing_timer = PLAYER_SWING_SEC;
+                    dmg = c.attack_damage;
+                    swing = true;
+                }
+            }
+            if swing {
+                deal_damage(world, owner_id, tid, dmg, Some("pet"), events);
             }
         }
     } else {
-        // Follow owner when idle.
-        let d = {
-            let pet = &entities[pi];
-            let dx = ox - pet.x;
-            let dz = oz - pet.z;
-            (dx * dx + dz * dz).sqrt()
+        let Some(pt) = world.get::<Transform>(pet_id).copied() else {
+            return;
         };
+        let dx = ot.x - pt.x;
+        let dz = ot.z - pt.z;
+        let d = (dx * dx + dz * dz).sqrt();
         if d > FOLLOW_RANGE {
-            move_toward(&mut entities[pi], ox, oz, MOB_SPEED);
+            let _ = step_toward(world, pet_id, ot.x, ot.z, MOB_SPEED);
         }
     }
-}
-
-fn move_toward(pet: &mut Entity, tx: f32, tz: f32, speed: f32) {
-    let _ = crate::entity_motion::step_toward(pet, tx, tz, speed);
 }
 
 /// True when `class` can summon.
@@ -216,74 +189,80 @@ pub fn can_summon(class: PlayerClass) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::{create_mob_from_template, create_player};
-    use woc_protocol::DT;
+    use crate::ecs::components::Identity;
+    use woc_protocol::{EntityKind, DT};
 
-    fn hunter_at(id: EntityId, x: f32, z: f32) -> Entity {
-        create_player(id, "Hunt", PlayerClass::Hunter, x, z)
-    }
-
-    fn warlock_at(id: EntityId, x: f32, z: f32) -> Entity {
-        create_player(id, "Lock", PlayerClass::Warlock, x, z)
+    fn hunter_world() -> World {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hunt", PlayerClass::Hunter, 10.0, -5.0);
+        world
     }
 
     #[test]
     fn hunter_can_summon_and_dismiss_pet() {
-        let mut entities = vec![hunter_at(1, 10.0, -5.0)];
-        let mut next_id = 2;
+        let mut world = hunter_world();
         let mut events = Vec::new();
-        assert!(summon_pet(&mut entities, &mut next_id, 1, &mut events));
-        assert!(find_pet(&entities, 1).is_some());
-        let pet = entities.iter().find(|e| e.kind == EntityKind::Pet).unwrap();
-        assert_eq!(pet.template_id.as_deref(), Some("hunter_wolf"));
-        assert_eq!(pet.owner_id, Some(1));
-        assert!(dismiss_pet(&mut entities, 1, &mut events));
-        assert!(find_pet(&entities, 1).is_none());
-        assert!(!entities.iter().any(|e| e.kind == EntityKind::Pet));
+        assert!(summon_pet(&mut world, 1, &mut events));
+        assert!(find_pet(&world, 1).is_some());
+        let pet = find_pet(&world, 1).unwrap();
+        assert_eq!(
+            world.get::<Identity>(pet).unwrap().template_id.as_deref(),
+            Some("hunter_wolf")
+        );
+        assert_eq!(world.get::<Owner>(pet).unwrap().owner_id, 1);
+        assert!(dismiss_pet(&mut world, 1, &mut events));
+        assert!(find_pet(&world, 1).is_none());
+        assert!(!world
+            .ids::<Owner>()
+            .into_iter()
+            .any(|id| { world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Pet) }));
     }
 
     #[test]
     fn warlock_summons_imp() {
-        let mut entities = vec![warlock_at(1, 10.0, -5.0)];
-        let mut next_id = 2;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Lock", PlayerClass::Warlock, 10.0, -5.0);
         let mut events = Vec::new();
-        assert!(summon_pet(&mut entities, &mut next_id, 1, &mut events));
-        let pet = entities.iter().find(|e| e.kind == EntityKind::Pet).unwrap();
-        assert_eq!(pet.template_id.as_deref(), Some("warlock_imp"));
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let pet = find_pet(&world, 1).unwrap();
+        assert_eq!(
+            world.get::<Identity>(pet).unwrap().template_id.as_deref(),
+            Some("warlock_imp")
+        );
     }
 
     #[test]
     fn warrior_cannot_summon() {
-        let mut entities = vec![create_player(1, "War", PlayerClass::Warrior, 10.0, -5.0)];
-        let mut next_id = 2;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "War", PlayerClass::Warrior, 10.0, -5.0);
         let mut events = Vec::new();
-        assert!(!summon_pet(&mut entities, &mut next_id, 1, &mut events));
-        assert!(find_pet(&entities, 1).is_none());
+        assert!(!summon_pet(&mut world, 1, &mut events));
+        assert!(find_pet(&world, 1).is_none());
     }
 
     #[test]
     fn pet_attacks_owner_target() {
-        let mut hunter = hunter_at(1, 10.0, -5.0);
-        let mut wolf = create_mob_from_template(2, "young_wolf", 12.0, -5.0).unwrap();
-        wolf.home_x = wolf.x;
-        wolf.home_z = wolf.z;
-        hunter.target = Some(2);
-        let mut entities = vec![hunter, wolf];
-        let mut next_id = 3;
+        let mut world = hunter_world();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 12.0, -5.0)
+            .unwrap();
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+        }
         let mut events = Vec::new();
-        assert!(summon_pet(&mut entities, &mut next_id, 1, &mut events));
-        let pet_id = find_pet(&entities, 1).unwrap();
-        // Place pet in melee range of the wolf.
-        if let Some(p) = entities.iter_mut().find(|e| e.id == pet_id) {
-            p.x = 12.0;
-            p.z = -5.0;
-            p.swing_timer = 0.0;
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let pet_id = find_pet(&world, 1).unwrap();
+        if let Some(t) = world.get_mut::<Transform>(pet_id) {
+            t.x = 12.0;
+            t.z = -5.0;
         }
-        let hp_before = entities.iter().find(|e| e.id == 2).unwrap().hp;
+        if let Some(c) = world.get_mut::<Combat>(pet_id) {
+            c.swing_timer = 0.0;
+        }
+        let hp_before = world.get::<Health>(2).unwrap().hp;
         for _ in 0..5 {
-            tick_pets(&mut entities, &mut events);
+            let _ = tick_pets(&mut world, &mut events);
         }
-        let hp_after = entities.iter().find(|e| e.id == 2).unwrap().hp;
+        let hp_after = world.get::<Health>(2).unwrap().hp;
         assert!(
             hp_after < hp_before,
             "pet should damage owner target ({hp_after} < {hp_before})"
@@ -304,18 +283,18 @@ mod tests {
 
     #[test]
     fn summon_replaces_existing_pet() {
-        let mut entities = vec![hunter_at(1, 10.0, -5.0)];
-        let mut next_id = 2;
+        let mut world = hunter_world();
         let mut events = Vec::new();
-        assert!(summon_pet(&mut entities, &mut next_id, 1, &mut events));
-        let first = find_pet(&entities, 1).unwrap();
-        assert!(summon_pet(&mut entities, &mut next_id, 1, &mut events));
-        let second = find_pet(&entities, 1).unwrap();
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let first = find_pet(&world, 1).unwrap();
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let second = find_pet(&world, 1).unwrap();
         assert_ne!(first, second);
         assert_eq!(
-            entities
-                .iter()
-                .filter(|e| e.kind == EntityKind::Pet)
+            world
+                .ids::<Owner>()
+                .into_iter()
+                .filter(|&id| world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Pet))
                 .count(),
             1
         );

@@ -15,7 +15,7 @@ use woc_protocol::{EntityId, InteractAction, PlayerIntent, SimEvent, TickSnapsho
 
 impl WorldHost for Sim {
     fn push_intent(&mut self, player_id: EntityId, intent: PlayerIntent) {
-        if self.entities.iter().any(|e| e.id == player_id) {
+        if self.world.contains(player_id) {
             self.intents.insert(player_id, intent);
         }
     }
@@ -23,25 +23,20 @@ impl WorldHost for Sim {
     fn interact(&mut self, player_id: EntityId, target_id: EntityId, action: InteractAction) {
         match action {
             InteractAction::SummonPet => {
-                let _ = summon_pet(
-                    &mut self.entities,
-                    &mut self.next_id,
-                    player_id,
-                    &mut self.events,
-                );
+                let _ = summon_pet(&mut self.world, player_id, &mut self.events);
             }
             InteractAction::DismissPet => {
-                let _ = dismiss_pet(&mut self.entities, player_id, &mut self.events);
+                let _ = dismiss_pet(&mut self.world, player_id, &mut self.events);
             }
             InteractAction::LearnTalent { talent_id } => {
-                let _ = talents::learn(&mut self.entities, player_id, &talent_id, &mut self.events);
+                let _ = talents::learn(&mut self.world, player_id, &talent_id, &mut self.events);
             }
             InteractAction::RespecTalents => {
-                let _ = talents::respec(&mut self.entities, player_id, &mut self.events);
+                let _ = talents::respec(&mut self.world, player_id, &mut self.events);
             }
             InteractAction::BankDeposit { bag_slot, count } => {
                 let _ = bank::deposit(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     bag_slot,
                     count,
@@ -50,7 +45,7 @@ impl WorldHost for Sim {
             }
             InteractAction::BankWithdraw { bank_slot, count } => {
                 let _ = bank::withdraw(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     bank_slot,
                     count,
@@ -58,12 +53,10 @@ impl WorldHost for Sim {
                 );
             }
             InteractAction::BankDepositCopper { amount } => {
-                let _ =
-                    bank::deposit_copper(&mut self.entities, player_id, amount, &mut self.events);
+                let _ = bank::deposit_copper(&mut self.world, player_id, amount, &mut self.events);
             }
             InteractAction::BankWithdrawCopper { amount } => {
-                let _ =
-                    bank::withdraw_copper(&mut self.entities, player_id, amount, &mut self.events);
+                let _ = bank::withdraw_copper(&mut self.world, player_id, amount, &mut self.events);
             }
             InteractAction::MailSend {
                 to_name,
@@ -72,7 +65,7 @@ impl WorldHost for Sim {
                 count,
             } => {
                 let _ = self.mail.send(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     &to_name,
                     copper,
@@ -84,7 +77,7 @@ impl WorldHost for Sim {
             InteractAction::MailCollect { mail_id } => {
                 let _ = self
                     .mail
-                    .collect(&mut self.entities, player_id, mail_id, &mut self.events);
+                    .collect(&mut self.world, player_id, mail_id, &mut self.events);
             }
             InteractAction::MarketList {
                 bag_slot,
@@ -92,7 +85,7 @@ impl WorldHost for Sim {
                 price,
             } => {
                 let _ = self.market.list_item(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     bag_slot,
                     count,
@@ -103,7 +96,7 @@ impl WorldHost for Sim {
             }
             InteractAction::MarketBuy { listing_id } => {
                 let _ = self.market.buy(
-                    &mut self.entities,
+                    &mut self.world,
                     &mut self.mail,
                     player_id,
                     listing_id,
@@ -112,7 +105,7 @@ impl WorldHost for Sim {
             }
             InteractAction::MarketCancel { listing_id } => {
                 let _ = self.market.cancel(
-                    &mut self.entities,
+                    &mut self.world,
                     &mut self.mail,
                     player_id,
                     listing_id,
@@ -120,22 +113,21 @@ impl WorldHost for Sim {
                 );
             }
             InteractAction::DuelChallenge => {
-                let _ = challenge_duel(&mut self.pvp, &self.entities, player_id, target_id);
+                let _ = challenge_duel(&mut self.pvp, &self.world, player_id, target_id);
             }
             InteractAction::DuelAccept => {
                 let _ =
-                    accept_pending_duel(&mut self.pvp, &self.entities, player_id, &mut self.events);
+                    accept_pending_duel(&mut self.pvp, &self.world, player_id, &mut self.events);
             }
             InteractAction::TogglePvp => {
-                let _ = toggle_pvp(&mut self.entities, player_id);
+                let _ = toggle_pvp(&mut self.world, player_id);
             }
             InteractAction::EnterPortal { zone_id } => {
-                let _ = enter_portal(&mut self.entities, player_id, &zone_id, &mut self.events);
+                let _ = enter_portal(&mut self.world, player_id, &zone_id, &mut self.events);
             }
             InteractAction::EnterDungeon { dungeon_id } => {
                 let _ = enter_dungeon(
-                    &mut self.entities,
-                    &mut self.next_id,
+                    &mut self.world,
                     &self.parties,
                     player_id,
                     &dungeon_id,
@@ -143,61 +135,22 @@ impl WorldHost for Sim {
                 );
             }
             InteractAction::EnterDelve { delve_id } => {
-                if enter_delve(&mut self.entities, player_id, &delve_id, &mut self.events) {
-                    self.next_id = self
-                        .entities
-                        .iter()
-                        .map(|entity| entity.id)
-                        .max()
-                        .unwrap_or(0)
-                        .saturating_add(1)
-                        .max(self.next_id);
-                }
+                let _ = enter_delve(&mut self.world, player_id, &delve_id, &mut self.events);
             }
             InteractAction::AdvanceDelve => {
-                if try_advance_delve(&mut self.entities, player_id, &mut self.events) {
-                    self.next_id = self
-                        .entities
-                        .iter()
-                        .map(|entity| entity.id)
-                        .max()
-                        .unwrap_or(0)
-                        .saturating_add(1)
-                        .max(self.next_id);
-                }
+                let _ = try_advance_delve(&mut self.world, player_id, &mut self.events);
             }
             InteractAction::LeaveInstance => {
-                let _ = leave_instance(&mut self.entities, player_id, &mut self.events);
+                let _ = leave_instance(&mut self.world, player_id, &mut self.events);
             }
             InteractAction::LootNeed { loot_id } => {
-                let _ = self.loot_rules.roll(
-                    loot_id,
-                    player_id,
-                    RollChoice::Need,
-                    &mut self.rng,
-                    &mut self.entities,
-                    &mut self.events,
-                );
+                self.roll_loot(loot_id, player_id, RollChoice::Need);
             }
             InteractAction::LootGreed { loot_id } => {
-                let _ = self.loot_rules.roll(
-                    loot_id,
-                    player_id,
-                    RollChoice::Greed,
-                    &mut self.rng,
-                    &mut self.entities,
-                    &mut self.events,
-                );
+                self.roll_loot(loot_id, player_id, RollChoice::Greed);
             }
             InteractAction::LootPass { loot_id } => {
-                let _ = self.loot_rules.roll(
-                    loot_id,
-                    player_id,
-                    RollChoice::Pass,
-                    &mut self.rng,
-                    &mut self.entities,
-                    &mut self.events,
-                );
+                self.roll_loot(loot_id, player_id, RollChoice::Pass);
             }
             InteractAction::SetLootMode { mode } => {
                 if let Some(m) = LootMode::parse(&mode) {
@@ -215,7 +168,7 @@ impl WorldHost for Sim {
                 let _ = crate::combat::claim_loot_target(
                     player_id,
                     target_id,
-                    &mut self.entities,
+                    &mut self.world,
                     &mut self.events,
                     &self.loot_rules,
                 );
@@ -229,7 +182,7 @@ impl WorldHost for Sim {
                 ) =>
             {
                 let _ = professions::handle_interact(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     other,
                     &mut self.events,
@@ -237,7 +190,7 @@ impl WorldHost for Sim {
             }
             other => {
                 handle_interact(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     target_id,
                     other,
@@ -253,5 +206,18 @@ impl WorldHost for Sim {
 
     fn snapshot_for(&self, player_id: EntityId) -> TickSnapshot {
         self.snapshot_for_player(player_id)
+    }
+}
+
+impl Sim {
+    fn roll_loot(&mut self, loot_id: EntityId, player_id: EntityId, choice: RollChoice) {
+        let _ = self.loot_rules.roll(
+            loot_id,
+            player_id,
+            choice,
+            &mut self.rng,
+            &mut self.world,
+            &mut self.events,
+        );
     }
 }

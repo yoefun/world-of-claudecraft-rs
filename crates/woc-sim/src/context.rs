@@ -1,6 +1,6 @@
-//! SimContext seam: emit + entity lookup/mutate without the full `Sim` facade.
+//! SimContext seam: emit + World lookup without the full `Sim` facade.
 
-use crate::entity::Entity;
+use crate::ecs::World;
 use crate::rng::Rng;
 use woc_protocol::{EntityId, SimEvent};
 
@@ -9,9 +9,8 @@ use woc_protocol::{EntityId, SimEvent};
 /// Leaf modules should prefer `&mut SimContext` over reaching into `Sim`.
 pub struct SimContext<'a> {
     pub events: &'a mut Vec<SimEvent>,
-    pub entities: &'a mut [Entity],
+    pub world: &'a mut World,
     pub rng: &'a mut Rng,
-    pub next_id: &'a mut EntityId,
 }
 
 impl<'a> SimContext<'a> {
@@ -19,20 +18,15 @@ impl<'a> SimContext<'a> {
         self.events.push(event);
     }
 
-    pub fn entity(&self, id: EntityId) -> Option<&Entity> {
-        self.entities.iter().find(|e| e.id == id)
-    }
-
-    pub fn entity_mut(&mut self, id: EntityId) -> Option<&mut Entity> {
-        self.entities.iter_mut().find(|e| e.id == id)
-    }
-
+    /// Every player in the realm, dead or alive.
     pub fn player_ids(&self) -> Vec<EntityId> {
-        self.entities
-            .iter()
-            .filter(|e| e.kind == woc_protocol::EntityKind::Player && e.alive)
-            .map(|e| e.id)
-            .collect()
+        crate::ecs::player_ids(self.world)
+    }
+
+    /// Players that are currently alive. Named apart from [`Self::player_ids`]
+    /// so the dead/living distinction is visible at the call site.
+    pub fn living_player_ids(&self) -> Vec<EntityId> {
+        crate::ecs::living_player_ids(self.world)
     }
 }
 

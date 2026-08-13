@@ -4,6 +4,7 @@
 
 ### Added
 
+- Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.
 - Protocol rev **6**: pending Need/Greed loot snapshot, bank copper vault, market `mine` flag; `BankDepositCopper` / `BankWithdrawCopper`.
 - Party Need/Greed is wired into mob loot spawn (eligible mates within 40 yd); pending piles skip FFA auto-pickup.
 - `LootCorpse` interact claims ground piles / corpse-adjacent loot (respects rolls).

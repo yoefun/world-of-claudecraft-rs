@@ -1,6 +1,7 @@
 //! World boss and deed completion (one-shot honor awards).
 
-use crate::entity::Entity;
+use crate::ecs::components::Progress;
+use crate::ecs::World;
 use woc_protocol::{EntityId, SimEvent};
 
 /// Minimal deed definition.
@@ -20,44 +21,51 @@ pub static DEEDS: &[DeedDef] = &[DeedDef {
 /// Credit a deed when a matching world boss template is killed.
 ///
 /// Returns true only the first time a player completes the deed.
-pub fn on_boss_killed(player: &mut Entity, template_id: &str, events: &mut Vec<SimEvent>) -> bool {
+pub fn on_boss_killed(
+    world: &mut World,
+    player_id: EntityId,
+    template_id: &str,
+    events: &mut Vec<SimEvent>,
+) -> bool {
     let Some(deed) = DEEDS.iter().find(|d| d.boss_template == template_id) else {
         return false;
     };
-    if !player.completed_deeds.insert(deed.id.to_string()) {
+    let Some(progress) = world.get_mut::<Progress>(player_id) else {
+        return false;
+    };
+    if !progress.completed_deeds.insert(deed.id.to_string()) {
         return false;
     }
+    progress.honor = progress.honor.saturating_add(25);
     events.push(SimEvent::Toast {
         message: format!("Deed complete: {}", deed.name),
     });
     events.push(SimEvent::HonorGained {
-        player: player.id,
+        player: player_id,
         amount: 25,
     });
-    player.honor = player.honor.saturating_add(25);
-    let _ = player_id_touch(player.id);
     true
-}
-
-fn player_id_touch(id: EntityId) -> EntityId {
-    id
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
     use woc_content::PlayerClass;
 
     #[test]
     fn deed_credits_honor_once() {
-        let mut player = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
         let mut events = Vec::new();
-        assert!(on_boss_killed(&mut player, "mire_terror", &mut events));
-        assert_eq!(player.honor, 25);
-        assert!(player.completed_deeds.contains("eastfen_mire_terror"));
+        assert!(on_boss_killed(&mut world, 1, "mire_terror", &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().honor, 25);
+        assert!(world
+            .get::<Progress>(1)
+            .unwrap()
+            .completed_deeds
+            .contains("eastfen_mire_terror"));
         events.clear();
-        assert!(!on_boss_killed(&mut player, "mire_terror", &mut events));
-        assert_eq!(player.honor, 25);
+        assert!(!on_boss_killed(&mut world, 1, "mire_terror", &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().honor, 25);
     }
 }

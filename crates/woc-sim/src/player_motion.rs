@@ -4,7 +4,8 @@
 //! (gravity, coyote jump, swim tread, fall damage). Travel flight is a rewrite
 //! convenience mode (toggle) rather than a full mount/form system.
 
-use crate::entity::Entity;
+use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Transform};
+use crate::ecs::World;
 use crate::physics::{eastbrook_buildings, sweep_character_xz};
 use crate::types::{
     AIR_CONTROL_ACCEL, COYOTE_TIME, FALL_SAFE_DISTANCE, FLY_SPEED_MULT, FLY_VERTICAL_SPEED,
@@ -14,7 +15,7 @@ use crate::world::{
     clamp_to_world, ground_height, terrain_steepness, water_level_at, PLAYER_MAX_CLIMB_SLOPE,
     WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SEED,
 };
-use woc_protocol::{PlayerIntent, DT};
+use woc_protocol::{EntityId, PlayerIntent, DT};
 
 /// Character capsule height used for Y-overlap tests against building AABBs.
 pub const PLAYER_HEIGHT: f32 = 1.8;
@@ -45,10 +46,10 @@ pub fn swim_surface_y(x: f32, z: f32) -> f32 {
 }
 
 /// True when standing/treading in deep water over a declared lake.
-pub fn is_swimming(player: &Entity) -> bool {
-    let ground = ground_height(player.x, player.z, WORLD_SEED);
-    let water = water_level_at(player.x, player.z);
-    ground < water - PLAYER_SWIM_DEPTH && player.y <= swim_surface_y(player.x, player.z) + 0.15
+pub fn is_swimming_at(x: f32, y: f32, z: f32) -> bool {
+    let ground = ground_height(x, z, WORLD_SEED);
+    let water = water_level_at(x, z);
+    ground < water - PLAYER_SWIM_DEPTH && y <= swim_surface_y(x, z) + 0.15
 }
 
 /// Accept a proposed ground sample only if climb slope / rise is walkable.
@@ -120,7 +121,8 @@ fn try_move_xz(x: f32, y: f32, z: f32, dx: f32, dz: f32, grounded: bool) -> (f32
 }
 
 fn apply_horizontal_wish(
-    player: &mut Entity,
+    t: &mut Transform,
+    m: &mut Motion,
     move_x: f32,
     move_z: f32,
     facing: f32,
@@ -129,9 +131,9 @@ fn apply_horizontal_wish(
 ) {
     let wish_len = (move_x * move_x + move_z * move_z).sqrt();
     if wish_len < 0.01 {
-        if grounded && !player.flying {
-            player.vx = 0.0;
-            player.vz = 0.0;
+        if grounded && !m.flying {
+            m.vx = 0.0;
+            m.vz = 0.0;
         }
         return;
     }
@@ -142,162 +144,168 @@ fn apply_horizontal_wish(
     let wish_vx = (mx * cos_y + mz * sin_y) * speed;
     let wish_vz = (-mx * sin_y + mz * cos_y) * speed;
 
-    if grounded || player.flying || is_swimming(player) {
-        player.vx = wish_vx;
-        player.vz = wish_vz;
+    if grounded || m.flying || is_swimming_at(t.x, t.y, t.z) {
+        m.vx = wish_vx;
+        m.vz = wish_vz;
     } else {
         // Air control: accelerate toward wish, capped at wish speed.
-        let ax = wish_vx - player.vx;
-        let az = wish_vz - player.vz;
+        let ax = wish_vx - m.vx;
+        let az = wish_vz - m.vz;
         let a_len = (ax * ax + az * az).sqrt();
         let step = AIR_CONTROL_ACCEL * DT;
         if a_len > 1e-4 {
             let k = (step / a_len).min(1.0);
-            player.vx += ax * k;
-            player.vz += az * k;
+            m.vx += ax * k;
+            m.vz += az * k;
         }
-        let after = (player.vx * player.vx + player.vz * player.vz).sqrt();
+        let after = (m.vx * m.vx + m.vz * m.vz).sqrt();
         let cap = speed.max((wish_vx * wish_vx + wish_vz * wish_vz).sqrt());
         if after > cap && after > 1e-6 {
-            player.vx *= cap / after;
-            player.vz *= cap / after;
+            m.vx *= cap / after;
+            m.vz *= cap / after;
         }
     }
 
-    let dx = player.vx * DT;
-    let dz = player.vz * DT;
+    let dx = m.vx * DT;
+    let dz = m.vz * DT;
     let steps = MOTION_SUBSTEPS as f32;
-    let mut x = player.x;
-    let mut y = player.y;
-    let mut z = player.z;
+    let mut x = t.x;
+    let mut y = t.y;
+    let mut z = t.z;
     for _ in 0..MOTION_SUBSTEPS {
-        let (nx, ny, nz) = try_move_xz(x, y, z, dx / steps, dz / steps, grounded && !player.flying);
+        let (nx, ny, nz) = try_move_xz(x, y, z, dx / steps, dz / steps, grounded && !m.flying);
         x = nx;
         y = ny;
         z = nz;
     }
     let (x, z) = clamp_to_world(x, z);
     let (x, z) = clamp_to_world_padded(x, z);
-    player.x = x;
-    player.z = z;
-    if grounded && !player.flying {
-        player.y = y;
+    t.x = x;
+    t.z = z;
+    if grounded && !m.flying {
+        t.y = y;
     }
 }
 
-fn vertical_pass(player: &mut Entity, intent: &PlayerIntent, wish_speed: f32) -> Option<f32> {
-    let ground = ground_height(player.x, player.z, WORLD_SEED);
-    let water = water_level_at(player.x, player.z);
+fn vertical_pass(
+    t: &mut Transform,
+    m: &mut Motion,
+    hp_max: f32,
+    intent: &PlayerIntent,
+    wish_speed: f32,
+) -> Option<f32> {
+    let ground = ground_height(t.x, t.z, WORLD_SEED);
+    let water = water_level_at(t.x, t.z);
     let deep_water = ground < water - PLAYER_SWIM_DEPTH;
-    let surface = swim_surface_y(player.x, player.z);
+    let surface = swim_surface_y(t.x, t.z);
 
     // --- Travel flight -------------------------------------------------------
-    if player.flying {
+    if m.flying {
         if intent.jump {
-            player.vy = FLY_VERTICAL_SPEED;
+            m.vy = FLY_VERTICAL_SPEED;
         } else if intent.descend {
-            player.vy = -FLY_VERTICAL_SPEED;
+            m.vy = -FLY_VERTICAL_SPEED;
         } else {
-            player.vy = 0.0;
+            m.vy = 0.0;
         }
-        player.y += player.vy * DT;
+        t.y += m.vy * DT;
         // Soft ceiling / floor.
         let min_y = ground + 0.5;
         let max_y = ground + 40.0;
-        if player.y < min_y {
-            player.y = min_y;
-            player.vy = 0.0;
+        if t.y < min_y {
+            t.y = min_y;
+            m.vy = 0.0;
             // Touching near-ground while not ascending lands and exits flight.
             if !intent.jump {
-                player.flying = false;
-                player.on_ground = true;
-                player.jumping = false;
-                player.y = ground;
-                player.fall_start_y = ground;
+                m.flying = false;
+                m.on_ground = true;
+                m.jumping = false;
+                t.y = ground;
+                m.fall_start_y = ground;
             }
-        } else if player.y > max_y {
-            player.y = max_y;
-            player.vy = 0.0;
+        } else if t.y > max_y {
+            t.y = max_y;
+            m.vy = 0.0;
         } else {
-            player.on_ground = false;
-            player.jumping = false;
+            m.on_ground = false;
+            m.jumping = false;
         }
         return None;
     }
 
     // --- Swim tread ----------------------------------------------------------
-    if deep_water && player.y <= surface + 0.05 {
-        player.y = surface;
-        player.vy = 0.0;
-        player.vx = 0.0;
-        player.vz = 0.0;
-        player.on_ground = true;
-        player.jumping = false;
-        player.fall_start_y = player.y;
+    if deep_water && t.y <= surface + 0.05 {
+        t.y = surface;
+        m.vy = 0.0;
+        m.vx = 0.0;
+        m.vz = 0.0;
+        m.on_ground = true;
+        m.jumping = false;
+        m.fall_start_y = t.y;
         if intent.descend {
             // Brief dive under the surface.
-            player.y = surface - 0.6;
-            player.on_ground = false;
+            t.y = surface - 0.6;
+            m.on_ground = false;
         } else if intent.jump {
-            player.vy = JUMP_VELOCITY * 0.7;
-            player.on_ground = false;
-            player.jumping = true;
+            m.vy = JUMP_VELOCITY * 0.7;
+            m.on_ground = false;
+            m.jumping = true;
         }
         return None;
     }
 
-    let steep_ground = player.on_ground
-        && !is_swimming(player)
-        && terrain_steepness(player.x, player.z, WORLD_SEED) > PLAYER_MAX_CLIMB_SLOPE;
+    let steep_ground = m.on_ground
+        && !is_swimming_at(t.x, t.y, t.z)
+        && terrain_steepness(t.x, t.z, WORLD_SEED) > PLAYER_MAX_CLIMB_SLOPE;
 
     // Coyote: walk-off ledge still allows a jump briefly.
-    let coyote = !player.on_ground
-        && !player.jumping
-        && !is_swimming(player)
-        && player.vy <= 0.0
-        && player.vy > -GRAVITY * COYOTE_TIME
-        && terrain_steepness(player.x, player.z, WORLD_SEED) <= PLAYER_MAX_CLIMB_SLOPE;
+    let coyote = !m.on_ground
+        && !m.jumping
+        && !is_swimming_at(t.x, t.y, t.z)
+        && m.vy <= 0.0
+        && m.vy > -GRAVITY * COYOTE_TIME
+        && terrain_steepness(t.x, t.z, WORLD_SEED) <= PLAYER_MAX_CLIMB_SLOPE;
 
-    if intent.jump && (player.on_ground || coyote) && !steep_ground {
-        player.vy = JUMP_VELOCITY;
-        player.on_ground = false;
-        player.jumping = true;
-        player.fall_start_y = player.y;
+    if intent.jump && (m.on_ground || coyote) && !steep_ground {
+        m.vy = JUMP_VELOCITY;
+        m.on_ground = false;
+        m.jumping = true;
+        m.fall_start_y = t.y;
         // Carry horizontal wish into the jump.
         if wish_speed > 0.01 {
             // vx/vz already set this tick from wish.
         }
     }
 
-    if !player.on_ground {
-        player.vy -= GRAVITY * DT;
-        player.y += player.vy * DT;
-        player.fall_start_y = player.fall_start_y.max(player.y);
+    if !m.on_ground {
+        m.vy -= GRAVITY * DT;
+        t.y += m.vy * DT;
+        m.fall_start_y = m.fall_start_y.max(t.y);
 
-        if deep_water && player.y <= surface {
-            player.y = surface;
-            player.vy = 0.0;
-            player.vx = 0.0;
-            player.vz = 0.0;
-            player.on_ground = true;
-            player.jumping = false;
-            player.fall_start_y = player.y;
+        if deep_water && t.y <= surface {
+            t.y = surface;
+            m.vy = 0.0;
+            m.vx = 0.0;
+            m.vz = 0.0;
+            m.on_ground = true;
+            m.jumping = false;
+            m.fall_start_y = t.y;
             return None;
         }
 
-        if player.y <= ground {
-            let drop = player.fall_start_y - ground;
-            player.y = ground;
-            player.vy = 0.0;
-            player.vx = 0.0;
-            player.vz = 0.0;
-            player.on_ground = true;
-            player.jumping = false;
+        if t.y <= ground {
+            let drop = m.fall_start_y - ground;
+            t.y = ground;
+            m.vy = 0.0;
+            m.vx = 0.0;
+            m.vz = 0.0;
+            m.on_ground = true;
+            m.jumping = false;
             let mut dmg = 0.0;
             if drop > FALL_SAFE_DISTANCE {
-                dmg = (player.hp_max * (drop - FALL_SAFE_DISTANCE) * 0.07).round();
+                dmg = (hp_max * (drop - FALL_SAFE_DISTANCE) * 0.07).round();
             }
-            player.fall_start_y = ground;
+            m.fall_start_y = ground;
             return if dmg > 0.0 { Some(dmg) } else { None };
         }
         return None;
@@ -306,49 +314,59 @@ fn vertical_pass(player: &mut Entity, intent: &PlayerIntent, wish_speed: f32) ->
     // Grounded: stick to terrain; walk off steep drops.
     let support = ground;
     let max_step_down = MAX_GROUND_STEP.max(0.4);
-    if support < player.y - max_step_down {
-        player.on_ground = false;
-        player.jumping = false;
-        player.vy = 0.0;
-        player.fall_start_y = player.y;
+    if support < t.y - max_step_down {
+        m.on_ground = false;
+        m.jumping = false;
+        m.vy = 0.0;
+        m.fall_start_y = t.y;
     } else {
-        player.y = support;
-        player.fall_start_y = support;
-        player.vy = 0.0;
+        t.y = support;
+        m.fall_start_y = support;
+        m.vy = 0.0;
     }
     None
 }
 
 /// Step one player from intent. Returns optional fall damage to apply.
-pub fn step_player_motion(player: &mut Entity, intent: &PlayerIntent) -> Option<MotionEffect> {
-    player.yaw = intent.facing;
+pub fn step_player_motion(
+    world: &mut World,
+    player_id: EntityId,
+    intent: &PlayerIntent,
+) -> Option<MotionEffect> {
+    let mut t = world.get::<Transform>(player_id).cloned()?;
+    let mut m = world.get::<Motion>(player_id).cloned()?;
+    let health = world.get::<Health>(player_id).cloned()?;
+    let in_instance = world
+        .get::<InstanceAt>(player_id)
+        .and_then(|i| i.instance_id.clone())
+        .is_some();
 
-    if intent.fly_toggle && player.alive {
-        player.flying = !player.flying;
-        if player.flying {
-            player.on_ground = false;
-            player.jumping = false;
-            player.vy = 0.0;
-            player.y = player
-                .y
-                .max(ground_height(player.x, player.z, WORLD_SEED) + 1.5);
-            player.fall_start_y = player.y;
+    t.yaw = intent.facing;
+
+    if intent.fly_toggle && health.alive {
+        m.flying = !m.flying;
+        if m.flying {
+            m.on_ground = false;
+            m.jumping = false;
+            m.vy = 0.0;
+            t.y = t.y.max(ground_height(t.x, t.z, WORLD_SEED) + 1.5);
+            m.fall_start_y = t.y;
         } else {
             // Drop out of flight into a fall / land.
-            player.vy = 0.0;
-            player.fall_start_y = player.y;
-            let ground = ground_height(player.x, player.z, WORLD_SEED);
-            if (player.y - ground).abs() < 0.75 {
-                player.y = ground;
-                player.on_ground = true;
+            m.vy = 0.0;
+            m.fall_start_y = t.y;
+            let ground = ground_height(t.x, t.z, WORLD_SEED);
+            if (t.y - ground).abs() < 0.75 {
+                t.y = ground;
+                m.on_ground = true;
             } else {
-                player.on_ground = false;
+                m.on_ground = false;
             }
         }
     }
 
-    let swimming = is_swimming(player);
-    let speed = if player.flying {
+    let swimming = is_swimming_at(t.x, t.y, t.z);
+    let speed = if m.flying {
         RUN_SPEED * FLY_SPEED_MULT
     } else if swimming {
         RUN_SPEED * SWIM_SPEED_MULT
@@ -356,9 +374,10 @@ pub fn step_player_motion(player: &mut Entity, intent: &PlayerIntent) -> Option<
         RUN_SPEED
     };
 
-    let grounded = player.on_ground && !player.flying;
+    let grounded = m.on_ground && !m.flying;
     apply_horizontal_wish(
-        player,
+        &mut t,
+        &mut m,
         intent.move_x,
         intent.move_z,
         intent.facing,
@@ -366,45 +385,53 @@ pub fn step_player_motion(player: &mut Entity, intent: &PlayerIntent) -> Option<
         grounded,
     );
 
-    let fall = vertical_pass(player, intent, speed);
+    let fall = vertical_pass(&mut t, &mut m, health.hp_max, intent, speed);
 
-    if player.instance_id.is_none() {
-        player.zone_id = crate::world::zone_band_at(player.z).id.to_string();
+    if !in_instance {
+        if let Some(ident) = world.get_mut::<Identity>(player_id) {
+            ident.zone_id = crate::world::zone_band_at(t.z).id.to_string();
+        }
+    }
+    if let Some(slot) = world.get_mut::<Transform>(player_id) {
+        *slot = t;
+    }
+    if let Some(slot) = world.get_mut::<Motion>(player_id) {
+        *slot = m;
     }
 
     fall.map(|fall_damage| MotionEffect { fall_damage })
 }
 
-/// Legacy helper used by older call sites / tests that only pass wish axes.
-pub fn step_player_motion_axes(player: &mut Entity, move_x: f32, move_z: f32, facing: f32) {
-    let intent = PlayerIntent {
-        move_x,
-        move_z,
-        facing,
-        ..Default::default()
-    };
-    let _ = step_player_motion(player, &intent);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
     use woc_content::PlayerClass;
+
+    fn step_axes(world: &mut World, player_id: EntityId, move_x: f32, move_z: f32, facing: f32) {
+        let intent = PlayerIntent {
+            move_x,
+            move_z,
+            facing,
+            ..Default::default()
+        };
+        let _ = step_player_motion(world, player_id, &intent);
+    }
+
+    fn player_at(x: f32, z: f32) -> World {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, x, z);
+        world
+    }
 
     #[test]
     fn slope_following_keeps_feet_on_terrain() {
-        let mut player = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        let mut world = player_at(0.0, 0.0);
         for _ in 0..40 {
-            step_player_motion_axes(&mut player, 0.0, 1.0, 0.0);
-            let expected = ground_height(player.x, player.z, WORLD_SEED);
-            assert!(
-                (player.y - expected).abs() < 1e-3,
-                "feet left terrain: y={} expected={}",
-                player.y,
-                expected
-            );
-            assert!(player.on_ground);
+            step_axes(&mut world, 1, 0.0, 1.0, 0.0);
+            let t = world.get::<Transform>(1).unwrap();
+            let expected = ground_height(t.x, t.z, WORLD_SEED);
+            assert!((t.y - expected).abs() < 1e-3);
+            assert!(world.get::<Motion>(1).unwrap().on_ground);
         }
     }
 
@@ -420,9 +447,9 @@ mod tests {
 
     #[test]
     fn world_bounds_clamp_x() {
-        let mut player = create_player(1, "Edge", PlayerClass::Warrior, WORLD_MAX_X - 0.1, 0.0);
-        step_player_motion_axes(&mut player, 1.0, 0.0, 0.0);
-        assert!(player.x <= WORLD_MAX_X - PLAYER_RADIUS + 1e-3);
+        let mut world = player_at(WORLD_MAX_X - 0.1, 0.0);
+        step_axes(&mut world, 1, 1.0, 0.0, 0.0);
+        assert!(world.get::<Transform>(1).unwrap().x <= WORLD_MAX_X - PLAYER_RADIUS + 1e-3);
     }
 
     #[test]
@@ -432,72 +459,70 @@ mod tests {
 
     #[test]
     fn jump_leaves_ground_and_lands() {
-        let mut player = create_player(1, "Jumpy", PlayerClass::Warrior, 0.0, 0.0);
-        let ground = player.y;
+        let mut world = player_at(0.0, 0.0);
+        let ground = world.get::<Transform>(1).unwrap().y;
         let intent = PlayerIntent {
             jump: true,
             ..Default::default()
         };
-        let _ = step_player_motion(&mut player, &intent);
-        assert!(!player.on_ground, "jump should leave the ground");
-        assert!(player.y > ground + 0.05, "should rise after jump");
-        assert!(player.jumping);
-
-        // Coast until landing (no further jump presses).
+        let _ = step_player_motion(&mut world, 1, &intent);
+        assert!(!world.get::<Motion>(1).unwrap().on_ground);
+        assert!(world.get::<Transform>(1).unwrap().y > ground + 0.05);
+        assert!(world.get::<Motion>(1).unwrap().jumping);
         let coast = PlayerIntent::default();
         for _ in 0..40 {
-            let _ = step_player_motion(&mut player, &coast);
-            if player.on_ground {
+            let _ = step_player_motion(&mut world, 1, &coast);
+            if world.get::<Motion>(1).unwrap().on_ground {
                 break;
             }
         }
-        assert!(player.on_ground, "should land");
-        assert!((player.y - ground_height(player.x, player.z, WORLD_SEED)).abs() < 1e-2);
-        assert!(!player.jumping);
+        assert!(world.get::<Motion>(1).unwrap().on_ground);
+        let t = world.get::<Transform>(1).unwrap();
+        assert!((t.y - ground_height(t.x, t.z, WORLD_SEED)).abs() < 1e-2);
+        assert!(!world.get::<Motion>(1).unwrap().jumping);
     }
 
     #[test]
     fn fly_toggle_enables_vertical_ascend() {
-        let mut player = create_player(1, "Flyer", PlayerClass::Mage, 0.0, 0.0);
-        let start_y = player.y;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Flyer", PlayerClass::Mage, 0.0, 0.0);
+        let start_y = world.get::<Transform>(1).unwrap().y;
         let toggle = PlayerIntent {
             fly_toggle: true,
             ..Default::default()
         };
-        let _ = step_player_motion(&mut player, &toggle);
-        assert!(player.flying);
+        let _ = step_player_motion(&mut world, 1, &toggle);
+        assert!(world.get::<Motion>(1).unwrap().flying);
         let up = PlayerIntent {
             jump: true,
             ..Default::default()
         };
         for _ in 0..10 {
-            let _ = step_player_motion(&mut player, &up);
+            let _ = step_player_motion(&mut world, 1, &up);
         }
-        assert!(
-            player.y > start_y + 2.0,
-            "flight ascend should gain altitude"
-        );
+        assert!(world.get::<Transform>(1).unwrap().y > start_y + 2.0);
     }
 
     #[test]
     fn long_fall_reports_damage() {
-        let mut player = create_player(1, "Cliff", PlayerClass::Warrior, 0.0, 0.0);
-        player.on_ground = false;
-        player.jumping = false;
-        player.y = player.y + 25.0;
-        player.fall_start_y = player.y;
-        player.vy = 0.0;
+        let mut world = player_at(0.0, 0.0);
+        {
+            let y = world.get::<Transform>(1).unwrap().y + 25.0;
+            world.get_mut::<Transform>(1).unwrap().y = y;
+            let m = world.get_mut::<Motion>(1).unwrap();
+            m.on_ground = false;
+            m.jumping = false;
+            m.fall_start_y = y;
+            m.vy = 0.0;
+        }
         let mut hit = None;
         for _ in 0..80 {
-            hit = step_player_motion(&mut player, &PlayerIntent::default());
-            if player.on_ground {
+            hit = step_player_motion(&mut world, 1, &PlayerIntent::default());
+            if world.get::<Motion>(1).unwrap().on_ground {
                 break;
             }
         }
-        assert!(player.on_ground);
-        assert!(
-            hit.map(|e| e.fall_damage > 0.0).unwrap_or(false),
-            "25yd fall should deal damage"
-        );
+        assert!(world.get::<Motion>(1).unwrap().on_ground);
+        assert!(hit.map(|e| e.fall_damage > 0.0).unwrap_or(false));
     }
 }
