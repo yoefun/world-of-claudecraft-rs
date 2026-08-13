@@ -44,6 +44,7 @@ pub mod player_motion;
 pub mod professions;
 pub mod pvp;
 pub mod quests;
+pub mod reputation;
 pub mod rng;
 pub mod sim;
 pub mod social;

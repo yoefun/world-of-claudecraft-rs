@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `reputation`:** four hub factions (Eastbrook Watch, Eastfen Circle, Mirefen Ferry, Highwatch) with a Neutral→Exalted ladder on a player `Reputation` column.
+- Quest turn-in and mob kills grant standing (party-shared on kills). Friendly+ vendor discounts; Unfriendly vendors refuse trade.
+- Wilkes sells `watch_signet` at Friendly Watch. Character sheet **C** lists standing. Additive on protocol rev **8**.
+
 ## 1.13.0 — 2026-08-13
 
 ### Added

@@ -531,6 +531,12 @@ impl Sim {
                     grant_xp(&mut self.world, rid, reward.xp, &mut self.events);
                     if let Some(ref tid) = reward.template_id {
                         on_mob_killed(&mut self.world, rid, tid, &mut self.events);
+                        crate::reputation::on_mob_killed(
+                            &mut self.world,
+                            rid,
+                            tid,
+                            &mut self.events,
+                        );
                         crate::worldboss::on_boss_killed(
                             &mut self.world,
                             rid,
@@ -885,6 +891,7 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
+            reputation: crate::reputation::snapshot(world, player_id),
         }
     }
 
@@ -1135,7 +1142,8 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, Health, LootPile, Owner, QuestLog, QuestState, Threat, Transform,
+        Bags, Bank, ClassKit, Health, LootPile, Owner, Progress, QuestLog, QuestState, Reputation,
+        Threat, Transform,
     };
     use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
@@ -1493,6 +1501,13 @@ mod tests {
         assert!(log
             .iter()
             .any(|q| q.quest_id == "wolves_at_the_gate" && q.state == "completed"));
+        let watch = WorldHost::snapshot_for(&sim, sim.player_id)
+            .reputation
+            .into_iter()
+            .find(|r| r.faction_id == "eastbrook_watch")
+            .expect("watch standing");
+        assert_eq!(watch.value, 150 + 250 + 25 * 3);
+        assert_eq!(watch.standing, "neutral");
     }
 
     #[test]
@@ -1732,6 +1747,112 @@ mod tests {
             .inventory
             .iter()
             .any(|s| s.item_id == "travelers_ration"));
+    }
+
+    #[test]
+    fn friendly_watch_unlocks_signet_and_discounts_rations() {
+        let mut sim = Sim::new_eastbrook("Rep", PlayerClass::Warrior);
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 200;
+        }
+        if let Some(rep) = sim.world.get_mut::<Reputation>(sim.player_id) {
+            rep.values.insert("eastbrook_watch".into(), 500);
+        }
+        let vendor = find_template(&sim, "trader_wilkes").unwrap();
+        let (vx, vz) = {
+            let t = sim.world.get::<Transform>(vendor).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, vx, vz);
+        sim.interact(vendor, InteractAction::Talk);
+        let session = sim
+            .snapshot_for_player(sim.player_id)
+            .open_npc
+            .expect("npc session");
+        assert_eq!(session.discount_pct, 5);
+        assert!(session.stock.iter().any(|o| o.item_id == "watch_signet"));
+        let ration = session
+            .stock
+            .iter()
+            .find(|o| o.item_id == "travelers_ration")
+            .expect("ration");
+        assert_eq!(
+            ration.price,
+            woc_content::item("travelers_ration").unwrap().vendor_buy
+        );
+        let signet = session
+            .stock
+            .iter()
+            .find(|o| o.item_id == "watch_signet")
+            .expect("signet");
+        assert_eq!(signet.price, 76);
+        sim.interact(
+            vendor,
+            InteractAction::Buy {
+                item_id: "watch_signet".into(),
+                count: 1,
+            },
+        );
+        assert!(sim
+            .snapshot_for_player(sim.player_id)
+            .inventory
+            .iter()
+            .any(|s| s.item_id == "watch_signet"));
+        assert_eq!(sim.copper(), 200 - 76);
+    }
+
+    #[test]
+    fn unfriendly_vendor_refuses_trade_and_hides_stock() {
+        let mut sim = Sim::new_eastbrook("Hate", PlayerClass::Warrior);
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 100;
+        }
+        if let Some(rep) = sim.world.get_mut::<Reputation>(sim.player_id) {
+            rep.values.insert("eastbrook_watch".into(), -1);
+        }
+        let vendor = find_template(&sim, "trader_wilkes").unwrap();
+        let (vx, vz) = {
+            let t = sim.world.get::<Transform>(vendor).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, vx, vz);
+        sim.interact(vendor, InteractAction::Talk);
+        let session = sim
+            .snapshot_for_player(sim.player_id)
+            .open_npc
+            .expect("npc session");
+        assert!(session.stock.is_empty());
+        sim.interact(
+            vendor,
+            InteractAction::Buy {
+                item_id: "travelers_ration".into(),
+                count: 1,
+            },
+        );
+        assert_eq!(sim.copper(), 100);
+        assert!(!sim
+            .snapshot_for_player(sim.player_id)
+            .inventory
+            .iter()
+            .any(|s| s.item_id == "travelers_ration"));
+    }
+
+    #[test]
+    fn neutral_hides_friendly_gated_stock() {
+        let mut sim = Sim::new_eastbrook("Neu", PlayerClass::Warrior);
+        let vendor = find_template(&sim, "trader_wilkes").unwrap();
+        let (vx, vz) = {
+            let t = sim.world.get::<Transform>(vendor).unwrap();
+            (t.x, t.z)
+        };
+        place_player_at(&mut sim, vx, vz);
+        sim.interact(vendor, InteractAction::Talk);
+        let session = sim
+            .snapshot_for_player(sim.player_id)
+            .open_npc
+            .expect("npc session");
+        assert!(!session.stock.iter().any(|o| o.item_id == "watch_signet"));
+        assert_eq!(session.discount_pct, 0);
     }
 
     #[test]

@@ -395,10 +395,23 @@ fn buy(
     if !ndef.is_vendor() || !ndef.vendor_stock.iter().any(|o| o.item_id == item_id) {
         return;
     }
+    let standing = crate::reputation::npc_standing(world, player_id, ndef);
+    if vendor_refuses_trade(standing, events) {
+        return;
+    }
+    let Some(offer) = ndef.vendor_stock.iter().find(|o| o.item_id == item_id) else {
+        return;
+    };
+    if standing < offer.min_standing {
+        events.push(SimEvent::Toast {
+            message: "Your standing is not high enough.".into(),
+        });
+        return;
+    }
     let Some(idef) = item(item_id) else {
         return;
     };
-    let price = idef.vendor_buy.saturating_mul(count);
+    let price = crate::reputation::vendor_price(idef.vendor_buy, standing).saturating_mul(count);
     let copper = world
         .get::<Progress>(player_id)
         .map(|p| p.copper)
@@ -440,6 +453,10 @@ fn sell(
         return;
     };
     if !ndef.is_vendor() {
+        return;
+    }
+    let standing = crate::reputation::npc_standing(world, player_id, ndef);
+    if vendor_refuses_trade(standing, events) {
         return;
     }
     if world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) != Some(target_id) {
@@ -508,6 +525,12 @@ fn buyback(
     if !ndef.is_vendor()
         || world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) != Some(target_id)
     {
+        return;
+    }
+    if vendor_refuses_trade(
+        crate::reputation::npc_standing(world, player_id, ndef),
+        events,
+    ) {
         return;
     }
 
@@ -1010,6 +1033,16 @@ fn use_item_from_bag(
     crate::quests::on_inventory_changed(world, player_id, events);
 }
 
+fn vendor_refuses_trade(standing: woc_content::Standing, events: &mut Vec<SimEvent>) -> bool {
+    if standing < woc_content::Standing::Neutral {
+        events.push(SimEvent::Toast {
+            message: "They will not trade with you.".into(),
+        });
+        return true;
+    }
+    false
+}
+
 fn opens_npc_session(def: &NpcDef) -> bool {
     def.is_vendor()
         || def.can_repair()
@@ -1029,15 +1062,19 @@ fn service_name(service: NpcService) -> &'static str {
     }
 }
 
-fn stock_snapshot(def: &NpcDef) -> Vec<VendorOfferSnapshot> {
+fn stock_snapshot(world: &World, player_id: EntityId, def: &NpcDef) -> Vec<VendorOfferSnapshot> {
+    let standing = crate::reputation::npc_standing(world, player_id, def);
     def.vendor_stock
         .iter()
         .filter_map(|o| {
-            let price = item(o.item_id)?.vendor_buy;
+            if standing < o.min_standing {
+                return None;
+            }
+            let base = item(o.item_id)?.vendor_buy;
             Some(VendorOfferSnapshot {
                 item_id: o.item_id.to_string(),
                 count: o.count,
-                price,
+                price: crate::reputation::vendor_price(base, standing),
             })
         })
         .collect()
@@ -1051,11 +1088,13 @@ pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protoco
     if !def.is_vendor() {
         return None;
     }
-    let stock = stock_snapshot(def);
+    let standing = crate::reputation::npc_standing(world, player_id, def);
+    let stock = stock_snapshot(world, player_id, def);
     Some(woc_protocol::VendorSnapshot {
         npc_id,
         npc_name: npc_e.name.clone(),
         stock,
+        discount_pct: crate::reputation::vendor_discount(standing),
     })
 }
 
@@ -1087,12 +1126,15 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
             .map(service_name)
             .map(str::to_string)
             .collect(),
-        stock: stock_snapshot(def),
+        stock: stock_snapshot(world, player_id, def),
         train_professions: def.trains.iter().map(|id| id.to_string()).collect(),
         can_repair: def.can_repair(),
         repair_cost: repair_cost(world, player_id),
         can_bind: def.is_innkeeper(),
         buyback,
+        discount_pct: crate::reputation::vendor_discount(crate::reputation::npc_standing(
+            world, player_id, def,
+        )),
     })
 }
 

@@ -719,6 +719,18 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         ),
         ItemQuality::Uncommon,
     ),
+    jewelry(
+        "watch_signet",
+        "Watch Signet",
+        ItemEquipSlot::Finger,
+        80,
+        20,
+        4.0,
+        2.0,
+        0.0,
+        1,
+        &[],
+    ),
     with_quality(
         jewelry(
             "boar_tusk_ring",

@@ -17,8 +17,9 @@ Manual. Requires a GPU client. CI does not run this.
 13. Train Mining at Brann, Herbalism at Wren.
 14. Bind at Innkeeper Mara, run to Wolf Run, press H.
 15. Rogue: equip a second dagger into OffHand; wear two rings; buy a Coarse Whetstone from Smith Brann, use it, see AP rise and `[Coarse Sharpening]` on the C-sheet.
+16. After Report + Wolves + Scout, Eastbrook Watch is Friendly; Wilkes sells Watch Signet (**C** sheet lists standing).
 
-Footer reads `WoC-rs 1.13.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
+Footer reads `WoC-rs 1.14.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 

@@ -25,7 +25,7 @@ woc-sim World  →  TickSnapshot  →  Bevy presentation ECS
 
 See the table in [`docs/superpowers/specs/2026-08-13-sim-ecs-design.md`](../superpowers/specs/2026-08-13-sim-ecs-design.md) §4.4 and `crates/woc-sim/src/ecs/components.rs` module docs.
 
-Player columns include `Hearth` (`zone_id`, bind `x`/`z`, `ready_tick`) for innkeeper binding and tick-based hearthstone cooldowns; see `crates/woc-sim/src/ecs/components.rs`.
+Player columns include `Hearth` (`zone_id`, bind `x`/`z`, `ready_tick`) for innkeeper binding and tick-based hearthstone cooldowns, and `Reputation` (`values: faction_id → i32`) for hub faction standing. See `crates/woc-sim/src/ecs/components.rs`.
 
 ## Status
 
