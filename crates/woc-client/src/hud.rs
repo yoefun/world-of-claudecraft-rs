@@ -1297,6 +1297,7 @@ mod tests {
             repair_cost: 12,
             can_bind: false,
             buyback: vec![],
+            train_riding: false,
         });
 
         let text = npc_session_help(&snap);

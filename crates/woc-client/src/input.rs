@@ -1051,6 +1051,7 @@ mod tests {
             on_ground: true,
             flying: false,
             swimming: false,
+            mounted: None,
         });
         snap.entities.push(woc_protocol::EntitySnapshot {
             id: 2,
@@ -1070,6 +1071,7 @@ mod tests {
             on_ground: true,
             flying: false,
             swimming: false,
+            mounted: None,
         });
         snap.entities.push(woc_protocol::EntitySnapshot {
             id: 3,
@@ -1089,6 +1091,7 @@ mod tests {
             on_ground: true,
             flying: false,
             swimming: false,
+            mounted: None,
         });
         let first = tab_cycle_from_snapshot(&snap, 0.0).expect("first");
         snap.target_id = Some(first);
