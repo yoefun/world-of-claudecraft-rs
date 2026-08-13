@@ -88,6 +88,40 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_gear_item_has_rules() {
+        for it in ITEMS.iter() {
+            if it.equip_slot.is_none() {
+                assert!(it.armor_class.is_none());
+                assert!(it.weapon_style.is_none());
+                continue;
+            }
+            match it.kind {
+                ItemKind::Weapon => {
+                    assert!(it.weapon_style.is_some(), "{}", it.id);
+                    assert!(it.armor_class.is_none(), "{}", it.id);
+                }
+                ItemKind::Armor => {
+                    let style = it.weapon_style;
+                    if matches!(it.equip_slot, Some(ItemEquipSlot::OffHand)) {
+                        assert_eq!(style, Some(WeaponStyle::Shield), "{}", it.id);
+                        assert!(it.armor_class.is_none(), "{}", it.id);
+                    } else if matches!(
+                        it.equip_slot,
+                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger)
+                    ) {
+                        assert!(style.is_none(), "{}", it.id);
+                        assert!(it.armor_class.is_none(), "{}", it.id);
+                    } else {
+                        assert!(it.armor_class.is_some(), "{}", it.id);
+                        assert!(style.is_none(), "{}", it.id);
+                    }
+                }
+                _ => panic!("{} is equippable but not weapon/armor", it.id),
+            }
+        }
+    }
+
+    #[test]
     fn every_class_start_gear_exists() {
         assert_eq!(CLASSES.len(), 9);
         for class in CLASSES {

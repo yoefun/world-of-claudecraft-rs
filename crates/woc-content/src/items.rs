@@ -27,6 +27,8 @@ pub enum ItemEquipSlot {
     Chest,
     Legs,
     Feet,
+    Neck,
+    Finger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,11 +118,36 @@ pub fn can_equip(def: &ItemDef, class: PlayerClass, level: u32) -> Result<(), Eq
     Ok(())
 }
 
+const WARRIOR: &[PlayerClass] = &[PlayerClass::Warrior];
+const PALADIN_SHAMAN: &[PlayerClass] = &[PlayerClass::Paladin, PlayerClass::Shaman];
+const HUNTER: &[PlayerClass] = &[PlayerClass::Hunter];
+const ROGUE: &[PlayerClass] = &[PlayerClass::Rogue];
+const CASTERS: &[PlayerClass] = &[
+    PlayerClass::Priest,
+    PlayerClass::Mage,
+    PlayerClass::Warlock,
+    PlayerClass::Druid,
+];
+#[allow(dead_code)]
+const WAR_PAL: &[PlayerClass] = &[PlayerClass::Warrior, PlayerClass::Paladin];
+const WAR_PAL_ROGUE: &[PlayerClass] = &[
+    PlayerClass::Warrior,
+    PlayerClass::Paladin,
+    PlayerClass::Rogue,
+];
+const WAR_PAL_SHA: &[PlayerClass] = &[
+    PlayerClass::Warrior,
+    PlayerClass::Paladin,
+    PlayerClass::Shaman,
+];
+
 const fn weapon(
     id: &'static str,
     name: &'static str,
     vendor_sell: u32,
     attack_power: f32,
+    style: WeaponStyle,
+    allowed: &'static [PlayerClass],
 ) -> ItemDef {
     ItemDef {
         id,
@@ -135,8 +162,8 @@ const fn weapon(
         level_req: 1,
         heal_hp: 0.0,
         armor_class: None,
-        weapon_style: Some(WeaponStyle::OneHand),
-        allowed_classes: &[],
+        weapon_style: Some(style),
+        allowed_classes: allowed,
         stamina: 0.0,
         spell_power: 0.0,
     }
@@ -149,6 +176,7 @@ const fn armor(
     vendor_sell: u32,
     armor: f32,
     level_req: u32,
+    armor_class: ArmorClass,
 ) -> ItemDef {
     ItemDef {
         id,
@@ -162,9 +190,36 @@ const fn armor(
         equip_slot: Some(slot),
         level_req,
         heal_hp: 0.0,
-        armor_class: Some(ArmorClass::Cloth),
+        armor_class: Some(armor_class),
         weapon_style: None,
         allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
+    }
+}
+
+const fn shield(
+    id: &'static str,
+    name: &'static str,
+    vendor_sell: u32,
+    armor: f32,
+    allowed: &'static [PlayerClass],
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind: ItemKind::Armor,
+        stack_size: 1,
+        vendor_buy: 0,
+        vendor_sell,
+        attack_power: 0.0,
+        armor,
+        equip_slot: Some(ItemEquipSlot::OffHand),
+        level_req: 1,
+        heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: Some(WeaponStyle::Shield),
+        allowed_classes: allowed,
         stamina: 0.0,
         spell_power: 0.0,
     }
@@ -219,11 +274,32 @@ const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell:
 }
 
 pub static ZONE1_ITEMS: &[ItemDef] = &[
-    weapon("worn_sword", "Worn Sword", 5, 8.0),
-    weapon("worn_mace", "Worn Mace", 5, 7.0),
-    weapon("worn_bow", "Worn Bow", 5, 7.0),
-    weapon("worn_dagger", "Worn Dagger", 5, 6.0),
-    weapon("worn_staff", "Worn Staff", 5, 5.0),
+    weapon("worn_sword", "Worn Sword", 5, 8.0, WeaponStyle::OneHand, WARRIOR),
+    weapon(
+        "worn_mace",
+        "Worn Mace",
+        5,
+        7.0,
+        WeaponStyle::OneHand,
+        PALADIN_SHAMAN,
+    ),
+    weapon("worn_bow", "Worn Bow", 5, 7.0, WeaponStyle::Ranged, HUNTER),
+    weapon(
+        "worn_dagger",
+        "Worn Dagger",
+        5,
+        6.0,
+        WeaponStyle::OneHand,
+        ROGUE,
+    ),
+    weapon(
+        "worn_staff",
+        "Worn Staff",
+        5,
+        5.0,
+        WeaponStyle::TwoHand,
+        CASTERS,
+    ),
     armor(
         "recruit_tunic",
         "Recruit's Tunic",
@@ -231,6 +307,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         4,
         12.0,
         1,
+        ArmorClass::Leather,
     ),
     armor(
         "recruit_robe",
@@ -239,6 +316,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         4,
         6.0,
         1,
+        ArmorClass::Cloth,
     ),
     armor(
         "recruit_cap",
@@ -247,6 +325,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         3,
         4.0,
         1,
+        ArmorClass::Cloth,
     ),
     armor(
         "recruit_pants",
@@ -255,6 +334,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         3,
         5.0,
         1,
+        ArmorClass::Cloth,
     ),
     armor(
         "recruit_boots",
@@ -263,15 +343,9 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         3,
         3.0,
         1,
+        ArmorClass::Cloth,
     ),
-    armor(
-        "wooden_buckler",
-        "Wooden Buckler",
-        ItemEquipSlot::OffHand,
-        4,
-        8.0,
-        1,
-    ),
+    shield("wooden_buckler", "Wooden Buckler", 4, 8.0, WAR_PAL_SHA),
     armor(
         "veteran_helm",
         "Veteran's Helm",
@@ -279,6 +353,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         12,
         20.0,
         5,
+        ArmorClass::Mail,
     ),
     consumable("baked_bread", "Baked Bread", 5, 1, 40.0),
     consumable("spring_water", "Spring Water", 5, 1, 0.0),
@@ -292,6 +367,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         8,
         18.0,
         1,
+        ArmorClass::Leather,
     ),
     // Profession reagents (herbalism gather yields).
     misc("silverleaf", "Silverleaf", ItemKind::Junk, 1),
@@ -303,7 +379,14 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
     // Mining / blacksmithing.
     misc("copper_ore", "Copper Ore", ItemKind::Junk, 1),
     misc("copper_bar", "Copper Bar", ItemKind::Junk, 2),
-    weapon("copper_shortsword", "Copper Shortsword", 12, 11.0),
+    weapon(
+        "copper_shortsword",
+        "Copper Shortsword",
+        12,
+        11.0,
+        WeaponStyle::OneHand,
+        WAR_PAL_ROGUE,
+    ),
 ];
 
 /// Zone1 + zone2 item definitions.
