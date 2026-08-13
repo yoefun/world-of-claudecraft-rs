@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::{
-    can_equip, enchant, item, quest, talents::talents_for_class, ItemKind, ItemQuality,
-    PlayerClass, QuestObjective,
+    can_equip, enchant, item, mount, quest, riding_rank_by_n, talents::talents_for_class, ItemKind,
+    ItemQuality, PlayerClass, QuestObjective,
 };
 use woc_protocol::{EntityId, InteractAction, QuestLogEntry, TickSnapshot, VendorOfferSnapshot};
 
@@ -136,8 +136,8 @@ fn npc_session_cache_key(snap: &TickSnapshot) -> Option<String> {
     };
 
     let mut key = format!(
-        "npc|{}|{}|{}|{}|{}",
-        npc.npc_id, npc.npc_name, npc.can_repair, npc.repair_cost, npc.can_bind
+        "npc|{}|{}|{}|{}|{}|{}",
+        npc.npc_id, npc.npc_name, npc.can_repair, npc.repair_cost, npc.can_bind, npc.train_riding
     );
     for service in &npc.services {
         key.push_str(&format!("|svc:{service}"));
@@ -179,7 +179,7 @@ pub(crate) fn first_equippable_bag_stack(snap: &TickSnapshot) -> Option<(u8, Str
 pub(crate) fn first_consumable_bag_stack(snap: &TickSnapshot) -> Option<(u8, String)> {
     snap.inventory.iter().find_map(|stack| {
         item(&stack.item_id)
-            .filter(|def| def.kind == ItemKind::Consumable)
+            .filter(|def| def.kind == ItemKind::Consumable || def.kind == ItemKind::Mount)
             .map(|_| (stack.slot, stack.item_id.clone()))
     })
 }
@@ -199,6 +199,22 @@ pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, 
             None
         }
     })
+}
+
+fn riding_chrome_lines(snap: &TickSnapshot) -> Vec<String> {
+    let mut lines = Vec::new();
+    if snap.riding_rank > 0 {
+        if let Some(rank) = riding_rank_by_n(snap.riding_rank) {
+            lines.push(format!("Riding: {}", rank.name));
+        }
+    }
+    if let Some(mount_id) = snap.mounted.as_deref() {
+        let name = mount(mount_id)
+            .map(|m| m.name)
+            .unwrap_or(mount_id);
+        lines.push(format!("Mounted: {name}"));
+    }
+    lines
 }
 
 fn zone_name(snap: &TickSnapshot) -> &str {
@@ -698,7 +714,7 @@ pub(crate) fn update_hud(
     }
     if let Ok(mut t) = xp.single_mut() {
         let gear = snap.equipment.main_hand.as_deref().unwrap_or("—");
-        **t = format!(
+        let mut line = format!(
             "Lv {} {}   XP {}/{}   Copper {}   Weapon: {}",
             snap.progress.level,
             snap.progress.class_id,
@@ -707,6 +723,11 @@ pub(crate) fn update_hud(
             snap.progress.copper,
             gear
         );
+        for extra in riding_chrome_lines(snap) {
+            line.push_str("   ");
+            line.push_str(&extra);
+        }
+        **t = line;
     }
     if let Ok(mut t) = target.single_mut() {
         **t = if let Some(tid) = snap.target_id {
@@ -844,8 +865,14 @@ pub(crate) fn update_hud(
         } else {
             snap.progress.class_id.as_str()
         };
+        let riding = riding_chrome_lines(snap).join("\n");
+        let riding_block = if riding.is_empty() {
+            String::new()
+        } else {
+            format!("{riding}\n")
+        };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip slot",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\n{riding_block}Talents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip slot",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
@@ -1109,6 +1136,15 @@ pub(crate) fn sync_vendor_panel(
                             "Bind hearth".into(),
                             InteractAction::BindHearth,
                             "Binding hearth.".into(),
+                        );
+                    }
+                    if npc.train_riding {
+                        spawn_session_button(
+                            parent,
+                            npc.npc_id,
+                            "Train riding".into(),
+                            InteractAction::TrainRiding,
+                            "Training riding.".into(),
                         );
                     }
                     for row in npc.buyback {

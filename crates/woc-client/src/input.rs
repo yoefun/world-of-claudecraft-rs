@@ -673,7 +673,7 @@ pub(crate) fn handle_interact_keys(
                         );
                         host.recent_toasts
                             .push((format!("Equipping {}.", stack.item_id), 2.0));
-                    } else if def.kind == ItemKind::Consumable {
+                    } else if def.kind == ItemKind::Consumable || def.kind == ItemKind::Mount {
                         host.interact(
                             player_id,
                             InteractAction::UseItem {

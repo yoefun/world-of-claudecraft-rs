@@ -74,8 +74,8 @@ pub use physics::{eastbrook_buildings, Aabb};
 pub use rng::{fbm2, hash2, noise2, Rng};
 pub use sim::{Sim, MAX_REALM_PLAYERS, SNAPSHOT_AOI_RADIUS};
 pub use visual_catalog::{
-    scene_markers, visual_key, visual_spec, zone_atmosphere, PartRole, PartShape, SceneMarker,
-    SceneMarkerKind, VisualFamily, VisualPart, VisualSpec, ZoneAtmosphere,
+    mount_visual_spec, scene_markers, visual_key, visual_spec, zone_atmosphere, PartRole,
+    PartShape, SceneMarker, SceneMarkerKind, VisualFamily, VisualPart, VisualSpec, ZoneAtmosphere,
 };
 pub use woc_content::PlayerClass;
 pub use world::{
