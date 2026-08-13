@@ -70,10 +70,7 @@ pub(crate) fn collect_intent(
         // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
         intent.jump = true;
     }
-    if keys.pressed(KeyCode::ControlLeft)
-        || keys.pressed(KeyCode::ControlRight)
-        || keys.pressed(KeyCode::KeyC)
-    {
+    if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
         intent.descend = true;
     }
     if keys.just_pressed(KeyCode::KeyV) {

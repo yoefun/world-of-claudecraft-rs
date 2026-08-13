@@ -343,7 +343,7 @@ impl Sim {
                 let flying = self.entities[pi].flying;
                 self.events.push(woc_protocol::SimEvent::Toast {
                     message: if flying {
-                        "Travel flight engaged (Space up · Ctrl/C down · V land).".into()
+                        "Travel flight engaged (Space up · Ctrl down · V land).".into()
                     } else {
                         "Travel flight disengaged.".into()
                     },
