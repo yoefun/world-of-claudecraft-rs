@@ -1,9 +1,10 @@
 //! Auction house listings, keyed by durable seller id with offline mail settlement.
 
-use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
+use crate::ecs::components::{Bags, ClassKit, Durable, Identity, InvStack, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, remove_item};
-use crate::mail::Mailbox;
+use crate::inventory::{put_stack, take_from_slot};
+use crate::mail::{MailAttachment, Mailbox};
+use woc_content::ItemKind;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
 /// Listing duration in ticks (~1 hour at 20 Hz).
@@ -21,6 +22,8 @@ pub struct Listing {
     pub seller_name: String,
     pub item_id: String,
     pub count: u32,
+    pub durability: Option<u32>,
+    pub enchant_id: Option<String>,
     pub price: u32,
     pub expires_tick: u64,
 }
@@ -126,13 +129,23 @@ impl AuctionHouse {
             return false;
         };
         let take = count.min(stack.count).max(1);
-        if let Some(bags) = world.get_mut::<Bags>(seller) {
-            if !remove_item(&mut bags.inventory, &stack.item_id, take) {
-                return false;
-            }
-        } else {
+        let is_quest = woc_content::item(&stack.item_id)
+            .map(|d| matches!(d.kind, ItemKind::Quest))
+            .unwrap_or(false);
+        if is_quest {
+            events.push(SimEvent::Toast {
+                message: "This item is needed for a quest.".into(),
+            });
             return false;
         }
+        let taken = if let Some(bags) = world.get_mut::<Bags>(seller) {
+            take_from_slot(&mut bags.inventory, bag_slot as usize, take)
+        } else {
+            None
+        };
+        let Some(taken) = taken else {
+            return false;
+        };
         if let Some(progress) = world.get_mut::<Progress>(seller) {
             progress.copper -= LISTING_FEE;
         }
@@ -148,8 +161,10 @@ impl AuctionHouse {
             seller_id: seller,
             seller_durable,
             seller_name,
-            item_id: stack.item_id,
-            count: take,
+            item_id: taken.item_id,
+            count: taken.count,
+            durability: taken.durability,
+            enchant_id: taken.enchant_id,
             price,
             expires_tick: now_tick.saturating_add(LISTING_TTL_TICKS),
         });
@@ -193,7 +208,13 @@ impl AuctionHouse {
             return false;
         }
         if let Some(bags) = world.get_mut::<Bags>(buyer) {
-            if !grant_into(&mut bags.inventory, &listing.item_id, listing.count) {
+            let stack = InvStack {
+                item_id: listing.item_id.clone(),
+                count: listing.count,
+                durability: listing.durability,
+                enchant_id: listing.enchant_id.clone(),
+            };
+            if put_stack(&mut bags.inventory, stack).is_err() {
                 events.push(SimEvent::Toast {
                     message: "Bags are full.".into(),
                 });
@@ -218,13 +239,12 @@ impl AuctionHouse {
                 progress.copper = progress.copper.saturating_add(listing.price);
             }
         } else {
-            mail.deliver_system(
+            mail.deliver_system_ex(
                 &listing.seller_durable,
                 "Auction House",
                 "Auction sold",
                 listing.price,
                 None,
-                0,
             );
         }
         self.listings.remove(idx);
@@ -267,30 +287,40 @@ impl AuctionHouse {
             return false;
         }
         let listing = self.listings.remove(idx);
+        let attachment = MailAttachment {
+            item_id: listing.item_id.clone(),
+            count: listing.count,
+            durability: listing.durability,
+            enchant_id: listing.enchant_id.clone(),
+        };
+        let return_stack = InvStack {
+            item_id: listing.item_id.clone(),
+            count: listing.count,
+            durability: listing.durability,
+            enchant_id: listing.enchant_id.clone(),
+        };
         if world.get::<ClassKit>(seller).is_some() {
             let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
-                grant_into(&mut bags.inventory, &listing.item_id, listing.count)
+                put_stack(&mut bags.inventory, return_stack).is_ok()
             } else {
                 false
             };
             if !returned {
-                mail.deliver_system(
+                mail.deliver_system_ex(
                     &listing.seller_durable,
                     "Auction House",
                     "Listing cancelled",
                     0,
-                    Some(listing.item_id),
-                    listing.count,
+                    Some(attachment),
                 );
             }
         } else {
-            mail.deliver_system(
+            mail.deliver_system_ex(
                 &listing.seller_durable,
                 "Auction House",
                 "Listing cancelled",
                 0,
-                Some(listing.item_id),
-                listing.count,
+                Some(attachment),
             );
         }
         events.push(SimEvent::Toast {
@@ -311,29 +341,44 @@ impl AuctionHouse {
                         || id == listing.seller_id
                 });
                 if let Some(seller) = seller_online {
+                    let attachment = MailAttachment {
+                        item_id: listing.item_id.clone(),
+                        count: listing.count,
+                        durability: listing.durability,
+                        enchant_id: listing.enchant_id.clone(),
+                    };
+                    let return_stack = InvStack {
+                        item_id: listing.item_id.clone(),
+                        count: listing.count,
+                        durability: listing.durability,
+                        enchant_id: listing.enchant_id.clone(),
+                    };
                     let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
-                        grant_into(&mut bags.inventory, &listing.item_id, listing.count)
+                        put_stack(&mut bags.inventory, return_stack).is_ok()
                     } else {
                         false
                     };
                     if !returned {
-                        mail.deliver_system(
+                        mail.deliver_system_ex(
                             &listing.seller_durable,
                             "Auction House",
                             "Listing expired",
                             0,
-                            Some(listing.item_id),
-                            listing.count,
+                            Some(attachment),
                         );
                     }
                 } else {
-                    mail.deliver_system(
+                    mail.deliver_system_ex(
                         &listing.seller_durable,
                         "Auction House",
                         "Listing expired",
                         0,
-                        Some(listing.item_id),
-                        listing.count,
+                        Some(MailAttachment {
+                            item_id: listing.item_id.clone(),
+                            count: listing.count,
+                            durability: listing.durability,
+                            enchant_id: listing.enchant_id.clone(),
+                        }),
                     );
                 }
             } else {
@@ -403,6 +448,8 @@ mod tests {
             seller_name: "Ada".into(),
             item_id: "silverleaf".into(),
             count: 1,
+            durability: None,
+            enchant_id: None,
             price: 40,
             expires_tick: 9999,
         });
@@ -428,6 +475,8 @@ mod tests {
             seller_name: "Ada".into(),
             item_id: "silverleaf".into(),
             count: 1,
+            durability: None,
+            enchant_id: None,
             price: 40,
             expires_tick: 9999,
         });
@@ -457,6 +506,8 @@ mod tests {
             seller_name: "Ada".into(),
             item_id: "silverleaf".into(),
             count: 1,
+            durability: None,
+            enchant_id: None,
             price: 40,
             expires_tick: 9999,
         });
@@ -465,5 +516,48 @@ mod tests {
         let mut events = Vec::new();
         assert!(ah.cancel(&mut world, &mut mail, 7, 1, &mut events));
         assert!(ah.listings.is_empty());
+    }
+
+    #[test]
+    fn list_and_cancel_returns_worn_enchant() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("ada".into());
+        }
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 20;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            let _ = grant_into(&mut bags.inventory, "worn_sword", 1);
+        }
+        let slot = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|x| x.item_id == "worn_sword"))
+            .unwrap();
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            if let Some(st) = bags.inventory[slot].as_mut() {
+                st.durability = Some(12);
+                st.enchant_id = Some("coarse_sharpening".into());
+            }
+        }
+        let mut ah = AuctionHouse::new();
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(ah.list_item(&mut world, 1, slot as u8, 1, 10, 0, &mut events));
+        assert!(ah.cancel(&mut world, &mut mail, 1, 1, &mut events));
+        let returned = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "worn_sword" && s.enchant_id.as_deref() == Some("coarse_sharpening"))
+            .unwrap();
+        assert_eq!(returned.durability, Some(12));
+        assert_eq!(returned.enchant_id.as_deref(), Some("coarse_sharpening"));
     }
 }
