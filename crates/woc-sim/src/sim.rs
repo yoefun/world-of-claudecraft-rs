@@ -648,6 +648,8 @@ impl Sim {
                 chest: bags.equipment.chest.clone(),
                 legs: bags.equipment.legs.clone(),
                 feet: bags.equipment.feet.clone(),
+                neck: bags.equipment.neck.clone(),
+                finger: bags.equipment.finger.clone(),
             })
             .unwrap_or_default();
 
@@ -832,6 +834,18 @@ impl Sim {
                 .and_then(|k| k.stance_id.clone())
                 .unwrap_or_default(),
             absorb: crate::combat::remaining_absorb(world, player_id),
+            attack_power: world
+                .get::<Combat>(player_id)
+                .map(|c| c.attack_damage)
+                .unwrap_or(0.0),
+            armor: world
+                .get::<Combat>(player_id)
+                .map(|c| c.armor)
+                .unwrap_or(0.0),
+            spell_power: world
+                .get::<Combat>(player_id)
+                .map(|c| c.spell_power)
+                .unwrap_or(0.0),
         }
     }
 

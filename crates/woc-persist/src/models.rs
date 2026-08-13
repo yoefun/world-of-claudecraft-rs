@@ -234,6 +234,10 @@ pub struct EquipmentDto {
     pub legs: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub neck: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finger: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

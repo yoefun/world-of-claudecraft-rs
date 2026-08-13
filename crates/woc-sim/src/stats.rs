@@ -71,6 +71,12 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
     if let Some(ref fid) = equipment.feet {
         add_gear_stats(fid, &mut ap, &mut armor, 0.0);
     }
+    if let Some(ref nid) = equipment.neck {
+        add_gear_stats(nid, &mut ap, &mut armor, 0.0);
+    }
+    if let Some(ref rid) = equipment.finger {
+        add_gear_stats(rid, &mut ap, &mut armor, 0.0);
+    }
 
     let (max_hp_pct, armor_pct, armor_flat, resource_pct) = talent_sums(&talents);
     armor = (armor + armor_flat) * (1.0 + armor_pct);
@@ -92,6 +98,7 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
     if let Some(c) = world.get_mut::<Combat>(player_id) {
         c.attack_damage = ap;
         c.armor = armor;
+        c.spell_power = 0.0;
     }
     if let Some(h) = world.get_mut::<Health>(player_id) {
         h.hp_max = hp_max;

@@ -88,6 +88,8 @@ pub struct Equipment {
     pub chest: Option<String>,
     pub legs: Option<String>,
     pub feet: Option<String>,
+    pub neck: Option<String>,
+    pub finger: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,6 +134,7 @@ pub struct Health {
 pub struct Combat {
     pub attack_damage: f32,
     pub armor: f32,
+    pub spell_power: f32,
     pub swing_timer: f32,
     pub ability_cd: f32,
     pub auto_attack: bool,

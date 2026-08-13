@@ -179,6 +179,8 @@ fn equip_from_dto(e: &EquipmentDto) -> Equipment {
         chest: e.chest.clone(),
         legs: e.legs.clone(),
         feet: e.feet.clone(),
+        neck: e.neck.clone(),
+        finger: e.finger.clone(),
     }
 }
 
@@ -190,6 +192,8 @@ fn equip_to_dto(e: &Equipment) -> EquipmentDto {
         chest: e.chest.clone(),
         legs: e.legs.clone(),
         feet: e.feet.clone(),
+        neck: e.neck.clone(),
+        finger: e.finger.clone(),
     }
 }
 

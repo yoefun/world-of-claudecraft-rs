@@ -76,6 +76,7 @@ fn insert_combat_blank(world: &mut World, id: EntityId, attack_damage: f32) {
         Combat {
             attack_damage,
             armor: 0.0,
+            spell_power: 0.0,
             swing_timer: 0.0,
             ability_cd: 0.0,
             auto_attack: false,
@@ -283,6 +284,7 @@ pub fn create_pet(
         Combat {
             attack_damage: def.attack_damage,
             armor: 0.0,
+            spell_power: 0.0,
             swing_timer: 0.0,
             ability_cd: 0.0,
             auto_attack: true,

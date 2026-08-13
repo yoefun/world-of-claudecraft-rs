@@ -22,6 +22,8 @@ fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
         ItemEquipSlot::Chest => EquipSlot::Chest,
         ItemEquipSlot::Legs => EquipSlot::Legs,
         ItemEquipSlot::Feet => EquipSlot::Feet,
+        ItemEquipSlot::Neck => EquipSlot::Neck,
+        ItemEquipSlot::Finger => EquipSlot::Finger,
     }
 }
 
@@ -33,6 +35,8 @@ fn equipment_slot_mut(equipment: &mut Equipment, slot: EquipSlot) -> &mut Option
         EquipSlot::Chest => &mut equipment.chest,
         EquipSlot::Legs => &mut equipment.legs,
         EquipSlot::Feet => &mut equipment.feet,
+        EquipSlot::Neck => &mut equipment.neck,
+        EquipSlot::Finger => &mut equipment.finger,
     }
 }
 

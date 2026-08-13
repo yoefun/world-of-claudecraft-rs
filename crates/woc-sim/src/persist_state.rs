@@ -54,6 +54,8 @@ impl PlayerPersistentState {
             && self.equipment.chest.is_none()
             && self.equipment.legs.is_none()
             && self.equipment.feet.is_none()
+            && self.equipment.neck.is_none()
+            && self.equipment.finger.is_none()
             && self.quests.is_empty()
             && self.talents.is_empty()
             && self.professions.is_empty()
