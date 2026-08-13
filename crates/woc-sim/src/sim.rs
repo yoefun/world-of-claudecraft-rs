@@ -258,7 +258,7 @@ impl Sim {
 
     /// Party invite by target player name.
     pub fn party_invite(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
-        let effects = self.parties.invite(player_id, name, &self.world);
+        let effects = self.parties.invite(player_id, name, &self.world, self.tick);
         map_party_effects(effects)
     }
 

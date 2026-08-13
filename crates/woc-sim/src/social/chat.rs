@@ -77,7 +77,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
         let mut roster = PartyRoster::new();
-        let _ = roster.invite(1, "Bob", &world);
+        let _ = roster.invite(1, "Bob", &world, 0);
         let _ = roster.accept(2, &world);
         (roster, world)
     }
