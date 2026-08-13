@@ -10,7 +10,7 @@ Manual. Requires a GPU client. CI does not run this.
 6. Bank an item and copper; mail copper; list then buy/cancel on the AH; gather + craft a salve or copper shortsword.
 7. Duel a player; honor increments.
 
-Footer reads `WoC-rs 1.4.0 · upstream 0.31.0` (`VERSION.toml`).
+Footer reads `WoC-rs 1.5.0 · upstream 0.31.0` (`VERSION.toml`).
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 
