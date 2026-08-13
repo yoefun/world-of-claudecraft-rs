@@ -1,7 +1,11 @@
 //! Player stat recalculation from class + gear + talents.
 
-use crate::entity::Entity;
+use std::collections::HashMap;
+
+use crate::ecs::components::{Bags, ClassKit, Combat, Health, Progress};
+use crate::ecs::World;
 use woc_content::{class_def, item, talent};
+use woc_protocol::EntityId;
 
 fn add_gear_stats(item_id: &str, ap: &mut f32, armor: &mut f32, weapon_fraction: f32) {
     if let Some(it) = item(item_id) {
@@ -10,12 +14,12 @@ fn add_gear_stats(item_id: &str, ap: &mut f32, armor: &mut f32, weapon_fraction:
     }
 }
 
-fn talent_sums(player: &Entity) -> (f32, f32, f32, f32) {
+fn talent_sums(talents: &HashMap<String, u32>) -> (f32, f32, f32, f32) {
     let mut max_hp_pct = 0.0;
     let mut armor_pct = 0.0;
     let mut armor_flat = 0.0;
     let mut resource_pct = 0.0;
-    for (id, rank) in &player.talents {
+    for (id, rank) in talents {
         let Some(def) = talent(id) else {
             continue;
         };
@@ -31,49 +35,72 @@ fn talent_sums(player: &Entity) -> (f32, f32, f32, f32) {
     (max_hp_pct, armor_pct, armor_flat, resource_pct)
 }
 
-pub fn recalc_player_stats(player: &mut Entity) {
-    let Some(class) = player.class_id else {
+pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
+    let Some(class) = world.get::<ClassKit>(player_id).and_then(|k| k.class_id) else {
         return;
     };
     let def = class_def(class);
+    let equipment = world
+        .get::<Bags>(player_id)
+        .map(|b| b.equipment.clone())
+        .unwrap_or_default();
+    let talents = world
+        .get::<Progress>(player_id)
+        .map(|p| p.talents.clone())
+        .unwrap_or_default();
+    let level = world
+        .get::<Health>(player_id)
+        .map(|h| h.level)
+        .unwrap_or(1);
+
     let mut ap = def.attack_power;
     let mut armor = 0.0_f32;
 
-    if let Some(ref wid) = player.equipment.main_hand {
+    if let Some(ref wid) = equipment.main_hand {
         add_gear_stats(wid, &mut ap, &mut armor, 1.0);
     }
-    if let Some(ref oid) = player.equipment.off_hand {
+    if let Some(ref oid) = equipment.off_hand {
         add_gear_stats(oid, &mut ap, &mut armor, 0.25);
     }
-    if let Some(ref hid) = player.equipment.head {
+    if let Some(ref hid) = equipment.head {
         add_gear_stats(hid, &mut ap, &mut armor, 0.0);
     }
-    if let Some(ref cid) = player.equipment.chest {
+    if let Some(ref cid) = equipment.chest {
         add_gear_stats(cid, &mut ap, &mut armor, 0.0);
     }
-    if let Some(ref lid) = player.equipment.legs {
+    if let Some(ref lid) = equipment.legs {
         add_gear_stats(lid, &mut ap, &mut armor, 0.0);
     }
-    if let Some(ref fid) = player.equipment.feet {
+    if let Some(ref fid) = equipment.feet {
         add_gear_stats(fid, &mut ap, &mut armor, 0.0);
     }
 
-    let (max_hp_pct, armor_pct, armor_flat, resource_pct) = talent_sums(player);
+    let (max_hp_pct, armor_pct, armor_flat, resource_pct) = talent_sums(&talents);
     armor = (armor + armor_flat) * (1.0 + armor_pct);
 
-    player.attack_damage = ap;
-    player.armor = armor;
-    let level = player.level;
-    let hp_max = (crate::types::player_hp(def.base_hp, level) + armor * 0.5) * (1.0 + max_hp_pct);
-    let ratio = if player.hp_max > 0.0 {
-        player.hp / player.hp_max
-    } else {
-        1.0
-    };
-    player.hp_max = hp_max;
-    player.hp = (hp_max * ratio).clamp(0.0, hp_max);
-    player.resource_max = def.resource_max * (1.0 + resource_pct);
-    if player.resource > player.resource_max {
-        player.resource = player.resource_max;
+    let hp_max =
+        (crate::types::player_hp(def.base_hp, level) + armor * 0.5) * (1.0 + max_hp_pct);
+    let resource_max = def.resource_max * (1.0 + resource_pct);
+
+    let (hp, hp_max_prev) = world
+        .get::<Health>(player_id)
+        .map(|h| (h.hp, h.hp_max))
+        .unwrap_or((hp_max, hp_max));
+    let ratio = if hp_max_prev > 0.0 { hp / hp_max_prev } else { 1.0 };
+    let new_hp = (hp_max * ratio).clamp(0.0, hp_max);
+
+    if let Some(c) = world.get_mut::<Combat>(player_id) {
+        c.attack_damage = ap;
+        c.armor = armor;
+    }
+    if let Some(h) = world.get_mut::<Health>(player_id) {
+        h.hp_max = hp_max;
+        h.hp = new_hp;
+    }
+    if let Some(k) = world.get_mut::<ClassKit>(player_id) {
+        k.resource_max = resource_max;
+        if k.resource > k.resource_max {
+            k.resource = k.resource_max;
+        }
     }
 }

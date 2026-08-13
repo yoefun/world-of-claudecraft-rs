@@ -44,28 +44,36 @@ impl WorldHost for Sim {
                 self.reindex();
             }
             InteractAction::LearnTalent { talent_id } => {
-                let _ = talents::learn(&mut self.entities, player_id, &talent_id, &mut self.events);
+                self.rebuild_world();
+                let _ = talents::learn(&mut self.world, player_id, &talent_id, &mut self.events);
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::RespecTalents => {
-                let _ = talents::respec(&mut self.entities, player_id, &mut self.events);
+                self.rebuild_world();
+                let _ = talents::respec(&mut self.world, player_id, &mut self.events);
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::BankDeposit { bag_slot, count } => {
+                self.rebuild_world();
                 let _ = bank::deposit(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     bag_slot,
                     count,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::BankWithdraw { bank_slot, count } => {
+                self.rebuild_world();
                 let _ = bank::withdraw(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     bank_slot,
                     count,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::MailSend {
                 to_name,
@@ -222,13 +230,15 @@ impl WorldHost for Sim {
                 );
             }
             other => {
+                self.rebuild_world();
                 handle_interact(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     target_id,
                     other,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
         }
     }

@@ -347,6 +347,13 @@ pub fn collect_pending_mob_kills(events: &[SimEvent], entities: &[Entity]) -> Ve
     out
 }
 
+fn sync_on_level_up(player: &mut Entity) {
+    let mut world = crate::ecs::World::new();
+    crate::ecs::spawn::sync_entity_to_world(&mut world, player);
+    crate::talents::on_level_up(&mut world, player.id);
+    crate::ecs::spawn::apply_world_to_entity(&world, player);
+}
+
 pub fn grant_xp(player: &mut Entity, amount: u32, events: &mut Vec<SimEvent>) {
     player.xp = player.xp.saturating_add(amount);
     loop {
@@ -368,7 +375,7 @@ pub fn grant_xp(player: &mut Entity, amount: u32, events: &mut Vec<SimEvent>) {
         events.push(SimEvent::Toast {
             message: format!("You reached level {}!", player.level),
         });
-        crate::talents::on_level_up(player);
+        sync_on_level_up(player);
         crate::entity::refresh_known_abilities(player);
     }
 }
@@ -400,25 +407,30 @@ pub fn spawn_mob_loot(
     id
 }
 
-pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimEvent>) {
+pub fn try_pickup_loot(
+    player_id: EntityId,
+    world: &mut World,
+    entities: &mut [Entity],
+    events: &mut Vec<SimEvent>,
+) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
         return;
     };
     let loot_ids: Vec<EntityId> = entities
         .iter()
-        .enumerate()
-        .filter(|(i, e)| {
-            *i != pi
-                && e.kind == EntityKind::Loot
+        .filter(|e| {
+            e.kind == EntityKind::Loot
                 && e.alive
                 // Profession gather nodes are harvested via Interact, not auto-loot.
                 && e.template_id
                     .as_deref()
                     .and_then(woc_content::gather_node)
                     .is_none()
-                && dist2d(&entities[pi], e) < crate::types::LOOT_RANGE
+                && crate::ecs::components::dist2d(world, player_id, e.id)
+                    .map(|d| d < crate::types::LOOT_RANGE)
+                    .unwrap_or(false)
         })
-        .map(|(_, e)| e.id)
+        .map(|e| e.id)
         .collect();
     for lid in loot_ids {
         let Some(li) = entities.iter().position(|e| e.id == lid) else {
@@ -427,15 +439,18 @@ pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mu
         let c = entities[li].loot_copper;
         let item = entities[li].loot_item.clone();
         if let Some(ref it) = item {
-            if crate::inventory::grant_item(&mut entities[pi], it, 1, events).is_err() {
+            if crate::inventory::grant_item(world, player_id, it, 1, events).is_err() {
                 events.push(SimEvent::Toast {
                     message: "Inventory full.".into(),
                 });
                 continue;
             }
-            crate::quests::on_inventory_changed(&mut entities[pi], events);
+            crate::quests::on_inventory_changed(world, player_id, events);
         }
         entities[li].alive = false;
+        if let Some(p) = world.get_mut::<crate::ecs::components::Progress>(player_id) {
+            p.copper = p.copper.saturating_add(c);
+        }
         entities[pi].copper = entities[pi].copper.saturating_add(c);
         events.push(SimEvent::Loot {
             player: player_id,

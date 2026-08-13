@@ -1,16 +1,26 @@
 //! Quest accept, credit, and turn-in.
 
-use crate::entity::Entity;
-use crate::entity::{QuestProgress, QuestState};
+use crate::ecs::components::{ClassKit, Health, Progress, QuestLog, QuestState};
+use crate::ecs::World;
+use crate::entity::QuestProgress;
 use crate::inventory::{grant_item, player_item_count, take_item};
+use crate::types::{player_hp, xp_to_next};
 use woc_content::{quest, QuestObjective, QUESTS};
-use woc_protocol::SimEvent;
+use woc_protocol::{EntityId, SimEvent};
 
-pub fn accept_quest(player: &mut Entity, quest_id: &str, events: &mut Vec<SimEvent>) -> bool {
+pub fn accept_quest(
+    world: &mut World,
+    player_id: EntityId,
+    quest_id: &str,
+    events: &mut Vec<SimEvent>,
+) -> bool {
     let Some(def) = quest(quest_id) else {
         return false;
     };
-    if player
+    let Some(log) = world.get::<QuestLog>(player_id) else {
+        return false;
+    };
+    if log
         .quest_log
         .iter()
         .any(|q| q.quest_id == quest_id && q.state != QuestState::Completed)
@@ -18,148 +28,218 @@ pub fn accept_quest(player: &mut Entity, quest_id: &str, events: &mut Vec<SimEve
         return false;
     }
     let counts = vec![0u32; def.objectives.len()];
-    player.quest_log.push(QuestProgress {
-        quest_id: quest_id.to_string(),
-        state: QuestState::Active,
-        counts,
-    });
+    if let Some(log) = world.get_mut::<QuestLog>(player_id) {
+        log.quest_log.push(QuestProgress {
+            quest_id: quest_id.to_string(),
+            state: QuestState::Active,
+            counts,
+        });
+    }
     events.push(SimEvent::QuestAccepted {
-        player: player.id,
+        player: player_id,
         quest_id: quest_id.to_string(),
     });
     events.push(SimEvent::Toast {
         message: format!("Accepted: {}", def.name),
     });
-    recompute_ready(player, events);
+    recompute_ready(world, player_id, events);
     true
 }
 
-pub fn on_mob_killed(player: &mut Entity, mob_template_id: &str, events: &mut Vec<SimEvent>) {
-    for qp in player.quest_log.iter_mut() {
-        if qp.state != QuestState::Active {
-            continue;
+pub fn on_mob_killed(
+    world: &mut World,
+    player_id: EntityId,
+    mob_template_id: &str,
+    events: &mut Vec<SimEvent>,
+) {
+    let updates: Vec<(String, usize, u32, u32, String)> = world
+        .get::<QuestLog>(player_id)
+        .map(|log| {
+            log.quest_log
+                .iter()
+                .filter(|qp| qp.state == QuestState::Active)
+                .flat_map(|qp| {
+                    let Some(def) = quest(&qp.quest_id) else {
+                        return Vec::new();
+                    };
+                    def.objectives
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, obj)| {
+                            if let QuestObjective::Kill {
+                                mob_id,
+                                count,
+                                label,
+                            } = obj
+                            {
+                                if *mob_id != mob_template_id {
+                                    return None;
+                                }
+                                if qp.counts.get(i).copied().unwrap_or(0) >= *count {
+                                    return None;
+                                }
+                                Some((
+                                    qp.quest_id.clone(),
+                                    i,
+                                    qp.counts.get(i).copied().unwrap_or(0) + 1,
+                                    *count,
+                                    (*label).to_string(),
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    for (quest_id, i, current, required, label) in updates {
+        if let Some(log) = world.get_mut::<QuestLog>(player_id) {
+            if let Some(qp) = log.quest_log.iter_mut().find(|q| q.quest_id == quest_id) {
+                if qp.state == QuestState::Active {
+                    qp.counts[i] = current;
+                    events.push(SimEvent::QuestProgress {
+                        player: player_id,
+                        quest_id: qp.quest_id.clone(),
+                        objective_index: i as u32,
+                        current,
+                        required,
+                        text: format!("{label}: {current}/{required}"),
+                    });
+                }
+            }
         }
-        let Some(def) = quest(&qp.quest_id) else {
-            continue;
-        };
-        for (i, obj) in def.objectives.iter().enumerate() {
-            if let QuestObjective::Kill {
-                mob_id,
-                count,
-                label,
-            } = obj
-            {
-                if *mob_id != mob_template_id {
-                    continue;
-                }
-                if qp.counts[i] >= *count {
-                    continue;
-                }
-                qp.counts[i] += 1;
+    }
+    recompute_ready(world, player_id, events);
+}
+
+pub fn on_inventory_changed(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
+    let collect_targets: Vec<(String, usize, String, u32, String)> = world
+        .get::<QuestLog>(player_id)
+        .map(|log| {
+            log.quest_log
+                .iter()
+                .filter(|qp| qp.state == QuestState::Active)
+                .flat_map(|qp| {
+                    let Some(def) = quest(&qp.quest_id) else {
+                        return Vec::new();
+                    };
+                    def.objectives
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, obj)| {
+                            if let QuestObjective::Collect {
+                                item_id,
+                                count,
+                                label,
+                            } = obj
+                            {
+                                Some((
+                                    qp.quest_id.clone(),
+                                    i,
+                                    (*item_id).to_string(),
+                                    *count,
+                                    (*label).to_string(),
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    for (quest_id, i, item_id, count, label) in collect_targets {
+        let have = player_item_count(world, player_id, &item_id);
+        let new_count = have.min(count);
+        if let Some(log) = world.get_mut::<QuestLog>(player_id) {
+            let Some(qp) = log.quest_log.iter_mut().find(|q| q.quest_id == quest_id) else {
+                continue;
+            };
+            if qp.state != QuestState::Active {
+                continue;
+            }
+            if new_count != qp.counts[i] {
+                qp.counts[i] = new_count;
                 events.push(SimEvent::QuestProgress {
-                    player: player.id,
+                    player: player_id,
                     quest_id: qp.quest_id.clone(),
                     objective_index: i as u32,
                     current: qp.counts[i],
-                    required: *count,
+                    required: count,
                     text: format!("{label}: {}/{count}", qp.counts[i]),
                 });
             }
         }
     }
-    recompute_ready(player, events);
+    recompute_ready(world, player_id, events);
 }
 
-pub fn on_inventory_changed(player: &mut Entity, events: &mut Vec<SimEvent>) {
-    // Snapshot collect counts before mutating quest_log (avoid borrow clash).
-    let collect_targets: Vec<(String, usize, String, u32, String)> = player
-        .quest_log
-        .iter()
-        .filter(|qp| qp.state == QuestState::Active)
-        .filter_map(|qp| {
-            let def = quest(&qp.quest_id)?;
-            Some(
-                def.objectives
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, obj)| {
-                        if let QuestObjective::Collect {
-                            item_id,
-                            count,
-                            label,
-                        } = obj
-                        {
-                            Some((
-                                qp.quest_id.clone(),
-                                i,
-                                (*item_id).to_string(),
-                                *count,
-                                (*label).to_string(),
-                            ))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-            )
+pub fn on_talked_to(
+    world: &mut World,
+    player_id: EntityId,
+    npc_template_id: &str,
+    events: &mut Vec<SimEvent>,
+) {
+    let updates: Vec<(String, usize, String)> = world
+        .get::<QuestLog>(player_id)
+        .map(|log| {
+            log.quest_log
+                .iter()
+                .filter(|qp| qp.state == QuestState::Active)
+                .flat_map(|qp| {
+                    let Some(def) = quest(&qp.quest_id) else {
+                        return Vec::new();
+                    };
+                    def.objectives
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, obj)| {
+                            if let QuestObjective::Talk { npc_id, label } = obj {
+                                if *npc_id != npc_template_id || qp.counts.get(i).copied().unwrap_or(0) >= 1
+                                {
+                                    return None;
+                                }
+                                Some((qp.quest_id.clone(), i, (*label).to_string()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
         })
-        .flatten()
-        .collect();
+        .unwrap_or_default();
 
-    for (quest_id, i, item_id, count, label) in collect_targets {
-        let have = player_item_count(player, &item_id);
-        let new_count = have.min(count);
-        let Some(qp) = player.quest_log.iter_mut().find(|q| q.quest_id == quest_id) else {
-            continue;
-        };
-        if qp.state != QuestState::Active {
-            continue;
-        }
-        if new_count != qp.counts[i] {
-            qp.counts[i] = new_count;
-            events.push(SimEvent::QuestProgress {
-                player: player.id,
-                quest_id: qp.quest_id.clone(),
-                objective_index: i as u32,
-                current: qp.counts[i],
-                required: count,
-                text: format!("{label}: {}/{count}", qp.counts[i]),
-            });
-        }
-    }
-    recompute_ready(player, events);
-}
-
-pub fn on_talked_to(player: &mut Entity, npc_template_id: &str, events: &mut Vec<SimEvent>) {
-    for qp in player.quest_log.iter_mut() {
-        if qp.state != QuestState::Active {
-            continue;
-        }
-        let Some(def) = quest(&qp.quest_id) else {
-            continue;
-        };
-        for (i, obj) in def.objectives.iter().enumerate() {
-            if let QuestObjective::Talk { npc_id, label } = obj {
-                if *npc_id != npc_template_id || qp.counts[i] >= 1 {
-                    continue;
+    for (quest_id, i, label) in updates {
+        if let Some(log) = world.get_mut::<QuestLog>(player_id) {
+            if let Some(qp) = log.quest_log.iter_mut().find(|q| q.quest_id == quest_id) {
+                if qp.state == QuestState::Active {
+                    qp.counts[i] = 1;
+                    events.push(SimEvent::QuestProgress {
+                        player: player_id,
+                        quest_id: qp.quest_id.clone(),
+                        objective_index: i as u32,
+                        current: 1,
+                        required: 1,
+                        text: format!("{label}: 1/1"),
+                    });
                 }
-                qp.counts[i] = 1;
-                events.push(SimEvent::QuestProgress {
-                    player: player.id,
-                    quest_id: qp.quest_id.clone(),
-                    objective_index: i as u32,
-                    current: 1,
-                    required: 1,
-                    text: format!("{label}: 1/1"),
-                });
             }
         }
     }
-    recompute_ready(player, events);
+    recompute_ready(world, player_id, events);
 }
 
-pub fn recompute_ready(player: &mut Entity, _events: &mut Vec<SimEvent>) {
-    for qp in player.quest_log.iter_mut() {
+pub fn recompute_ready(world: &mut World, player_id: EntityId, _events: &mut Vec<SimEvent>) {
+    let Some(log) = world.get_mut::<QuestLog>(player_id) else {
+        return;
+    };
+    for qp in log.quest_log.iter_mut() {
         if qp.state == QuestState::Completed {
             continue;
         }
@@ -182,35 +262,105 @@ pub fn recompute_ready(player: &mut Entity, _events: &mut Vec<SimEvent>) {
     }
 }
 
-pub fn turn_in_quest(player: &mut Entity, quest_id: &str, events: &mut Vec<SimEvent>) -> bool {
-    let Some(idx) = player
-        .quest_log
-        .iter()
-        .position(|q| q.quest_id == quest_id && q.state == QuestState::Ready)
-    else {
+fn grant_xp_world(world: &mut World, player_id: EntityId, amount: u32, events: &mut Vec<SimEvent>) {
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.xp = p.xp.saturating_add(amount);
+    }
+    loop {
+        let level = world
+            .get::<Health>(player_id)
+            .map(|h| h.level)
+            .unwrap_or(1);
+        let xp = world
+            .get::<Progress>(player_id)
+            .map(|p| p.xp)
+            .unwrap_or(0);
+        let need = xp_to_next(level);
+        if xp < need {
+            break;
+        }
+        if let Some(p) = world.get_mut::<Progress>(player_id) {
+            p.xp -= need;
+        }
+        let class = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.class_id);
+        let armor = world
+            .get::<crate::ecs::components::Combat>(player_id)
+            .map(|c| c.armor)
+            .unwrap_or(0.0);
+        let new_level = world
+            .get::<Health>(player_id)
+            .map(|h| h.level + 1)
+            .unwrap_or(1);
+        if let Some(h) = world.get_mut::<Health>(player_id) {
+            h.level = new_level;
+            if let Some(class) = class {
+                let def = woc_content::class_def(class);
+                h.hp_max = player_hp(def.base_hp, h.level) + armor * 0.5;
+            }
+            h.hp = h.hp_max;
+            events.push(SimEvent::LevelUp {
+                player: player_id,
+                level: h.level,
+            });
+            events.push(SimEvent::Toast {
+                message: format!("You reached level {}!", h.level),
+            });
+        }
+        if let (Some(class), Some(kit)) = (
+            class,
+            world.get_mut::<ClassKit>(player_id),
+        ) {
+            kit.known_abilities = woc_content::known_abilities_at_level(class, new_level)
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
+        }
+        crate::talents::on_level_up(world, player_id);
+    }
+}
+
+pub fn turn_in_quest(
+    world: &mut World,
+    player_id: EntityId,
+    quest_id: &str,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let ready = world
+        .get::<QuestLog>(player_id)
+        .and_then(|log| {
+            log.quest_log
+                .iter()
+                .position(|q| q.quest_id == quest_id && q.state == QuestState::Ready)
+        });
+    let Some(idx) = ready else {
         return false;
     };
     let Some(def) = quest(quest_id) else {
         return false;
     };
 
-    // Consume collect items.
     for obj in def.objectives {
         if let QuestObjective::Collect { item_id, count, .. } = obj {
-            if take_item(player, item_id, *count, events).is_err() {
+            if take_item(world, player_id, item_id, *count, events).is_err() {
                 return false;
             }
         }
     }
 
-    player.quest_log[idx].state = QuestState::Completed;
-    player.copper = player.copper.saturating_add(def.reward.copper);
-    crate::combat::grant_xp(player, def.reward.xp, events);
+    if let Some(log) = world.get_mut::<QuestLog>(player_id) {
+        log.quest_log[idx].state = QuestState::Completed;
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper = p.copper.saturating_add(def.reward.copper);
+    }
+    grant_xp_world(world, player_id, def.reward.xp, events);
     if let Some(item_id) = def.reward.item_id {
-        let _ = grant_item(player, item_id, 1, events);
+        let _ = grant_item(world, player_id, item_id, 1, events);
     }
     events.push(SimEvent::QuestCompleted {
-        player: player.id,
+        player: player_id,
         quest_id: quest_id.to_string(),
     });
     events.push(SimEvent::Toast {

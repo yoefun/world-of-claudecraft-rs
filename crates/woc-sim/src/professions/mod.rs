@@ -107,7 +107,7 @@ pub fn gather_content(
         item_id: node.item_id.into(),
         count: node.count,
     });
-    crate::quests::on_inventory_changed(player, events);
+    notify_inventory_quests(player, events);
     Ok(())
 }
 
@@ -191,7 +191,7 @@ pub fn craft(player: &mut Entity, recipe_id: &str, events: &mut Vec<SimEvent>) -
         item_id: definition.product_item_id.into(),
         count: definition.product_count,
     });
-    crate::quests::on_inventory_changed(player, events);
+    notify_inventory_quests(player, events);
     Ok(())
 }
 
@@ -222,6 +222,13 @@ fn bump_skill(player: &mut Entity, profession_id: &str) {
         .entry(profession_id.to_string())
         .or_default();
     *skill = skill.saturating_add(1).min(definition.max_skill);
+}
+
+fn notify_inventory_quests(player: &mut Entity, events: &mut Vec<SimEvent>) {
+    let mut world = crate::ecs::World::new();
+    crate::ecs::spawn::sync_entity_to_world(&mut world, player);
+    crate::quests::on_inventory_changed(&mut world, player.id, events);
+    crate::ecs::spawn::apply_world_to_entity(&world, player);
 }
 
 #[cfg(test)]

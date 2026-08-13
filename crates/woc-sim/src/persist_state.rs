@@ -103,7 +103,7 @@ pub fn apply_player_state(player: &mut Entity, state: &PlayerPersistentState) {
         if !state.zone_id.is_empty() {
             player.zone_id = state.zone_id.clone();
         }
-        recalc_player_stats(player);
+        sync_recalc_player_stats(player);
         refresh_known_abilities(player);
         return;
     }
@@ -141,7 +141,7 @@ pub fn apply_player_state(player: &mut Entity, state: &PlayerPersistentState) {
     player.open_vendor_npc = None;
     player.threat.clear();
     refresh_known_abilities(player);
-    recalc_player_stats(player);
+    sync_recalc_player_stats(player);
     player.hp = player.hp_max;
     if let Some(rt) = player.resource_type {
         player.resource = match rt {
@@ -151,6 +151,13 @@ pub fn apply_player_state(player: &mut Entity, state: &PlayerPersistentState) {
             }
         };
     }
+}
+
+fn sync_recalc_player_stats(player: &mut Entity) {
+    let mut world = crate::ecs::World::new();
+    crate::ecs::spawn::sync_entity_to_world(&mut world, player);
+    recalc_player_stats(&mut world, player.id);
+    crate::ecs::spawn::apply_world_to_entity(&world, player);
 }
 
 fn pad_slots(mut slots: Vec<Option<InvStack>>, size: usize) -> Vec<Option<InvStack>> {

@@ -1,6 +1,9 @@
 //! Interaction commands: talk, quests, vendor, equip, use item, loot corpse.
 
-use crate::entity::{grant_into, remove_item, Entity};
+use crate::ecs::components::{Bags, Health, Identity, Progress};
+use crate::ecs::components::{dist2d, Equipment};
+use crate::ecs::World;
+use crate::entity::{grant_into, remove_item, AuraInstance};
 use crate::inventory::{grant_item, take_item};
 use crate::quests::{accept_quest, on_talked_to, quests_for_npc, turn_in_quest};
 use crate::stats::recalc_player_stats;
@@ -9,12 +12,6 @@ use woc_content::{item, npc, ItemEquipSlot, ItemKind};
 use woc_protocol::{
     EntityId, EntityKind, EquipSlot, InteractAction, SimEvent, VendorOfferSnapshot,
 };
-
-pub fn dist2d(a: &Entity, b: &Entity) -> f32 {
-    let dx = a.x - b.x;
-    let dz = a.z - b.z;
-    (dx * dx + dz * dz).sqrt()
-}
 
 fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
     match slot {
@@ -27,60 +24,59 @@ fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
     }
 }
 
-fn equipment_slot_mut(player: &mut Entity, slot: EquipSlot) -> &mut Option<String> {
+fn equipment_slot_mut(equipment: &mut Equipment, slot: EquipSlot) -> &mut Option<String> {
     match slot {
-        EquipSlot::MainHand => &mut player.equipment.main_hand,
-        EquipSlot::OffHand => &mut player.equipment.off_hand,
-        EquipSlot::Head => &mut player.equipment.head,
-        EquipSlot::Chest => &mut player.equipment.chest,
-        EquipSlot::Legs => &mut player.equipment.legs,
-        EquipSlot::Feet => &mut player.equipment.feet,
+        EquipSlot::MainHand => &mut equipment.main_hand,
+        EquipSlot::OffHand => &mut equipment.off_hand,
+        EquipSlot::Head => &mut equipment.head,
+        EquipSlot::Chest => &mut equipment.chest,
+        EquipSlot::Legs => &mut equipment.legs,
+        EquipSlot::Feet => &mut equipment.feet,
     }
 }
 
 pub fn handle_interact(
-    entities: &mut [Entity],
+    world: &mut World,
     player_id: EntityId,
     target_id: EntityId,
     action: InteractAction,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
-        return;
-    };
-    let Some(ti) = entities.iter().position(|e| e.id == target_id) else {
-        return;
-    };
-    if !entities[pi].alive {
+    if !world.get::<Health>(player_id).is_some_and(|h| h.alive) {
         return;
     }
 
     if matches!(action, InteractAction::CloseVendor) {
-        entities[pi].open_vendor_npc = None;
+        if let Some(bags) = world.get_mut::<Bags>(player_id) {
+            bags.open_vendor_npc = None;
+        }
         return;
     }
 
     match &action {
         InteractAction::Equip { bag_slot } => {
-            equip_from_bag(&mut entities[pi], *bag_slot, events);
+            equip_from_bag(world, player_id, *bag_slot, events);
             return;
         }
         InteractAction::Unequip { equip_slot } => {
-            unequip_to_bag(&mut entities[pi], *equip_slot, events);
+            unequip_to_bag(world, player_id, *equip_slot, events);
             return;
         }
         InteractAction::UseItem { bag_slot } => {
-            use_item_from_bag(&mut entities[pi], *bag_slot, events);
+            use_item_from_bag(world, player_id, *bag_slot, events);
             return;
         }
         InteractAction::LootCorpse { target_id: corpse } => {
-            loot_corpse(entities, player_id, *corpse, events);
+            loot_corpse(world, player_id, *corpse, events);
             return;
         }
         _ => {}
     }
 
-    if dist2d(&entities[pi], &entities[ti]) > INTERACT_RANGE {
+    if dist2d(world, player_id, target_id)
+        .map(|d| d > INTERACT_RANGE)
+        .unwrap_or(true)
+    {
         events.push(SimEvent::Toast {
             message: "Too far away.".into(),
         });
@@ -88,60 +84,78 @@ pub fn handle_interact(
     }
 
     match action {
-        InteractAction::Talk => talk(entities, pi, ti, events),
+        InteractAction::Talk => talk(world, player_id, target_id, events),
         InteractAction::AcceptQuest { quest_id } => {
-            let template = entities[ti].template_id.clone();
-            if entities[ti].kind != EntityKind::Npc {
+            let template = world
+                .get::<Identity>(target_id)
+                .and_then(|i| i.template_id.clone());
+            if world
+                .get::<Identity>(target_id)
+                .map(|i| i.kind)
+                != Some(EntityKind::Npc)
+            {
                 return;
             }
-            if accept_quest(&mut entities[pi], &quest_id, events) {
+            if accept_quest(world, player_id, &quest_id, events) {
                 if let Some(tid) = template.as_deref() {
-                    on_talked_to(&mut entities[pi], tid, events);
+                    on_talked_to(world, player_id, tid, events);
                 }
             }
         }
         InteractAction::TurnInQuest { quest_id } => {
-            if entities[ti].kind != EntityKind::Npc {
+            if world
+                .get::<Identity>(target_id)
+                .map(|i| i.kind)
+                != Some(EntityKind::Npc)
+            {
                 return;
             }
-            let _ = turn_in_quest(&mut entities[pi], &quest_id, events);
+            let _ = turn_in_quest(world, player_id, &quest_id, events);
         }
         InteractAction::Buy { item_id, count } => {
-            buy(entities, pi, ti, &item_id, count, events);
+            buy(world, player_id, target_id, &item_id, count, events);
         }
         InteractAction::Sell { bag_slot, count } => {
-            sell(entities, pi, ti, bag_slot, count, events);
+            sell(world, player_id, target_id, bag_slot, count, events);
         }
         _ => {}
     }
 }
 
-fn talk(entities: &mut [Entity], pi: usize, ti: usize, events: &mut Vec<SimEvent>) {
-    if entities[ti].kind != EntityKind::Npc {
+fn talk(world: &mut World, player_id: EntityId, target_id: EntityId, events: &mut Vec<SimEvent>) {
+    if world
+        .get::<Identity>(target_id)
+        .map(|i| i.kind)
+        != Some(EntityKind::Npc)
+    {
         return;
     }
-    let template_id = entities[ti].template_id.clone().unwrap_or_default();
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
     let def = npc(&template_id);
     let text = def
         .map(|d| d.greeting.to_string())
         .unwrap_or_else(|| "...".into());
-    let npc_eid = entities[ti].id;
     events.push(SimEvent::NpcDialog {
-        player: entities[pi].id,
-        npc_id: npc_eid,
+        player: player_id,
+        npc_id: target_id,
         text: text.clone(),
     });
     events.push(SimEvent::Toast { message: text });
 
     if let Some(d) = def {
         if d.is_vendor {
-            entities[pi].open_vendor_npc = Some(npc_eid);
+            if let Some(bags) = world.get_mut::<Bags>(player_id) {
+                bags.open_vendor_npc = Some(target_id);
+            }
             events.push(SimEvent::VendorOpen {
-                player: entities[pi].id,
-                npc_id: npc_eid,
+                player: player_id,
+                npc_id: target_id,
             });
         }
-        on_talked_to(&mut entities[pi], &template_id, events);
+        on_talked_to(world, player_id, &template_id, events);
         let available = quests_for_npc(&template_id);
         if !available.is_empty() && d.is_quest_giver {
             let names: Vec<&str> = available.iter().map(|q| q.name).collect();
@@ -153,17 +167,25 @@ fn talk(entities: &mut [Entity], pi: usize, ti: usize, events: &mut Vec<SimEvent
 }
 
 fn buy(
-    entities: &mut [Entity],
-    pi: usize,
-    ti: usize,
+    world: &mut World,
+    player_id: EntityId,
+    target_id: EntityId,
     item_id: &str,
     count: u32,
     events: &mut Vec<SimEvent>,
 ) {
-    if entities[ti].kind != EntityKind::Npc || count == 0 {
+    if world
+        .get::<Identity>(target_id)
+        .map(|i| i.kind)
+        != Some(EntityKind::Npc)
+        || count == 0
+    {
         return;
     }
-    let template_id = entities[ti].template_id.clone().unwrap_or_default();
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
     let Some(ndef) = npc(&template_id) else {
         return;
     };
@@ -174,34 +196,48 @@ fn buy(
         return;
     };
     let price = idef.vendor_buy.saturating_mul(count);
-    if entities[pi].copper < price {
+    let copper = world
+        .get::<Progress>(player_id)
+        .map(|p| p.copper)
+        .unwrap_or(0);
+    if copper < price {
         events.push(SimEvent::Toast {
             message: "Not enough copper.".into(),
         });
         return;
     }
-    if grant_item(&mut entities[pi], item_id, count, events).is_err() {
+    if grant_item(world, player_id, item_id, count, events).is_err() {
         events.push(SimEvent::Toast {
             message: "Inventory full.".into(),
         });
         return;
     }
-    entities[pi].copper -= price;
-    crate::quests::on_inventory_changed(&mut entities[pi], events);
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper -= price;
+    }
+    crate::quests::on_inventory_changed(world, player_id, events);
 }
 
 fn sell(
-    entities: &mut [Entity],
-    pi: usize,
-    ti: usize,
+    world: &mut World,
+    player_id: EntityId,
+    target_id: EntityId,
     bag_slot: u8,
     count: u32,
     events: &mut Vec<SimEvent>,
 ) {
-    if entities[ti].kind != EntityKind::Npc || count == 0 {
+    if world
+        .get::<Identity>(target_id)
+        .map(|i| i.kind)
+        != Some(EntityKind::Npc)
+        || count == 0
+    {
         return;
     }
-    let template_id = entities[ti].template_id.clone().unwrap_or_default();
+    let template_id = world
+        .get::<Identity>(target_id)
+        .and_then(|i| i.template_id.clone())
+        .unwrap_or_default();
     let Some(ndef) = npc(&template_id) else {
         return;
     };
@@ -209,26 +245,41 @@ fn sell(
         return;
     }
     let slot = bag_slot as usize;
-    let Some(Some(stack)) = entities[pi].inventory.get(slot).cloned() else {
+    let stack = world
+        .get::<Bags>(player_id)
+        .and_then(|b| b.inventory.get(slot))
+        .and_then(|s| s.clone());
+    let Some(stack) = stack else {
         return;
     };
     let take = count.min(stack.count);
     let Some(idef) = item(&stack.item_id) else {
         return;
     };
-    if take_item(&mut entities[pi], &stack.item_id, take, events).is_err() {
+    if take_item(world, player_id, &stack.item_id, take, events).is_err() {
         return;
     }
     let _ = ndef;
-    entities[pi].copper = entities[pi]
-        .copper
-        .saturating_add(idef.vendor_sell.saturating_mul(take));
-    crate::quests::on_inventory_changed(&mut entities[pi], events);
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.copper = p
+            .copper
+            .saturating_add(idef.vendor_sell.saturating_mul(take));
+    }
+    crate::quests::on_inventory_changed(world, player_id, events);
 }
 
-fn equip_from_bag(player: &mut Entity, bag_slot: u8, events: &mut Vec<SimEvent>) {
+fn equip_from_bag(
+    world: &mut World,
+    player_id: EntityId,
+    bag_slot: u8,
+    events: &mut Vec<SimEvent>,
+) {
     let slot = bag_slot as usize;
-    let Some(Some(stack)) = player.inventory.get(slot).cloned() else {
+    let stack = world
+        .get::<Bags>(player_id)
+        .and_then(|b| b.inventory.get(slot))
+        .and_then(|s| s.clone());
+    let Some(stack) = stack else {
         return;
     };
     let Some(idef) = item(&stack.item_id) else {
@@ -240,46 +291,76 @@ fn equip_from_bag(player: &mut Entity, bag_slot: u8, events: &mut Vec<SimEvent>)
         });
         return;
     };
-    if player.level < idef.level_req {
+    let level = world
+        .get::<Health>(player_id)
+        .map(|h| h.level)
+        .unwrap_or(1);
+    if level < idef.level_req {
         events.push(SimEvent::Toast {
             message: format!("Requires level {}.", idef.level_req),
         });
         return;
     }
     let equip_slot = to_protocol_slot(content_slot);
-    if !remove_item(&mut player.inventory, &stack.item_id, 1) {
-        return;
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        if !remove_item(&mut bags.inventory, &stack.item_id, 1) {
+            return;
+        }
+        let previous =
+            equipment_slot_mut(&mut bags.equipment, equip_slot).replace(stack.item_id.clone());
+        if let Some(prev) = previous {
+            let _ = grant_into(&mut bags.inventory, &prev, 1);
+        }
     }
-    let previous = equipment_slot_mut(player, equip_slot).replace(stack.item_id.clone());
-    if let Some(prev) = previous {
-        let _ = grant_into(&mut player.inventory, &prev, 1);
-    }
-    recalc_player_stats(player);
+    recalc_player_stats(world, player_id);
     events.push(SimEvent::Equipped {
-        player: player.id,
+        player: player_id,
         item_id: stack.item_id,
         slot: equip_slot,
     });
 }
 
-fn unequip_to_bag(player: &mut Entity, equip_slot: EquipSlot, events: &mut Vec<SimEvent>) {
-    let item_id = equipment_slot_mut(player, equip_slot).take();
+fn unequip_to_bag(
+    world: &mut World,
+    player_id: EntityId,
+    equip_slot: EquipSlot,
+    events: &mut Vec<SimEvent>,
+) {
+    let item_id = world
+        .get_mut::<Bags>(player_id)
+        .and_then(|b| equipment_slot_mut(&mut b.equipment, equip_slot).take());
     let Some(item_id) = item_id else {
         return;
     };
-    if !grant_into(&mut player.inventory, &item_id, 1) {
-        *equipment_slot_mut(player, equip_slot) = Some(item_id);
+    let mut restored = false;
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        if grant_into(&mut bags.inventory, &item_id, 1) {
+            restored = true;
+        } else {
+            *equipment_slot_mut(&mut bags.equipment, equip_slot) = Some(item_id.clone());
+        }
+    }
+    if !restored {
         events.push(SimEvent::Toast {
             message: "Inventory full.".into(),
         });
         return;
     }
-    recalc_player_stats(player);
+    recalc_player_stats(world, player_id);
 }
 
-fn use_item_from_bag(player: &mut Entity, bag_slot: u8, events: &mut Vec<SimEvent>) {
+fn use_item_from_bag(
+    world: &mut World,
+    player_id: EntityId,
+    bag_slot: u8,
+    events: &mut Vec<SimEvent>,
+) {
     let slot = bag_slot as usize;
-    let Some(Some(stack)) = player.inventory.get(slot).cloned() else {
+    let stack = world
+        .get::<Bags>(player_id)
+        .and_then(|b| b.inventory.get(slot))
+        .and_then(|s| s.clone());
+    let Some(stack) = stack else {
         return;
     };
     let Some(idef) = item(&stack.item_id) else {
@@ -291,17 +372,32 @@ fn use_item_from_bag(player: &mut Entity, bag_slot: u8, events: &mut Vec<SimEven
         });
         return;
     }
-    if !remove_item(&mut player.inventory, &stack.item_id, 1) {
-        return;
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        if !remove_item(&mut bags.inventory, &stack.item_id, 1) {
+            return;
+        }
     }
-    let before = player.hp;
-    player.hp = (player.hp + idef.heal_hp).min(player.hp_max);
-    let healed = player.hp - before;
-    // Short HoT linger after consumable (≈3s at 4 HP/tick).
+    let before = world
+        .get::<Health>(player_id)
+        .map(|h| h.hp)
+        .unwrap_or(0.0);
+    let hp_max = world
+        .get::<Health>(player_id)
+        .map(|h| h.hp_max)
+        .unwrap_or(0.0);
+    if let Some(h) = world.get_mut::<Health>(player_id) {
+        h.hp = (h.hp + idef.heal_hp).min(hp_max);
+    }
+    let after = world
+        .get::<Health>(player_id)
+        .map(|h| h.hp)
+        .unwrap_or(before);
+    let healed = after - before;
     let hot_tick = (idef.heal_hp * 0.15).max(2.0);
-    crate::combat::apply_aura_entity(
-        player,
-        crate::entity::AuraInstance {
+    crate::combat::apply_aura(
+        world,
+        player_id,
+        AuraInstance {
             id: "consumable_renew".into(),
             remaining: 3.0,
             stacks: 1,
@@ -309,48 +405,49 @@ fn use_item_from_bag(player: &mut Entity, bag_slot: u8, events: &mut Vec<SimEven
             tick_interval: 1.0,
             tick_damage: 0.0,
             tick_heal: hot_tick,
-            source: player.id,
+            source: player_id,
         },
         events,
     );
     events.push(SimEvent::ItemLost {
-        player: player.id,
+        player: player_id,
         item_id: stack.item_id.clone(),
         count: 1,
     });
     events.push(SimEvent::Toast {
         message: format!("You restore {:.0} health.", healed),
     });
-    crate::quests::on_inventory_changed(player, events);
+    crate::quests::on_inventory_changed(world, player_id, events);
 }
 
 fn loot_corpse(
-    entities: &mut [Entity],
+    world: &World,
     player_id: EntityId,
     corpse_id: EntityId,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
-        return;
-    };
-    let Some(ci) = entities.iter().position(|e| e.id == corpse_id) else {
-        return;
-    };
-    if entities[ci].alive || entities[ci].kind != EntityKind::Mob {
+    if world
+        .get::<Identity>(corpse_id)
+        .map(|i| i.kind)
+        != Some(EntityKind::Mob)
+    {
         return;
     }
-    if dist2d(&entities[pi], &entities[ci]) > INTERACT_RANGE {
+    if world.get::<Health>(corpse_id).is_some_and(|h| h.alive) {
+        return;
+    }
+    if dist2d(world, player_id, corpse_id)
+        .map(|d| d > INTERACT_RANGE)
+        .unwrap_or(true)
+    {
         return;
     }
     let _ = events;
 }
 
-pub fn vendor_snapshot(
-    entities: &[Entity],
-    player: &Entity,
-) -> Option<woc_protocol::VendorSnapshot> {
-    let npc_id = player.open_vendor_npc?;
-    let npc_e = entities.iter().find(|e| e.id == npc_id)?;
+pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protocol::VendorSnapshot> {
+    let npc_id = world.get::<Bags>(player_id)?.open_vendor_npc?;
+    let npc_e = world.get::<Identity>(npc_id)?;
     let template = npc_e.template_id.as_deref()?;
     let def = npc(template)?;
     let stock = def
@@ -376,10 +473,13 @@ pub fn vendor_snapshot(
 mod tests {
     use super::*;
     use crate::entity::{create_player, grant_into};
+    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
     use woc_content::PlayerClass;
 
-    fn bag_slot_of(player: &Entity, item_id: &str) -> u8 {
-        player
+    fn bag_slot_of(world: &World, player_id: EntityId, item_id: &str) -> u8 {
+        world
+            .get::<Bags>(player_id)
+            .unwrap()
             .inventory
             .iter()
             .position(|s| s.as_ref().is_some_and(|st| st.item_id == item_id))
@@ -388,18 +488,20 @@ mod tests {
 
     #[test]
     fn use_consumable_restores_hp() {
-        let mut player = create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0);
-        player.hp = player.hp_max * 0.25;
-        let before = player.hp;
-        let before_count = crate::entity::count_item(&player.inventory, "baked_bread");
+        let mut entities = vec![create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0)];
+        entities[0].hp = entities[0].hp_max * 0.25;
+        let before = entities[0].hp;
+        let before_count = crate::entity::count_item(&entities[0].inventory, "baked_bread");
         assert!(before_count >= 1, "warrior starts with bread");
-        let slot = bag_slot_of(&player, "baked_bread");
+        let mut world = world_from_entities(&entities);
+        let slot = bag_slot_of(&world, 1, "baked_bread");
         let mut events = Vec::new();
-        use_item_from_bag(&mut player, slot, &mut events);
-        assert!(player.hp > before);
-        assert!(player.hp <= player.hp_max);
+        use_item_from_bag(&mut world, 1, slot, &mut events);
+        apply_world_to_entities(&world, &mut entities);
+        assert!(entities[0].hp > before);
+        assert!(entities[0].hp <= entities[0].hp_max);
         assert_eq!(
-            crate::entity::count_item(&player.inventory, "baked_bread"),
+            crate::entity::count_item(&entities[0].inventory, "baked_bread"),
             before_count - 1
         );
         assert!(events
@@ -409,27 +511,31 @@ mod tests {
 
     #[test]
     fn travelers_ration_heals() {
-        let mut player = create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0);
-        player.hp = 10.0;
-        assert!(grant_into(&mut player.inventory, "travelers_ration", 1));
-        let slot = bag_slot_of(&player, "travelers_ration");
+        let mut entities = vec![create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0)];
+        entities[0].hp = 10.0;
+        assert!(grant_into(&mut entities[0].inventory, "travelers_ration", 1));
+        let mut world = world_from_entities(&entities);
+        let slot = bag_slot_of(&world, 1, "travelers_ration");
         let mut events = Vec::new();
-        use_item_from_bag(&mut player, slot, &mut events);
-        let expected = (10.0_f32 + 80.0).min(player.hp_max);
-        assert!((player.hp - expected).abs() < 1e-3);
+        use_item_from_bag(&mut world, 1, slot, &mut events);
+        apply_world_to_entities(&world, &mut entities);
+        let expected = (10.0_f32 + 80.0).min(entities[0].hp_max);
+        assert!((entities[0].hp - expected).abs() < 1e-3);
     }
 
     #[test]
     fn refuse_low_level_equip() {
-        let mut player = create_player(1, "Noob", PlayerClass::Warrior, 0.0, 0.0);
-        assert_eq!(player.level, 1);
-        assert!(grant_into(&mut player.inventory, "veteran_helm", 1));
-        let slot = bag_slot_of(&player, "veteran_helm");
+        let mut entities = vec![create_player(1, "Noob", PlayerClass::Warrior, 0.0, 0.0)];
+        assert_eq!(entities[0].level, 1);
+        assert!(grant_into(&mut entities[0].inventory, "veteran_helm", 1));
+        let mut world = world_from_entities(&entities);
+        let slot = bag_slot_of(&world, 1, "veteran_helm");
         let mut events = Vec::new();
-        equip_from_bag(&mut player, slot, &mut events);
-        assert!(player.equipment.head.is_none());
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        apply_world_to_entities(&world, &mut entities);
+        assert!(entities[0].equipment.head.is_none());
         assert_eq!(
-            crate::entity::count_item(&player.inventory, "veteran_helm"),
+            crate::entity::count_item(&entities[0].inventory, "veteran_helm"),
             1
         );
         assert!(events.iter().any(|e| matches!(
@@ -440,34 +546,39 @@ mod tests {
 
     #[test]
     fn equip_head_and_offhand() {
-        let mut player = create_player(1, "Geared", PlayerClass::Warrior, 0.0, 0.0);
-        assert!(grant_into(&mut player.inventory, "recruit_cap", 1));
-        assert!(grant_into(&mut player.inventory, "wooden_buckler", 1));
+        let mut entities = vec![create_player(1, "Geared", PlayerClass::Warrior, 0.0, 0.0)];
+        assert!(grant_into(&mut entities[0].inventory, "recruit_cap", 1));
+        assert!(grant_into(&mut entities[0].inventory, "wooden_buckler", 1));
+        let mut world = world_from_entities(&entities);
         let mut events = Vec::new();
-        let head_slot = bag_slot_of(&player, "recruit_cap");
-        equip_from_bag(&mut player, head_slot, &mut events);
-        let oh_slot = bag_slot_of(&player, "wooden_buckler");
-        equip_from_bag(&mut player, oh_slot, &mut events);
-        assert_eq!(player.equipment.head.as_deref(), Some("recruit_cap"));
-        assert_eq!(player.equipment.off_hand.as_deref(), Some("wooden_buckler"));
+        let head_slot = bag_slot_of(&world, 1, "recruit_cap");
+        equip_from_bag(&mut world, 1, head_slot, &mut events);
+        let oh_slot = bag_slot_of(&world, 1, "wooden_buckler");
+        equip_from_bag(&mut world, 1, oh_slot, &mut events);
+        apply_world_to_entities(&world, &mut entities);
+        assert_eq!(entities[0].equipment.head.as_deref(), Some("recruit_cap"));
+        assert_eq!(
+            entities[0].equipment.off_hand.as_deref(),
+            Some("wooden_buckler")
+        );
     }
 
     #[test]
     fn use_item_via_interact_action() {
-        let mut player = create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0);
-        player.hp = 5.0;
-        assert!(grant_into(&mut player.inventory, "baked_bread", 1));
-        let slot = bag_slot_of(&player, "baked_bread");
-        let pid = player.id;
-        let mut entities = vec![player];
+        let mut entities = vec![create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0)];
+        entities[0].hp = 5.0;
+        assert!(grant_into(&mut entities[0].inventory, "baked_bread", 1));
+        let mut world = world_from_entities(&entities);
+        let slot = bag_slot_of(&world, 1, "baked_bread");
         let mut events = Vec::new();
         handle_interact(
-            &mut entities,
-            pid,
-            pid,
+            &mut world,
+            1,
+            1,
             InteractAction::UseItem { bag_slot: slot },
             &mut events,
         );
+        apply_world_to_entities(&world, &mut entities);
         assert!(entities[0].hp > 5.0);
     }
 }

@@ -211,7 +211,10 @@ pub fn create_player(id: EntityId, name: &str, class: PlayerClass, x: f32, z: f3
     for (item_id, count) in def.start_items {
         let _ = grant_into(&mut e.inventory, item_id, *count);
     }
-    crate::stats::recalc_player_stats(&mut e);
+    let mut world = crate::ecs::World::new();
+    crate::ecs::spawn::sync_entity_to_world(&mut world, &e);
+    crate::stats::recalc_player_stats(&mut world, id);
+    crate::ecs::spawn::apply_world_to_entity(&world, &mut e);
     e
 }
 

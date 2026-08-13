@@ -342,12 +342,16 @@ impl Sim {
         item_id: &str,
         count: u32,
     ) -> Result<(), &'static str> {
-        let Some(i) = self.entity_index(player_id) else {
-            return Err("no player");
-        };
-        let p = &mut self.entities[i];
-        crate::inventory::grant_item(p, item_id, count, &mut self.events)?;
-        crate::quests::on_inventory_changed(p, &mut self.events);
+        self.rebuild_world();
+        crate::inventory::grant_item(
+            &mut self.world,
+            player_id,
+            item_id,
+            count,
+            &mut self.events,
+        )?;
+        crate::quests::on_inventory_changed(&mut self.world, player_id, &mut self.events);
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
         Ok(())
     }
 
@@ -529,7 +533,15 @@ impl Sim {
                     if self.entities[pi].kind == EntityKind::Player {
                         grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
                         if let Some(ref tid) = reward.template_id {
-                            on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
+                            crate::ecs::spawn::sync_entity_to_world(
+                                &mut self.world,
+                                &self.entities[pi],
+                            );
+                            on_mob_killed(&mut self.world, rid, tid, &mut self.events);
+                            crate::ecs::spawn::apply_world_to_entity(
+                                &self.world,
+                                &mut self.entities[pi],
+                            );
                             crate::worldboss::on_boss_killed_entity(
                                 &mut self.entities[pi],
                                 tid,
@@ -561,8 +573,9 @@ impl Sim {
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
-            try_pickup_loot(pid, &mut self.entities, &mut self.events);
+            try_pickup_loot(pid, &mut self.world, &mut self.entities, &mut self.events);
         }
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
         self.reindex();
         self.rebuild_world();
 
@@ -656,7 +669,7 @@ impl Sim {
             })
             .unwrap_or_default();
 
-        let open_vendor = player.and_then(|p| vendor_snapshot(&self.entities, p));
+        let open_vendor = vendor_snapshot(&self.world, player_id);
 
         let auras = player
             .map(|p| {

@@ -1,19 +1,25 @@
 //! Inventory helpers exposed on Sim.
 
-use crate::entity::{count_item, grant_into, remove_item, Entity};
-use woc_protocol::SimEvent;
+use crate::ecs::components::Bags;
+use crate::ecs::World;
+use crate::entity::{count_item, grant_into, remove_item};
+use woc_protocol::{EntityId, SimEvent};
 
 pub fn grant_item(
-    player: &mut Entity,
+    world: &mut World,
+    player_id: EntityId,
     item_id: &str,
     count: u32,
     events: &mut Vec<SimEvent>,
 ) -> Result<(), &'static str> {
-    if !grant_into(&mut player.inventory, item_id, count) {
+    let Some(bags) = world.get_mut::<Bags>(player_id) else {
+        return Err("no player");
+    };
+    if !grant_into(&mut bags.inventory, item_id, count) {
         return Err("inventory full");
     }
     events.push(SimEvent::ItemGained {
-        player: player.id,
+        player: player_id,
         item_id: item_id.to_string(),
         count,
     });
@@ -21,22 +27,29 @@ pub fn grant_item(
 }
 
 pub fn take_item(
-    player: &mut Entity,
+    world: &mut World,
+    player_id: EntityId,
     item_id: &str,
     count: u32,
     events: &mut Vec<SimEvent>,
 ) -> Result<(), &'static str> {
-    if !remove_item(&mut player.inventory, item_id, count) {
+    let Some(bags) = world.get_mut::<Bags>(player_id) else {
+        return Err("no player");
+    };
+    if !remove_item(&mut bags.inventory, item_id, count) {
         return Err("not enough items");
     }
     events.push(SimEvent::ItemLost {
-        player: player.id,
+        player: player_id,
         item_id: item_id.to_string(),
         count,
     });
     Ok(())
 }
 
-pub fn player_item_count(player: &Entity, item_id: &str) -> u32 {
-    count_item(&player.inventory, item_id)
+pub fn player_item_count(world: &World, player_id: EntityId, item_id: &str) -> u32 {
+    world
+        .get::<Bags>(player_id)
+        .map(|b| count_item(&b.inventory, item_id))
+        .unwrap_or(0)
 }
