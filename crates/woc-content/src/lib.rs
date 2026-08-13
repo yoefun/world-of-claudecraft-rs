@@ -50,7 +50,10 @@ pub use quests::{quest, QuestDef, QuestObjective, QuestReward, QUESTS};
 pub use quests_zone2::ZONE2_QUESTS;
 pub use quests_zone3::ZONE3_QUESTS;
 pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
-pub use talents::{talent, TalentDef, TALENTS};
+pub use talents::{
+    format_talent_effect, points_spent_below_tier, talent, talent_tier_unlocked, TalentDef,
+    POINTS_PER_TIER, TALENTS,
+};
 pub use world_spatial::{
     canonical_zone_id, zone_at, zone_by_id, BiomeId, CampDef, HeightStamp, HubDef, LakeDef,
     ZoneBand, CAMPS, JAIL_TERRAIN_EDITS, LAKE_BLEND_RADIUS_MULT, SOWFIELD_FLAT_FALLOFF,

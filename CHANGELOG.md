@@ -7,6 +7,7 @@
 - Basic combat UX polish: keys **1–5** fire class kit slots; **Tab** cycles hostile targets; **Esc** clears target and stops auto-attack.
 - Protocol rev **5**: intent `clear_target`; snapshot `ability_bar` / `gcd` / `auto_attack` for the action-bar HUD.
 - Action bar shows known/locked kit abilities with CD/GCD state; aura strip on the bar; ability-hit / damage-taken combat toasts.
+- Advanced combat polish: talent **tier gates** (5 pts/tier), numbered spend (**1–3** in talent panel), effect/bonus summary on talent + character panels; **T** pet summon/dismiss for hunter/warlock; talent learn/respec toasts.
 - Procedural character / creature visual catalog (`woc-sim::visual_catalog`): class-, template-, and role-keyed mesh recipes (players, NPCs, mobs, pets, loot).
 - Bevy scene loading: Eastbrook building meshes from physics AABBs, hub beacons, zone-gate portal arches, campfire props; biome-tinted terrain bands + zone sky/ambient on travel.
 - Character create: rotating 3D class preview silhouette behind the UI panel.

@@ -92,6 +92,7 @@ pub(crate) fn collect_intent(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut host: ResMut<GameHost>,
+    ui: Res<UiFlags>,
 ) {
     // Preserve one-shot clear_target from Esc until the next sim/net step consumes it.
     let clear_target = host.pending_intent.clear_target;
@@ -126,7 +127,10 @@ pub(crate) fn collect_intent(
     if keys.just_pressed(KeyCode::KeyV) {
         intent.fly_toggle = true;
     }
-    intent.ability = ability_slot_from_keys(&keys);
+    // When the talent panel is open, digit keys spend points instead of casting.
+    if !ui.show_talents {
+        intent.ability = ability_slot_from_keys(&keys);
+    }
 
     if keys.just_pressed(KeyCode::Tab) {
         if let Some(id) = tab_cycle_from_snapshot(&host.snapshot, host.look_yaw) {
@@ -180,16 +184,50 @@ pub(crate) fn collect_intent(
 }
 
 fn first_available_talent_id(snap: &TickSnapshot) -> Option<String> {
-    talents_for_class(&snap.progress.class_id)
+    let class = snap.progress.class_id.as_str();
+    let ranks: Vec<(String, u32)> = snap
+        .talents
+        .iter()
+        .map(|t| (t.talent_id.clone(), t.rank))
+        .collect();
+    talents_for_class(class)
         .find(|def| {
-            snap.talents
+            let rank = ranks
                 .iter()
-                .find(|rank| rank.talent_id == def.id)
-                .map(|rank| rank.rank)
-                .unwrap_or(0)
-                < def.max_rank
+                .find(|(id, _)| id == def.id)
+                .map(|(_, r)| *r)
+                .unwrap_or(0);
+            rank < def.max_rank && woc_content::talent_tier_unlocked(class, &ranks, def)
         })
         .map(|def| def.id.to_string())
+}
+
+fn talent_id_at_index(snap: &TickSnapshot, index: usize) -> Option<String> {
+    talents_for_class(&snap.progress.class_id)
+        .nth(index)
+        .map(|def| def.id.to_string())
+}
+
+fn try_learn_talent(host: &mut GameHost, player_id: EntityId, talent_id: String) {
+    if host.snapshot.talent_points == 0 {
+        host.recent_toasts
+            .push(("No unspent talent points.".into(), 2.0));
+        return;
+    }
+    host.interact(
+        player_id,
+        InteractAction::LearnTalent {
+            talent_id: talent_id.clone(),
+        },
+    );
+    host.recent_toasts
+        .push((format!("Learning talent: {talent_id}"), 2.0));
+}
+
+fn local_pet_alive(snap: &TickSnapshot) -> bool {
+    snap.entities
+        .iter()
+        .any(|e| e.kind == EntityKind::Pet && e.alive)
 }
 
 pub(crate) fn handle_interact_keys(
@@ -256,19 +294,35 @@ pub(crate) fn handle_interact_keys(
     }
 
     let player_id = host.snapshot.player_id;
+    if ui.show_talents {
+        let slot = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
+            Some(0usize)
+        } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+            Some(1)
+        } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+            Some(2)
+        } else if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+            Some(3)
+        } else if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+            Some(4)
+        } else {
+            None
+        };
+        if let Some(idx) = slot {
+            if let Some(talent_id) = talent_id_at_index(&host.snapshot, idx) {
+                try_learn_talent(&mut host, player_id, talent_id);
+            } else {
+                host.recent_toasts
+                    .push((format!("No talent in slot {}.", idx + 1), 2.0));
+            }
+        }
+    }
     if ui.show_talents && (keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::KeyY)) {
-        if host.snapshot.talent_points == 0 {
+        if let Some(talent_id) = first_available_talent_id(&host.snapshot) {
+            try_learn_talent(&mut host, player_id, talent_id);
+        } else if host.snapshot.talent_points == 0 {
             host.recent_toasts
                 .push(("No unspent talent points.".into(), 2.0));
-        } else if let Some(talent_id) = first_available_talent_id(&host.snapshot) {
-            host.interact(
-                player_id,
-                InteractAction::LearnTalent {
-                    talent_id: talent_id.clone(),
-                },
-            );
-            host.recent_toasts
-                .push((format!("Learning talent: {talent_id}"), 2.0));
         } else {
             host.recent_toasts
                 .push(("No available class talent.".into(), 2.0));
@@ -277,6 +331,17 @@ pub(crate) fn handle_interact_keys(
     if ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
         host.interact(player_id, InteractAction::RespecTalents);
         host.recent_toasts.push(("Respeccing talents.".into(), 2.0));
+    }
+
+    // Pet toggle (hunter/warlock): T — when mail panel is closed so P stays mail-collect.
+    if !ui.show_mail && keys.just_pressed(KeyCode::KeyT) {
+        if local_pet_alive(&host.snapshot) {
+            host.interact(player_id, InteractAction::DismissPet);
+            host.recent_toasts.push(("Dismissing pet…".into(), 1.5));
+        } else {
+            host.interact(player_id, InteractAction::SummonPet);
+            host.recent_toasts.push(("Summoning pet…".into(), 1.5));
+        }
     }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
         if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
@@ -429,6 +494,22 @@ mod tests {
         assert_eq!(
             first_available_talent_id(&snap).as_deref(),
             Some("warrior_cruelty")
+        );
+    }
+
+    #[test]
+    fn first_available_skips_locked_tier_two() {
+        let mut snap = TickSnapshot::default();
+        snap.progress.class_id = "warrior".into();
+        snap.talent_points = 1;
+        // No points spent — tier 2 vitality must not be "first available".
+        assert_eq!(
+            first_available_talent_id(&snap).as_deref(),
+            Some("warrior_cruelty")
+        );
+        assert_eq!(
+            talent_id_at_index(&snap, 2).as_deref(),
+            Some("warrior_vitality")
         );
     }
 

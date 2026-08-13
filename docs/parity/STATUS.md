@@ -28,7 +28,7 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | `woc-persist` + auth API | done | R4 fields + deeds; WS load/save loop |
 | Client login / char select | done | |
 | Multi-ability kits | done | |
-| Talents / loadouts | done | 3/class; damage/hp/armor/resource effects |
+| Talents / loadouts | done | 3/class; tier gates; numbered spend + pet key; damage/hp/armor/resource effects |
 | Pets | done | hunter/warlock |
 | Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen + Thornpeak quests/mobs |
 | Party + chat | done | kill credit within 40 yd + same instance |
