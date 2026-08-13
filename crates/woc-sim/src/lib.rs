@@ -1,5 +1,7 @@
 pub const TICK_HZ: u32 = 20;
 
+pub mod rng;
+
 pub fn ticks_from_seconds(seconds: f32) -> u32 {
     (seconds * TICK_HZ as f32).ceil() as u32
 }
