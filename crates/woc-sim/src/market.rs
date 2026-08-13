@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, remove_item};
+use crate::inventory::{grant_into, take_from_slot};
 use crate::mail::Mailbox;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
@@ -21,6 +21,8 @@ pub struct Listing {
     pub seller_name: String,
     pub item_id: String,
     pub count: u32,
+    pub durability: Option<u32>,
+    pub enchant_id: Option<String>,
     pub price: u32,
     pub expires_tick: u64,
 }
@@ -63,8 +65,8 @@ impl AuctionHouse {
                 count: l.count,
                 price: l.price,
                 mine: false,
-                durability: None,
-                enchant_id: None,
+                durability: l.durability,
+                enchant_id: l.enchant_id.clone(),
                 expires_tick: l.expires_tick,
             })
             .collect()
@@ -86,8 +88,8 @@ impl AuctionHouse {
                     count: l.count,
                     price: l.price,
                     mine,
-                    durability: None,
-                    enchant_id: None,
+                    durability: l.durability,
+                    enchant_id: l.enchant_id.clone(),
                     expires_tick: l.expires_tick,
                 }
             })
@@ -131,14 +133,21 @@ impl AuctionHouse {
             });
             return false;
         };
-        let take = count.min(stack.count).max(1);
-        if let Some(bags) = world.get_mut::<Bags>(seller) {
-            if !remove_item(&mut bags.inventory, &stack.item_id, take) {
-                return false;
-            }
-        } else {
+        if woc_content::item(&stack.item_id).is_some_and(|d| d.kind == woc_content::ItemKind::Quest)
+        {
+            events.push(SimEvent::Toast {
+                message: "This item is needed for a quest.".into(),
+            });
             return false;
         }
+        let take = count.min(stack.count).max(1);
+        let Some(taken) = (if let Some(bags) = world.get_mut::<Bags>(seller) {
+            take_from_slot(&mut bags.inventory, bag_slot, take)
+        } else {
+            None
+        }) else {
+            return false;
+        };
         if let Some(progress) = world.get_mut::<Progress>(seller) {
             progress.copper -= LISTING_FEE;
         }
@@ -154,8 +163,10 @@ impl AuctionHouse {
             seller_id: seller,
             seller_durable,
             seller_name,
-            item_id: stack.item_id,
-            count: take,
+            item_id: taken.item_id,
+            count: taken.count,
+            durability: taken.durability,
+            enchant_id: taken.enchant_id,
             price,
             expires_tick: now_tick.saturating_add(LISTING_TTL_TICKS),
         });
@@ -353,7 +364,7 @@ impl AuctionHouse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Durable, Progress};
+    use crate::ecs::components::{Bags, Durable, InvStack, Progress};
     use crate::inventory::grant_into;
     use crate::mail::Mailbox;
     use woc_content::PlayerClass;
@@ -409,6 +420,8 @@ mod tests {
             seller_name: "Ada".into(),
             item_id: "silverleaf".into(),
             count: 1,
+            durability: None,
+            enchant_id: None,
             price: 40,
             expires_tick: 9999,
         });
@@ -434,6 +447,8 @@ mod tests {
             seller_name: "Ada".into(),
             item_id: "silverleaf".into(),
             count: 1,
+            durability: None,
+            enchant_id: None,
             price: 40,
             expires_tick: 9999,
         });
@@ -463,6 +478,8 @@ mod tests {
             seller_name: "Ada".into(),
             item_id: "silverleaf".into(),
             count: 1,
+            durability: None,
+            enchant_id: None,
             price: 40,
             expires_tick: 9999,
         });
@@ -471,5 +488,88 @@ mod tests {
         let mut events = Vec::new();
         assert!(ah.cancel(&mut world, &mut mail, 7, 1, &mut events));
         assert!(ah.listings.is_empty());
+    }
+
+    #[test]
+    fn list_takes_the_named_slot_not_another_stack_of_the_same_id() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.inventory[0] = Some(InvStack {
+                item_id: "silverleaf".into(),
+                count: 3,
+                durability: None,
+                enchant_id: None,
+            });
+            bags.inventory[1] = Some(InvStack {
+                item_id: "silverleaf".into(),
+                count: 2,
+                durability: None,
+                enchant_id: None,
+            });
+        }
+        let mut ah = AuctionHouse::new();
+        let mut events = Vec::new();
+        assert!(ah.list_item(&mut world, 1, 1, 1, 12, 1, &mut events));
+        let bags = world.get::<Bags>(1).unwrap();
+        assert_eq!(bags.inventory[0].as_ref().unwrap().count, 3);
+        assert_eq!(bags.inventory[1].as_ref().unwrap().count, 1);
+        assert_eq!(ah.listings[0].count, 1);
+    }
+
+    #[test]
+    fn list_refuses_quest_items() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "boar_tusk", 1));
+        }
+        let slot = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "boar_tusk"))
+            .unwrap() as u8;
+        let mut ah = AuctionHouse::new();
+        let mut events = Vec::new();
+        assert!(!ah.list_item(&mut world, 1, slot, 1, 20, 1, &mut events));
+        assert!(ah.listings.is_empty());
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, 100);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "This item is needed for a quest."
+        )));
+    }
+
+    #[test]
+    fn list_stores_durability_and_enchant() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.inventory[0] = Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(7),
+                enchant_id: Some("coarse_sharpening".into()),
+            });
+        }
+        let mut ah = AuctionHouse::new();
+        let mut events = Vec::new();
+        assert!(ah.list_item(&mut world, 1, 0, 1, 25, 1, &mut events));
+        assert_eq!(ah.listings[0].durability, Some(7));
+        assert_eq!(
+            ah.listings[0].enchant_id.as_deref(),
+            Some("coarse_sharpening")
+        );
     }
 }
