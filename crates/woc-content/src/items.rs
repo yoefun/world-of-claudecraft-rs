@@ -49,6 +49,58 @@ pub enum WeaponStyle {
     Shield,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemQuality {
+    Poor,
+    Common,
+    Uncommon,
+    Rare,
+}
+
+pub fn quality_mult(q: ItemQuality) -> f32 {
+    match q {
+        ItemQuality::Poor => 0.9,
+        ItemQuality::Common => 1.0,
+        ItemQuality::Uncommon => 1.1,
+        ItemQuality::Rare => 1.2,
+    }
+}
+
+pub fn can_dual_wield(class: PlayerClass) -> bool {
+    matches!(class, PlayerClass::Warrior | PlayerClass::Rogue)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EnchantDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub attack_power: f32,
+    pub stamina: f32,
+    pub spell_power: f32,
+}
+
+pub static ENCHANTS: &[EnchantDef] = &[
+    EnchantDef {
+        id: "coarse_sharpening",
+        name: "Coarse Sharpening",
+        attack_power: 6.0,
+        stamina: 0.0,
+        spell_power: 0.0,
+    },
+    EnchantDef {
+        id: "minor_wizard_oil",
+        name: "Minor Wizard Oil",
+        attack_power: 0.0,
+        stamina: 0.0,
+        spell_power: 6.0,
+    },
+];
+
+pub fn enchant(id: &str) -> Option<&'static EnchantDef> {
+    ENCHANTS.iter().find(|e| e.id == id)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EquipDeny {
     NotGear,
@@ -82,6 +134,13 @@ pub struct ItemDef {
     pub allowed_classes: &'static [PlayerClass],
     pub stamina: f32,
     pub spell_power: f32,
+    pub quality: ItemQuality,
+    pub enchant_id: Option<&'static str>,
+}
+
+const fn with_quality(mut def: ItemDef, quality: ItemQuality) -> ItemDef {
+    def.quality = quality;
+    def
 }
 
 pub fn class_armor_cap(class: PlayerClass) -> ArmorClass {
@@ -194,6 +253,8 @@ const fn weapon_gear(
         allowed_classes: allowed,
         stamina: 0.0,
         spell_power,
+        quality: ItemQuality::Common,
+        enchant_id: None,
     }
 }
 
@@ -228,6 +289,8 @@ const fn jewelry(
         allowed_classes: allowed,
         stamina,
         spell_power,
+        quality: ItemQuality::Common,
+        enchant_id: None,
     }
 }
 
@@ -260,6 +323,8 @@ const fn armor(
         allowed_classes: &[],
         stamina: 0.0,
         spell_power: 0.0,
+        quality: ItemQuality::Common,
+        enchant_id: None,
     }
 }
 
@@ -289,6 +354,8 @@ const fn shield(
         allowed_classes: allowed,
         stamina: 0.0,
         spell_power: 0.0,
+        quality: ItemQuality::Common,
+        enchant_id: None,
     }
 }
 
@@ -317,6 +384,8 @@ const fn consumable(
         allowed_classes: &[],
         stamina: 0.0,
         spell_power: 0.0,
+        quality: ItemQuality::Common,
+        enchant_id: None,
     }
 }
 
@@ -339,7 +408,16 @@ const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell:
         allowed_classes: &[],
         stamina: 0.0,
         spell_power: 0.0,
+        quality: ItemQuality::Common,
+        enchant_id: None,
     }
+}
+
+const fn enchant_oil(id: &'static str, name: &'static str, enchant_id: &'static str) -> ItemDef {
+    let mut def = consumable(id, name, 15, 3, 0.0);
+    def.stack_size = 5;
+    def.enchant_id = Some(enchant_id);
+    def
 }
 
 pub static ZONE1_ITEMS: &[ItemDef] = &[
@@ -439,30 +517,36 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         ArmorClass::Cloth,
     ),
     shield("wooden_buckler", "Wooden Buckler", 16, 4, 8.0, WAR_PAL_SHA),
-    armor(
-        "veteran_helm",
-        "Veteran's Helm",
-        ItemEquipSlot::Head,
-        0,
-        12,
-        20.0,
-        5,
-        ArmorClass::Mail,
+    with_quality(
+        armor(
+            "veteran_helm",
+            "Veteran's Helm",
+            ItemEquipSlot::Head,
+            0,
+            12,
+            20.0,
+            5,
+            ArmorClass::Mail,
+        ),
+        ItemQuality::Uncommon,
     ),
     consumable("baked_bread", "Baked Bread", 5, 1, 40.0),
     consumable("spring_water", "Spring Water", 5, 1, 0.0),
     consumable("travelers_ration", "Traveler's Ration", 12, 3, 80.0),
     misc("wolf_fang", "Wolf Fang", ItemKind::Junk, 2),
     misc("boar_tusk", "Boar Tusk", ItemKind::Quest, 1),
-    armor(
-        "eastbrook_greaves",
-        "Eastbrook Greaves",
-        ItemEquipSlot::Legs,
-        0,
-        8,
-        18.0,
-        1,
-        ArmorClass::Leather,
+    with_quality(
+        armor(
+            "eastbrook_greaves",
+            "Eastbrook Greaves",
+            ItemEquipSlot::Legs,
+            0,
+            8,
+            18.0,
+            1,
+            ArmorClass::Leather,
+        ),
+        ItemQuality::Uncommon,
     ),
     // Profession reagents (herbalism gather yields).
     misc("silverleaf", "Silverleaf", ItemKind::Junk, 1),
@@ -474,50 +558,64 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
     // Mining / blacksmithing.
     misc("copper_ore", "Copper Ore", ItemKind::Junk, 1),
     misc("copper_bar", "Copper Bar", ItemKind::Junk, 2),
-    weapon(
-        "copper_shortsword",
-        "Copper Shortsword",
-        48,
-        12,
-        11.0,
-        WeaponStyle::OneHand,
-        WAR_PAL_ROGUE,
+    with_quality(
+        weapon(
+            "copper_shortsword",
+            "Copper Shortsword",
+            48,
+            12,
+            11.0,
+            WeaponStyle::OneHand,
+            WAR_PAL_ROGUE,
+        ),
+        ItemQuality::Uncommon,
     ),
-    jewelry(
-        "fang_pendant",
-        "Fang Pendant",
-        ItemEquipSlot::Neck,
-        40,
-        10,
-        4.0,
-        0.0,
-        0.0,
-        1,
-        &[],
+    with_quality(
+        jewelry(
+            "fang_pendant",
+            "Fang Pendant",
+            ItemEquipSlot::Neck,
+            40,
+            10,
+            4.0,
+            0.0,
+            0.0,
+            1,
+            &[],
+        ),
+        ItemQuality::Uncommon,
     ),
-    jewelry(
-        "boar_tusk_ring",
-        "Boar Tusk Ring",
-        ItemEquipSlot::Finger,
-        48,
-        12,
-        3.0,
-        1.0,
-        0.0,
-        1,
-        &[],
+    with_quality(
+        jewelry(
+            "boar_tusk_ring",
+            "Boar Tusk Ring",
+            ItemEquipSlot::Finger,
+            48,
+            12,
+            3.0,
+            1.0,
+            0.0,
+            1,
+            &[],
+        ),
+        ItemQuality::Uncommon,
     ),
-    weapon_gear(
-        "crypt_cleaver",
-        "Crypt Cleaver",
-        96,
-        24,
-        16.0,
-        0.0,
-        3,
-        WeaponStyle::TwoHand,
-        WAR_PAL,
+    with_quality(
+        weapon_gear(
+            "crypt_cleaver",
+            "Crypt Cleaver",
+            96,
+            24,
+            16.0,
+            0.0,
+            3,
+            WeaponStyle::TwoHand,
+            WAR_PAL,
+        ),
+        ItemQuality::Rare,
     ),
+    enchant_oil("coarse_whetstone", "Coarse Whetstone", "coarse_sharpening"),
+    enchant_oil("minor_wizard_oil", "Minor Wizard Oil", "minor_wizard_oil"),
 ];
 
 /// Zone1 + zone2 item definitions.
@@ -571,5 +669,24 @@ mod tests {
             can_equip(item("wolf_fang").unwrap(), PlayerClass::Warrior, 1),
             Err(EquipDeny::NotGear)
         );
+    }
+
+    #[test]
+    fn dual_wield_classes() {
+        assert!(can_dual_wield(PlayerClass::Warrior));
+        assert!(can_dual_wield(PlayerClass::Rogue));
+        assert!(!can_dual_wield(PlayerClass::Mage));
+        assert!(!can_dual_wield(PlayerClass::Hunter));
+    }
+
+    #[test]
+    fn rare_hag_focus_and_oils() {
+        assert_eq!(item("hag_focus").unwrap().quality, ItemQuality::Rare);
+        assert_eq!(quality_mult(ItemQuality::Rare), 1.2);
+        assert_eq!(
+            item("coarse_whetstone").unwrap().enchant_id,
+            Some("coarse_sharpening")
+        );
+        assert!(enchant("coarse_sharpening").is_some());
     }
 }

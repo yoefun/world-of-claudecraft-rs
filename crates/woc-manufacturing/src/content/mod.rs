@@ -1,6 +1,6 @@
-pub mod enchants;
 #[cfg(test)]
 pub mod economy;
+pub mod enchants;
 pub mod items;
 pub mod nodes;
 pub mod recipes;

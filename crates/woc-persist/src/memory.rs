@@ -262,6 +262,7 @@ mod tests {
                 item_id: "wolf_pelt".into(),
                 count: 2,
                 durability: None,
+                enchant_id: None,
             })],
             equipment: EquipmentDto {
                 main_hand: Some("rusty_sword".into()),
@@ -283,6 +284,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
                 durability: None,
+                enchant_id: None,
             })],
             bank_copper: 0,
             honor: 125,

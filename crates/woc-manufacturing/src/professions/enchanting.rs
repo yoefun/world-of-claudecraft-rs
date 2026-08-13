@@ -1,15 +1,13 @@
+use super::skill::ProfessionSkills;
 use crate::content::enchants::{disenchant_yield, enchant_by_id, EnchantId};
 use crate::content::items::item_def;
 use crate::inventory::{Inventory, ItemStack};
 use crate::professions::types::{DenyReason, ProfessionId, Reagent};
-use super::skill::ProfessionSkills;
 
 const ENCHANT_SKILL_REQ: u16 = 0;
 
 fn has_reagents(inv: &Inventory, reagents: &[Reagent]) -> bool {
-    reagents
-        .iter()
-        .all(|r| inv.count(r.item) >= r.count)
+    reagents.iter().all(|r| inv.count(r.item) >= r.count)
 }
 
 fn remove_reagents(inv: &mut Inventory, reagents: &[Reagent]) -> bool {
@@ -212,14 +210,9 @@ mod tests {
 
         inv.instance_mut(instance).unwrap().enchant = Some(EnchantId::BracerMinorHealth);
 
-        let err = evaluate_apply_enchant(
-            instance,
-            EnchantId::ChestMinorStamina,
-            false,
-            &inv,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_apply_enchant(instance, EnchantId::ChestMinorStamina, false, &inv, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::AlreadyEnchanted);
 
         let dust_before = inv.count(ItemId::ArcaneDust);
@@ -268,14 +261,8 @@ mod tests {
         )
         .unwrap();
 
-        let err = evaluate_apply_enchant(
-            instance,
-            EnchantId::ChestMinorStamina,
-            true,
-            &inv,
-            false,
-        )
-        .unwrap_err();
+        let err = evaluate_apply_enchant(instance, EnchantId::ChestMinorStamina, true, &inv, false)
+            .unwrap_err();
         assert_eq!(err, DenyReason::SameEnchant);
 
         let dust_before = inv.count(ItemId::ArcaneDust);
@@ -309,14 +296,9 @@ mod tests {
         .unwrap();
         let mut skills = ProfessionSkills::default();
 
-        let err = evaluate_apply_enchant(
-            instance,
-            EnchantId::BracerMinorHealth,
-            false,
-            &inv,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_apply_enchant(instance, EnchantId::BracerMinorHealth, false, &inv, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::WrongSlot);
 
         let dust_before = inv.count(ItemId::ArcaneDust);

@@ -39,8 +39,9 @@ pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{
-    can_equip, class_armor_cap, item, ArmorClass, EquipDeny, ItemDef, ItemEquipSlot, ItemKind,
-    WeaponStyle, ITEMS,
+    can_dual_wield, can_equip, class_armor_cap, enchant, item, quality_mult, ArmorClass,
+    EnchantDef, EquipDeny, ItemDef, ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS,
+    ITEMS,
 };
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};

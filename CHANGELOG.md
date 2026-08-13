@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.13.0 — 2026-08-13
+
+### Added
+
+- **1.13.0 `gear-slots`:** Warrior/Rogue dual-wield routes a second OneHand into OffHand; Finger2 fills after Finger.
+- Catalog `ItemQuality` multipliers (Poor 0.9 / Common 1.0 / Uncommon 1.1 / Rare 1.2) on AP/armor/sta/SP.
+- Main-hand enchants from vendor oils: Coarse Whetstone (+6 AP), Minor Wizard Oil (+6 SP). Broken MH skips weapon AP and enchant stats.
+- Client C-sheet lists Finger2, quality prefixes, and MH enchant; unequip keys **1–9**.
+- Protocol rev stays **8** (`finger2`, `main_hand_enchant`, stack `enchant_id` are additive).
+
 ## 1.12.0 — 2026-08-13
 
 ### Added

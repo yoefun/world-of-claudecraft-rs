@@ -33,9 +33,7 @@ pub struct XorShift64 {
 
 impl XorShift64 {
     pub fn new(seed: u64) -> Self {
-        Self {
-            state: seed | 1,
-        }
+        Self { state: seed | 1 }
     }
 }
 

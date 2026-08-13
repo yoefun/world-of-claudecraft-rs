@@ -168,6 +168,7 @@ pub fn create_player(
             inventory,
             equipment,
             equipment_wear,
+            equipment_enchants: Default::default(),
             open_vendor_npc: None,
             buyback: Vec::new(),
         },

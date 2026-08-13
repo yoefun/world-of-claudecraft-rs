@@ -1,15 +1,15 @@
+use super::masterwork::masterwork_proc_chance;
+use super::skill::ProfessionSkills;
+use super::stations::in_station_range;
+use super::types::{
+    DenyReason, Reagent, RecipeDef, RecipeId, Vec2, CRAFT_BATCH_MAX,
+    CRAFT_GOLD_SINK_COPPER_PER_BUDGET,
+};
 use crate::content::recipes::recipe_by_id;
 use crate::gold::Gold;
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::ItemId;
 use crate::rng::Rng;
-use super::masterwork::masterwork_proc_chance;
-use super::skill::ProfessionSkills;
-use super::stations::in_station_range;
-use super::types::{
-    CRAFT_BATCH_MAX, CRAFT_GOLD_SINK_COPPER_PER_BUDGET, DenyReason, RecipeDef, RecipeId, Reagent,
-    Vec2,
-};
 
 pub fn base_of(item: ItemId) -> ItemId {
     match item {
@@ -36,13 +36,16 @@ fn available_count(inv: &Inventory, item: ItemId) -> u16 {
     if item != base_of(item) {
         return exact;
     }
-    exact + fine_substitute_for(item)
-        .map(|fine| inv.count(fine))
-        .unwrap_or(0)
+    exact
+        + fine_substitute_for(item)
+            .map(|fine| inv.count(fine))
+            .unwrap_or(0)
 }
 
 fn has_reagents(inv: &Inventory, reagents: &[Reagent], crafts: u16) -> bool {
-    reagents.iter().all(|r| available_count(inv, r.item) >= r.count.saturating_mul(crafts))
+    reagents
+        .iter()
+        .all(|r| available_count(inv, r.item) >= r.count.saturating_mul(crafts))
 }
 
 fn remove_reagent(inv: &mut Inventory, item: ItemId, count: u16) -> bool {
@@ -214,15 +217,9 @@ mod tests {
     fn missing_ore_does_not_charge_gold() {
         let inv = Inventory::with_capacity(4);
         let gold = Gold { copper: 100 };
-        let err = evaluate_craft_admission(
-            RecipeId::SmeltCopper,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_craft_admission(RecipeId::SmeltCopper, 1, field_pos(), &inv, &gold, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::MissingReagents);
 
         let mut inv = inv;
@@ -260,15 +257,8 @@ mod tests {
         let mut last_masterwork = None;
         let mut rng = ScriptedRng::from_seq(&[99]);
 
-        evaluate_craft_admission(
-            RecipeId::SmeltCopper,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap();
+        evaluate_craft_admission(RecipeId::SmeltCopper, 1, field_pos(), &inv, &gold, false)
+            .unwrap();
 
         let grant = complete_craft(
             RecipeId::SmeltCopper,
@@ -303,15 +293,8 @@ mod tests {
         let mut last_masterwork = None;
         let mut rng = ScriptedRng::from_seq(&[99]);
 
-        evaluate_craft_admission(
-            RecipeId::SmeltCopper,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap();
+        evaluate_craft_admission(RecipeId::SmeltCopper, 1, field_pos(), &inv, &gold, false)
+            .unwrap();
 
         let grant = complete_craft(
             RecipeId::SmeltCopper,
@@ -383,15 +366,8 @@ mod tests {
         .unwrap();
         let gold = Gold { copper: 100 };
 
-        evaluate_craft_admission(
-            RecipeId::SmeltCopper,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap();
+        evaluate_craft_admission(RecipeId::SmeltCopper, 1, field_pos(), &inv, &gold, false)
+            .unwrap();
 
         let mut gold = gold;
         let mut skills = ProfessionSkills::default();
@@ -420,15 +396,9 @@ mod tests {
         let inv = Inventory::with_capacity(4);
         let gold = Gold { copper: 100 };
         let mut rng = ScriptedRng::from_seq(&[]);
-        let err = evaluate_craft_admission(
-            RecipeId::SmeltCopper,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_craft_admission(RecipeId::SmeltCopper, 1, field_pos(), &inv, &gold, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::MissingReagents);
         let _ = &mut rng;
     }

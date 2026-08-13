@@ -231,6 +231,7 @@ mod tests {
                 inventory: vec![None; crate::types::BACKPACK_SLOTS],
                 equipment: crate::ecs::components::Equipment::default(),
                 equipment_wear: crate::ecs::components::EquipmentWear::default(),
+                equipment_enchants: crate::ecs::components::EquipmentEnchants::default(),
                 open_vendor_npc: None,
                 buyback: Vec::new(),
             },

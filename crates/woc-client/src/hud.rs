@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::{
-    can_equip, item, quest, talents::talents_for_class, ItemKind, PlayerClass, QuestObjective,
+    can_equip, enchant, item, quest, talents::talents_for_class, ItemKind, ItemQuality,
+    PlayerClass, QuestObjective,
 };
 use woc_protocol::{EntityId, InteractAction, QuestLogEntry, TickSnapshot, VendorOfferSnapshot};
 
@@ -262,9 +263,29 @@ fn bag_stack_label(item_id: &str, count: u32, durability: Option<u32>) -> String
 
 fn equipment_label(item_id: Option<&str>, durability: Option<u32>) -> String {
     match item_id {
-        Some(id) => gear_durability_text(id, durability).unwrap_or_else(|| id.to_string()),
+        Some(id) => {
+            let base = gear_durability_text(id, durability)
+                .or_else(|| item(id).map(|d| d.name.to_string()))
+                .unwrap_or_else(|| id.to_string());
+            match item(id).map(|d| d.quality) {
+                Some(ItemQuality::Uncommon) => format!("Uncommon {base}"),
+                Some(ItemQuality::Rare) => format!("Rare {base}"),
+                Some(ItemQuality::Poor) => format!("Poor {base}"),
+                _ => base,
+            }
+        }
         None => "—".into(),
     }
+}
+
+fn main_hand_label(eq: &woc_protocol::EquipmentSnapshot) -> String {
+    let mut label = equipment_label(eq.main_hand.as_deref(), eq.main_hand_durability);
+    if let Some(eid) = eq.main_hand_enchant.as_deref() {
+        if let Some(def) = enchant(eid) {
+            label = format!("{label} [{}]", def.name);
+        }
+    }
+    label
 }
 
 fn talent_panel_text(snap: &TickSnapshot) -> String {
@@ -824,14 +845,14 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-8] Unequip slot",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip slot",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
             snap.progress.copper,
             snap.talent_points,
             talent_bonus_summary(snap),
-            equipment_label(eq.main_hand.as_deref(), eq.main_hand_durability),
+            main_hand_label(eq),
             equipment_label(eq.off_hand.as_deref(), eq.off_hand_durability),
             equipment_label(eq.head.as_deref(), eq.head_durability),
             equipment_label(eq.chest.as_deref(), eq.chest_durability),
@@ -839,6 +860,7 @@ pub(crate) fn update_hud(
             equipment_label(eq.feet.as_deref(), eq.feet_durability),
             equipment_label(eq.neck.as_deref(), None),
             equipment_label(eq.finger.as_deref(), None),
+            equipment_label(eq.finger2.as_deref(), None),
             snap.attack_power,
             snap.armor,
             snap.spell_power,
@@ -1186,12 +1208,14 @@ mod tests {
             item_id: "wolf_fang".into(),
             count: 3,
             durability: None,
+            enchant_id: None,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
             item_id: "silverleaf".into(),
             count: 4,
             durability: None,
+            enchant_id: None,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1384,5 +1408,13 @@ mod tests {
         let mage = format_action_bar(&snap);
         assert!(!mage.contains("[F] Stance"));
         assert!(!mage.contains("[F] Form"));
+    }
+
+    #[test]
+    fn jewelry_equipment_label_uses_quality_and_name() {
+        assert_eq!(
+            equipment_label(Some("fang_pendant"), None),
+            "Uncommon Fang Pendant"
+        );
     }
 }

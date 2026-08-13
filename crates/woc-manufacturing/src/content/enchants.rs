@@ -27,13 +27,16 @@ const WEAPON_MINOR_MIGHT_REAGENTS: &[Reagent] = &[Reagent {
     count: 5,
 }];
 
-const CHEST_MINOR_STAMINA_REAGENTS: &[Reagent] = &[Reagent {
-    item: ItemId::ArcaneDust,
-    count: 3,
-}, Reagent {
-    item: ItemId::ArcaneEssence,
-    count: 1,
-}];
+const CHEST_MINOR_STAMINA_REAGENTS: &[Reagent] = &[
+    Reagent {
+        item: ItemId::ArcaneDust,
+        count: 3,
+    },
+    Reagent {
+        item: ItemId::ArcaneEssence,
+        count: 1,
+    },
+];
 
 pub const ENCHANT_DEFS: &[EnchantDef] = &[
     EnchantDef {

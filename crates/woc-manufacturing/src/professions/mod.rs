@@ -10,7 +10,7 @@ pub mod stations;
 pub mod tools;
 pub mod types;
 
-pub use crafting::{complete_craft, evaluate_craft_admission, base_of, CraftGrant};
+pub use crafting::{base_of, complete_craft, evaluate_craft_admission, CraftGrant};
 pub use enchanting::{
     complete_apply_enchant, complete_disenchant, evaluate_apply_enchant, evaluate_disenchant,
     ApplyEnchantGrant, DisenchantGrant,

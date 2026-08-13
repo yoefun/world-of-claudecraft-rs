@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::ecs::components::{Bags, ClassKit, Combat, Equipment, EquipmentWear, Health, Progress};
 use crate::ecs::World;
-use woc_content::{class_def, item, talent};
+use woc_content::{class_def, enchant, item, quality_mult, talent};
 use woc_protocol::EntityId;
 
 fn add_gear_stats(
@@ -16,10 +16,11 @@ fn add_gear_stats(
     weapon_fraction: f32,
 ) {
     if let Some(it) = item(item_id) {
-        *ap += it.attack_power * weapon_fraction;
-        *armor += it.armor;
-        *sta += it.stamina;
-        *sp += it.spell_power;
+        let q = quality_mult(it.quality);
+        *ap += it.attack_power * q * weapon_fraction;
+        *armor += it.armor * q;
+        *sta += it.stamina * q;
+        *sp += it.spell_power * q;
     }
 }
 
@@ -53,10 +54,16 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
         return;
     };
     let def = class_def(class);
-    let (equipment, wear) = world
+    let (equipment, wear, mh_enchant) = world
         .get::<Bags>(player_id)
-        .map(|b| (b.equipment.clone(), b.equipment_wear.clone()))
-        .unwrap_or_else(|| (Equipment::default(), EquipmentWear::default()));
+        .map(|b| {
+            (
+                b.equipment.clone(),
+                b.equipment_wear.clone(),
+                b.equipment_enchants.main_hand.clone(),
+            )
+        })
+        .unwrap_or_else(|| (Equipment::default(), EquipmentWear::default(), None));
     let talents = world
         .get::<Progress>(player_id)
         .map(|p| p.talents.clone())
@@ -104,6 +111,16 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
     }
     if let Some(ref rid) = equipment.finger {
         add_gear_stats(rid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+    }
+    if let Some(ref r2) = equipment.finger2 {
+        add_gear_stats(r2, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+    }
+    if !slot_broken(wear.main_hand) {
+        if let Some(ench) = mh_enchant.as_deref().and_then(enchant) {
+            ap += ench.attack_power;
+            sta += ench.stamina;
+            sp += ench.spell_power;
+        }
     }
 
     let (max_hp_pct, armor_pct, armor_flat, resource_pct) = talent_sums(&talents);
@@ -176,8 +193,8 @@ mod tests {
         recalc_player_stats(&mut world, 1);
         let with_pendant = world.get::<Health>(1).unwrap().hp_max;
         assert!(
-            (with_pendant - base_hp - 8.0).abs() < 0.01,
-            "expected +8 hp_max from sta 4, got base {base_hp} with {with_pendant}"
+            (with_pendant - base_hp - 8.8).abs() < 0.01,
+            "expected +8.8 hp_max from sta 4 * uncommon 1.1, got base {base_hp} with {with_pendant}"
         );
     }
 
@@ -194,8 +211,50 @@ mod tests {
         recalc_player_stats(&mut world, 1);
         let with_focus = world.get::<Combat>(1).unwrap().spell_power;
         assert!(
-            (with_focus - base_sp - 8.0).abs() < 0.01,
-            "expected +8 spell_power from hag_focus, got base {base_sp} with {with_focus}"
+            (with_focus - base_sp - 9.6).abs() < 0.01,
+            "expected +9.6 spell_power from rare hag_focus, got base {base_sp} with {with_focus}"
+        );
+    }
+
+    #[test]
+    fn whetstone_enchant_adds_attack_power() {
+        use crate::ecs::components::Combat;
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        recalc_player_stats(&mut world, 1);
+        let base = world.get::<Combat>(1).unwrap().attack_damage;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_enchants.main_hand = Some("coarse_sharpening".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let enchanted = world.get::<Combat>(1).unwrap().attack_damage;
+        assert!(
+            (enchanted - base - 6.0).abs() < 0.01,
+            "expected +6 AP from coarse sharpening, got base {base} with {enchanted}"
+        );
+    }
+
+    #[test]
+    fn broken_mh_skips_enchant() {
+        use crate::ecs::components::Combat;
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_enchants.main_hand = Some("coarse_sharpening".into());
+            bags.equipment_wear.main_hand = Some(0);
+        }
+        recalc_player_stats(&mut world, 1);
+        let broken = world.get::<Combat>(1).unwrap().attack_damage;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_enchants.main_hand = None;
+        }
+        recalc_player_stats(&mut world, 1);
+        let broken_no_enchant = world.get::<Combat>(1).unwrap().attack_damage;
+        assert!(
+            (broken - broken_no_enchant).abs() < 0.01,
+            "broken MH must not receive enchant AP"
         );
     }
 

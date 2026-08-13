@@ -1,6 +1,6 @@
+use super::types::{NodeKind, ProfessionId};
 use crate::inventory::Inventory;
 use crate::item::ItemId;
-use super::types::{NodeKind, ProfessionId};
 
 pub fn tool_item_for(profession: ProfessionId) -> Option<ItemId> {
     match profession {
