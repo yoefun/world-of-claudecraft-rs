@@ -8,6 +8,7 @@ pub static ZONE3_QUESTS: &[QuestDef] = &[
         name: "Stalkers on the Ridge",
         giver_npc: "commander_elara",
         turn_in_npc: Some("commander_elara"),
+        requires: None,
         blurb: "Cull the ridge stalkers prowling the western approach to Highwatch.",
         objectives: &[QuestObjective::Kill {
             mob_id: "ridge_stalker",
@@ -25,6 +26,7 @@ pub static ZONE3_QUESTS: &[QuestDef] = &[
         name: "Tusks for Highwatch",
         giver_npc: "pathfinder_toren",
         turn_in_npc: Some("pathfinder_toren"),
+        requires: None,
         blurb: "Gather cragback tusks to reinforce the ice hooks along the ascent.",
         objectives: &[QuestObjective::Collect {
             item_id: "boar_tusk",
@@ -42,6 +44,7 @@ pub static ZONE3_QUESTS: &[QuestDef] = &[
         name: "Harpies over Highwatch",
         giver_npc: "commander_elara",
         turn_in_npc: Some("commander_elara"),
+        requires: Some("stalkers_on_the_ridge"),
         blurb: "Drive the gale harpies from the upper crags before they descend on the watchfires.",
         objectives: &[QuestObjective::Kill {
             mob_id: "gale_harpy",

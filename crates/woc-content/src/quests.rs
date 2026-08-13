@@ -36,6 +36,7 @@ pub struct QuestDef {
     pub name: &'static str,
     pub giver_npc: &'static str,
     pub turn_in_npc: Option<&'static str>,
+    pub requires: Option<&'static str>,
     pub blurb: &'static str,
     pub objectives: &'static [QuestObjective],
     pub reward: QuestReward,
@@ -47,6 +48,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
         name: "Wolves at the Gate",
         giver_npc: "captain_alden",
         turn_in_npc: Some("captain_alden"),
+        requires: Some("report_to_alden"),
         blurb: "Slay young wolves north of town.",
         objectives: &[QuestObjective::Kill {
             mob_id: "young_wolf",
@@ -64,6 +66,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
         name: "Boar Tusks",
         giver_npc: "captain_alden",
         turn_in_npc: Some("captain_alden"),
+        requires: Some("wolves_at_the_gate"),
         blurb: "Collect tusks from the eastern meadow.",
         objectives: &[QuestObjective::Collect {
             item_id: "boar_tusk",
@@ -81,6 +84,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
         name: "Report to Alden",
         giver_npc: "town_crier",
         turn_in_npc: Some("captain_alden"),
+        requires: None,
         blurb: "Speak with Captain Alden in the square.",
         objectives: &[QuestObjective::Talk {
             npc_id: "captain_alden",

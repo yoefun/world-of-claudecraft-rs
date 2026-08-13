@@ -199,6 +199,44 @@ mod tests {
     }
 
     #[test]
+    fn every_quest_requires_exists_and_is_acyclic() {
+        for q in QUESTS.iter() {
+            let Some(req) = q.requires else {
+                continue;
+            };
+            assert!(
+                QUESTS.iter().any(|o| o.id == req),
+                "quest {} requires missing {req}",
+                q.id
+            );
+            let mut seen = vec![q.id];
+            let mut cursor = q.requires;
+            while let Some(id) = cursor {
+                assert!(
+                    !seen.contains(&id),
+                    "quest {} has a requires cycle at {id}",
+                    q.id
+                );
+                seen.push(id);
+                cursor = quest(id).and_then(|d| d.requires);
+            }
+        }
+    }
+
+    #[test]
+    fn eastbrook_quest_chain_is_report_wolves_tusks() {
+        assert_eq!(quest("report_to_alden").unwrap().requires, None);
+        assert_eq!(
+            quest("wolves_at_the_gate").unwrap().requires,
+            Some("report_to_alden")
+        );
+        assert_eq!(
+            quest("boar_tusks").unwrap().requires,
+            Some("wolves_at_the_gate")
+        );
+    }
+
+    #[test]
     fn every_quest_objective_refs_exist() {
         for q in QUESTS.iter() {
             for obj in q.objectives {
