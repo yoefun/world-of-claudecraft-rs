@@ -133,6 +133,14 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
                 item_id: "recruit_tunic",
                 count: 1,
             },
+            VendorOffer {
+                item_id: "coarse_whetstone",
+                count: 20,
+            },
+            VendorOffer {
+                item_id: "minor_wizard_oil",
+                count: 20,
+            },
         ],
         trains: &["mining", "blacksmithing"],
     },
