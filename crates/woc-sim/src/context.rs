@@ -1,5 +1,7 @@
 //! SimContext seam: emit + entity lookup/mutate without the full `Sim` facade.
 
+use std::collections::HashMap;
+
 use crate::entity::Entity;
 use crate::rng::Rng;
 use woc_protocol::{EntityId, SimEvent};
@@ -10,6 +12,7 @@ use woc_protocol::{EntityId, SimEvent};
 pub struct SimContext<'a> {
     pub events: &'a mut Vec<SimEvent>,
     pub entities: &'a mut [Entity],
+    pub by_id: &'a HashMap<EntityId, usize>,
     pub rng: &'a mut Rng,
     pub next_id: &'a mut EntityId,
 }
@@ -20,11 +23,13 @@ impl<'a> SimContext<'a> {
     }
 
     pub fn entity(&self, id: EntityId) -> Option<&Entity> {
-        self.entities.iter().find(|e| e.id == id)
+        let i = *self.by_id.get(&id)?;
+        self.entities.get(i).filter(|e| e.id == id)
     }
 
     pub fn entity_mut(&mut self, id: EntityId) -> Option<&mut Entity> {
-        self.entities.iter_mut().find(|e| e.id == id)
+        let i = *self.by_id.get(&id)?;
+        self.entities.get_mut(i).filter(|e| e.id == id)
     }
 
     pub fn player_ids(&self) -> Vec<EntityId> {

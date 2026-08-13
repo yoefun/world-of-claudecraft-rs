@@ -44,6 +44,8 @@ pub struct Sim {
     pub seed: u32,
     pub rng: Rng,
     pub entities: Vec<Entity>,
+    /// Parallel index: `EntityId` → slot in `entities`. Kept in sync on spawn/despawn.
+    pub by_id: HashMap<EntityId, usize>,
     pub next_id: EntityId,
     /// Primary / local player id (offline host). `0` when the realm has no players yet.
     pub player_id: EntityId,
@@ -59,6 +61,31 @@ pub struct Sim {
 }
 
 impl Sim {
+    fn reindex(&mut self) {
+        self.by_id.clear();
+        for (i, e) in self.entities.iter().enumerate() {
+            self.by_id.insert(e.id, i);
+        }
+    }
+
+    fn push_entity(&mut self, e: Entity) {
+        self.by_id.insert(e.id, self.entities.len());
+        self.entities.push(e);
+    }
+
+    pub fn entity_index(&self, id: EntityId) -> Option<usize> {
+        self.by_id.get(&id).copied()
+    }
+
+    fn entity_ref(&self, id: EntityId) -> Option<&Entity> {
+        let i = self.entity_index(id)?;
+        self.entities.get(i).filter(|e| e.id == id)
+    }
+
+    fn entity_mut_ref(&mut self, id: EntityId) -> Option<&mut Entity> {
+        let i = self.entity_index(id)?;
+        self.entities.get_mut(i).filter(|e| e.id == id)
+    }
     /// Continuous overworld (all zone bands) with no player. Online sticky realm.
     pub fn new_empty_eastbrook() -> Self {
         let seed = WORLD_SEED;
@@ -67,11 +94,12 @@ impl Sim {
         let mut entities = Vec::new();
         populate_all_overworld(&mut entities, &mut next_id, &mut rng);
 
-        Self {
+        let mut sim = Self {
             tick: 0,
             seed,
             rng,
             entities,
+            by_id: HashMap::new(),
             next_id,
             player_id: 0,
             events: Vec::new(),
@@ -81,7 +109,9 @@ impl Sim {
             market: crate::market::AuctionHouse::new(),
             loot_rules: crate::social::LootRules::default(),
             pvp: crate::pvp::PvpState::default(),
-        }
+        };
+        sim.reindex();
+        sim
     }
 
     /// Start Eastbrook from content tables with one local player.
@@ -117,7 +147,7 @@ impl Sim {
             EASTBROOK.player_spawn_z,
         );
         player.y = Entity::ground_at(player.x, player.z);
-        self.entities.push(player);
+        self.push_entity(player);
         self.intents.insert(id, PlayerIntent::default());
         if self.player_id == 0 {
             self.player_id = id;
@@ -166,7 +196,7 @@ impl Sim {
         } else {
             player.y = Entity::ground_at(player.x, player.z);
         }
-        self.entities.push(player);
+        self.push_entity(player);
         self.intents.insert(id, PlayerIntent::default());
         if self.player_id == 0 {
             self.player_id = id;
@@ -179,7 +209,7 @@ impl Sim {
         &self,
         player_id: EntityId,
     ) -> Option<crate::persist_state::PlayerPersistentState> {
-        let player = self.entities.iter().find(|e| e.id == player_id)?;
+        let player = self.entity_ref(player_id)?;
         crate::persist_state::export_player_state(player)
     }
 
@@ -189,6 +219,7 @@ impl Sim {
         let _ = self.parties.on_despawn(player_id);
         self.entities
             .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
+        self.reindex();
         self.intents.remove(&player_id);
         if self.player_id == player_id {
             self.player_id = self
@@ -239,12 +270,12 @@ impl Sim {
     }
 
     pub fn player(&self) -> Option<&Entity> {
-        self.entities.iter().find(|e| e.id == self.player_id)
+        self.entity_ref(self.player_id)
     }
 
     pub fn player_mut(&mut self) -> Option<&mut Entity> {
         let id = self.player_id;
-        self.entities.iter_mut().find(|e| e.id == id)
+        self.entity_mut_ref(id)
     }
 
     /// Convenience: primary player copper (0 if none).
@@ -285,9 +316,10 @@ impl Sim {
         item_id: &str,
         count: u32,
     ) -> Result<(), &'static str> {
-        let Some(p) = self.entities.iter_mut().find(|e| e.id == player_id) else {
+        let Some(i) = self.entity_index(player_id) else {
             return Err("no player");
         };
+        let p = &mut self.entities[i];
         crate::inventory::grant_item(p, item_id, count, &mut self.events)?;
         crate::quests::on_inventory_changed(p, &mut self.events);
         Ok(())
@@ -306,6 +338,7 @@ impl Sim {
         SimContext {
             events: &mut self.events,
             entities: &mut self.entities,
+            by_id: &self.by_id,
             rng: &mut self.rng,
             next_id: &mut self.next_id,
         }
@@ -323,6 +356,7 @@ impl Sim {
     pub fn tick_all(&mut self) -> (TickSnapshot, Vec<SimEvent>) {
         self.events.clear();
         self.tick += 1;
+        self.reindex();
 
         let player_ids: Vec<EntityId> = self
             .entities
@@ -334,7 +368,7 @@ impl Sim {
         // Phase 1: apply intents + motion
         for &pid in &player_ids {
             let intent = self.intents.get(&pid).copied().unwrap_or_default();
-            let Some(pi) = self.entities.iter().position(|e| e.id == pid) else {
+            let Some(pi) = self.entity_index(pid) else {
                 continue;
             };
             if !self.entities[pi].alive {
@@ -389,6 +423,7 @@ impl Sim {
 
         // Pet AI (after player combat; keeps TICK_PHASES fingerprint stable).
         tick_pets(&mut self.entities, &mut self.events);
+        self.reindex();
 
         // Phase 3: mob AI + combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
@@ -399,7 +434,7 @@ impl Sim {
             .collect();
         for mid in &mob_ids {
             let focus = {
-                let Some(mob) = self.entities.iter().find(|e| e.id == *mid) else {
+                let Some(mob) = self.entity_ref(*mid) else {
                     continue;
                 };
                 nearest_alive_player(&self.entities, mob, 40.0)
@@ -409,15 +444,10 @@ impl Sim {
             }
         }
         for mid in &mob_ids {
-            let focus = self
-                .entities
-                .iter()
-                .find(|e| e.id == *mid)
-                .and_then(|m| m.target)
-                .or_else(|| {
-                    let mob = self.entities.iter().find(|e| e.id == *mid)?;
-                    nearest_alive_player(&self.entities, mob, 40.0)
-                });
+            let focus = self.entity_ref(*mid).and_then(|m| m.target).or_else(|| {
+                let mob = self.entity_ref(*mid)?;
+                nearest_alive_player(&self.entities, mob, 40.0)
+            });
             if let Some(pid) = focus {
                 update_mob_combat(*mid, pid, &mut self.entities, &mut self.events);
             }
@@ -437,7 +467,7 @@ impl Sim {
                 }
             }
             for rid in recipients {
-                if let Some(pi) = self.entities.iter().position(|e| e.id == rid) {
+                if let Some(pi) = self.entity_index(rid) {
                     if self.entities[pi].kind == EntityKind::Player {
                         grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
                         if let Some(ref tid) = reward.template_id {
@@ -460,6 +490,7 @@ impl Sim {
                 reward.z,
             );
         }
+        self.reindex();
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
         crate::death::on_player_death_check(&mut self.entities, &mut self.events);
 
@@ -472,6 +503,7 @@ impl Sim {
         for &pid in &player_ids {
             try_pickup_loot(pid, &mut self.entities, &mut self.events);
         }
+        self.reindex();
 
         // Phase 6: snapshot
         let viewer = if self.player_id != 0 {
@@ -489,7 +521,7 @@ impl Sim {
     }
 
     pub fn snapshot_for_player(&self, player_id: EntityId) -> TickSnapshot {
-        let player = self.entities.iter().find(|e| e.id == player_id);
+        let player = self.entity_ref(player_id);
         let level = player.map(|p| p.level).unwrap_or(1);
         let target_id = player.and_then(|p| p.target);
         let ability_cd = player.map(|p| p.ability_cd).unwrap_or(0.0);
@@ -869,6 +901,18 @@ mod tests {
             assert_eq!(ctx.player_ids().len(), 1);
         }
         assert_eq!(sim.events.len(), 1);
+    }
+
+    #[test]
+    fn entity_index_matches_scan() {
+        let sim = Sim::new_eastbrook("Idx", PlayerClass::Warrior);
+        for e in &sim.entities {
+            assert_eq!(
+                sim.entity_index(e.id).map(|i| sim.entities[i].id),
+                Some(e.id)
+            );
+        }
+        assert!(sim.entity_index(u32::MAX).is_none());
     }
 
     #[test]
