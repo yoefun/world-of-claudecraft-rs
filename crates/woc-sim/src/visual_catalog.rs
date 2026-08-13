@@ -69,6 +69,10 @@ pub struct VisualSpec {
     pub parts: &'static [VisualPart],
     /// Soft emissive boost (0–1) for wisps / loot / portals accents.
     pub emissive: f32,
+    /// World-space height above feet for nameplates / quest marks.
+    pub label_height: f32,
+    /// Gentle vertical bob while idle (wisps / herbs / loot).
+    pub bob: bool,
 }
 
 /// Zone atmosphere for ClearColor / ambient / terrain tint.
@@ -147,7 +151,21 @@ pub fn visual_key(kind: EntityKind, template_id: Option<&str>) -> &'static str {
             "warlock_imp" => "pet_imp",
             _ => "pet_generic",
         },
-        EntityKind::Loot => "loot_spark",
+        EntityKind::Loot => {
+            if matches!(
+                tid,
+                "eastbrook_meadow_silverleaf"
+                    | "eastbrook_brook_peacebloom"
+                    | "eastbrook_north_briar"
+            ) || tid.contains("silverleaf")
+                || tid.contains("peacebloom")
+                || tid.contains("briar")
+            {
+                "gather_herb"
+            } else {
+                "loot_spark"
+            }
+        }
     }
 }
 
@@ -179,6 +197,7 @@ fn spec_for_key(key: &str) -> VisualSpec {
         "pet_imp" => PET_IMP,
         "pet_generic" => PET_GENERIC,
         "loot_spark" => LOOT_SPARK,
+        "gather_herb" => GATHER_HERB,
         _ => MOB_GENERIC,
     }
 }
@@ -297,6 +316,8 @@ const PLAYER_WARRIOR: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.95, 0.34, 0.55, rgb(0.55, 0.22, 0.18)),
         head(1.85, 0.22, rgb(0.85, 0.70, 0.55)),
@@ -314,6 +335,8 @@ const PLAYER_PALADIN: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.05,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.95, 0.36, 0.55, rgb(0.75, 0.70, 0.35)),
         head(1.85, 0.22, rgb(0.85, 0.72, 0.55)),
@@ -331,6 +354,8 @@ const PLAYER_HUNTER: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.92, 0.32, 0.52, rgb(0.30, 0.48, 0.28)),
         head(1.78, 0.21, rgb(0.80, 0.65, 0.48)),
@@ -348,6 +373,8 @@ const PLAYER_ROGUE: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.90, 0.30, 0.50, rgb(0.22, 0.25, 0.28)),
         head(1.72, 0.20, rgb(0.75, 0.60, 0.48)),
@@ -365,6 +392,8 @@ const PLAYER_PRIEST: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.12,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.95, 0.33, 0.55, rgb(0.92, 0.90, 0.85)),
         head(1.85, 0.21, rgb(0.88, 0.75, 0.60)),
@@ -382,6 +411,8 @@ const PLAYER_SHAMAN: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.04,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.94, 0.34, 0.54, rgb(0.35, 0.45, 0.70)),
         head(1.82, 0.21, rgb(0.78, 0.62, 0.48)),
@@ -399,6 +430,8 @@ const PLAYER_MAGE: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.08,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.95, 0.32, 0.55, rgb(0.25, 0.40, 0.80)),
         head(1.85, 0.21, rgb(0.85, 0.72, 0.58)),
@@ -416,6 +449,8 @@ const PLAYER_WARLOCK: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.06,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.95, 0.33, 0.55, rgb(0.40, 0.22, 0.55)),
         head(1.85, 0.21, rgb(0.80, 0.65, 0.55)),
@@ -433,6 +468,8 @@ const PLAYER_DRUID: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.03,
+    label_height: 2.35,
+    bob: false,
     parts: parts![
         body(0.94, 0.34, 0.54, rgb(0.35, 0.55, 0.30)),
         head(1.82, 0.22, rgb(0.78, 0.60, 0.45)),
@@ -450,6 +487,8 @@ const NPC_QUEST: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.1,
+    label_height: 2.3,
+    bob: false,
     parts: parts![
         body(0.92, 0.32, 0.52, rgb(0.45, 0.55, 0.35)),
         head(1.78, 0.21, rgb(0.82, 0.68, 0.52)),
@@ -467,6 +506,8 @@ const NPC_VENDOR: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.3,
+    bob: false,
     parts: parts![
         body(0.90, 0.36, 0.50, rgb(0.55, 0.40, 0.28)),
         head(1.72, 0.22, rgb(0.80, 0.65, 0.50)),
@@ -484,6 +525,8 @@ const NPC_TOWN: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.3,
+    bob: false,
     parts: parts![
         body(0.90, 0.31, 0.50, rgb(0.50, 0.55, 0.45)),
         head(1.72, 0.20, rgb(0.82, 0.68, 0.52)),
@@ -495,6 +538,8 @@ const MOB_WOLF: VisualSpec = VisualSpec {
     family: VisualFamily::Wolf,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 1.15,
+    bob: false,
     parts: parts![
         VisualPart {
             shape: PartShape::Cuboid,
@@ -522,6 +567,8 @@ const MOB_BOAR: VisualSpec = VisualSpec {
     family: VisualFamily::Boar,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 1.15,
+    bob: false,
     parts: parts![
         VisualPart {
             shape: PartShape::Cuboid,
@@ -555,6 +602,8 @@ const MOB_CRAWLER: VisualSpec = VisualSpec {
     family: VisualFamily::Crawler,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 0.7,
+    bob: false,
     parts: parts![
         VisualPart {
             shape: PartShape::Sphere,
@@ -594,6 +643,8 @@ const MOB_TOAD: VisualSpec = VisualSpec {
     family: VisualFamily::Toad,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 0.85,
+    bob: false,
     parts: parts![
         VisualPart {
             shape: PartShape::Sphere,
@@ -615,6 +666,8 @@ const MOB_WISP: VisualSpec = VisualSpec {
     family: VisualFamily::Wisp,
     y_offset: 0.0,
     emissive: 0.55,
+    label_height: 1.5,
+    bob: true,
     parts: parts![
         VisualPart {
             shape: PartShape::Sphere,
@@ -636,6 +689,8 @@ const MOB_SHAMBLER: VisualSpec = VisualSpec {
     family: VisualFamily::Shambler,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.4,
+    bob: false,
     parts: parts![
         body(1.05, 0.42, 0.65, rgb(0.40, 0.45, 0.28)),
         head(1.95, 0.30, rgb(0.55, 0.50, 0.30)),
@@ -647,6 +702,8 @@ const MOB_TERROR: VisualSpec = VisualSpec {
     family: VisualFamily::Shambler,
     y_offset: 0.0,
     emissive: 0.15,
+    label_height: 3.2,
+    bob: false,
     parts: parts![
         body(1.35, 0.55, 0.85, rgb(0.35, 0.18, 0.28)),
         head(2.55, 0.38, rgb(0.45, 0.20, 0.30)),
@@ -670,6 +727,8 @@ const MOB_HARPY: VisualSpec = VisualSpec {
     family: VisualFamily::Harpy,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 2.2,
+    bob: true,
     parts: parts![
         body(1.10, 0.28, 0.45, rgb(0.55, 0.45, 0.55)),
         head(1.85, 0.20, rgb(0.80, 0.70, 0.55)),
@@ -693,6 +752,8 @@ const MOB_UNDEAD: VisualSpec = VisualSpec {
     family: VisualFamily::Humanoid,
     y_offset: 0.0,
     emissive: 0.08,
+    label_height: 2.4,
+    bob: false,
     parts: parts![
         body(1.05, 0.36, 0.60, rgb(0.55, 0.58, 0.50)),
         head(1.95, 0.24, rgb(0.75, 0.78, 0.70)),
@@ -710,6 +771,8 @@ const MOB_GENERIC: VisualSpec = VisualSpec {
     family: VisualFamily::Cuboid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 1.0,
+    bob: false,
     parts: parts![VisualPart {
         shape: PartShape::Cuboid,
         offset: [0.0, 0.35, 0.0],
@@ -723,6 +786,8 @@ const PET_WOLF: VisualSpec = VisualSpec {
     family: VisualFamily::Wolf,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 1.0,
+    bob: false,
     parts: parts![
         VisualPart {
             shape: PartShape::Cuboid,
@@ -744,6 +809,8 @@ const PET_IMP: VisualSpec = VisualSpec {
     family: VisualFamily::Imp,
     y_offset: 0.0,
     emissive: 0.2,
+    label_height: 1.4,
+    bob: true,
     parts: parts![
         body(0.55, 0.20, 0.28, rgb(0.70, 0.25, 0.20)),
         head(1.00, 0.18, rgb(0.75, 0.30, 0.22)),
@@ -767,6 +834,8 @@ const PET_GENERIC: VisualSpec = VisualSpec {
     family: VisualFamily::Cuboid,
     y_offset: 0.0,
     emissive: 0.0,
+    label_height: 0.9,
+    bob: false,
     parts: parts![VisualPart {
         shape: PartShape::Cuboid,
         offset: [0.0, 0.30, 0.0],
@@ -775,11 +844,48 @@ const PET_GENERIC: VisualSpec = VisualSpec {
     }],
 };
 
+const GATHER_HERB: VisualSpec = VisualSpec {
+    key: "gather_herb",
+    family: VisualFamily::Loot,
+    y_offset: 0.0,
+    emissive: 0.18,
+    label_height: 1.05,
+    bob: true,
+    parts: parts![
+        VisualPart {
+            shape: PartShape::Cylinder,
+            offset: [0.0, 0.25, 0.0],
+            size: [0.08, 0.45, 0.0],
+            color: rgb(0.25, 0.55, 0.22),
+        },
+        VisualPart {
+            shape: PartShape::Sphere,
+            offset: [0.12, 0.55, 0.0],
+            size: [0.16, 0.0, 0.0],
+            color: rgb(0.45, 0.85, 0.40),
+        },
+        VisualPart {
+            shape: PartShape::Sphere,
+            offset: [-0.10, 0.48, 0.08],
+            size: [0.14, 0.0, 0.0],
+            color: rgb(0.55, 0.90, 0.45),
+        },
+        VisualPart {
+            shape: PartShape::Sphere,
+            offset: [0.0, 0.62, -0.10],
+            size: [0.12, 0.0, 0.0],
+            color: rgb(0.70, 0.95, 0.55),
+        },
+    ],
+};
+
 const LOOT_SPARK: VisualSpec = VisualSpec {
     key: "loot_spark",
     family: VisualFamily::Loot,
     y_offset: 0.0,
     emissive: 0.35,
+    label_height: 0.85,
+    bob: true,
     parts: parts![
         VisualPart {
             shape: PartShape::Sphere,
@@ -864,6 +970,17 @@ mod tests {
             let spec = visual_spec(kind, tid);
             assert!(!spec.parts.is_empty(), "empty parts for {tid:?}");
         }
+    }
+
+    #[test]
+    fn gather_nodes_use_herb_visual() {
+        assert_eq!(
+            visual_key(EntityKind::Loot, Some("eastbrook_meadow_silverleaf")),
+            "gather_herb"
+        );
+        let spec = visual_spec(EntityKind::Loot, Some("eastbrook_brook_peacebloom"));
+        assert_eq!(spec.key, "gather_herb");
+        assert!(spec.bob);
     }
 
     #[test]

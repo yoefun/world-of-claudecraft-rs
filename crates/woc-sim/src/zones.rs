@@ -1,7 +1,9 @@
 //! Overworld zone transitions on the continuous strip.
 
 use crate::entity::{create_mob_from_template, create_npc_from_template, Entity};
-use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, MIREFEN, THORNPEAK};
+use woc_content::{
+    GatherNodeDef, ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK,
+};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Resolve a supported overworld zone to its spawn layout.
@@ -144,6 +146,37 @@ pub fn populate_all_overworld(
             }
         }
     }
+    spawn_gather_nodes(entities, next_id);
+}
+
+/// Place profession gather nodes as world entities (loot-kind + gather template).
+pub fn spawn_gather_nodes(entities: &mut Vec<Entity>, next_id: &mut EntityId) {
+    for node in GATHER_NODES {
+        if entities
+            .iter()
+            .any(|e| e.template_id.as_deref() == Some(node.id))
+        {
+            continue;
+        }
+        let id = *next_id;
+        *next_id = next_id.saturating_add(1);
+        entities.push(gather_entity(id, node));
+    }
+}
+
+fn gather_entity(id: EntityId, node: &GatherNodeDef) -> Entity {
+    let mut e = Entity::blank(
+        id,
+        EntityKind::Loot,
+        node.name,
+        Some(node.id),
+        node.x,
+        node.z,
+    );
+    e.zone_id = node.zone_id.to_string();
+    e.loot_item = Some(node.item_id.to_string());
+    e.loot_copper = 0;
+    e
 }
 
 #[cfg(test)]
@@ -230,6 +263,30 @@ mod tests {
             event,
             SimEvent::ZoneChanged { player: 1, zone_id } if zone_id == "mirefen"
         )));
+    }
+
+    #[test]
+    fn populate_spawns_gather_nodes() {
+        let mut entities = Vec::new();
+        let mut next_id = 1;
+        let mut rng = crate::rng::Rng::new(1);
+        populate_all_overworld(&mut entities, &mut next_id, &mut rng);
+        assert!(entities
+            .iter()
+            .any(|e| e.template_id.as_deref() == Some("eastbrook_meadow_silverleaf")));
+        assert!(entities
+            .iter()
+            .any(|e| e.template_id.as_deref() == Some("eastbrook_brook_peacebloom")));
+        let herbs = entities
+            .iter()
+            .filter(|e| {
+                e.kind == EntityKind::Loot
+                    && e.template_id
+                        .as_deref()
+                        .is_some_and(|t| t.contains("eastbrook_"))
+            })
+            .count();
+        assert!(herbs >= 3, "expected gather herbs, got {herbs}");
     }
 
     #[test]

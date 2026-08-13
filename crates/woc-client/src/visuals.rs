@@ -1,6 +1,7 @@
 //! Bevy mesh builders for procedural character / creature / scene visuals.
 
 use bevy::prelude::*;
+use woc_content::npc;
 use woc_protocol::{EntityId, EntityKind, EntitySnapshot};
 use woc_sim::{
     eastbrook_buildings, scene_markers, terrain_height, visual_spec, zone_atmosphere, Aabb,
@@ -12,7 +13,20 @@ use woc_sim::{
 pub(crate) struct SimVisual {
     pub(crate) id: EntityId,
     pub(crate) key: &'static str,
+    pub(crate) bob: bool,
 }
+
+/// Child mesh that belongs to the procedural body (not overhead markers).
+#[derive(Component)]
+pub(crate) struct VisualPartMesh;
+
+/// Floating quest / vendor cue above an NPC.
+#[derive(Component)]
+pub(crate) struct OverheadMarker;
+
+/// Ground selection ring under the current combat target.
+#[derive(Component)]
+pub(crate) struct TargetRing;
 
 /// Static world dressing (buildings, portals, beacons) — despawned with the zone scene.
 #[derive(Component)]
@@ -37,6 +51,7 @@ pub(crate) fn spawn_entity_visual(
             SimVisual {
                 id: snap.id,
                 key: spec.key,
+                bob: spec.bob,
             },
             Transform::default(),
             Visibility::default(),
@@ -45,6 +60,15 @@ pub(crate) fn spawn_entity_visual(
         ))
         .id();
     spawn_parts(commands, meshes, materials, root, &spec, alive);
+    spawn_overhead_markers(
+        commands,
+        meshes,
+        materials,
+        root,
+        snap.kind,
+        snap.template_id.as_deref(),
+        &spec,
+    );
 }
 
 fn spawn_parts(
@@ -76,6 +100,7 @@ fn spawn_parts(
         }
         let child = commands
             .spawn((
+                VisualPartMesh,
                 Mesh3d(mesh),
                 MeshMaterial3d(materials.add(mat)),
                 Transform::from_translation(Vec3::new(
@@ -89,16 +114,71 @@ fn spawn_parts(
     }
 }
 
+fn spawn_overhead_markers(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    parent: Entity,
+    kind: EntityKind,
+    template_id: Option<&str>,
+    spec: &VisualSpec,
+) {
+    if kind != EntityKind::Npc {
+        return;
+    }
+    let Some(def) = template_id.and_then(npc) else {
+        return;
+    };
+    let y = spec.label_height + 0.25;
+    if def.is_quest_giver {
+        let mat = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.95, 0.82, 0.25),
+            emissive: LinearRgba::from(Color::srgb(0.9, 0.6, 0.1)),
+            ..default()
+        });
+        let stem = commands
+            .spawn((
+                OverheadMarker,
+                Mesh3d(meshes.add(Cuboid::new(0.12, 0.45, 0.12))),
+                MeshMaterial3d(mat.clone()),
+                Transform::from_xyz(0.0, y + 0.15, 0.0),
+            ))
+            .id();
+        let dot = commands
+            .spawn((
+                OverheadMarker,
+                Mesh3d(meshes.add(Sphere::new(0.08))),
+                MeshMaterial3d(mat),
+                Transform::from_xyz(0.0, y - 0.22, 0.0),
+            ))
+            .id();
+        commands.entity(parent).add_child(stem);
+        commands.entity(parent).add_child(dot);
+    } else if def.is_vendor {
+        let mat = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.35, 0.85, 0.45),
+            emissive: LinearRgba::from(Color::srgb(0.1, 0.4, 0.15)),
+            ..default()
+        });
+        let bag = commands
+            .spawn((
+                OverheadMarker,
+                Mesh3d(meshes.add(Cuboid::new(0.35, 0.28, 0.22))),
+                MeshMaterial3d(mat),
+                Transform::from_xyz(0.0, y, 0.0),
+            ))
+            .id();
+        commands.entity(parent).add_child(bag);
+    }
+}
+
 fn mesh_for_part(meshes: &mut ResMut<Assets<Mesh>>, part: &VisualPart) -> Handle<Mesh> {
     match part.shape {
         PartShape::Cuboid => meshes.add(Cuboid::new(part.size[0], part.size[1], part.size[2])),
         PartShape::Capsule => meshes.add(Capsule3d::new(part.size[0], part.size[1] * 2.0)),
         PartShape::Sphere => meshes.add(Sphere::new(part.size[0])),
         PartShape::Cylinder => meshes.add(Cylinder::new(part.size[0], part.size[1])),
-        PartShape::Cone => {
-            // Bevy Cone: radius + height; apex points +Y by default.
-            meshes.add(Cone::new(part.size[0], part.size[1]))
-        }
+        PartShape::Cone => meshes.add(Cone::new(part.size[0], part.size[1])),
     }
 }
 
@@ -117,15 +197,26 @@ pub(crate) fn respawn_parts_if_needed(
         return;
     }
     if let Some(children) = children {
-        for child in children.iter() {
+        let kids: Vec<Entity> = children.iter().collect();
+        for child in kids {
             commands.entity(child).despawn();
         }
     }
     vis.key = spec.key;
+    vis.bob = spec.bob;
     spawn_parts(commands, meshes, materials, entity, &spec, snap.alive);
+    spawn_overhead_markers(
+        commands,
+        meshes,
+        materials,
+        entity,
+        snap.kind,
+        snap.template_id.as_deref(),
+        &spec,
+    );
 }
 
-/// Tint materials of a visual when alive state flips (mobs/corpses).
+/// Tint body-part materials when alive state flips (mobs/corpses).
 pub(crate) fn apply_alive_tint(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     mat_handles: impl Iterator<Item = Handle<StandardMaterial>>,
@@ -157,6 +248,34 @@ pub(crate) fn apply_alive_tint(
             mat.emissive = LinearRgba::BLACK;
         }
     }
+}
+
+/// Ensure a single ground ring exists for the current combat target.
+pub(crate) fn ensure_target_ring(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    q: &Query<Entity, With<TargetRing>>,
+) -> Entity {
+    if let Some(e) = q.iter().next() {
+        return e;
+    }
+    let mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.95, 0.75, 0.25, 0.65),
+        emissive: LinearRgba::from(Color::srgb(0.5, 0.35, 0.05)),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        ..default()
+    });
+    commands
+        .spawn((
+            TargetRing,
+            Mesh3d(meshes.add(Cylinder::new(0.85, 0.06))),
+            MeshMaterial3d(mat),
+            Transform::from_xyz(0.0, -50.0, 0.0),
+            Visibility::Hidden,
+        ))
+        .id()
 }
 
 /// Spawn buildings, hub beacons, portal arches, and camp props.

@@ -21,8 +21,8 @@ use crate::hud::{
 };
 use crate::online;
 use crate::visuals::{
-    self, apply_alive_tint, spawn_entity_visual, spawn_scene_props, sync_zone_atmosphere,
-    ActiveAtmosphere, SceneProp, SimVisual,
+    self, apply_alive_tint, ensure_target_ring, spawn_entity_visual, spawn_scene_props,
+    sync_zone_atmosphere, ActiveAtmosphere, SceneProp, SimVisual, TargetRing, VisualPartMesh,
 };
 use crate::{AppState, GameHost, NetStatus, PlayMode};
 
@@ -197,6 +197,38 @@ fn setup_world(
         &mut materials,
         &host.snapshot.entities,
     );
+
+    let npc_n = host
+        .snapshot
+        .entities
+        .iter()
+        .filter(|e| e.kind == EntityKind::Npc)
+        .count();
+    let mob_n = host
+        .snapshot
+        .entities
+        .iter()
+        .filter(|e| e.kind == EntityKind::Mob)
+        .count();
+    let herb_n = host
+        .snapshot
+        .entities
+        .iter()
+        .filter(|e| {
+            e.kind == EntityKind::Loot
+                && e.template_id
+                    .as_deref()
+                    .is_some_and(|t| woc_content::gather_node(t).is_some())
+        })
+        .count();
+    // Mutate after count: toast on local host before insert.
+    let mut host = host;
+    if npc_n + mob_n > 0 {
+        host.recent_toasts.push((
+            format!("Scene loaded · {npc_n} NPCs · {mob_n} foes · {herb_n} herbs"),
+            3.5,
+        ));
+    }
     commands.insert_resource(host);
 
     commands
@@ -524,6 +556,7 @@ fn cleanup_world(
             With<SimVisual>,
             With<TerrainMarker>,
             With<SceneProp>,
+            With<TargetRing>,
             With<HudRoot>,
         )>,
     >,
@@ -630,7 +663,7 @@ pub(crate) fn sim_fixed_step(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    visuals: Query<&SimVisual>,
+    visuals: Query<(Entity, &SimVisual)>,
 ) {
     if host.is_online() {
         apply_online_messages(&mut host);
@@ -663,22 +696,41 @@ pub(crate) fn sim_fixed_step(
         }
     }
 
-    let known: HashSet<EntityId> = visuals.iter().map(|v| v.id).collect();
+    let known: HashSet<EntityId> = visuals.iter().map(|(_, v)| v.id).collect();
+    let snap_ids: HashSet<EntityId> = host.snapshot.entities.iter().map(|e| e.id).collect();
+
+    // Spawn any snapshot entity we don't yet have a visual for (including corpses / loot / herbs).
     for e in &host.snapshot.entities {
-        if e.alive && !known.contains(&e.id) {
+        if known.contains(&e.id) {
+            continue;
+        }
+        let should_spawn = e.alive
+            || matches!(e.kind, EntityKind::Mob | EntityKind::Npc)
+            || (e.kind == EntityKind::Loot && e.alive);
+        if should_spawn {
             spawn_entity_visual(&mut commands, &mut meshes, &mut materials, e);
+        }
+    }
+
+    // Despawn visuals for entities that left the snapshot (picked loot, dismissed pets, …).
+    for (entity, vis) in &visuals {
+        if !snap_ids.contains(&vis.id) {
+            commands.entity(entity).despawn();
         }
     }
 }
 
 pub(crate) fn sync_visuals(
+    time: Res<Time>,
     host: Res<GameHost>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut visuals: Query<(Entity, &mut SimVisual, &mut Transform, Option<&Children>)>,
-    child_mats: Query<&MeshMaterial3d<StandardMaterial>>,
-    mut cam: Query<&mut Transform, (With<FollowCam>, Without<SimVisual>)>,
+    part_mats: Query<&MeshMaterial3d<StandardMaterial>, With<VisualPartMesh>>,
+    mut cam: Query<&mut Transform, (With<FollowCam>, Without<SimVisual>, Without<TargetRing>)>,
+    ring_q: Query<Entity, With<TargetRing>>,
+    mut ring_tf: Query<(&mut Transform, &mut Visibility), (With<TargetRing>, Without<SimVisual>)>,
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<AmbientLight>,
     mut atmo: ResMut<ActiveAtmosphere>,
@@ -690,6 +742,7 @@ pub(crate) fn sync_visuals(
         &mut ambient,
     );
 
+    let bob_t = time.elapsed_secs();
     let player = host.player_snap().map(|p| (p.x, p.y, p.z));
     for (entity, mut vis, mut tf, children) in &mut visuals {
         if let Some(e) = host.snapshot.entities.iter().find(|ent| ent.id == vis.id) {
@@ -703,19 +756,25 @@ pub(crate) fn sync_visuals(
                 children,
             );
 
+            let bob = if vis.bob && e.alive {
+                (bob_t * 2.4 + e.id as f32 * 0.7).sin() * 0.12
+            } else {
+                0.0
+            };
+
             if e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc {
-                tf.translation = Vec3::new(e.x, e.y, e.z);
+                tf.translation = Vec3::new(e.x, e.y + bob, e.z);
                 tf.rotation = Quat::from_rotation_y(e.yaw);
                 tf.scale = Vec3::ONE;
             } else {
                 tf.scale = Vec3::ZERO;
             }
 
-            if matches!(e.kind, EntityKind::Mob | EntityKind::Npc) {
+            if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Loot) {
                 if let Some(children) = children {
                     let handles = children
                         .iter()
-                        .filter_map(|c| child_mats.get(c).ok().map(|m| m.0.clone()));
+                        .filter_map(|c| part_mats.get(c).ok().map(|m| m.0.clone()));
                     apply_alive_tint(
                         &mut materials,
                         handles,
@@ -727,6 +786,22 @@ pub(crate) fn sync_visuals(
             }
         } else {
             tf.scale = Vec3::ZERO;
+        }
+    }
+
+    // Target ground ring.
+    let ring_entity = ensure_target_ring(&mut commands, &mut meshes, &mut materials, &ring_q);
+    let _ = ring_entity;
+    if let Ok((mut rtf, mut rvis)) = ring_tf.single_mut() {
+        if let Some(tid) = host.snapshot.target_id {
+            if let Some(t) = host.snapshot.entities.iter().find(|e| e.id == tid) {
+                rtf.translation = Vec3::new(t.x, t.y + 0.05, t.z);
+                *rvis = Visibility::Visible;
+            } else {
+                *rvis = Visibility::Hidden;
+            }
+        } else {
+            *rvis = Visibility::Hidden;
         }
     }
 

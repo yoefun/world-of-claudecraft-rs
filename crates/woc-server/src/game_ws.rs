@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn spawn_with_state_restores_progression() {
         let mut sim = Sim::new_empty_eastbrook();
-        let mut state = PlayerPersistentState {
+        let state = PlayerPersistentState {
             durable_id: Some("11111111-1111-1111-1111-111111111111".into()),
             level: 4,
             xp: 50,

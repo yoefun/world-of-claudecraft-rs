@@ -7,6 +7,7 @@ mod hud;
 mod input;
 mod login;
 mod menu_ui;
+mod nameplates;
 mod online;
 mod title;
 mod visuals;
@@ -47,6 +48,7 @@ fn main() {
             char_select::plugin,
             world_setup::plugin,
             hud::plugin,
+            nameplates::plugin,
         ))
         .add_systems(
             Update,
