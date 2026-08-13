@@ -51,6 +51,83 @@ pub const MAX_REALM_PLAYERS: usize = 8;
 /// Snapshot radius for other players, mobs, pets, and non-roll loot (yards).
 pub const SNAPSHOT_AOI_RADIUS: f32 = 80.0;
 
+fn quality_snap(q: Option<woc_content::ItemQuality>) -> Option<String> {
+    q.map(|q| q.as_str().to_string())
+}
+
+fn inv_slot_snap(i: usize, st: &crate::ecs::components::InvStack) -> InvSlotSnapshot {
+    InvSlotSnapshot {
+        slot: i as u8,
+        item_id: st.item_id.clone(),
+        count: st.count,
+        durability: st.durability,
+        enchant_id: st.enchant_id.clone(),
+        quality: quality_snap(st.quality),
+    }
+}
+
+fn bags_equipment_snapshot(bags: &Bags) -> EquipmentSnapshot {
+    EquipmentSnapshot {
+        main_hand: bags.equipment.main_hand.clone(),
+        off_hand: bags.equipment.off_hand.clone(),
+        head: bags.equipment.head.clone(),
+        chest: bags.equipment.chest.clone(),
+        legs: bags.equipment.legs.clone(),
+        feet: bags.equipment.feet.clone(),
+        neck: bags.equipment.neck.clone(),
+        finger: bags.equipment.finger.clone(),
+        finger2: bags.equipment.finger2.clone(),
+        shoulder: bags.equipment.shoulder.clone(),
+        back: bags.equipment.back.clone(),
+        wrist: bags.equipment.wrist.clone(),
+        hands: bags.equipment.hands.clone(),
+        waist: bags.equipment.waist.clone(),
+        trinket: bags.equipment.trinket.clone(),
+        trinket2: bags.equipment.trinket2.clone(),
+        main_hand_enchant: bags.equipment_enchants.main_hand.clone(),
+        off_hand_enchant: bags.equipment_enchants.off_hand.clone(),
+        main_hand_durability: bags
+            .equipment
+            .main_hand
+            .as_ref()
+            .and(bags.equipment_wear.main_hand),
+        off_hand_durability: bags
+            .equipment
+            .off_hand
+            .as_ref()
+            .and(bags.equipment_wear.off_hand),
+        head_durability: bags.equipment.head.as_ref().and(bags.equipment_wear.head),
+        chest_durability: bags.equipment.chest.as_ref().and(bags.equipment_wear.chest),
+        legs_durability: bags.equipment.legs.as_ref().and(bags.equipment_wear.legs),
+        feet_durability: bags.equipment.feet.as_ref().and(bags.equipment_wear.feet),
+        shoulder_durability: bags
+            .equipment
+            .shoulder
+            .as_ref()
+            .and(bags.equipment_wear.shoulder),
+        back_durability: bags.equipment.back.as_ref().and(bags.equipment_wear.back),
+        wrist_durability: bags.equipment.wrist.as_ref().and(bags.equipment_wear.wrist),
+        hands_durability: bags.equipment.hands.as_ref().and(bags.equipment_wear.hands),
+        waist_durability: bags.equipment.waist.as_ref().and(bags.equipment_wear.waist),
+        main_hand_quality: quality_snap(bags.equipment_qualities.main_hand),
+        off_hand_quality: quality_snap(bags.equipment_qualities.off_hand),
+        head_quality: quality_snap(bags.equipment_qualities.head),
+        chest_quality: quality_snap(bags.equipment_qualities.chest),
+        legs_quality: quality_snap(bags.equipment_qualities.legs),
+        feet_quality: quality_snap(bags.equipment_qualities.feet),
+        neck_quality: quality_snap(bags.equipment_qualities.neck),
+        finger_quality: quality_snap(bags.equipment_qualities.finger),
+        finger2_quality: quality_snap(bags.equipment_qualities.finger2),
+        shoulder_quality: quality_snap(bags.equipment_qualities.shoulder),
+        back_quality: quality_snap(bags.equipment_qualities.back),
+        wrist_quality: quality_snap(bags.equipment_qualities.wrist),
+        hands_quality: quality_snap(bags.equipment_qualities.hands),
+        waist_quality: quality_snap(bags.equipment_qualities.waist),
+        trinket_quality: quality_snap(bags.equipment_qualities.trinket),
+        trinket2_quality: quality_snap(bags.equipment_qualities.trinket2),
+    }
+}
+
 pub struct Sim {
     pub tick: u64,
     pub seed: u32,
@@ -643,47 +720,14 @@ impl Sim {
                 bags.inventory
                     .iter()
                     .enumerate()
-                    .filter_map(|(i, s)| {
-                        s.as_ref().map(|st| InvSlotSnapshot {
-                            slot: i as u8,
-                            item_id: st.item_id.clone(),
-                            count: st.count,
-                            durability: st.durability,
-                            enchant_id: st.enchant_id.clone(),
-                        })
-                    })
+                    .filter_map(|(i, s)| s.as_ref().map(|st| inv_slot_snap(i, st)))
                     .collect()
             })
             .unwrap_or_default();
 
         let equipment = world
             .get::<Bags>(player_id)
-            .map(|bags| EquipmentSnapshot {
-                main_hand: bags.equipment.main_hand.clone(),
-                off_hand: bags.equipment.off_hand.clone(),
-                head: bags.equipment.head.clone(),
-                chest: bags.equipment.chest.clone(),
-                legs: bags.equipment.legs.clone(),
-                feet: bags.equipment.feet.clone(),
-                neck: bags.equipment.neck.clone(),
-                finger: bags.equipment.finger.clone(),
-                finger2: bags.equipment.finger2.clone(),
-                main_hand_enchant: bags.equipment_enchants.main_hand.clone(),
-                main_hand_durability: bags
-                    .equipment
-                    .main_hand
-                    .as_ref()
-                    .and(bags.equipment_wear.main_hand),
-                off_hand_durability: bags
-                    .equipment
-                    .off_hand
-                    .as_ref()
-                    .and(bags.equipment_wear.off_hand),
-                head_durability: bags.equipment.head.as_ref().and(bags.equipment_wear.head),
-                chest_durability: bags.equipment.chest.as_ref().and(bags.equipment_wear.chest),
-                legs_durability: bags.equipment.legs.as_ref().and(bags.equipment_wear.legs),
-                feet_durability: bags.equipment.feet.as_ref().and(bags.equipment_wear.feet),
-            })
+            .map(bags_equipment_snapshot)
             .unwrap_or_default();
 
         let quest_log = quest_log_entries(world, player_id);
@@ -812,15 +856,7 @@ impl Sim {
                     bank.bank
                         .iter()
                         .enumerate()
-                        .filter_map(|(i, s)| {
-                            s.as_ref().map(|st| InvSlotSnapshot {
-                                slot: i as u8,
-                                item_id: st.item_id.clone(),
-                                count: st.count,
-                                durability: st.durability,
-                                enchant_id: st.enchant_id.clone(),
-                            })
-                        })
+                        .filter_map(|(i, s)| s.as_ref().map(|st| inv_slot_snap(i, st)))
                         .collect()
                 })
                 .unwrap_or_default(),

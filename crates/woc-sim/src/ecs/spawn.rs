@@ -169,6 +169,7 @@ pub fn create_player(
             equipment,
             equipment_wear,
             equipment_enchants: Default::default(),
+            equipment_qualities: Default::default(),
             open_vendor_npc: None,
             buyback: Vec::new(),
         },
@@ -273,7 +274,14 @@ pub fn create_loot(
     adopt_fresh_id(world, id);
     insert_identity(world, id, EntityKind::Loot, "Loot", None, "eastbrook");
     insert_transform(world, id, x, z, 0.0);
-    world.insert(id, LootPile { copper, item });
+    world.insert(
+        id,
+        LootPile {
+            copper,
+            item,
+            quality: None,
+        },
+    );
     world.insert(id, InstanceAt::default());
     id
 }
@@ -338,6 +346,7 @@ pub fn create_gather_node(
         LootPile {
             copper: 0,
             item: Some(node.item_id.to_string()),
+            quality: None,
         },
     );
     world.insert(id, InstanceAt::default());

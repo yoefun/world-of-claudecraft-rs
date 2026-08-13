@@ -520,6 +520,7 @@ mod tests {
             },
             equipment_wear: woc_sim::ecs::components::EquipmentWear::default(),
             equipment_enchants: woc_sim::ecs::components::EquipmentEnchants::default(),
+            equipment_qualities: woc_sim::ecs::components::EquipmentQualities::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 1,

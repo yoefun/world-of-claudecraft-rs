@@ -2,8 +2,8 @@
 
 use crate::ecs::components::AuraInstance;
 use crate::ecs::components::{
-    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
-    Hearth, Identity, InvStack, Progress, Transform,
+    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentQualities,
+    EquipmentWear, Health, Hearth, Identity, InvStack, Progress, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::remove_item;
@@ -15,7 +15,7 @@ use crate::stats::recalc_player_stats;
 use crate::types::INTERACT_RANGE;
 use woc_content::{
     can_dual_wield, can_equip, item, known_abilities_at_level, npc, EquipDeny, ItemEquipSlot,
-    ItemKind, NpcDef, NpcService, PlayerClass, WeaponStyle,
+    ItemKind, ItemQuality, NpcDef, NpcService, PlayerClass, WeaponStyle,
 };
 use woc_protocol::{
     BuybackSnapshot, EntityId, EntityKind, EquipSlot, InteractAction, NpcSessionSnapshot, SimEvent,
@@ -32,6 +32,12 @@ fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
         ItemEquipSlot::Feet => EquipSlot::Feet,
         ItemEquipSlot::Neck => EquipSlot::Neck,
         ItemEquipSlot::Finger => EquipSlot::Finger,
+        ItemEquipSlot::Shoulder => EquipSlot::Shoulder,
+        ItemEquipSlot::Back => EquipSlot::Back,
+        ItemEquipSlot::Wrist => EquipSlot::Wrist,
+        ItemEquipSlot::Hands => EquipSlot::Hands,
+        ItemEquipSlot::Waist => EquipSlot::Waist,
+        ItemEquipSlot::Trinket => EquipSlot::Trinket,
     }
 }
 
@@ -51,6 +57,17 @@ fn resolve_equip_slot(
             }
         }
         return EquipSlot::Finger;
+    }
+    if idef.equip_slot == Some(ItemEquipSlot::Trinket) {
+        if let Some(bags) = world.get::<Bags>(player_id) {
+            if bags.equipment.trinket.is_none() {
+                return EquipSlot::Trinket;
+            }
+            if bags.equipment.trinket2.is_none() {
+                return EquipSlot::Trinket2;
+            }
+        }
+        return EquipSlot::Trinket;
     }
     if idef.weapon_style == Some(WeaponStyle::OneHand) && can_dual_wield(class) {
         if let Some(bags) = world.get::<Bags>(player_id) {
@@ -80,6 +97,13 @@ fn equipment_slot_ref(equipment: &Equipment, slot: EquipSlot) -> &Option<String>
         EquipSlot::Neck => &equipment.neck,
         EquipSlot::Finger => &equipment.finger,
         EquipSlot::Finger2 => &equipment.finger2,
+        EquipSlot::Shoulder => &equipment.shoulder,
+        EquipSlot::Back => &equipment.back,
+        EquipSlot::Wrist => &equipment.wrist,
+        EquipSlot::Hands => &equipment.hands,
+        EquipSlot::Waist => &equipment.waist,
+        EquipSlot::Trinket => &equipment.trinket,
+        EquipSlot::Trinket2 => &equipment.trinket2,
     }
 }
 
@@ -94,21 +118,18 @@ fn equipment_slot_mut(equipment: &mut Equipment, slot: EquipSlot) -> &mut Option
         EquipSlot::Neck => &mut equipment.neck,
         EquipSlot::Finger => &mut equipment.finger,
         EquipSlot::Finger2 => &mut equipment.finger2,
+        EquipSlot::Shoulder => &mut equipment.shoulder,
+        EquipSlot::Back => &mut equipment.back,
+        EquipSlot::Wrist => &mut equipment.wrist,
+        EquipSlot::Hands => &mut equipment.hands,
+        EquipSlot::Waist => &mut equipment.waist,
+        EquipSlot::Trinket => &mut equipment.trinket,
+        EquipSlot::Trinket2 => &mut equipment.trinket2,
     }
 }
 
 fn equipment_slot(equipment: &Equipment, slot: EquipSlot) -> &Option<String> {
-    match slot {
-        EquipSlot::MainHand => &equipment.main_hand,
-        EquipSlot::OffHand => &equipment.off_hand,
-        EquipSlot::Head => &equipment.head,
-        EquipSlot::Chest => &equipment.chest,
-        EquipSlot::Legs => &equipment.legs,
-        EquipSlot::Feet => &equipment.feet,
-        EquipSlot::Neck => &equipment.neck,
-        EquipSlot::Finger => &equipment.finger,
-        EquipSlot::Finger2 => &equipment.finger2,
-    }
+    equipment_slot_ref(equipment, slot)
 }
 
 fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> Option<&mut Option<u32>> {
@@ -119,7 +140,16 @@ fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> Option<
         EquipSlot::Chest => Some(&mut wear.chest),
         EquipSlot::Legs => Some(&mut wear.legs),
         EquipSlot::Feet => Some(&mut wear.feet),
-        EquipSlot::Neck | EquipSlot::Finger | EquipSlot::Finger2 => None,
+        EquipSlot::Shoulder => Some(&mut wear.shoulder),
+        EquipSlot::Back => Some(&mut wear.back),
+        EquipSlot::Wrist => Some(&mut wear.wrist),
+        EquipSlot::Hands => Some(&mut wear.hands),
+        EquipSlot::Waist => Some(&mut wear.waist),
+        EquipSlot::Neck
+        | EquipSlot::Finger
+        | EquipSlot::Finger2
+        | EquipSlot::Trinket
+        | EquipSlot::Trinket2 => None,
     }
 }
 
@@ -131,7 +161,16 @@ fn equipment_wear_slot(wear: &EquipmentWear, slot: EquipSlot) -> Option<u32> {
         EquipSlot::Chest => wear.chest,
         EquipSlot::Legs => wear.legs,
         EquipSlot::Feet => wear.feet,
-        EquipSlot::Neck | EquipSlot::Finger | EquipSlot::Finger2 => None,
+        EquipSlot::Shoulder => wear.shoulder,
+        EquipSlot::Back => wear.back,
+        EquipSlot::Wrist => wear.wrist,
+        EquipSlot::Hands => wear.hands,
+        EquipSlot::Waist => wear.waist,
+        EquipSlot::Neck
+        | EquipSlot::Finger
+        | EquipSlot::Finger2
+        | EquipSlot::Trinket
+        | EquipSlot::Trinket2 => None,
     }
 }
 
@@ -167,26 +206,57 @@ fn restore_slot_enchant(
     }
 }
 
-const EQUIP_SLOTS: [EquipSlot; 6] = [
+const EQUIP_SLOTS: [EquipSlot; 11] = [
     EquipSlot::MainHand,
     EquipSlot::OffHand,
     EquipSlot::Head,
     EquipSlot::Chest,
     EquipSlot::Legs,
     EquipSlot::Feet,
+    EquipSlot::Shoulder,
+    EquipSlot::Back,
+    EquipSlot::Wrist,
+    EquipSlot::Hands,
+    EquipSlot::Waist,
 ];
+
+fn equipment_quality_slot_mut(
+    qualities: &mut EquipmentQualities,
+    slot: EquipSlot,
+) -> &mut Option<ItemQuality> {
+    match slot {
+        EquipSlot::MainHand => &mut qualities.main_hand,
+        EquipSlot::OffHand => &mut qualities.off_hand,
+        EquipSlot::Head => &mut qualities.head,
+        EquipSlot::Chest => &mut qualities.chest,
+        EquipSlot::Legs => &mut qualities.legs,
+        EquipSlot::Feet => &mut qualities.feet,
+        EquipSlot::Neck => &mut qualities.neck,
+        EquipSlot::Finger => &mut qualities.finger,
+        EquipSlot::Finger2 => &mut qualities.finger2,
+        EquipSlot::Shoulder => &mut qualities.shoulder,
+        EquipSlot::Back => &mut qualities.back,
+        EquipSlot::Wrist => &mut qualities.wrist,
+        EquipSlot::Hands => &mut qualities.hands,
+        EquipSlot::Waist => &mut qualities.waist,
+        EquipSlot::Trinket => &mut qualities.trinket,
+        EquipSlot::Trinket2 => &mut qualities.trinket2,
+    }
+}
 
 fn stack_with_durability(
     item_id: &str,
     count: u32,
     durability: Option<u32>,
     enchant_id: Option<String>,
+    quality: Option<ItemQuality>,
 ) -> InvStack {
     let mut stack = InvStack::new(item_id, count);
     if durability.is_some() {
         stack.durability = durability;
     }
     stack.enchant_id = enchant_id;
+    stack.quality = quality;
     stack
 }
 
@@ -478,6 +548,7 @@ fn sell(
             count: take,
             durability,
             enchant_id,
+            quality: stack.quality,
             copper,
         });
         if bags.buyback.len() > 6 {
@@ -543,17 +614,18 @@ fn buyback(
     let price = entry.copper;
     let durability = entry.durability;
     let enchant_id = entry.enchant_id.clone();
+    let quality = entry.quality;
     let inventory_before = world
         .get::<Bags>(player_id)
         .map(|bags| bags.inventory.clone())
         .unwrap_or_default();
-    let granted = if durability.is_some() || enchant_id.is_some() {
+    let granted = if durability.is_some() || enchant_id.is_some() || quality.is_some() {
         world
             .get_mut::<Bags>(player_id)
             .and_then(|bags| bags.inventory.iter_mut().find(|slot| slot.is_none()))
             .map(|empty| {
                 *empty = Some(stack_with_durability(
-                    &item_id, count, durability, enchant_id,
+                    &item_id, count, durability, enchant_id, quality,
                 ));
             })
             .is_some()
@@ -835,25 +907,35 @@ fn equip_from_bag(
         let incoming_enchant = matches!(equip_slot, EquipSlot::MainHand | EquipSlot::OffHand)
             .then(|| removed_stack.enchant_id.clone())
             .flatten();
+        let incoming_quality = removed_stack.quality;
         let previous = equipment_slot_mut(&mut bags.equipment, equip_slot)
             .replace(removed_stack.item_id.clone());
         let previous_wear = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot)
             .and_then(|wear_slot| std::mem::replace(wear_slot, durability));
         let previous_enchant =
             replace_slot_enchant(&mut bags.equipment_enchants, equip_slot, incoming_enchant);
+        let previous_quality = std::mem::replace(
+            equipment_quality_slot_mut(&mut bags.equipment_qualities, equip_slot),
+            incoming_quality,
+        );
         if let Some(prev) = previous {
             bags.inventory[slot] = Some(stack_with_durability(
                 &prev,
                 1,
                 previous_wear,
                 previous_enchant,
+                previous_quality,
             ));
         }
         if two_hand {
             if let Some(oh) = bags.equipment.off_hand.take() {
                 let oh_wear = bags.equipment_wear.off_hand.take();
+                let oh_enchant = bags.equipment_enchants.off_hand.take();
+                let oh_quality = bags.equipment_qualities.off_hand.take();
                 if let Some(empty) = bags.inventory.iter_mut().find(|slot| slot.is_none()) {
-                    *empty = Some(stack_with_durability(&oh, 1, oh_wear, None));
+                    *empty = Some(stack_with_durability(
+                        &oh, 1, oh_wear, oh_enchant, oh_quality,
+                    ));
                 }
             }
         }
@@ -880,8 +962,9 @@ fn unequip_to_bag(
         let wear = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot)
             .and_then(|wear_slot| wear_slot.take());
         let enchant = take_slot_enchant(&mut bags.equipment_enchants, equip_slot);
+        let quality = equipment_quality_slot_mut(&mut bags.equipment_qualities, equip_slot).take();
         if let Some(empty) = bags.inventory.iter_mut().find(|slot| slot.is_none()) {
-            *empty = Some(stack_with_durability(&item_id, 1, wear, enchant));
+            *empty = Some(stack_with_durability(&item_id, 1, wear, enchant, quality));
             restored = true;
         } else {
             *equipment_slot_mut(&mut bags.equipment, equip_slot) = Some(item_id.clone());
@@ -889,6 +972,7 @@ fn unequip_to_bag(
                 *wear_slot = wear;
             }
             restore_slot_enchant(&mut bags.equipment_enchants, equip_slot, enchant);
+            *equipment_quality_slot_mut(&mut bags.equipment_qualities, equip_slot) = quality;
         }
     }
     if !restored {
@@ -918,36 +1002,50 @@ fn use_item_from_bag(
         return;
     };
     if let Some(eid) = idef.enchant_id {
-        let mh = world
-            .get::<Bags>(player_id)
-            .and_then(|b| b.equipment.main_hand.clone());
-        let Some(mh_id) = mh else {
+        let Some(bags) = world.get::<Bags>(player_id) else {
+            return;
+        };
+        let mh_weapon = bags
+            .equipment
+            .main_hand
+            .as_deref()
+            .and_then(item)
+            .filter(|d| d.kind == ItemKind::Weapon);
+        let oh_weapon = bags
+            .equipment
+            .off_hand
+            .as_deref()
+            .and_then(item)
+            .filter(|d| d.kind == ItemKind::Weapon);
+        let target =
+            if let (Some(mh), true) = (mh_weapon, bags.equipment_enchants.main_hand.is_none()) {
+                Some((EquipSlot::MainHand, mh.name))
+            } else {
+                oh_weapon.map(|oh| (EquipSlot::OffHand, oh.name))
+            };
+        let Some((target_slot, weapon_name)) = target else {
             events.push(SimEvent::Toast {
                 message: "Nothing to enchant.".into(),
             });
             return;
         };
-        let Some(mh_def) = item(&mh_id) else {
-            events.push(SimEvent::Toast {
-                message: "Nothing to enchant.".into(),
-            });
-            return;
-        };
-        if mh_def.kind != ItemKind::Weapon {
-            events.push(SimEvent::Toast {
-                message: "Nothing to enchant.".into(),
-            });
-            return;
-        }
         if let Some(bags) = world.get_mut::<Bags>(player_id) {
             if !remove_item(&mut bags.inventory, &stack.item_id, 1) {
                 return;
             }
-            bags.equipment_enchants.main_hand = Some(eid.to_string());
+            match target_slot {
+                EquipSlot::MainHand => {
+                    bags.equipment_enchants.main_hand = Some(eid.to_string());
+                }
+                EquipSlot::OffHand => {
+                    bags.equipment_enchants.off_hand = Some(eid.to_string());
+                }
+                _ => {}
+            }
         }
         recalc_player_stats(world, player_id);
         events.push(SimEvent::Toast {
-            message: format!("Enchanted {}.", mh_def.name),
+            message: format!("Enchanted {weapon_name}."),
         });
         return;
     }
@@ -1452,5 +1550,113 @@ mod tests {
             .find(|st| st.item_id == "worn_dagger")
             .expect("unequipped dagger");
         assert_eq!(restored.enchant_id.as_deref(), Some("coarse_sharpening"));
+    }
+
+    #[test]
+    fn hunter_second_hatchet_fills_off_hand() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "H", PlayerClass::Hunter, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "worn_hatchet", 2));
+        }
+        let slot = bag_slot_of(&world, 1, "worn_hatchet");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        let slot = bag_slot_of(&world, 1, "worn_hatchet");
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        let eq = &world.get::<Bags>(1).unwrap().equipment;
+        assert_eq!(eq.main_hand.as_deref(), Some("worn_hatchet"));
+        assert_eq!(eq.off_hand.as_deref(), Some("worn_hatchet"));
+    }
+
+    #[test]
+    fn shaman_second_mace_does_not_fill_off_hand() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "S", PlayerClass::Shaman, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "worn_mace", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "worn_mace");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        assert!(world.get::<Bags>(1).unwrap().equipment.off_hand.is_none());
+        assert_eq!(
+            world.get::<Bags>(1).unwrap().equipment.main_hand.as_deref(),
+            Some("worn_mace")
+        );
+    }
+
+    #[test]
+    fn cloak_equips_to_back() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "wool_cloak", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "wool_cloak");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        assert_eq!(
+            world.get::<Bags>(1).unwrap().equipment.back.as_deref(),
+            Some("wool_cloak")
+        );
+    }
+
+    #[test]
+    fn two_pebbles_fill_trinket_then_trinket2() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "lucky_pebble", 2));
+        }
+        let slot = bag_slot_of(&world, 1, "lucky_pebble");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        let slot = bag_slot_of(&world, 1, "lucky_pebble");
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        let bags = world.get::<Bags>(1).unwrap();
+        assert_eq!(bags.equipment.trinket.as_deref(), Some("lucky_pebble"));
+        assert_eq!(bags.equipment.trinket2.as_deref(), Some("lucky_pebble"));
+        assert!(bags.equipment_qualities.trinket.is_none());
+    }
+
+    #[test]
+    fn second_whetstone_enchants_off_hand() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "worn_sword", 1));
+            assert!(grant_into(&mut bags.inventory, "coarse_whetstone", 2));
+        }
+        let slot = bag_slot_of(&world, 1, "worn_sword");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        let slot = bag_slot_of(&world, 1, "coarse_whetstone");
+        handle_interact(
+            &mut world,
+            1,
+            1,
+            InteractAction::UseItem { bag_slot: slot },
+            0,
+            &mut events,
+        );
+        let slot = bag_slot_of(&world, 1, "coarse_whetstone");
+        handle_interact(
+            &mut world,
+            1,
+            1,
+            InteractAction::UseItem { bag_slot: slot },
+            0,
+            &mut events,
+        );
+        let bags = world.get::<Bags>(1).unwrap();
+        assert_eq!(
+            bags.equipment_enchants.main_hand.as_deref(),
+            Some("coarse_sharpening")
+        );
+        assert_eq!(
+            bags.equipment_enchants.off_hand.as_deref(),
+            Some("coarse_sharpening")
+        );
     }
 }

@@ -262,6 +262,8 @@ pub struct InvStackDto {
     pub durability: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enchant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -297,6 +299,20 @@ pub struct EquipmentDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finger2: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shoulder: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrist: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hands: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waist: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trinket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trinket2: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_hand_enchant: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub off_hand_enchant: Option<String>,
@@ -312,6 +328,48 @@ pub struct EquipmentDto {
     pub legs_durability: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feet_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shoulder_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrist_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hands_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waist_durability: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main_hand_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub off_hand_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chest_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legs_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feet_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub neck_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finger_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finger2_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shoulder_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrist_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hands_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waist_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trinket_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trinket2_quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -505,6 +563,7 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             })],
             bank_copper: 0,
             honor: 125,
@@ -566,6 +625,7 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             })],
             bank_copper: 0,
             honor: 125,

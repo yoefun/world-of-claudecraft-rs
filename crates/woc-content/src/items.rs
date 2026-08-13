@@ -801,10 +801,7 @@ mod tests {
         );
         let hatchet = item("worn_hatchet").unwrap();
         assert_eq!(hatchet.weapon_style, Some(WeaponStyle::OneHand));
-        assert_eq!(
-            can_equip(hatchet, PlayerClass::Hunter, 1),
-            Ok(())
-        );
+        assert_eq!(can_equip(hatchet, PlayerClass::Hunter, 1), Ok(()));
         assert_eq!(
             can_equip(item("copper_shortsword").unwrap(), PlayerClass::Hunter, 1),
             Ok(())

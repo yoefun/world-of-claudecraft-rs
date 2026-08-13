@@ -263,6 +263,7 @@ mod tests {
                 count: 2,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             })],
             equipment: EquipmentDto {
                 main_hand: Some("rusty_sword".into()),
@@ -285,6 +286,7 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             })],
             bank_copper: 0,
             honor: 125,
