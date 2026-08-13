@@ -394,7 +394,7 @@ pub fn step_player_motion(
         grounded,
     );
 
-    let fall = vertical_pass(&mut t, &mut m, health.hp_max, intent, speed);
+    let fall = vertical_pass(&mut t, &mut m, health.hp_max, &intent, speed);
 
     if !in_instance {
         if let Some(ident) = world.get_mut::<Identity>(player_id) {
