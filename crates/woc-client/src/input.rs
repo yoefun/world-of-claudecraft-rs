@@ -7,7 +7,7 @@ use woc_content::talents::talents_for_class;
 use woc_content::{can_equip, item, ItemKind, PlayerClass};
 use woc_protocol::{
     AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, QuestLogEntry,
-    TickSnapshot,
+    TickSnapshot, WsClientMsg,
 };
 use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
@@ -165,9 +165,42 @@ pub(crate) fn collect_intent(
     let form_f = matches!(class_id, "warrior" | "shaman" | "druid")
         && keys.just_pressed(KeyCode::KeyF)
         && !bags_consume_f;
-    if mouse.just_pressed(MouseButton::Left)
-        || (keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f)
-    {
+    if mouse.just_pressed(MouseButton::Left) {
+        let player_pos = host.player_snap().map(|p| (p.x, p.z));
+        let player_id = host.snapshot.player_id;
+        let mut best: Option<(EntityId, EntityKind, f32)> = None;
+        if let Some((px, pz)) = player_pos {
+            for e in &host.snapshot.entities {
+                let is_other_player = e.kind == EntityKind::Player && e.id != player_id && e.alive;
+                let is_mob = e.kind == EntityKind::Mob && e.alive;
+                if !is_other_player && !is_mob {
+                    continue;
+                }
+                let dx = e.x - px;
+                let dz = e.z - pz;
+                let d = (dx * dx + dz * dz).sqrt();
+                if d < 25.0 && best.map(|(_, _, bd)| d < bd).unwrap_or(true) {
+                    best = Some((e.id, e.kind, d));
+                }
+            }
+        }
+        if let Some((id, kind, _)) = best {
+            intent.target_id = Some(id);
+            if kind == EntityKind::Player {
+                host.snapshot.target_id = Some(id);
+                host.local_auto_attack = false;
+                if let Some(sim) = host.sim.as_mut() {
+                    sim.set_player_target(Some(id));
+                }
+            } else {
+                intent.attack = true;
+                host.local_auto_attack = true;
+            }
+        } else {
+            intent.attack = true;
+            host.local_auto_attack = true;
+        }
+    } else if keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f {
         intent.attack = true;
         host.local_auto_attack = true;
         if let Some(p) = host.player_snap() {
@@ -202,6 +235,14 @@ pub(crate) fn collect_intent(
         intent.target_id = intent.target_id.or(host.snapshot.target_id);
     }
     host.pending_intent = intent;
+}
+
+fn targeted_other_member_name(snap: &TickSnapshot) -> Option<String> {
+    let tid = snap.target_id?;
+    snap.party_members
+        .iter()
+        .find(|m| m.id == tid && m.id != snap.player_id)
+        .map(|m| m.name.clone())
 }
 
 fn first_available_talent_id(snap: &TickSnapshot) -> Option<String> {
@@ -383,6 +424,70 @@ pub(crate) fn handle_interact_keys(
         ui.show_map = false;
     }
 
+    let pending = !host.snapshot.pending_invite_from.is_empty();
+    let ready_prompt = host
+        .snapshot
+        .ready_check
+        .as_ref()
+        .is_some_and(|r| !r.you_responded);
+
+    if pending && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+        host.send_party(WsClientMsg::PartyAccept);
+    } else if ready_prompt && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+        host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
+    }
+
+    if pending && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        host.send_party(WsClientMsg::PartyDecline);
+    } else if ready_prompt && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        host.send_party(WsClientMsg::PartyReadyRespond { ready: false });
+    } else if !pending && !ready_prompt && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        ui.show_party = !ui.show_party;
+        if ui.show_party {
+            ui.show_character = false;
+            ui.show_map = false;
+        }
+    }
+
+    if !ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
+        if let Some(tid) = host.snapshot.target_id {
+            if let Some(e) = host.snapshot.entities.iter().find(|e| e.id == tid) {
+                if e.kind == EntityKind::Player && e.id != host.snapshot.player_id {
+                    host.send_party(WsClientMsg::PartyInvite {
+                        name: e.name.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    if ui.show_party && keys.just_pressed(KeyCode::KeyX) {
+        host.send_party(WsClientMsg::PartyLeave);
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::KeyY) {
+        if let Some(name) = targeted_other_member_name(&host.snapshot) {
+            host.send_party(WsClientMsg::PartyPromote { name });
+        }
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::Minus) {
+        if let Some(name) = targeted_other_member_name(&host.snapshot) {
+            host.send_party(WsClientMsg::PartyKick { name });
+        }
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::KeyR) {
+        host.send_party(WsClientMsg::PartyReadyCheck);
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::Backspace) {
+        host.send_party(WsClientMsg::PartyDisband);
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::Equal) {
+        if host.snapshot.party_kind == "raid" {
+            host.send_party(WsClientMsg::ConvertToParty);
+        } else {
+            host.send_party(WsClientMsg::ConvertToRaid);
+        }
+    }
+
     let player_id = host.snapshot.player_id;
     if ui.show_quests && !ui.show_talents {
         if keys.just_pressed(KeyCode::KeyX) {
@@ -434,7 +539,7 @@ pub(crate) fn handle_interact_keys(
         host.interact(player_id, InteractAction::RespecTalents);
         host.recent_toasts.push(("Respeccing talents.".into(), 2.0));
     }
-    if !ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
+    if !ui.show_talents && !ui.show_party && keys.just_pressed(KeyCode::KeyR) {
         if let Some(npc) = host
             .snapshot
             .open_npc

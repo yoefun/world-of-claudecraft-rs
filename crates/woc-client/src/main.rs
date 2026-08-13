@@ -20,7 +20,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::Mutex;
 use uuid::Uuid;
 use woc_protocol::{
-    EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg,
+    EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg, WsServerMsg,
 };
 use woc_sim::Sim;
 use woc_version::{footer, VersionInfo};
@@ -253,6 +253,42 @@ impl GameHost {
             PlayMode::Online => {
                 if let Some(tx) = &self.to_net {
                     let _ = tx.send(WsClientMsg::Interact { target_id, action });
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_party(&mut self, msg: WsClientMsg) {
+        match self.play_mode {
+            PlayMode::Offline => {
+                if let Some(sim) = self.sim.as_mut() {
+                    let pid = sim.player_id;
+                    let outs = match &msg {
+                        WsClientMsg::PartyInvite { name } => sim.party_invite(pid, name),
+                        WsClientMsg::PartyAccept => sim.party_accept(pid),
+                        WsClientMsg::PartyDecline => sim.party_decline(pid),
+                        WsClientMsg::PartyLeave => sim.party_leave(pid),
+                        WsClientMsg::PartyKick { name } => sim.party_kick(pid, name),
+                        WsClientMsg::PartyPromote { name } => sim.party_promote(pid, name),
+                        WsClientMsg::PartyDisband => sim.party_disband(pid),
+                        WsClientMsg::PartyReadyCheck => sim.party_ready_check(pid),
+                        WsClientMsg::PartyReadyRespond { ready } => {
+                            sim.party_ready_respond(pid, *ready)
+                        }
+                        WsClientMsg::ConvertToRaid => sim.convert_to_raid(pid),
+                        WsClientMsg::ConvertToParty => sim.convert_to_party(pid),
+                        _ => Vec::new(),
+                    };
+                    for out in outs {
+                        if let WsServerMsg::Chat { text, .. } = out {
+                            self.recent_toasts.push((text, 4.0));
+                        }
+                    }
+                }
+            }
+            PlayMode::Online => {
+                if let Some(tx) = &self.to_net {
+                    let _ = tx.send(msg);
                 }
             }
         }
