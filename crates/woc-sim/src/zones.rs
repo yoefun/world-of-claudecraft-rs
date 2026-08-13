@@ -3,6 +3,7 @@
 use crate::ecs::components::{Bags, Combat, Hearth, Identity, InstanceAt, Threat, Transform};
 use crate::ecs::World;
 use crate::types::HEARTH_COOLDOWN_TICKS;
+use crate::world::WORLD_SEED;
 use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
@@ -75,7 +76,8 @@ pub(crate) fn load_overworld_zone_at(
     }
 
     let tag = layout_zone_tag(zone_id);
-    ensure_zone_population(world, layout, tag);
+    let mut rng = crate::rng::Rng::new(WORLD_SEED.wrapping_add(tag.len() as u32));
+    ensure_zone_population(world, layout, tag, &mut rng);
 
     let y = crate::ecs::spawn::ground_at(x, z);
     if let Some(t) = world.get_mut::<Transform>(player_id) {
@@ -129,7 +131,12 @@ pub(crate) fn use_hearthstone(
     true
 }
 
-fn ensure_zone_population(world: &mut World, layout: &ZoneLayout, tag: &str) {
+fn ensure_zone_population(
+    world: &mut World,
+    layout: &ZoneLayout,
+    tag: &str,
+    rng: &mut crate::rng::Rng,
+) {
     let has_zone_npc = world.ids::<Identity>().into_iter().any(|id| {
         world.get::<Identity>(id).is_some_and(|identity| {
             identity.kind == EntityKind::Npc
@@ -151,12 +158,21 @@ fn ensure_zone_population(world: &mut World, layout: &ZoneLayout, tag: &str) {
         }
     }
     for spot in layout.mobs {
-        let id = world.next_id();
-        if let Some(mid) =
-            crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, spot.x, spot.z)
-        {
-            if let Some(identity) = world.get_mut::<Identity>(mid) {
-                identity.zone_id = tag.to_string();
+        for i in 0..spot.count {
+            let id = world.next_id();
+            let (x, z) = if spot.radius > 0.0 {
+                let ox = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                let oz = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                (spot.x + ox, spot.z + oz)
+            } else {
+                (spot.x + i as f32 * 1.2, spot.z)
+            };
+            if let Some(mid) =
+                crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, z)
+            {
+                if let Some(identity) = world.get_mut::<Identity>(mid) {
+                    identity.zone_id = tag.to_string();
+                }
             }
         }
     }
@@ -181,20 +197,25 @@ pub fn populate_all_overworld(world: &mut World, rng: &mut crate::rng::Rng) {
             }
         }
         for spot in layout.mobs {
-            let id = world.next_id();
-            let ox = (rng.next_f32() - 0.5) * 1.5;
-            let oz = (rng.next_f32() - 0.5) * 1.5;
-            let x = spot.x + ox;
-            let z = spot.z + oz;
-            if let Some(mid) =
-                crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, z)
-            {
-                if let Some(identity) = world.get_mut::<Identity>(mid) {
-                    identity.zone_id = tag.to_string();
-                }
-                if let Some(home) = world.get_mut::<crate::ecs::components::Home>(mid) {
-                    home.home_x = x;
-                    home.home_z = z;
+            for i in 0..spot.count {
+                let id = world.next_id();
+                let (x, z) = if spot.radius > 0.0 {
+                    let ox = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                    let oz = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                    (spot.x + ox, spot.z + oz)
+                } else {
+                    (spot.x + i as f32 * 1.2, spot.z)
+                };
+                if let Some(mid) =
+                    crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, z)
+                {
+                    if let Some(identity) = world.get_mut::<Identity>(mid) {
+                        identity.zone_id = tag.to_string();
+                    }
+                    if let Some(home) = world.get_mut::<crate::ecs::components::Home>(mid) {
+                        home.home_x = x;
+                        home.home_z = z;
+                    }
                 }
             }
         }
@@ -320,6 +341,23 @@ mod tests {
         assert!(!enter_portal(&mut world, pid, "nope", &mut events));
         let t = world.get::<Transform>(pid).unwrap();
         assert_eq!((t.x, t.z), (9.0, 11.0));
+    }
+
+    #[test]
+    fn populate_spawns_wolf_run_pack() {
+        let mut world = World::new();
+        let mut rng = crate::rng::Rng::new(1);
+        populate_all_overworld(&mut world, &mut rng);
+        let n = world
+            .ids::<Identity>()
+            .into_iter()
+            .filter(|&id| {
+                world.get::<Identity>(id).and_then(|i| i.template_id.as_deref()) == Some("young_wolf")
+                    && world.get::<Identity>(id).map(|i| i.zone_id.as_str()) == Some("eastbrook")
+                    && world.get::<Health>(id).is_some_and(|h| h.alive)
+            })
+            .count();
+        assert!(n >= 5, "eastbrook young_wolf count={n}");
     }
 
     #[test]
