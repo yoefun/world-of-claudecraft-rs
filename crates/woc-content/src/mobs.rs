@@ -26,6 +26,40 @@ pub struct MobTemplate {
     pub loot: &'static [LootEntry],
 }
 
+const SCARRED_WOLF_LOOT: &[LootEntry] = &[
+    LootEntry {
+        item_id: "wolf_fang",
+        chance: 0.75,
+        count: 1,
+    },
+    LootEntry {
+        item_id: "fang_pendant",
+        chance: 0.12,
+        count: 1,
+    },
+];
+
+const YOUNG_BOAR_LOOT: &[LootEntry] = &[
+    LootEntry {
+        item_id: "boar_tusk",
+        chance: 0.85,
+        count: 1,
+    },
+    LootEntry {
+        item_id: "boar_tusk_ring",
+        chance: 0.12,
+        count: 1,
+    },
+];
+
+const CRYPT_WARDEN_LOOT: &[LootEntry] = &[
+    LootEntry {
+        item_id: "crypt_cleaver",
+        chance: 1.0,
+        count: 1,
+    },
+];
+
 pub static ZONE1_MOBS: &[MobTemplate] = &[
     MobTemplate {
         id: "young_wolf",
@@ -51,11 +85,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_min: 6,
         copper_max: 14,
         attack_damage: 9.0,
-        loot: &[LootEntry {
-            item_id: "wolf_fang",
-            chance: 0.75,
-            count: 1,
-        }],
+        loot: SCARRED_WOLF_LOOT,
     },
     MobTemplate {
         id: "young_boar",
@@ -66,11 +96,18 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_min: 4,
         copper_max: 10,
         attack_damage: 7.0,
-        loot: &[LootEntry {
-            item_id: "boar_tusk",
-            chance: 0.85,
-            count: 1,
-        }],
+        loot: YOUNG_BOAR_LOOT,
+    },
+    MobTemplate {
+        id: "crypt_warden",
+        name: "The Crypt Warden",
+        level: 3,
+        hp: 240.0,
+        xp: 150,
+        copper_min: 20,
+        copper_max: 40,
+        attack_damage: 14.0,
+        loot: CRYPT_WARDEN_LOOT,
     },
 ];
 

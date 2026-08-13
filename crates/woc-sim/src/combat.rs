@@ -1219,21 +1219,32 @@ pub fn spawn_mob_loot(
     x: f32,
     z: f32,
 ) -> EntityId {
-    let (copper, item) = if let Some(tid) = template_id.and_then(mob) {
-        let copper = rng.gen_range_u32(tid.copper_min, tid.copper_max);
-        let mut dropped = None;
-        for entry in tid.loot {
-            if rng.next_f32() < entry.chance {
-                dropped = Some(entry.item_id.to_string());
-                break;
-            }
-        }
-        (copper, dropped)
-    } else {
-        (rng.gen_range_u32(3, 8), None)
+    let Some(tid) = template_id.and_then(mob) else {
+        let copper = rng.gen_range_u32(3, 8);
+        let id = world.next_id();
+        return crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
     };
-    let id = world.next_id();
-    crate::ecs::spawn::create_loot(world, id, x, z, copper, item)
+    let copper = rng.gen_range_u32(tid.copper_min, tid.copper_max);
+    let mut dropped: Vec<String> = Vec::new();
+    for entry in tid.loot {
+        if rng.next_f32() < entry.chance {
+            dropped.push(entry.item_id.to_string());
+        }
+    }
+    if dropped.is_empty() {
+        let id = world.next_id();
+        return crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
+    }
+    let mut first = 0;
+    for (i, item_id) in dropped.into_iter().enumerate() {
+        let id = world.next_id();
+        let c = if i == 0 { copper } else { 0 };
+        crate::ecs::spawn::create_loot(world, id, x + i as f32 * 0.4, z, c, Some(item_id));
+        if i == 0 {
+            first = id;
+        }
+    }
+    first
 }
 
 pub fn try_pickup_loot(
@@ -3060,5 +3071,32 @@ mod tests {
         );
         toggle_form(&mut world, 1, &mut Vec::new());
         assert!((move_speed_mult(&world, 1) - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn independent_loot_can_drop_two_items() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        let _ = spawn_mob_loot(&mut world, &mut rng, Some("barrow_hag"), 0.0, 0.0);
+        let piles: Vec<_> = world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| world.get::<LootPile>(id).and_then(|p| p.item.clone()))
+            .collect();
+        assert!(piles.iter().any(|i| i == "hag_claw"));
+        assert!(piles.iter().any(|i| i == "hag_focus"));
+    }
+
+    #[test]
+    fn crypt_warden_drops_cleaver() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        spawn_mob_loot(&mut world, &mut rng, Some("crypt_warden"), 1.0, 1.0);
+        let items: Vec<_> = world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| world.get::<LootPile>(id).and_then(|p| p.item.clone()))
+            .collect();
+        assert_eq!(items, vec!["crypt_cleaver".to_string()]);
     }
 }

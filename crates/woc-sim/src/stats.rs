@@ -126,6 +126,7 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
 
 #[cfg(test)]
 mod tests {
+    use super::recalc_player_stats;
     use crate::ecs::components::Bags;
     use crate::ecs::spawn::create_player;
     use crate::ecs::World;
@@ -143,5 +144,23 @@ mod tests {
         assert_eq!(eq.feet.as_deref(), Some("recruit_boots"));
         assert!(eq.off_hand.is_none());
         assert!(eq.neck.is_none());
+    }
+
+    #[test]
+    fn pendant_raises_hp_max() {
+        use crate::ecs::components::Health;
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        let base_hp = world.get::<Health>(1).unwrap().hp_max;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.neck = Some("fang_pendant".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let with_pendant = world.get::<Health>(1).unwrap().hp_max;
+        assert!(
+            (with_pendant - base_hp - 8.0).abs() < 0.01,
+            "expected +8 hp_max from sta 4, got base {base_hp} with {with_pendant}"
+        );
     }
 }

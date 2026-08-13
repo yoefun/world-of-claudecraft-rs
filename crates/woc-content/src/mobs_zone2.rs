@@ -2,6 +2,32 @@
 
 use crate::mobs::{LootEntry, MobTemplate};
 
+const BOG_WISP_LOOT: &[LootEntry] = &[
+    LootEntry {
+        item_id: "wisp_ember",
+        chance: 0.65,
+        count: 1,
+    },
+    LootEntry {
+        item_id: "fen_staff",
+        chance: 0.15,
+        count: 1,
+    },
+];
+
+const BARROW_HAG_LOOT: &[LootEntry] = &[
+    LootEntry {
+        item_id: "hag_claw",
+        chance: 1.0,
+        count: 1,
+    },
+    LootEntry {
+        item_id: "hag_focus",
+        chance: 1.0,
+        count: 1,
+    },
+];
+
 pub static ZONE2_MOBS: &[MobTemplate] = &[
     MobTemplate {
         id: "fen_crawler",
@@ -42,11 +68,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         copper_min: 12,
         copper_max: 24,
         attack_damage: 14.0,
-        loot: &[LootEntry {
-            item_id: "wisp_ember",
-            chance: 0.65,
-            count: 1,
-        }],
+        loot: BOG_WISP_LOOT,
     },
     MobTemplate {
         id: "mire_leech",
@@ -102,10 +124,6 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         copper_min: 24,
         copper_max: 40,
         attack_damage: 18.0,
-        loot: &[LootEntry {
-            item_id: "hag_claw",
-            chance: 1.0,
-            count: 1,
-        }],
+        loot: BARROW_HAG_LOOT,
     },
 ];

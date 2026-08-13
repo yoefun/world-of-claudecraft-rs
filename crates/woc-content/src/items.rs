@@ -128,7 +128,6 @@ const CASTERS: &[PlayerClass] = &[
     PlayerClass::Warlock,
     PlayerClass::Druid,
 ];
-#[allow(dead_code)]
 const WAR_PAL: &[PlayerClass] = &[PlayerClass::Warrior, PlayerClass::Paladin];
 const WAR_PAL_ROGUE: &[PlayerClass] = &[
     PlayerClass::Warrior,
@@ -149,6 +148,19 @@ const fn weapon(
     style: WeaponStyle,
     allowed: &'static [PlayerClass],
 ) -> ItemDef {
+    weapon_gear(id, name, vendor_sell, attack_power, 0.0, 1, style, allowed)
+}
+
+const fn weapon_gear(
+    id: &'static str,
+    name: &'static str,
+    vendor_sell: u32,
+    attack_power: f32,
+    spell_power: f32,
+    level_req: u32,
+    style: WeaponStyle,
+    allowed: &'static [PlayerClass],
+) -> ItemDef {
     ItemDef {
         id,
         name,
@@ -159,13 +171,44 @@ const fn weapon(
         attack_power,
         armor: 0.0,
         equip_slot: Some(ItemEquipSlot::MainHand),
-        level_req: 1,
+        level_req,
         heal_hp: 0.0,
         armor_class: None,
         weapon_style: Some(style),
         allowed_classes: allowed,
         stamina: 0.0,
-        spell_power: 0.0,
+        spell_power,
+    }
+}
+
+const fn jewelry(
+    id: &'static str,
+    name: &'static str,
+    slot: ItemEquipSlot,
+    vendor_sell: u32,
+    stamina: f32,
+    attack_power: f32,
+    spell_power: f32,
+    level_req: u32,
+    allowed: &'static [PlayerClass],
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind: ItemKind::Armor,
+        stack_size: 1,
+        vendor_buy: 0,
+        vendor_sell,
+        attack_power,
+        armor: 0.0,
+        equip_slot: Some(slot),
+        level_req,
+        heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: allowed,
+        stamina,
+        spell_power,
     }
 }
 
@@ -386,6 +429,38 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         11.0,
         WeaponStyle::OneHand,
         WAR_PAL_ROGUE,
+    ),
+    jewelry(
+        "fang_pendant",
+        "Fang Pendant",
+        ItemEquipSlot::Neck,
+        10,
+        4.0,
+        0.0,
+        0.0,
+        1,
+        &[],
+    ),
+    jewelry(
+        "boar_tusk_ring",
+        "Boar Tusk Ring",
+        ItemEquipSlot::Finger,
+        12,
+        3.0,
+        1.0,
+        0.0,
+        1,
+        &[],
+    ),
+    weapon_gear(
+        "crypt_cleaver",
+        "Crypt Cleaver",
+        24,
+        16.0,
+        0.0,
+        3,
+        WeaponStyle::TwoHand,
+        WAR_PAL,
     ),
 ];
 

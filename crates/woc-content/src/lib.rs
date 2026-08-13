@@ -288,6 +288,17 @@ mod tests {
     }
 
     #[test]
+    fn dungeon_bosses_have_mob_templates() {
+        for d in DUNGEONS {
+            assert!(
+                mob(d.boss_id).is_some(),
+                "boss {} missing MobTemplate",
+                d.boss_id
+            );
+        }
+    }
+
+    #[test]
     fn eastbrook_spots_resolve() {
         for spot in EASTBROOK.npcs {
             assert!(
