@@ -52,6 +52,22 @@ pub fn tick_mob_respawns(world: &mut World, dt: f32) {
     }
 }
 
+fn reset_mob_combat(world: &mut World, id: EntityId) {
+    if let Some(c) = world.get_mut::<Combat>(id) {
+        c.target = None;
+        c.cast = None;
+        c.swing_timer = 0.0;
+        c.ability_cd = 0.0;
+        c.gcd = 0.0;
+    }
+    if let Some(th) = world.get_mut::<Threat>(id) {
+        th.threat.clear();
+    }
+    if let Some(a) = world.get_mut::<Auras>(id) {
+        a.auras.clear();
+    }
+}
+
 fn revive_mob(world: &mut World, id: EntityId) {
     let hp_max = world.get::<Health>(id).map(|h| h.hp_max).unwrap_or(1.0);
     let home = world.get::<Home>(id).copied();
@@ -66,19 +82,7 @@ fn revive_mob(world: &mut World, id: EntityId) {
             t.y = ground_height(t.x, t.z, WORLD_SEED);
         }
     }
-    if let Some(c) = world.get_mut::<Combat>(id) {
-        c.target = None;
-        c.cast = None;
-        c.swing_timer = 0.0;
-        c.ability_cd = 0.0;
-        c.gcd = 0.0;
-    }
-    if let Some(th) = world.get_mut::<Threat>(id) {
-        th.threat.clear();
-    }
-    if let Some(a) = world.get_mut::<Auras>(id) {
-        a.auras.clear();
-    }
+    reset_mob_combat(world, id);
     if let Some(r) = world.get_mut::<Respawn>(id) {
         r.respawn_timer = 0.0;
     }
@@ -165,11 +169,9 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
 
     // Leash: too far from home → drop combat and return.
     if d_home > LEASH_RANGE {
-        if let Some(c) = world.get_mut::<Combat>(mob_id) {
-            c.target = None;
-        }
-        if let Some(th) = world.get_mut::<Threat>(mob_id) {
-            th.threat.clear();
+        reset_mob_combat(world, mob_id);
+        if let Some(h) = world.get_mut::<Health>(mob_id) {
+            h.hp = h.hp_max;
         }
         move_toward_home(world, mob_id);
         return;
@@ -225,7 +227,7 @@ fn move_toward_home(world: &mut World, mob_id: EntityId) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Combat, Health, Home, Respawn, Threat, Transform};
+    use crate::ecs::components::{Auras, Combat, Health, Home, Respawn, Threat, Transform};
     use crate::types::LEASH_RANGE;
     use woc_content::PlayerClass;
     use woc_protocol::DT;
@@ -285,6 +287,46 @@ mod tests {
         update_mob_ai(&mut world, 2, 1);
         assert!(world.get::<Transform>(2).unwrap().x > before);
         assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
+    }
+
+    #[test]
+    fn leash_restores_hp_and_clears_auras() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Kite", woc_content::PlayerClass::Warrior, 80.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 5.0;
+        }
+        if let Some(a) = world.get_mut::<Auras>(2) {
+            a.auras.push(crate::ecs::components::AuraInstance {
+                id: "rend".into(),
+                remaining: 9.0,
+                stacks: 1,
+                tick_timer: 3.0,
+                tick_interval: 3.0,
+                tick_damage: 4.0,
+                tick_heal: 0.0,
+                source: 1,
+                stun: false,
+                move_mult: 1.0,
+                absorb: 0.0,
+                breaks_on_damage: false,
+                damage_mult: 1.0,
+                thorns: 0.0,
+                armor_flat: 0.0,
+            });
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = Some(1);
+        }
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 80.0;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        let h = world.get::<Health>(2).unwrap();
+        assert!((h.hp - h.hp_max).abs() < 0.1, "leash must heal, hp={}", h.hp);
+        assert!(world.get::<Combat>(2).unwrap().target.is_none());
+        assert!(world.get::<Auras>(2).unwrap().auras.is_empty());
     }
 
     #[test]
