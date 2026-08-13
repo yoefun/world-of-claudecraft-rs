@@ -399,6 +399,354 @@ impl GuildRoster {
             },
         ]
     }
+
+    pub fn kick(
+        &mut self,
+        actor: EntityId,
+        target_name: &str,
+        world: &World,
+    ) -> Vec<GuildEffect> {
+        if world.get::<ClassKit>(actor).is_none() {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in the realm.".into(),
+            }];
+        }
+        let actor_key = Self::member_key(world, actor);
+        let Some(&guild_id) = self.membership.get(&actor_key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(guild) = self.guilds.get(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let actor_rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == actor_key)
+            .map(|m| m.rank);
+        if actor_rank == Some(GuildRank::Member) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only officers and the Guild Master may remove members.".into(),
+            }];
+        }
+        let actor_name = world
+            .get::<Identity>(actor)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| "Someone".into());
+        if world
+            .get::<Identity>(actor)
+            .is_some_and(|i| i.name == target_name)
+        {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Use Leave Guild to remove yourself.".into(),
+            }];
+        }
+        let Some(guild) = self.guilds.get_mut(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(target_idx) = guild
+            .members
+            .iter()
+            .position(|m| m.name == target_name)
+        else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_name} is not in your guild."),
+            }];
+        };
+        let target = guild.members[target_idx].clone();
+        if target.rank == GuildRank::Leader {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You cannot remove the Guild Master.".into(),
+            }];
+        }
+        if target.rank == GuildRank::Officer && actor_rank == Some(GuildRank::Officer) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only the Guild Master may remove an officer.".into(),
+            }];
+        }
+        let guild_name = guild.name.clone();
+        let target_name_display = target.name.clone();
+        let target_key = target.durable_id.clone();
+        guild.members.retain(|m| m.durable_id != target_key);
+        self.membership.remove(&target_key);
+        let mut effects = Vec::new();
+        if let Some(kicked_id) = find_player_by_durable(world, &target_key) {
+            effects.push(GuildEffect::Notice {
+                to: kicked_id,
+                message: format!("You have been removed from <{guild_name}>."),
+            });
+        }
+        effects.push(GuildEffect::GuildNotice {
+            guild_id,
+            message: format!("{target_name_display} has been removed from the guild by {actor_name}."),
+        });
+        effects
+    }
+
+    pub fn set_rank(
+        &mut self,
+        actor: EntityId,
+        target_name: &str,
+        rank: GuildRank,
+        world: &World,
+    ) -> Vec<GuildEffect> {
+        if world.get::<ClassKit>(actor).is_none() {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in the realm.".into(),
+            }];
+        }
+        let actor_key = Self::member_key(world, actor);
+        let Some(&guild_id) = self.membership.get(&actor_key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(guild) = self.guilds.get(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let actor_rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == actor_key)
+            .map(|m| m.rank);
+        if actor_rank != Some(GuildRank::Leader) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only the Guild Master may change ranks.".into(),
+            }];
+        }
+        if rank == GuildRank::Leader {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Use a guild transfer to hand over leadership.".into(),
+            }];
+        }
+        let Some(guild) = self.guilds.get_mut(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(member) = guild.members.iter_mut().find(|m| m.name == target_name) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_name} is not in your guild."),
+            }];
+        };
+        if member.rank == rank {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_name} is already {}.", rank.label()),
+            }];
+        }
+        member.rank = rank;
+        vec![GuildEffect::GuildNotice {
+            guild_id,
+            message: format!("{target_name} is now {}.", rank.label()),
+        }]
+    }
+
+    pub fn transfer_leader(
+        &mut self,
+        actor: EntityId,
+        target_name: &str,
+        world: &World,
+    ) -> Vec<GuildEffect> {
+        if world.get::<ClassKit>(actor).is_none() {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in the realm.".into(),
+            }];
+        }
+        let actor_key = Self::member_key(world, actor);
+        let Some(&guild_id) = self.membership.get(&actor_key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(guild) = self.guilds.get(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let actor_rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == actor_key)
+            .map(|m| m.rank);
+        if actor_rank != Some(GuildRank::Leader) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only the Guild Master may promote a new leader.".into(),
+            }];
+        }
+        let Some(guild) = self.guilds.get_mut(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(target) = guild.members.iter_mut().find(|m| m.name == target_name) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_name} is not in your guild."),
+            }];
+        };
+        if target.durable_id == actor_key {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: format!("{target_name} is not in your guild."),
+            }];
+        }
+        target.rank = GuildRank::Leader;
+        if let Some(actor_member) = guild.members.iter_mut().find(|m| m.durable_id == actor_key) {
+            actor_member.rank = GuildRank::Officer;
+        }
+        let guild_name = guild.name.clone();
+        vec![GuildEffect::GuildNotice {
+            guild_id,
+            message: format!("{target_name} is now the Guild Master of <{guild_name}>."),
+        }]
+    }
+
+    pub fn disband(&mut self, actor: EntityId, world: &World) -> Vec<GuildEffect> {
+        if world.get::<ClassKit>(actor).is_none() {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in the realm.".into(),
+            }];
+        }
+        let actor_key = Self::member_key(world, actor);
+        let Some(&guild_id) = self.membership.get(&actor_key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(guild) = self.guilds.get(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let actor_rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == actor_key)
+            .map(|m| m.rank);
+        if actor_rank != Some(GuildRank::Leader) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only the Guild Master may disband the guild.".into(),
+            }];
+        }
+        let Some(guild) = self.guilds.remove(&guild_id) else {
+            return Vec::new();
+        };
+        let guild_name = guild.name.clone();
+        for member in &guild.members {
+            self.membership.remove(&member.durable_id);
+        }
+        vec![GuildEffect::GuildNotice {
+            guild_id,
+            message: format!("<{guild_name}> has been disbanded."),
+        }]
+    }
+
+    pub fn set_motd(
+        &mut self,
+        actor: EntityId,
+        text: &str,
+        world: &World,
+    ) -> Vec<GuildEffect> {
+        if world.get::<ClassKit>(actor).is_none() {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in the realm.".into(),
+            }];
+        }
+        let actor_key = Self::member_key(world, actor);
+        let Some(&guild_id) = self.membership.get(&actor_key) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let Some(guild) = self.guilds.get(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        let actor_rank = guild
+            .members
+            .iter()
+            .find(|m| m.durable_id == actor_key)
+            .map(|m| m.rank);
+        if actor_rank == Some(GuildRank::Member) {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "Only officers and the Guild Master may set the billboard.".into(),
+            }];
+        }
+        let actor_name = world
+            .get::<Identity>(actor)
+            .map(|i| i.name.clone())
+            .unwrap_or_else(|| "Someone".into());
+        let motd: String = text.chars().take(GUILD_MOTD_MAX).collect();
+        let Some(guild) = self.guilds.get_mut(&guild_id) else {
+            return vec![GuildEffect::Error {
+                to: actor,
+                message: "You are not in a guild.".into(),
+            }];
+        };
+        guild.motd = motd;
+        guild.motd_set_by = actor_name;
+        vec![GuildEffect::Notice {
+            to: actor,
+            message: "Guild billboard updated.".into(),
+        }]
+    }
+
+    pub fn remove_member(&mut self, durable_id: &str) {
+        let Some(&guild_id) = self.membership.get(durable_id) else {
+            return;
+        };
+        let Some(mut guild) = self.guilds.remove(&guild_id) else {
+            self.membership.remove(durable_id);
+            return;
+        };
+        guild.members.retain(|m| m.durable_id != durable_id);
+        self.membership.remove(durable_id);
+        if guild.members.is_empty() {
+            return;
+        }
+        if !guild.members.iter().any(|m| m.rank == GuildRank::Leader) {
+            guild.members[0].rank = GuildRank::Leader;
+        }
+        self.guilds.insert(guild_id, guild);
+    }
 }
 
 fn live_member(world: &World, id: EntityId, rank: GuildRank) -> GuildMember {
@@ -423,6 +771,12 @@ fn find_player_by_name(world: &World, name: &str) -> Option<EntityId> {
         world
             .get::<Identity>(id)
             .is_some_and(|i| i.name == name)
+    })
+}
+
+fn find_player_by_durable(world: &World, durable: &str) -> Option<EntityId> {
+    world.ids::<ClassKit>().into_iter().find(|&id| {
+        GuildRoster::member_key(world, id) == durable
     })
 }
 
@@ -550,5 +904,61 @@ mod tests {
             GuildEffect::Notice { to: 1, message } if message.contains("disbanded")
         )));
         assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 1)).is_none());
+    }
+
+    fn formed_duo(tick: u64) -> (World, GuildRoster) {
+        let world = world_with_players(3);
+        let mut roster = GuildRoster::new();
+        let _ = roster.create(1, "Vale Watch", &world);
+        let _ = roster.invite(1, "Bob", tick, &world);
+        let _ = roster.accept(2, tick + 1, &world);
+        (world, roster)
+    }
+
+    #[test]
+    fn kick_and_rank_permissions() {
+        let (world, mut roster) = formed_duo(0);
+        let as_member = roster.kick(2, "Alice", &world);
+        assert!(as_member.iter().any(|e| matches!(
+            e,
+            GuildEffect::Error { to: 2, message } if message.contains("Only officers")
+        )));
+        let _ = roster.set_rank(1, "Bob", GuildRank::Officer, &world);
+        let kicked_leader = roster.kick(2, "Alice", &world);
+        assert!(kicked_leader.iter().any(|e| matches!(
+            e,
+            GuildEffect::Error { message, .. } if message.contains("Guild Master")
+        )));
+        let _ = roster.invite(2, "Carol", 5, &world);
+        let _ = roster.accept(3, 6, &world);
+        let ok = roster.kick(2, "Carol", &world);
+        assert!(ok.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+    }
+
+    #[test]
+    fn transfer_then_old_leader_can_leave() {
+        let (world, mut roster) = formed_duo(0);
+        let _ = roster.transfer_leader(1, "Bob", &world);
+        let alice_key = GuildRoster::member_key(&world, 1);
+        let g = roster.guild(roster.guild_id_of(&alice_key).unwrap()).unwrap();
+        assert_eq!(
+            g.members.iter().find(|m| m.name == "Bob").unwrap().rank,
+            GuildRank::Leader
+        );
+        let left = roster.leave(1, &world);
+        assert!(left.iter().any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+    }
+
+    #[test]
+    fn disband_and_motd() {
+        let (world, mut roster) = formed_duo(0);
+        let motd = roster.set_motd(1, "Kill wolves at dusk", &world);
+        assert!(motd.iter().any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+        let gid = roster.guild_id_of(&GuildRoster::member_key(&world, 1)).unwrap();
+        assert_eq!(roster.guild(gid).unwrap().motd, "Kill wolves at dusk");
+        let gone = roster.disband(1, &world);
+        assert!(gone.iter().any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
+        assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 1)).is_none());
+        assert!(roster.guild_id_of(&GuildRoster::member_key(&world, 2)).is_none());
     }
 }
