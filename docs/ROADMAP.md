@@ -15,6 +15,14 @@
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n are non-goals.
 
+## Internal: sim ECS columns
+
+Gameplay actors in `woc-sim` move from a fat `Vec<Entity>` to a typed sparse-column `World` (simpler systems, O(1) lookup, sparse loot/NPC). Parity/protocol unchanged.
+
+**Design:** [`docs/superpowers/specs/2026-08-13-sim-ecs-design.md`](superpowers/specs/2026-08-13-sim-ecs-design.md)  
+**Plan:** [`docs/superpowers/plans/2026-08-13-sim-ecs.md`](superpowers/plans/2026-08-13-sim-ecs.md)  
+**Rules:** [`docs/architecture/ecs.md`](architecture/ecs.md) · [`AGENTS.md`](../AGENTS.md)
+
 ## Parallel execution
 
 Main agent freezes protocol/sim contracts per wave, dispatches subagents on isolated branches with exclusive path ownership, then merges by dependency and runs workspace tests. See plan §“Main-agent merge playbook”.

@@ -377,3 +377,24 @@ pub fn remove_item(inv: &mut [Option<InvStack>], item_id: &str, count: u32) -> b
     }
     remaining == 0
 }
+
+#[cfg(test)]
+mod architecture {
+    use super::Entity;
+
+    /// Stack layout of the frozen fat `Entity`. Lower this as ECS migration
+    /// extracts columns. Raising it means someone added a field — don't; add a
+    /// component (`docs/architecture/ecs.md`).
+    const FAT_ENTITY_SIZE_CEILING: usize = 864;
+
+    #[test]
+    fn fat_entity_stack_size_must_not_grow() {
+        let size = std::mem::size_of::<Entity>();
+        assert!(
+            size <= FAT_ENTITY_SIZE_CEILING,
+            "Entity is {size} bytes (ceiling {FAT_ENTITY_SIZE_CEILING}). \
+             Do not add fields to Entity; add a sparse component \
+             (docs/architecture/ecs.md)."
+        );
+    }
+}

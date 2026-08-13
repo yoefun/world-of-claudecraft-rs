@@ -4,6 +4,7 @@
 
 ### Added
 
+- Sim ECS program (docs + guardrails): typed sparse-column `World` design/plan; `AGENTS.md` + `docs/architecture/ecs.md`; fat `Entity` stack-size freeze (864 bytes).
 - Basic combat UX polish: keys **1–5** fire class kit slots; **Tab** cycles hostile targets; **Esc** clears target and stops auto-attack.
 - Protocol rev **5**: intent `clear_target`; snapshot `ability_bar` / `gcd` / `auto_attack` for the action-bar HUD.
 - Action bar shows known/locked kit abilities with CD/GCD state; aura strip on the bar; ability-hit / damage-taken combat toasts.
