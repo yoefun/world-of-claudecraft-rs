@@ -586,6 +586,7 @@ impl Sim {
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
             .tick_expire(self.tick, &mut self.world, &mut self.mail);
+        self.mail.tick_expire(self.tick, &mut self.events);
 
         // Phase 8: loot_pickup
         for &pid in &player_ids {
@@ -892,7 +893,11 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
-            mail_postage: 0,
+            mail_postage: if world.get::<ClassKit>(player_id).is_some() {
+                crate::mail::MAIL_POSTAGE
+            } else {
+                0
+            },
         }
     }
 
@@ -1233,6 +1238,69 @@ mod tests {
         assert_eq!(TICK_PHASES[8], "profession_casts");
         assert_eq!(TICK_PHASES[9], "build_snapshot");
         assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+    }
+
+    #[test]
+    fn mail_expiry_runs_inside_pvp_and_market_without_fingerprint_change() {
+        use crate::mail::{MAIL_POSTAGE, MAIL_TTL_TICKS};
+
+        assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+        let mut sim = Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 5;
+        }
+        sim.interact(0, InteractAction::MailSend {
+            to_name: "Bob".into(),
+            copper: 2,
+            bag_slot: None,
+            count: 0,
+        });
+        assert_eq!(sim.snapshot_for(bob).mail.len(), 1);
+        sim.tick = MAIL_TTL_TICKS;
+        sim.tick_all();
+        assert!(sim.snapshot_for(bob).mail.is_empty());
+        assert_eq!(
+            sim.snapshot_for(sim.player_id).mail[0].subject,
+            "Returned: Parcel"
+        );
+        assert_eq!(
+            sim.snapshot_for(sim.player_id).mail_postage,
+            MAIL_POSTAGE
+        );
+    }
+
+    #[test]
+    fn mail_refuses_quest_item() {
+        let mut sim = Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let _bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            assert!(crate::inventory::grant_into(
+                &mut bags.inventory,
+                "boar_tusk",
+                1
+            ));
+        }
+        let slot = sim
+            .world
+            .get::<Bags>(sim.player_id)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "boar_tusk"))
+            .unwrap() as u8;
+        sim.interact(0, InteractAction::MailSend {
+            to_name: "Bob".into(),
+            copper: 0,
+            bag_slot: Some(slot),
+            count: 1,
+        });
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "This item is needed for a quest."
+        )));
+        assert!(sim.snapshot_for(sim.player_id).mail.is_empty());
+        assert!(sim.snapshot_for(_bob).mail.is_empty());
     }
 
     #[test]

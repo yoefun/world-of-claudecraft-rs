@@ -434,13 +434,14 @@ impl Mailbox {
             return false;
         };
         let mail = mails.remove(idx);
-        self.route_return_or_discard(mail, events);
+        self.route_return_or_discard(mail, events, false);
         true
     }
 
     /// Drain expired player parcels (`expires_tick > 0 && now_tick >=
     /// expires_tick`) and return them to their sender as system mail. System
-    /// mail (`expires_tick == 0`) never expires.
+    /// mail (`expires_tick == 0`) never expires. Does not emit realm-wide
+    /// toasts (unlike interactive [`Mailbox::return_mail`]).
     pub fn tick_expire(&mut self, now_tick: u64, events: &mut Vec<SimEvent>) {
         let mut expired = Vec::new();
         for mails in self.inbox.values_mut() {
@@ -454,11 +455,16 @@ impl Mailbox {
             }
         }
         for mail in expired {
-            self.route_return_or_discard(mail, events);
+            self.route_return_or_discard(mail, events, true);
         }
     }
 
-    fn route_return_or_discard(&mut self, mail: MailItem, events: &mut Vec<SimEvent>) {
+    fn route_return_or_discard(
+        &mut self,
+        mail: MailItem,
+        events: &mut Vec<SimEvent>,
+        silent: bool,
+    ) {
         if let Some(return_to) = mail.return_to.clone() {
             let attachment = mail.item_id.clone().map(|item_id| MailAttachment {
                 item_id,
@@ -473,10 +479,12 @@ impl Mailbox {
                 mail.copper,
                 attachment,
             );
-            events.push(SimEvent::Toast {
-                message: "Mail returned.".into(),
-            });
-        } else {
+            if !silent {
+                events.push(SimEvent::Toast {
+                    message: "Mail returned.".into(),
+                });
+            }
+        } else if !silent {
             events.push(SimEvent::Toast {
                 message: "Mail discarded.".into(),
             });
