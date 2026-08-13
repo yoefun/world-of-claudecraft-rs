@@ -254,6 +254,7 @@ pub(crate) fn handle_interact_keys(
     if keys.just_pressed(KeyCode::KeyC) {
         ui.show_character = !ui.show_character;
         if ui.show_character {
+            ui.show_bags = false;
             ui.show_talents = false;
             ui.show_bank = false;
             ui.show_mail = false;
@@ -520,7 +521,7 @@ pub(crate) fn handle_interact_keys(
         }
     }
 
-    if ui.show_bags {
+    if ui.show_bags && !ui.show_character {
         let bag_slot = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
         {
             Some(0u8)
