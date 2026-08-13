@@ -1,7 +1,28 @@
 # Parity status
 
 **Current rewrite:** `1.3.0` / `online-hard`.  
-**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).
+**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
+**Next gameplay program:** class-identity `1.6.0`–`1.8.0` (planned) — [`../superpowers/specs/2026-08-13-class-identity-program-design.md`](../superpowers/specs/2026-08-13-class-identity-program-design.md).
+
+## Class-identity (`class-engine` → `class-forms`) — planned
+
+Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
+
+Prerequisite: [PR #20](https://github.com/yoefun/world-of-claudecraft-rs/pull/20) (named auras / Execute / HealOrHarm / 4–5 kits) on `develop`.
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Protocol rev 7 identity snapshot | planned | `combo_points`, `stealthed`, `stance_id`, `absorb`; Z/F interact |
+| Absorb / interrupt lockout / self-AoE | planned | Priest shield; Kick lockout; Frost Nova without a target |
+| Rogue stealth + combo | planned | Z stealth; builder/spend; Cheap Shot from stealth |
+| Warrior charge + rage-from-taken | planned | Slot 5 Charge; defensive stance in 1.8 |
+| Mage blink | planned | Slot 5 Blink |
+| Hunter mana + Aspect | planned | ResourceType::Mana; Aspect of the Hawk |
+| Paladin aura + seal | planned | 1.8 |
+| Shaman lightning shield + ghost wolf | planned | 1.8 |
+| Warlock life tap + fear | planned | 1.8 |
+| Druid travel form | planned | 1.8; not bear/cat |
+| Full upstream spellbooks / 27 specs | deferred | Explicit non-goal |
 
 ## Post-completion (`stable` → `online-hard`)
 

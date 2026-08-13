@@ -11,6 +11,10 @@
 | **1.1.0** (this branch) | `combat-depth` | Data-driven ability effects: heal, AoE, miss/crit, interrupt, taunt |
 | **1.2.0** (this branch) | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
 | **1.3.0** (this branch) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
+| **1.4.0 / 1.5.0** (other program) | `client-compat` / `client-update` | Version gate + updater packages — not class gameplay |
+| **1.6.0** (planned) | `class-engine` | Combo, stealth, absorb, lockout, charge/blink/life-tap, hunter mana |
+| **1.7.0** (planned) | `class-identity` | Rogue stealth+combo, priest shield, warrior charge, mage blink, hunter aspect |
+| **1.8.0** (planned) | `class-forms` | Paladin aura/seal, shaman shield+ghost wolf, warlock tap+fear, druid travel form, warrior stance |
 
 ## Completion program (closed)
 
@@ -26,6 +30,16 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 **Max-parallel schedule:** [`docs/superpowers/plans/2026-08-13-parallel-post-completion.md`](superpowers/plans/2026-08-13-parallel-post-completion.md)
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
+
+## Class-identity program (planned)
+
+Prerequisite: class-kit identity ([PR #20](https://github.com/yoefun/world-of-claudecraft-rs/pull/20)) on `develop`. Versions **1.6.0–1.8.0** so they do not collide with client-compat `1.4.0` / client-update `1.5.0`.
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-class-identity-program-design.md`](superpowers/specs/2026-08-13-class-identity-program-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-class-identity-program.md`](superpowers/plans/2026-08-13-class-identity-program.md)  
+**Max-parallel schedule:** [`docs/superpowers/plans/2026-08-13-parallel-class-identity.md`](superpowers/plans/2026-08-13-parallel-class-identity.md)
+
+Not a full upstream spellbook port. Engine first, then one signature per class. No 6th action-bar slot, no 27 talent specs.
 
 ## Internal: sim ECS columns (done)
 
