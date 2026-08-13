@@ -11,6 +11,7 @@
 | **1.1.0** (this branch) | `combat-depth` | Data-driven ability effects: heal, AoE, miss/crit, interrupt, taunt |
 | **1.2.0** (this branch) | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
 | **1.3.0** (this branch) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
+| **1.4.0** (planned) | `client-compat` | Online version gate: title `/version` preflight, Hello identity, Welcome kick |
 
 ## Completion program (closed)
 
@@ -26,6 +27,13 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 **Max-parallel schedule:** [`docs/superpowers/plans/2026-08-13-parallel-post-completion.md`](superpowers/plans/2026-08-13-parallel-post-completion.md)
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
+
+## Client version gate (planned)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-client-version-update-design.md`](superpowers/specs/2026-08-13-client-version-update-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-client-version-update.md`](superpowers/plans/2026-08-13-client-version-update.md)
+
+Online Bevy clients must not enter a realm with a mismatched rewrite version or `protocol_rev`. Packaged auto-update (installers, signed feeds, self-replace) stays a non-goal; players rebuild out of band. `PROTOCOL_REV` stays 6 (additive Hello fields).
 
 ## Internal: sim ECS columns (done)
 
