@@ -425,6 +425,7 @@ mod tests {
             bags.equipment.finger2 = Some("boar_tusk_ring".into());
             bags.equipment_wear.main_hand = Some(17);
             bags.equipment_enchants.main_hand = Some("coarse_sharpening".into());
+            bags.equipment_enchants.off_hand = Some("minor_wizard_oil".into());
         }
         if let Some(hearth) = world.get_mut::<Hearth>(1) {
             hearth.zone_id = "eastfen".into();
@@ -466,6 +467,10 @@ mod tests {
         assert_eq!(
             restored.equipment_enchants.main_hand.as_deref(),
             Some("coarse_sharpening")
+        );
+        assert_eq!(
+            restored.equipment_enchants.off_hand.as_deref(),
+            Some("minor_wizard_oil")
         );
         assert!(!restored.is_virgin());
     }

@@ -299,6 +299,8 @@ pub struct EquipmentDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_hand_enchant: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub off_hand_enchant: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_hand_durability: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub off_hand_durability: Option<u32>,

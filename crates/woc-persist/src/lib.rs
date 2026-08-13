@@ -210,6 +210,7 @@ mod serialize_tests {
         assert!(eq.finger.is_none());
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
+        assert!(eq.off_hand_enchant.is_none());
     }
 
     #[test]

@@ -217,6 +217,7 @@ fn wear_from_dto(e: &EquipmentDto) -> EquipmentWear {
 fn enchants_from_dto(e: &EquipmentDto) -> woc_sim::ecs::components::EquipmentEnchants {
     woc_sim::ecs::components::EquipmentEnchants {
         main_hand: e.main_hand_enchant.clone(),
+        off_hand: e.off_hand_enchant.clone(),
     }
 }
 
@@ -236,6 +237,7 @@ fn equip_to_dto(
         finger: e.finger.clone(),
         finger2: e.finger2.clone(),
         main_hand_enchant: enchants.main_hand.clone(),
+        off_hand_enchant: enchants.off_hand.clone(),
         main_hand_durability: wear.main_hand,
         off_hand_durability: wear.off_hand,
         head_durability: wear.head,

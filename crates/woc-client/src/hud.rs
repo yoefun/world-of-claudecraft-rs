@@ -264,7 +264,9 @@ fn bag_stack_label(item_id: &str, count: u32, durability: Option<u32>) -> String
 fn equipment_label(item_id: Option<&str>, durability: Option<u32>) -> String {
     match item_id {
         Some(id) => {
-            let base = gear_durability_text(id, durability).unwrap_or_else(|| id.to_string());
+            let base = gear_durability_text(id, durability)
+                .or_else(|| item(id).map(|d| d.name.to_string()))
+                .unwrap_or_else(|| id.to_string());
             match item(id).map(|d| d.quality) {
                 Some(ItemQuality::Uncommon) => format!("Uncommon {base}"),
                 Some(ItemQuality::Rare) => format!("Rare {base}"),
@@ -1406,5 +1408,13 @@ mod tests {
         let mage = format_action_bar(&snap);
         assert!(!mage.contains("[F] Stance"));
         assert!(!mage.contains("[F] Form"));
+    }
+
+    #[test]
+    fn jewelry_equipment_label_uses_quality_and_name() {
+        assert_eq!(
+            equipment_label(Some("fang_pendant"), None),
+            "Uncommon Fang Pendant"
+        );
     }
 }

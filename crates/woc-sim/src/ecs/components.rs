@@ -140,6 +140,7 @@ impl EquipmentWear {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EquipmentEnchants {
     pub main_hand: Option<String>,
+    pub off_hand: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +148,7 @@ pub struct BuybackEntry {
     pub item_id: String,
     pub count: u32,
     pub durability: Option<u32>,
+    pub enchant_id: Option<String>,
     pub copper: u32,
 }
 
