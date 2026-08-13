@@ -11,7 +11,7 @@
 //! | `Skinnable` | beast loot piles |
 //! | `Owner` | pet |
 //! | `Escort` | escort NPC (quest follower; not Owner) |
-//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `ProfessionCast` | player |
+//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Reputation`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `ProfessionCast` | player |
 //!
 //! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
 
@@ -309,6 +309,12 @@ pub struct Progress {
     pub completed_deeds: BTreeSet<String>,
 }
 
+/// Per-faction standing values. Missing ids read as Neutral 0.
+#[derive(Debug, Clone, Default)]
+pub struct Reputation {
+    pub values: HashMap<String, i32>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Bank {
     pub bank: Vec<Option<InvStack>>,
@@ -401,6 +407,7 @@ impl_component!(Bags, bags);
 impl_component!(Hearth, hearth);
 impl_component!(QuestLog, quest_log);
 impl_component!(Progress, progress);
+impl_component!(Reputation, reputation);
 impl_component!(Bank, bank);
 impl_component!(Motion, motion);
 impl_component!(Spirit, spirit);

@@ -535,6 +535,7 @@ mod tests {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Default::default(),
         };
         // Force non-virgin by setting copper.
         assert!(!state.is_virgin());

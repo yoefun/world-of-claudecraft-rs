@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, GatherNodeState,
     Health, Hearth, Home, Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress,
-    QuestLog, Respawn, Skinnable, Spirit, Threat, Transform,
+    QuestLog, Reputation, Respawn, Skinnable, Spirit, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::grant_into;
@@ -176,6 +176,7 @@ pub fn create_player(
     );
     world.insert(id, QuestLog::default());
     world.insert(id, Progress::default());
+    world.insert(id, Reputation::default());
     world.insert(
         id,
         Bank {

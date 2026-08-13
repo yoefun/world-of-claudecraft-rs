@@ -13,7 +13,9 @@ pub type EntityId = u32;
 /// `protocol_rev` / `rewrite_version` identity; omitting them is valid JSON and
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
-/// Rev 8: quest abandon/share, optional turn-in reward choice.
+/// Rev 8: quest abandon/share, optional turn-in reward choice. Additive
+/// reputation snapshot / vendor discount_pct / ReputationChanged (1.14.0);
+/// also `finger2` / `main_hand_enchant` / stack `enchant_id` (1.13.0).
 pub const PROTOCOL_REV: u32 = 8;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
@@ -388,6 +390,8 @@ pub struct VendorSnapshot {
     pub npc_id: EntityId,
     pub npc_name: String,
     pub stock: Vec<VendorOfferSnapshot>,
+    #[serde(default)]
+    pub discount_pct: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -418,6 +422,9 @@ pub struct NpcSessionSnapshot {
     pub can_bind: bool,
     #[serde(default)]
     pub buyback: Vec<BuybackSnapshot>,
+    /// Vendor buy discount percent from the viewer's standing (0 if none).
+    #[serde(default)]
+    pub discount_pct: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -575,6 +582,18 @@ pub struct TickSnapshot {
     /// Derived spell power from gear and stats.
     #[serde(default)]
     pub spell_power: f32,
+    /// Per-faction standing for the local player (all known factions).
+    #[serde(default)]
+    pub reputation: Vec<ReputationSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ReputationSnapshot {
+    pub faction_id: String,
+    pub name: String,
+    pub value: i32,
+    /// `hated` … `exalted`
+    pub standing: String,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -685,6 +704,7 @@ impl Default for TickSnapshot {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            reputation: Vec::new(),
         }
     }
 }
@@ -869,6 +889,13 @@ pub enum SimEvent {
         delve_id: String,
         reward_copper: u32,
         reward_item: Option<String>,
+    },
+    ReputationChanged {
+        player: EntityId,
+        faction_id: String,
+        delta: i32,
+        total: i32,
+        standing: String,
     },
 }
 
@@ -1113,6 +1140,7 @@ mod tests {
         assert!(!snap.stealthed);
         assert!(snap.stance_id.is_empty());
         assert_eq!(snap.absorb, 0.0);
+        assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
     }
 
@@ -1191,6 +1219,7 @@ mod tests {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            reputation: Vec::new(),
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -1232,6 +1261,13 @@ mod tests {
             SimEvent::ProfessionDenied {
                 player: 9,
                 reason: ProfessionDeny::MissingTool,
+            },
+            SimEvent::ReputationChanged {
+                player: 1,
+                faction_id: "eastbrook_watch".into(),
+                delta: 150,
+                total: 150,
+                standing: "neutral".into(),
             },
         ];
         for e in events {
@@ -1507,6 +1543,7 @@ mod tests {
         assert_eq!(snap.attack_power, 0.0);
         assert_eq!(snap.armor, 0.0);
         assert_eq!(snap.spell_power, 0.0);
+        assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
         assert_eq!(PROTOCOL_REV, 8);
     }

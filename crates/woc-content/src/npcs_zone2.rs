@@ -10,6 +10,7 @@ pub static ZONE2_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("eastfen_circle"),
     },
     NpcDef {
         id: "apothecary_vex",
@@ -21,20 +22,12 @@ pub static ZONE2_NPCS: &[NpcDef] = &[
             NpcService::ProfessionTrainer,
         ],
         vendor_stock: &[
-            VendorOffer {
-                item_id: "fen_tonic",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "travelers_ration",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "spring_water",
-                count: 40,
-            },
+            VendorOffer::stack("fen_tonic", 20),
+            VendorOffer::stack("travelers_ration", 20),
+            VendorOffer::stack("spring_water", 40),
         ],
         trains: &["herbalism", "alchemy"],
+        faction: Some("eastfen_circle"),
     },
     NpcDef {
         id: "scout_darian",
@@ -43,6 +36,7 @@ pub static ZONE2_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("eastfen_circle"),
     },
     NpcDef {
         id: "keeper_orla",
@@ -51,6 +45,7 @@ pub static ZONE2_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("mirefen_ferry"),
     },
     NpcDef {
         id: "ferryman_noll",
@@ -58,19 +53,11 @@ pub static ZONE2_NPCS: &[NpcDef] = &[
         greeting: "The skiff still floats, which is more than I can say for the old road.",
         services: &[NpcService::QuestGiver, NpcService::Vendor],
         vendor_stock: &[
-            VendorOffer {
-                item_id: "deepfen_draught",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "travelers_ration",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "spring_water",
-                count: 40,
-            },
+            VendorOffer::stack("deepfen_draught", 20),
+            VendorOffer::stack("travelers_ration", 20),
+            VendorOffer::stack("spring_water", 40),
         ],
         trains: &[],
+        faction: Some("mirefen_ferry"),
     },
 ];
