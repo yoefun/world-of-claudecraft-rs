@@ -850,8 +850,13 @@ pub fn apply_ability_effect(
         .get::<Combat>(src)
         .map(|c| c.attack_damage)
         .unwrap_or(0.0);
+    let spell = world
+        .get::<Combat>(src)
+        .map(|c| c.spell_power)
+        .unwrap_or(0.0);
     let requested = world.get::<Combat>(src).and_then(|c| c.target);
-    let weapon = def.damage + attack * 0.35;
+    let melee = def.damage + attack * 0.35;
+    let spell_hit = def.damage + attack * 0.35 + spell * 0.5;
     let rage = world
         .get::<ClassKit>(src)
         .and_then(|k| k.resource_type)
@@ -874,7 +879,7 @@ pub fn apply_ability_effect(
                 src,
                 tid,
                 def,
-                weapon * coefficient * dmg_scale,
+                melee * coefficient * dmg_scale,
                 events,
             );
         }
@@ -882,7 +887,7 @@ pub fn apply_ability_effect(
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_direct_damage(world, rng, src, tid, def, weapon * dmg_scale, events);
+            apply_direct_damage(world, rng, src, tid, def, spell_hit * dmg_scale, events);
         }
         AbilityEffect::AoeDamage {
             radius,
@@ -897,7 +902,7 @@ pub fn apply_ability_effect(
                 }
             };
             let hit = roll_player_hit(world, rng, src);
-            let Some(amount) = scale_hit(weapon * dmg_scale, hit) else {
+            let Some(amount) = scale_hit(melee * dmg_scale, hit) else {
                 toast_miss(events, def.name);
                 return;
             };
@@ -927,7 +932,7 @@ pub fn apply_ability_effect(
                     src,
                     tid,
                     def,
-                    weapon * coefficient * dmg_scale,
+                    spell_hit * coefficient * dmg_scale,
                     events,
                 );
             } else {
@@ -954,7 +959,7 @@ pub fn apply_ability_effect(
                 src,
                 tid,
                 def,
-                weapon * coefficient * dmg_scale,
+                melee * coefficient * dmg_scale,
                 events,
             );
         }
@@ -971,7 +976,7 @@ pub fn apply_ability_effect(
                 apply_ability_aura(world, src, tid, def.id, events);
             } else {
                 let hit = roll_player_hit(world, rng, src);
-                if let Some(amount) = scale_hit(weapon.max(1.0) * dmg_scale, hit) {
+                if let Some(amount) = scale_hit(melee.max(1.0) * dmg_scale, hit) {
                     if hit == HitResult::Crit {
                         toast_crit(events, def.name);
                     }
@@ -996,7 +1001,7 @@ pub fn apply_ability_effect(
             events.push(SimEvent::Toast {
                 message: format!("{name} interrupts!", name = def.name),
             });
-            apply_direct_damage(world, rng, src, tid, def, weapon * dmg_scale, events);
+            apply_direct_damage(world, rng, src, tid, def, melee * dmg_scale, events);
         }
         AbilityEffect::Taunt { threat } => {
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
@@ -1017,7 +1022,7 @@ pub fn apply_ability_effect(
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_charge(world, rng, src, tid, def, weapon * dmg_scale, events);
+            apply_charge(world, rng, src, tid, def, melee * dmg_scale, events);
         }
         AbilityEffect::Blink { distance } => {
             apply_blink(world, src, distance);
@@ -1045,11 +1050,15 @@ fn apply_direct_heal(
 ) {
     let hit = roll_player_hit(world, rng, src);
     let heal_mult = 1.0 + crate::talents::talent_bonus(world, src, "heal_pct");
+    let sp = world
+        .get::<Combat>(src)
+        .map(|c| c.spell_power)
+        .unwrap_or(0.0);
     let amount = match hit {
-        HitResult::Miss | HitResult::Hit => def.damage * coefficient * heal_mult,
+        HitResult::Miss | HitResult::Hit => (def.damage + sp * 0.5) * coefficient * heal_mult,
         HitResult::Crit => {
             toast_crit(events, def.name);
-            def.damage * coefficient * CRIT_MULT * heal_mult
+            (def.damage + sp * 0.5) * coefficient * CRIT_MULT * heal_mult
         }
     };
     apply_heal(world, tid, amount, def.name, events);
@@ -2131,6 +2140,27 @@ mod tests {
             hit_count, 4,
             "cleave_targets_plus should raise max_targets from 3 to 4"
         );
+    }
+
+    #[test]
+    fn spell_power_increases_priest_heal() {
+        fn heal_once(sp: f32) -> f32 {
+            let mut world = World::new();
+            let mut rng = Rng::new(1);
+            crate::ecs::spawn::create_player(&mut world, 1, "P", PlayerClass::Priest, 0.0, 0.0);
+            if let Some(h) = world.get_mut::<Health>(1) {
+                h.hp = 20.0;
+            }
+            if let Some(c) = world.get_mut::<Combat>(1) {
+                c.spell_power = sp;
+                c.target = Some(1);
+            }
+            let def = woc_content::ability("flash_heal").expect("flash_heal");
+            let mut events = Vec::new();
+            apply_ability_effect(&mut world, &mut rng, 1, def, &mut events);
+            world.get::<Health>(1).unwrap().hp
+        }
+        assert!(heal_once(10.0) > heal_once(0.0) + 4.0);
     }
 
     #[test]
