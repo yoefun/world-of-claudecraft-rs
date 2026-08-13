@@ -92,6 +92,10 @@ pub(crate) struct UiFlags {
     pub(crate) show_mail: bool,
     pub(crate) show_market: bool,
     pub(crate) show_map: bool,
+    /// Mail recipient buffer, seeded from the current target when mail opens.
+    pub(crate) mail_to: String,
+    /// True while the mail recipient buffer has keyboard focus (Enter toggles).
+    pub(crate) mail_compose: bool,
 }
 
 #[derive(Resource, Default)]
@@ -109,6 +113,8 @@ pub(crate) fn plugin(app: &mut App) {
         show_mail: false,
         show_market: false,
         show_map: false,
+        mail_to: String::new(),
+        mail_compose: false,
     })
     .init_resource::<VendorUiCache>();
 }
@@ -161,6 +167,16 @@ pub(crate) fn first_junk_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, Stri
     snap.inventory.iter().find_map(|stack| {
         item(&stack.item_id)
             .map(|def| def.kind == ItemKind::Junk)
+            .unwrap_or(false)
+            .then(|| (stack.slot, stack.count, stack.item_id.clone()))
+    })
+}
+
+/// First bag stack the bank will accept: any kind except `ItemKind::Quest`.
+pub(crate) fn first_bankable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String)> {
+    snap.inventory.iter().find_map(|stack| {
+        item(&stack.item_id)
+            .map(|def| def.kind != ItemKind::Quest)
             .unwrap_or(false)
             .then(|| (stack.slot, stack.count, stack.item_id.clone()))
     })
@@ -420,6 +436,22 @@ fn talent_bonus_summary(snap: &TickSnapshot) -> String {
     parts.join(" · ")
 }
 
+/// Bank/mail line label: gear shows durability, then enchant name when present.
+fn instance_label(
+    item_id: &str,
+    count: u32,
+    durability: Option<u32>,
+    enchant_id: Option<&str>,
+) -> String {
+    let mut label = bag_stack_label(item_id, count, durability);
+    if let Some(eid) = enchant_id {
+        if let Some(def) = enchant(eid) {
+            label = format!("{label} [{}]", def.name);
+        }
+    }
+    label
+}
+
 fn bank_panel_text(snap: &TickSnapshot) -> String {
     let mut lines = vec![
         "Bank [K]".to_string(),
@@ -436,24 +468,33 @@ fn bank_panel_text(snap: &TickSnapshot) -> String {
     } else {
         lines.extend(snap.bank.iter().enumerate().map(|(i, stack)| {
             format!(
-                "  [{}] slot {} — {}×{}",
+                "  [{}] slot {} — {}",
                 i + 1,
                 stack.slot,
-                stack.count,
-                stack.item_id
+                instance_label(
+                    &stack.item_id,
+                    stack.count,
+                    stack.durability,
+                    stack.enchant_id.as_deref()
+                )
             )
         }));
     }
-    match first_junk_bag_stack(snap) {
+    match first_bankable_bag_stack(snap) {
         Some((_, count, item_id)) => {
-            lines.push(format!("[G] Deposit {count}×{item_id} (first bag junk)"));
+            lines.push(format!("[G] Deposit {count}×{item_id} (first bag stack)"));
         }
-        None => lines.push("[G] Deposit first bag junk (none)".into()),
+        None => lines.push("[G] Deposit first bag stack (none)".into()),
     }
     match snap.bank.first() {
         Some(stack) => lines.push(format!(
-            "[H] Withdraw {}×{} (first bank slot)",
-            stack.count, stack.item_id
+            "[H] Withdraw {} (first bank slot)",
+            instance_label(
+                &stack.item_id,
+                stack.count,
+                stack.durability,
+                stack.enchant_id.as_deref()
+            )
         )),
         None => lines.push("[H] Withdraw first bank slot (empty)".into()),
     }
@@ -467,13 +508,18 @@ fn mail_panel_text(snap: &TickSnapshot) -> String {
     if snap.mail.is_empty() {
         lines.push("  (inbox empty)".into());
     } else {
-        for mail in &snap.mail {
+        for (i, mail) in snap.mail.iter().enumerate() {
             let mut attachments = Vec::new();
             if mail.copper > 0 {
                 attachments.push(format!("{}c", mail.copper));
             }
             if let Some(item_id) = &mail.item_id {
-                attachments.push(format!("{}×{item_id}", mail.item_count));
+                attachments.push(instance_label(
+                    item_id,
+                    mail.item_count,
+                    mail.durability,
+                    mail.enchant_id.as_deref(),
+                ));
             }
             let suffix = if attachments.is_empty() {
                 String::new()
@@ -481,12 +527,19 @@ fn mail_panel_text(snap: &TickSnapshot) -> String {
                 format!(" ({})", attachments.join(" + "))
             };
             lines.push(format!(
-                "  #{} {} — {}{}",
-                mail.id, mail.from, mail.subject, suffix
+                "  [{}] #{} {} — {}{}",
+                i + 1,
+                mail.id,
+                mail.from,
+                mail.subject,
+                suffix
             ));
         }
     }
-    lines.push("[P] Collect first mail".into());
+    lines.push(format!(
+        "[S] Send item · [Y] Send wallet copper · [P] Collect first mail · [1–9] Collect numbered mail · [X] Return first mail · Enter compose · postage {}c",
+        snap.mail_postage
+    ));
     lines.join("\n")
 }
 
@@ -545,7 +598,14 @@ pub(crate) fn update_chrome_panels(
         **text = match panel.0 {
             ChromePanelKind::Talents => talent_panel_text(&host.snapshot),
             ChromePanelKind::Bank => bank_panel_text(&host.snapshot),
-            ChromePanelKind::Mail => mail_panel_text(&host.snapshot),
+            ChromePanelKind::Mail => {
+                let recipient = if ui.mail_compose {
+                    format!("To: {}_", ui.mail_to)
+                } else {
+                    format!("To: {}", ui.mail_to)
+                };
+                format!("{recipient}\n{}", mail_panel_text(&host.snapshot))
+            }
             ChromePanelKind::Market => market_panel_text(&host.snapshot),
         };
     }
@@ -907,7 +967,10 @@ fn format_action_bar(snap: &TickSnapshot) -> String {
             snap.ability_name.as_str()
         };
         let ready = if snap.ability_ready { "READY" } else { "CD" };
-        return format!("[1] {name} {ready}   [2] —   [3] —   [4] —   [5] —");
+        return format!(
+            "[1] {name} {ready}   [2] —   [3] —   [4] —   [5] —{hint}",
+            hint = class_interact_hint(snap)
+        );
     }
     let mut parts = Vec::new();
     for slot in 1u8..=5 {
@@ -1195,6 +1258,7 @@ mod tests {
         snap.zone_id = "eastbrook".into();
         snap.honor = 12;
         snap.talent_points = 2;
+        snap.mail_postage = 1;
         snap.talents.push(TalentRankSnapshot {
             talent_id: "warrior_cruelty".into(),
             rank: 1,
@@ -1203,8 +1267,16 @@ mod tests {
             id: "herbalism".into(),
             skill: 18,
         });
+        // Quest item first: bank G must skip it and pick the non-quest stack below.
         snap.inventory.push(InvSlotSnapshot {
             slot: 0,
+            item_id: "boar_tusk".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
             item_id: "wolf_fang".into(),
             count: 3,
             durability: None,
@@ -1215,6 +1287,14 @@ mod tests {
             item_id: "silverleaf".into(),
             count: 4,
             durability: None,
+            enchant_id: None,
+        });
+        // Worn bank stack: proves bank lines carry durability through storage.
+        snap.bank.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "worn_sword".into(),
+            count: 1,
+            durability: Some(12),
             enchant_id: None,
         });
         snap.mail.push(MailSnapshot {
@@ -1265,12 +1345,40 @@ mod tests {
     }
 
     #[test]
+    fn bank_panel_offers_first_non_quest_deposit() {
+        let text = bank_panel_text(&chrome_snapshot());
+        assert!(text.contains("[G] Deposit"));
+        assert!(!text.contains("first bag junk"));
+    }
+
+    #[test]
+    fn bank_panel_shows_durability_on_worn_stored_gear() {
+        let text = bank_panel_text(&chrome_snapshot());
+        assert!(text.contains("Worn Sword 12/"));
+    }
+
+    #[test]
     fn mail_panel_formats_attachments_and_collect_help() {
         let text = mail_panel_text(&chrome_snapshot());
 
         assert!(text.contains("#7 Ada — Parcel"));
         assert!(text.contains("9c + 2×baked_bread"));
         assert!(text.contains("[P] Collect first mail"));
+    }
+
+    #[test]
+    fn mail_panel_shows_send_and_numbered_collect() {
+        let text = mail_panel_text(&chrome_snapshot());
+        assert!(text.contains("[S] Send item"));
+        assert!(text.contains("[P] Collect first mail"));
+        assert!(text.contains("[1–9] Collect numbered"));
+        assert!(text.contains("[X] Return"));
+    }
+
+    #[test]
+    fn mail_panel_shows_postage_from_snapshot() {
+        let text = mail_panel_text(&chrome_snapshot());
+        assert!(text.contains("postage 1c"));
     }
 
     #[test]

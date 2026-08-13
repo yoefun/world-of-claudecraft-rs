@@ -13,8 +13,8 @@ use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
-    first_consumable_bag_stack, first_equippable_bag_stack, first_junk_bag_stack,
-    first_listable_bag_stack, UiFlags,
+    first_bankable_bag_stack, first_consumable_bag_stack, first_equippable_bag_stack,
+    first_junk_bag_stack, first_listable_bag_stack, UiFlags,
 };
 use crate::GameHost;
 
@@ -111,17 +111,19 @@ pub(crate) fn collect_intent(
     };
     let mut mx = 0.0;
     let mut mz = 0.0;
-    if keys.pressed(KeyCode::KeyW) {
-        mz += 1.0;
-    }
-    if keys.pressed(KeyCode::KeyS) {
-        mz -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyA) {
-        mx -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyD) {
-        mx += 1.0;
+    if !ui.mail_compose {
+        if keys.pressed(KeyCode::KeyW) {
+            mz += 1.0;
+        }
+        if keys.pressed(KeyCode::KeyS) {
+            mz -= 1.0;
+        }
+        if keys.pressed(KeyCode::KeyA) {
+            mx -= 1.0;
+        }
+        if keys.pressed(KeyCode::KeyD) {
+            mx += 1.0;
+        }
     }
     intent.move_x = mx;
     intent.move_z = mz;
@@ -142,6 +144,7 @@ pub(crate) fn collect_intent(
         .is_some();
     if !ui.show_talents
         && !ui.show_bank
+        && !ui.show_mail
         && !loot_rolling
         && !ui.show_bags
         && !ui.show_character
@@ -319,11 +322,24 @@ pub(crate) fn quest_interact_actions(
     out
 }
 
+fn mail_target_player_name(snap: &TickSnapshot) -> Option<String> {
+    let tid = snap.target_id?;
+    snap.entities
+        .iter()
+        .find(|e| e.id == tid && e.kind == EntityKind::Player)
+        .map(|e| e.name.clone())
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
     mut ui: ResMut<UiFlags>,
 ) {
+    // Blur mail compose on Esc without closing the panel or stealing the
+    // global Esc target-clear handled in `grab_cursor`.
+    if ui.mail_compose && keys.just_pressed(KeyCode::Escape) {
+        ui.mail_compose = false;
+    }
     if keys.just_pressed(KeyCode::KeyB) {
         ui.show_bags = !ui.show_bags;
     }
@@ -337,6 +353,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_talents = false;
             ui.show_bank = false;
             ui.show_mail = false;
+            ui.mail_compose = false;
             ui.show_market = false;
             ui.show_map = false;
         }
@@ -353,6 +370,8 @@ pub(crate) fn handle_interact_keys(
         if ui.show_bank {
             ui.show_character = false;
             ui.show_map = false;
+            ui.show_mail = false;
+            ui.mail_compose = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyI) {
@@ -360,6 +379,12 @@ pub(crate) fn handle_interact_keys(
         if ui.show_mail {
             ui.show_character = false;
             ui.show_map = false;
+            ui.show_bank = false;
+            if let Some(name) = mail_target_player_name(&host.snapshot) {
+                ui.mail_to = name;
+            }
+        } else {
+            ui.mail_compose = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyM) {
@@ -369,6 +394,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_talents = false;
             ui.show_bank = false;
             ui.show_mail = false;
+            ui.mail_compose = false;
             ui.show_market = false;
         }
     }
@@ -481,13 +507,13 @@ pub(crate) fn handle_interact_keys(
         }
     }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
-        if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
+        if let Some((bag_slot, count, item_id)) = first_bankable_bag_stack(&host.snapshot) {
             host.interact(player_id, InteractAction::BankDeposit { bag_slot, count });
             host.recent_toasts
                 .push((format!("Depositing {count}×{item_id}."), 2.0));
         } else {
             host.recent_toasts
-                .push(("No junk stack in bags.".into(), 2.0));
+                .push(("No bankable stack in bags.".into(), 2.0));
         }
     }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyH) {
@@ -570,6 +596,99 @@ pub(crate) fn handle_interact_keys(
                 .push((format!("Collecting mail #{mail_id}."), 2.0));
         } else {
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
+        }
+    }
+    if ui.show_mail {
+        let mail_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
+        {
+            Some(0usize)
+        } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+            Some(1)
+        } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+            Some(2)
+        } else if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+            Some(3)
+        } else if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+            Some(4)
+        } else if keys.just_pressed(KeyCode::Digit6) || keys.just_pressed(KeyCode::Numpad6) {
+            Some(5)
+        } else if keys.just_pressed(KeyCode::Digit7) || keys.just_pressed(KeyCode::Numpad7) {
+            Some(6)
+        } else if keys.just_pressed(KeyCode::Digit8) || keys.just_pressed(KeyCode::Numpad8) {
+            Some(7)
+        } else if keys.just_pressed(KeyCode::Digit9) || keys.just_pressed(KeyCode::Numpad9) {
+            Some(8)
+        } else {
+            None
+        };
+        if let Some(idx) = mail_idx {
+            if let Some(mail) = host.snapshot.mail.get(idx) {
+                let mail_id = mail.id;
+                host.interact(player_id, InteractAction::MailCollect { mail_id });
+                host.recent_toasts
+                    .push((format!("Collecting mail #{mail_id}."), 2.0));
+            }
+        }
+    }
+    if ui.show_mail && keys.just_pressed(KeyCode::KeyX) {
+        if let Some(mail) = host.snapshot.mail.first() {
+            let mail_id = mail.id;
+            host.interact(player_id, InteractAction::MailReturn { mail_id });
+            host.recent_toasts
+                .push((format!("Returning mail #{mail_id}."), 2.0));
+        } else {
+            host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
+        }
+    }
+    if ui.show_mail && keys.just_pressed(KeyCode::KeyS) {
+        let to_name = if !ui.mail_to.trim().is_empty() {
+            ui.mail_to.trim().to_string()
+        } else {
+            mail_target_player_name(&host.snapshot).unwrap_or_default()
+        };
+        if to_name.is_empty() {
+            host.recent_toasts.push(("No recipient.".into(), 2.0));
+        } else if let Some((bag_slot, count, _)) = first_bankable_bag_stack(&host.snapshot) {
+            host.interact(
+                player_id,
+                InteractAction::MailSend {
+                    to_name,
+                    copper: 0,
+                    bag_slot: Some(bag_slot),
+                    count,
+                },
+            );
+            host.recent_toasts.push(("Sending parcel…".into(), 2.0));
+        } else {
+            host.recent_toasts.push(("Nothing to send.".into(), 2.0));
+        }
+    }
+    if ui.show_mail && !ui.show_bank && keys.just_pressed(KeyCode::KeyY) {
+        let to_name = if !ui.mail_to.trim().is_empty() {
+            ui.mail_to.trim().to_string()
+        } else {
+            mail_target_player_name(&host.snapshot).unwrap_or_default()
+        };
+        let copper = host
+            .snapshot
+            .progress
+            .copper
+            .saturating_sub(host.snapshot.mail_postage);
+        if to_name.is_empty() {
+            host.recent_toasts.push(("No recipient.".into(), 2.0));
+        } else if copper == 0 {
+            host.recent_toasts.push(("Mail is empty.".into(), 2.0));
+        } else {
+            host.interact(
+                player_id,
+                InteractAction::MailSend {
+                    to_name,
+                    copper,
+                    bag_slot: None,
+                    count: 0,
+                },
+            );
+            host.recent_toasts.push(("Sending parcel…".into(), 2.0));
         }
     }
     if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
@@ -903,6 +1022,38 @@ pub(crate) fn handle_interact_keys(
         for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
             host.interact(nid, action);
         }
+    }
+}
+
+/// Types into the mail recipient buffer while compose is focused. Enter
+/// toggles focus and Esc blurs it in `handle_interact_keys`; this system only
+/// appends/deletes characters (ascii, max 24 — same length rule as
+/// `validate_character_name`).
+pub(crate) fn mail_compose_text(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut ui: ResMut<UiFlags>,
+    mut events: EventReader<bevy::input::keyboard::KeyboardInput>,
+) {
+    if !ui.mail_compose {
+        events.clear();
+        return;
+    }
+    use bevy::input::ButtonState;
+    for ev in events.read() {
+        if ev.state != ButtonState::Pressed {
+            continue;
+        }
+        let Some(text) = &ev.text else {
+            continue;
+        };
+        for ch in text.chars() {
+            if ch.is_ascii_alphanumeric() && ui.mail_to.len() < 24 {
+                ui.mail_to.push(ch);
+            }
+        }
+    }
+    if keys.just_pressed(KeyCode::Backspace) {
+        ui.mail_to.pop();
     }
 }
 
