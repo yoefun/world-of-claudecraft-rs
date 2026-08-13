@@ -6,7 +6,7 @@ pub mod components;
 pub mod sparse;
 pub mod world;
 
-pub use components::{Identity, Transform};
+pub use components::{Identity, LootPile, Transform};
 pub use sparse::SparseSet;
 pub use world::World;
 
@@ -101,5 +101,30 @@ mod tests {
         );
         let live: Vec<_> = w.live_ids().collect();
         assert_eq!(live, vec![id]);
+    }
+
+    #[test]
+    fn despawn_drops_sparse_columns() {
+        let mut w = World::new();
+        let id = w.spawn();
+        w.insert(
+            id,
+            crate::ecs::components::LootPile {
+                copper: 5,
+                item: None,
+            },
+        );
+        w.insert(
+            id,
+            crate::ecs::components::Bags {
+                inventory: vec![None; crate::types::BACKPACK_SLOTS],
+                equipment: crate::ecs::components::Equipment::default(),
+                open_vendor_npc: None,
+            },
+        );
+        assert!(w.despawn(id));
+        assert!(w.ids::<crate::ecs::components::LootPile>().is_empty());
+        assert!(w.ids::<crate::ecs::components::Bags>().is_empty());
+        assert!(!w.contains(id));
     }
 }

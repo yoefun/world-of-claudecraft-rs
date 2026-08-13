@@ -1,6 +1,9 @@
 //! Typed sparse-column world. Entity ids are monotonic and never reused.
 
-use crate::ecs::components::{Component, Identity, Transform};
+use crate::ecs::components::{
+    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Health, Home, Identity, InstanceAt,
+    LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit, Threat, Transform,
+};
 use crate::ecs::SparseSet;
 use woc_protocol::EntityId;
 
@@ -11,6 +14,24 @@ pub struct World {
     live_index: std::collections::HashMap<EntityId, usize>,
     pub identity: SparseSet<Identity>,
     pub transform: SparseSet<Transform>,
+    pub health: SparseSet<Health>,
+    pub combat: SparseSet<Combat>,
+    pub auras: SparseSet<Auras>,
+    pub home: SparseSet<Home>,
+    pub threat: SparseSet<Threat>,
+    pub loot_table: SparseSet<LootTable>,
+    pub respawn: SparseSet<Respawn>,
+    pub loot_pile: SparseSet<LootPile>,
+    pub owner: SparseSet<Owner>,
+    pub class_kit: SparseSet<ClassKit>,
+    pub bags: SparseSet<Bags>,
+    pub quest_log: SparseSet<QuestLog>,
+    pub progress: SparseSet<Progress>,
+    pub bank: SparseSet<Bank>,
+    pub motion: SparseSet<Motion>,
+    pub spirit: SparseSet<Spirit>,
+    pub instance_at: SparseSet<InstanceAt>,
+    pub durable: SparseSet<Durable>,
 }
 
 impl World {
@@ -89,5 +110,23 @@ impl World {
     fn clear_all_columns(&mut self, id: EntityId) {
         self.identity.remove(id);
         self.transform.remove(id);
+        self.health.remove(id);
+        self.combat.remove(id);
+        self.auras.remove(id);
+        self.home.remove(id);
+        self.threat.remove(id);
+        self.loot_table.remove(id);
+        self.respawn.remove(id);
+        self.loot_pile.remove(id);
+        self.owner.remove(id);
+        self.class_kit.remove(id);
+        self.bags.remove(id);
+        self.quest_log.remove(id);
+        self.progress.remove(id);
+        self.bank.remove(id);
+        self.motion.remove(id);
+        self.spirit.remove(id);
+        self.instance_at.remove(id);
+        self.durable.remove(id);
     }
 }

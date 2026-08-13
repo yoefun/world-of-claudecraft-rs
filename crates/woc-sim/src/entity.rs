@@ -9,60 +9,9 @@ use woc_content::{
 };
 use woc_protocol::{EntityId, EntityKind};
 
-/// Live aura instance (DoT/HoT/buff) on an entity.
-#[derive(Debug, Clone)]
-pub struct AuraInstance {
-    pub id: String,
-    pub remaining: f32,
-    pub stacks: u32,
-    /// Countdown to next damage/heal tick.
-    pub tick_timer: f32,
-    pub tick_interval: f32,
-    /// Positive = DoT damage per tick.
-    pub tick_damage: f32,
-    /// Positive = HoT healing per tick.
-    pub tick_heal: f32,
-    pub source: EntityId,
-}
-
-/// In-progress ability cast.
-#[derive(Debug, Clone)]
-pub struct CastState {
-    pub ability_id: String,
-    pub elapsed: f32,
-    pub duration: f32,
-    pub target: EntityId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvStack {
-    pub item_id: String,
-    pub count: u32,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Equipment {
-    pub main_hand: Option<String>,
-    pub off_hand: Option<String>,
-    pub head: Option<String>,
-    pub chest: Option<String>,
-    pub legs: Option<String>,
-    pub feet: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum QuestState {
-    Active,
-    Ready,
-    Completed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QuestProgress {
-    pub quest_id: String,
-    pub state: QuestState,
-    pub counts: Vec<u32>,
-}
+pub use crate::ecs::components::{
+    AuraInstance, CastState, Equipment, InvStack, QuestProgress, QuestState,
+};
 
 #[derive(Debug, Clone)]
 pub struct Entity {
