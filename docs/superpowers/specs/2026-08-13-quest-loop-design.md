@@ -1,7 +1,7 @@
 # Quest loop — accept, progress, complete
 
 **Status:** Approved for implementation planning (2026-08-13). Cloud-agent planning deliverable; implement from the paired plan, not from this spec alone.  
-**Rewrite target:** `1.4.0` / parity `quest-loop` (after shipped `1.3.0` / `online-hard`).  
+**Rewrite target:** `1.9.0` / parity `quest-loop` (after shipped `1.8.0` / `class-forms`).  
 **Upstream pin:** unchanged (`0.31.0` / `a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Protocol:** stay on rev **6**. No new `InteractAction` / `SimEvent` variants.
 
@@ -212,7 +212,7 @@ Client: pure functions `format_quest_log_line` and a small interact-offer unit t
 | Mail overflow for reward items | Keep ignore-on-full |
 | Reintroducing a fat `Entity` | `AGENTS.md` |
 
-## 9. Definition of done (`1.4.0` / `quest-loop`)
+## 9. Definition of done (`1.9.0` / `quest-loop`)
 
 1. Accept / turn-in are rejected unless the target NPC matches the table.
 2. `requires` is enforced; the chain table in §5.1 is authored.
@@ -220,7 +220,7 @@ Client: pure functions `format_quest_log_line` and a small interact-offer unit t
 4. Log and tracker show names + objective `current/required`.
 5. Map yellow/green respects offers (not raw table membership).
 6. Tests in §7 pass: `cargo test --workspace --exclude woc-client` and `cargo check -p woc-client`.
-7. `VERSION.toml` rewrite `1.4.0`, parity `quest-loop`; `STATUS.md` / `ROADMAP.md` / `CHANGELOG.md` / `DEMO.md` mention the loop (Town Crier → Alden → wolves → tusks).
+7. `VERSION.toml` rewrite `1.9.0`, parity `quest-loop`; `STATUS.md` / `ROADMAP.md` / `CHANGELOG.md` / `DEMO.md` mention the loop (Town Crier → Alden → wolves → tusks).
 
 ## 10. Success demo (human)
 

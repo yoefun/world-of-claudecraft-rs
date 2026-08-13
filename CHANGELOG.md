@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+## 1.9.0 — 2026-08-13
+
 ### Added
 
-- Quest-loop plan (`1.9.0` / `quest-loop`): design + implementation tasks for accept / progress / complete (giver/turn-in gates, `requires` chains, generic **E**, named log). Spec: `docs/superpowers/specs/2026-08-13-quest-loop-design.md`.
+- Quest loop (`1.9.0` / `quest-loop`): giver and turn-in NPC checks, `QuestDef.requires` chains, ready toast, generic **E** accept/turn-in, quest log names + objective counts, offer-aware map markers.
 
 ## 1.8.0 — 2026-08-13
 

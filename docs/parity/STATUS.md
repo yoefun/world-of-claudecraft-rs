@@ -1,9 +1,9 @@
 # Parity status
 
-**Current rewrite:** `1.8.0` / `class-forms`.  
+**Current rewrite:** `1.9.0` / `quest-loop`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.  
-**Next:** `1.9.0` / `quest-loop` (planned) — [`quest-loop design`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`implementation plan`](../superpowers/plans/2026-08-13-quest-loop.md)
+**Shipped:** [`quest-loop design`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`implementation plan`](../superpowers/plans/2026-08-13-quest-loop.md)
 
 ## Client version gate (`client-compat`)
 
@@ -58,16 +58,16 @@
 | Warlock | Life Tap; Fear (stun, breaks on damage) |
 | Druid | **F** Travel Form (1.4 move, breaks on hit) |
 
-## Next (`quest-loop`)
+## Quest loop (`1.9.0`)
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Giver / turn-in NPC checks | planned | Accept/turn-in fail unless the target template matches the table |
-| `QuestDef.requires` chains | planned | Breadcrumb → hub sequences; integrity + acyclic tests |
-| Talk / collect coverage | planned | Sim tests beyond the wolf kill path; ready toast |
-| Generic **E** accept/turn-in | planned | Drop Captain Alden hardcoded ids |
-| Named log + objective counts | planned | HUD uses `woc-content` `QuestDef` |
-| Offer-aware map markers | planned | Yellow/green from `npc_quest_offers`, not raw table membership |
+| Giver / turn-in NPC checks | done | Accept/turn-in fail unless the target template matches the table |
+| `QuestDef.requires` chains | done | Breadcrumb → hub sequences; integrity + acyclic tests |
+| Talk / collect coverage | done | Sim tests beyond the wolf kill path; ready toast |
+| Generic **E** accept/turn-in | done | Drop Captain Alden hardcoded ids |
+| Named log + objective counts | done | HUD uses `woc-content` `QuestDef` |
+| Offer-aware map markers | done | Yellow/green from `npc_quest_offers`, not raw table membership |
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -104,7 +104,8 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.8.0` / class-forms (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.9.0` / quest-loop (upstream still 0.31.0) |
+| Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
