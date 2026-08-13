@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 
 use crate::items_zone2::ZONE2_ITEMS;
+use crate::PlayerClass;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,6 +29,32 @@ pub enum ItemEquipSlot {
     Feet,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArmorClass {
+    Cloth,
+    Leather,
+    Mail,
+    Plate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WeaponStyle {
+    OneHand,
+    TwoHand,
+    Ranged,
+    Shield,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EquipDeny {
+    NotGear,
+    LevelReq(u32),
+    WrongClass,
+    WrongArmor,
+}
+
 #[derive(Debug, Clone)]
 pub struct ItemDef {
     pub id: &'static str,
@@ -46,6 +73,47 @@ pub struct ItemDef {
     pub level_req: u32,
     /// HP restored when used as a consumable (0 if not a heal).
     pub heal_hp: f32,
+    pub armor_class: Option<ArmorClass>,
+    pub weapon_style: Option<WeaponStyle>,
+    pub allowed_classes: &'static [PlayerClass],
+    pub stamina: f32,
+    pub spell_power: f32,
+}
+
+pub fn class_armor_cap(class: PlayerClass) -> ArmorClass {
+    match class {
+        PlayerClass::Warrior | PlayerClass::Paladin => ArmorClass::Plate,
+        PlayerClass::Hunter | PlayerClass::Shaman => ArmorClass::Mail,
+        PlayerClass::Rogue | PlayerClass::Druid => ArmorClass::Leather,
+        PlayerClass::Priest | PlayerClass::Mage | PlayerClass::Warlock => ArmorClass::Cloth,
+    }
+}
+
+fn armor_rank(class: ArmorClass) -> u8 {
+    match class {
+        ArmorClass::Cloth => 0,
+        ArmorClass::Leather => 1,
+        ArmorClass::Mail => 2,
+        ArmorClass::Plate => 3,
+    }
+}
+
+pub fn can_equip(def: &ItemDef, class: PlayerClass, level: u32) -> Result<(), EquipDeny> {
+    if def.equip_slot.is_none() {
+        return Err(EquipDeny::NotGear);
+    }
+    if level < def.level_req {
+        return Err(EquipDeny::LevelReq(def.level_req));
+    }
+    if !def.allowed_classes.is_empty() && !def.allowed_classes.contains(&class) {
+        return Err(EquipDeny::WrongClass);
+    }
+    if let Some(ac) = def.armor_class {
+        if armor_rank(ac) > armor_rank(class_armor_cap(class)) {
+            return Err(EquipDeny::WrongArmor);
+        }
+    }
+    Ok(())
 }
 
 const fn weapon(
@@ -66,6 +134,11 @@ const fn weapon(
         equip_slot: Some(ItemEquipSlot::MainHand),
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: Some(WeaponStyle::OneHand),
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     }
 }
 
@@ -89,6 +162,11 @@ const fn armor(
         equip_slot: Some(slot),
         level_req,
         heal_hp: 0.0,
+        armor_class: Some(ArmorClass::Cloth),
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     }
 }
 
@@ -111,6 +189,11 @@ const fn consumable(
         equip_slot: None,
         level_req: 1,
         heal_hp,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     }
 }
 
@@ -127,6 +210,11 @@ const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell:
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     }
 }
 
@@ -228,4 +316,46 @@ pub static ITEMS: LazyLock<&'static [ItemDef]> = LazyLock::new(|| {
 
 pub fn item(id: &str) -> Option<&'static ItemDef> {
     ITEMS.iter().find(|i| i.id == id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::PlayerClass;
+
+    #[test]
+    fn mage_cannot_wear_leather_or_sword() {
+        let sword = item("worn_sword").unwrap();
+        assert_eq!(
+            can_equip(sword, PlayerClass::Mage, 10),
+            Err(EquipDeny::WrongClass)
+        );
+        let tunic = item("recruit_tunic").unwrap();
+        assert_eq!(
+            can_equip(tunic, PlayerClass::Mage, 10),
+            Err(EquipDeny::WrongArmor)
+        );
+    }
+
+    #[test]
+    fn warrior_can_wear_cloth_and_leather() {
+        assert!(can_equip(item("recruit_robe").unwrap(), PlayerClass::Warrior, 1).is_ok());
+        assert!(can_equip(item("recruit_tunic").unwrap(), PlayerClass::Warrior, 1).is_ok());
+    }
+
+    #[test]
+    fn level_req_still_blocks() {
+        assert_eq!(
+            can_equip(item("veteran_helm").unwrap(), PlayerClass::Warrior, 1),
+            Err(EquipDeny::LevelReq(5))
+        );
+    }
+
+    #[test]
+    fn junk_is_not_gear() {
+        assert_eq!(
+            can_equip(item("wolf_fang").unwrap(), PlayerClass::Warrior, 1),
+            Err(EquipDeny::NotGear)
+        );
+    }
 }

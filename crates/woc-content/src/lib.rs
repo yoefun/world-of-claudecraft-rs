@@ -38,7 +38,10 @@ pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
-pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
+pub use items::{
+    can_equip, class_armor_cap, item, ArmorClass, EquipDeny, ItemDef, ItemEquipSlot, ItemKind,
+    WeaponStyle, ITEMS,
+};
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;

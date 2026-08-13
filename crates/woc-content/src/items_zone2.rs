@@ -1,6 +1,6 @@
 //! Zone 2 (Eastfen Marsh) item definitions.
 
-use crate::items::{ItemDef, ItemEquipSlot, ItemKind};
+use crate::items::{ArmorClass, ItemDef, ItemEquipSlot, ItemKind};
 
 pub static ZONE2_ITEMS: &[ItemDef] = &[
     ItemDef {
@@ -15,6 +15,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "toad_bile",
@@ -28,6 +33,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "wisp_ember",
@@ -41,6 +51,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "fen_tonic",
@@ -54,6 +69,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 120.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "marsh_wraps",
@@ -67,6 +87,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: Some(ItemEquipSlot::Chest),
         level_req: 3,
         heal_hp: 0.0,
+        armor_class: Some(ArmorClass::Cloth),
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "reedwalk_boots",
@@ -80,6 +105,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: Some(ItemEquipSlot::Feet),
         level_req: 3,
         heal_hp: 0.0,
+        armor_class: Some(ArmorClass::Cloth),
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "leech_ichor",
@@ -93,6 +123,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "rotcap_spore",
@@ -106,6 +141,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "terror_scale",
@@ -119,6 +159,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "deepfen_draught",
@@ -132,6 +177,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 180.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "mireguard_hood",
@@ -145,6 +195,11 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: Some(ItemEquipSlot::Head),
         level_req: 5,
         heal_hp: 0.0,
+        armor_class: Some(ArmorClass::Cloth),
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
     ItemDef {
         id: "hag_claw",
@@ -158,5 +213,10 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         equip_slot: None,
         level_req: 1,
         heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
     },
 ];
