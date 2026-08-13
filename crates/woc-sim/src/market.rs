@@ -63,6 +63,9 @@ impl AuctionHouse {
                 count: l.count,
                 price: l.price,
                 mine: false,
+                durability: None,
+                enchant_id: None,
+                expires_tick: l.expires_tick,
             })
             .collect()
     }
@@ -83,6 +86,9 @@ impl AuctionHouse {
                     count: l.count,
                     price: l.price,
                     mine,
+                    durability: None,
+                    enchant_id: None,
+                    expires_tick: l.expires_tick,
                 }
             })
             .collect()

@@ -1224,6 +1224,8 @@ mod tests {
             copper: 9,
             item_id: Some("baked_bread".into()),
             item_count: 2,
+            durability: None,
+            enchant_id: None,
         });
         snap.market.push(MarketListingSnapshot {
             id: 11,
@@ -1232,6 +1234,9 @@ mod tests {
             count: 5,
             price: 30,
             mine: false,
+            durability: None,
+            enchant_id: None,
+            expires_tick: 0,
         });
         snap
     }
@@ -1297,6 +1302,7 @@ mod tests {
             repair_cost: 12,
             can_bind: false,
             buyback: vec![],
+            can_auction: false,
         });
 
         let text = npc_session_help(&snap);

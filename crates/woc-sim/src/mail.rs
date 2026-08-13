@@ -86,6 +86,8 @@ impl Mailbox {
                         copper: m.copper,
                         item_id: m.item_id.clone(),
                         item_count: m.item_count,
+                        durability: None,
+                        enchant_id: None,
                     })
                     .collect()
             })

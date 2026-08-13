@@ -418,6 +418,8 @@ pub struct NpcSessionSnapshot {
     pub can_bind: bool,
     #[serde(default)]
     pub buyback: Vec<BuybackSnapshot>,
+    #[serde(default)]
+    pub can_auction: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -602,6 +604,10 @@ pub struct MailSnapshot {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -614,6 +620,12 @@ pub struct MarketListingSnapshot {
     /// True when this listing belongs to the viewing player.
     #[serde(default)]
     pub mine: bool,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub expires_tick: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -1480,6 +1492,29 @@ mod tests {
         assert!(eq.main_hand_enchant.is_none());
         let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
+        assert_eq!(PROTOCOL_REV, 8);
+    }
+
+    #[test]
+    fn market_mail_auction_fields_default_when_omitted() {
+        let listing: MarketListingSnapshot =
+            serde_json::from_str(r#"{"id":1,"seller":"Ada","item_id":"x","count":1,"price":2}"#)
+                .unwrap();
+        assert!(listing.durability.is_none());
+        assert!(listing.enchant_id.is_none());
+        assert_eq!(listing.expires_tick, 0);
+        assert!(!listing.mine);
+
+        let mail: MailSnapshot = serde_json::from_str(
+            r#"{"id":1,"from":"AH","subject":"Sold","copper":40,"item_id":null,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(mail.durability.is_none());
+        assert!(mail.enchant_id.is_none());
+
+        let session: NpcSessionSnapshot =
+            serde_json::from_str(r#"{"npc_id":1,"npc_name":"Lise"}"#).unwrap();
+        assert!(!session.can_auction);
         assert_eq!(PROTOCOL_REV, 8);
     }
 
