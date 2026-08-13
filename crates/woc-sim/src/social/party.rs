@@ -296,6 +296,55 @@ impl PartyRoster {
         self.parties.get(&pid).map(|p| p.leader)
     }
 
+    pub fn kind_of(&self, player: EntityId) -> Option<GroupKind> {
+        let pid = self.party_id(player)?;
+        self.parties.get(&pid).map(|p| p.kind)
+    }
+
+    pub fn pending_inviter_name(&self, invitee: EntityId, world: &World) -> String {
+        let Some(p) = self.pending.get(&invitee) else {
+            return String::new();
+        };
+        player_name(world, p.inviter).unwrap_or_default()
+    }
+
+    pub fn raid_group_of(&self, player: EntityId) -> u8 {
+        let Some(pid) = self.party_id(player) else {
+            return 0;
+        };
+        let Some(party) = self.parties.get(&pid) else {
+            return 0;
+        };
+        if party.kind != GroupKind::Raid {
+            return 0;
+        }
+        if party.raid_groups[1].contains(&player) {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub fn ready_snapshot(
+        &self,
+        player: EntityId,
+        _now_tick: u64,
+    ) -> Option<woc_protocol::ReadyCheckSnapshot> {
+        let check = self.ready.as_ref()?;
+        let pid = self.party_id(player)?;
+        if check.party_id != pid {
+            return None;
+        }
+        let total = self.members_of(player).map(|m| m.len() as u32).unwrap_or(0);
+        let ready_count = check.responses.values().filter(|v| **v).count() as u32;
+        Some(woc_protocol::ReadyCheckSnapshot {
+            expires_tick: check.expires_tick,
+            you_responded: check.responses.contains_key(&player),
+            ready_count,
+            total,
+        })
+    }
+
     pub fn kick(&mut self, leader: EntityId, name: &str, world: &World) -> Vec<PartyEffect> {
         if self.leader_of(leader) != Some(leader) {
             return vec![PartyEffect::Error {
@@ -481,6 +530,73 @@ impl PartyRoster {
                 ready_names(world, &yes),
                 ready_names(world, &no)
             ),
+        }]
+    }
+
+    pub fn convert_to_raid(&mut self, leader: EntityId) -> Vec<PartyEffect> {
+        if self.leader_of(leader) != Some(leader) {
+            return vec![PartyEffect::Error {
+                message: "You are not the party leader.".into(),
+            }];
+        }
+        let Some(pid) = self.party_id(leader) else {
+            return vec![PartyEffect::Error {
+                message: "You are not in a party.".into(),
+            }];
+        };
+        let Some(party) = self.parties.get_mut(&pid) else {
+            return vec![PartyEffect::Error {
+                message: "You are not in a party.".into(),
+            }];
+        };
+        if party.kind == GroupKind::Raid {
+            return vec![PartyEffect::Error {
+                message: "Already a raid.".into(),
+            }];
+        }
+        if party.members.len() != MAX_PARTY_SIZE {
+            return vec![PartyEffect::Error {
+                message: "You need a full party of 5 to convert to a raid.".into(),
+            }];
+        }
+        party.kind = GroupKind::Raid;
+        party.raid_groups[0] = party.members.clone();
+        party.raid_groups[1].clear();
+        vec![PartyEffect::Notice {
+            message: "Converted to a raid.".into(),
+        }]
+    }
+
+    pub fn convert_to_party(&mut self, leader: EntityId) -> Vec<PartyEffect> {
+        if self.leader_of(leader) != Some(leader) {
+            return vec![PartyEffect::Error {
+                message: "You are not the party leader.".into(),
+            }];
+        }
+        let Some(pid) = self.party_id(leader) else {
+            return vec![PartyEffect::Error {
+                message: "You are not in a raid.".into(),
+            }];
+        };
+        let Some(party) = self.parties.get_mut(&pid) else {
+            return vec![PartyEffect::Error {
+                message: "You are not in a raid.".into(),
+            }];
+        };
+        if party.kind != GroupKind::Raid {
+            return vec![PartyEffect::Error {
+                message: "You are not in a raid.".into(),
+            }];
+        }
+        if party.members.len() > MAX_PARTY_SIZE {
+            return vec![PartyEffect::Error {
+                message: "Too many members to convert to a party.".into(),
+            }];
+        }
+        party.kind = GroupKind::Party;
+        party.raid_groups = [Vec::new(), Vec::new()];
+        vec![PartyEffect::Notice {
+            message: "Converted to a party.".into(),
         }]
     }
 }

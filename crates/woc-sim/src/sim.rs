@@ -273,6 +273,48 @@ impl Sim {
         map_party_effects(self.parties.leave(player_id))
     }
 
+    pub fn party_decline(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.decline(player_id, &self.world))
+    }
+
+    pub fn party_kick(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.kick(player_id, name, &self.world))
+    }
+
+    pub fn party_promote(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.promote(player_id, name, &self.world))
+    }
+
+    pub fn party_disband(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.disband(player_id))
+    }
+
+    pub fn party_ready_check(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.ready_check(player_id, self.tick))
+    }
+
+    pub fn party_ready_respond(&mut self, player_id: EntityId, ready: bool) -> Vec<WsServerMsg> {
+        let connected: Vec<EntityId> = self
+            .parties
+            .members_of(player_id)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| self.intents.contains_key(id))
+            .collect();
+        map_party_effects(
+            self.parties
+                .ready_respond(player_id, ready, &self.world, &connected),
+        )
+    }
+
+    pub fn convert_to_raid(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.convert_to_raid(player_id))
+    }
+
+    pub fn convert_to_party(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.convert_to_party(player_id))
+    }
+
     /// Say / party chat.
     pub fn chat(&mut self, player_id: EntityId, channel: &str, text: &str) -> Vec<WsServerMsg> {
         map_chat_effects(handle_chat(
@@ -395,6 +437,14 @@ impl Sim {
         for &pid in &player_ids {
             refresh_daily_quests(&mut self.world, pid, self.tick);
         }
+
+        self.parties.expire_invites(self.tick);
+        let ready_effects = self.parties.expire_ready_check(self.tick, &self.world);
+        self.events
+            .extend(ready_effects.into_iter().filter_map(|e| match e {
+                PartyEffect::Notice { message } => Some(woc_protocol::SimEvent::Toast { message }),
+                _ => None,
+            }));
 
         // Phase 1: apply intents + motion
         for &pid in &player_ids {
@@ -794,11 +844,18 @@ impl Sim {
                 .map(|h| !h.alive)
                 .unwrap_or(false),
             party_id: self.parties.party_id(player_id),
-            party_leader_id: None,
-            party_kind: String::new(),
-            party_members: Vec::new(),
-            pending_invite_from: String::new(),
-            ready_check: None,
+            party_leader_id: self.parties.leader_of(player_id),
+            party_kind: self
+                .parties
+                .kind_of(player_id)
+                .map(|k| match k {
+                    crate::social::party::GroupKind::Party => "party".into(),
+                    crate::social::party::GroupKind::Raid => "raid".into(),
+                })
+                .unwrap_or_default(),
+            party_members: self.party_member_snapshots(player_id),
+            pending_invite_from: self.parties.pending_inviter_name(player_id, &self.world),
+            ready_check: self.parties.ready_snapshot(player_id, self.tick),
             zone_id: world
                 .get::<Identity>(player_id)
                 .map(|i| i.zone_id.clone())
@@ -892,6 +949,35 @@ impl Sim {
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
         }
+    }
+
+    fn party_member_snapshots(
+        &self,
+        player_id: EntityId,
+    ) -> Vec<woc_protocol::PartyMemberSnapshot> {
+        let Some(members) = self.parties.members_of(player_id) else {
+            return Vec::new();
+        };
+        members
+            .into_iter()
+            .map(|id| {
+                let ident = self.world.get::<Identity>(id);
+                let hp = self.world.get::<Health>(id);
+                let kit = self.world.get::<ClassKit>(id);
+                woc_protocol::PartyMemberSnapshot {
+                    id,
+                    name: ident.map(|i| i.name.clone()).unwrap_or_default(),
+                    class_id: kit
+                        .and_then(|k| k.class_id)
+                        .map(|c| c.as_str().to_string())
+                        .unwrap_or_default(),
+                    hp: hp.map(|h| h.hp).unwrap_or(0.0),
+                    hp_max: hp.map(|h| h.hp_max).unwrap_or(0.0),
+                    online: self.intents.contains_key(&id),
+                    raid_group: self.parties.raid_group_of(id),
+                }
+            })
+            .collect()
     }
 
     fn snapshot_visible(
@@ -1968,6 +2054,37 @@ mod tests {
         );
         assert!(sim.party_members(a).is_none());
         assert!(sim.snapshot_for_player(a).party_id.is_none());
+    }
+
+    #[test]
+    fn park_keeps_party_membership() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let _ = sim.party_invite(a, "Bob");
+        let _ = sim.party_accept(b);
+        assert!(sim.parties.party_id(a).is_some());
+        sim.park_player(b);
+        assert_eq!(sim.party_members(a), Some(vec![a, b]));
+        let snap = sim.snapshot_for_player(a);
+        let bob = snap
+            .party_members
+            .iter()
+            .find(|m| m.id == b)
+            .expect("bob on roster");
+        assert!(!bob.online);
+        assert_eq!(snap.party_kind, "party");
+        assert_eq!(snap.party_leader_id, Some(a));
+    }
+
+    #[test]
+    fn snapshot_pending_invite_name() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let _ = sim.party_invite(a, "Bob");
+        let snap = sim.snapshot_for_player(b);
+        assert_eq!(snap.pending_invite_from, "Alice");
     }
 
     #[test]
