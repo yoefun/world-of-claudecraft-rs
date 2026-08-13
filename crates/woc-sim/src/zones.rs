@@ -1,8 +1,7 @@
 //! Overworld zone transitions on the continuous strip.
 
-use crate::ecs::components::{Bags, Combat, Health, Identity, InstanceAt, Threat, Transform};
+use crate::ecs::components::{Bags, Combat, Identity, InstanceAt, Threat, Transform};
 use crate::ecs::World;
-use crate::inventory::{count_item, grant_into};
 use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
@@ -177,7 +176,8 @@ pub fn spawn_gather_nodes(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Progress};
+    use crate::ecs::components::{Bags, Health, Progress};
+    use crate::inventory::{count_item, grant_into};
     use woc_content::PlayerClass;
 
     fn player_world(name: &str, class: PlayerClass, x: f32, z: f32) -> (World, EntityId) {

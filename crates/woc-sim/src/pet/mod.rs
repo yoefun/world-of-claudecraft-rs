@@ -1,12 +1,12 @@
 //! Hunter / warlock pet summon, dismiss, and combat AI.
 
 use crate::combat::{deal_damage, dist2d_ids, face_toward_ids};
-use crate::ecs::components::{ClassKit, Combat, Health, Identity, LootTable, Owner, Transform};
+use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Owner, Transform};
 use crate::ecs::World;
 use crate::entity_motion::step_toward;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
 use woc_content::{pet_for_class, PlayerClass};
-use woc_protocol::{EntityId, EntityKind, SimEvent, DT};
+use woc_protocol::{EntityId, SimEvent, DT};
 
 /// Offset from owner when the pet is summoned.
 const SUMMON_OFFSET: f32 = 1.5;
@@ -189,7 +189,8 @@ pub fn can_summon(class: PlayerClass) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use woc_protocol::DT;
+    use crate::ecs::components::Identity;
+    use woc_protocol::{EntityKind, DT};
 
     fn hunter_world() -> World {
         let mut world = World::new();

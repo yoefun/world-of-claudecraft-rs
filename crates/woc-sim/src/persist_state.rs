@@ -62,9 +62,7 @@ impl PlayerPersistentState {
 
 /// Export durable fields from a live player in the sparse-column world.
 pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerPersistentState> {
-    if world.get::<ClassKit>(player_id).is_none() {
-        return None;
-    }
+    world.get::<ClassKit>(player_id)?;
     Some(PlayerPersistentState {
         durable_id: world
             .get::<Durable>(player_id)

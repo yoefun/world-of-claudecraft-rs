@@ -45,14 +45,9 @@ pub fn deposit(
             return false;
         }
     }
-    let bank_full = if let Some(bank) = world.get_mut::<Bank>(player_id) {
-        if !grant_into(&mut bank.bank, &stack.item_id, take) {
-            true
-        } else {
-            false
-        }
-    } else {
-        true
+    let bank_full = match world.get_mut::<Bank>(player_id) {
+        Some(bank) => !grant_into(&mut bank.bank, &stack.item_id, take),
+        None => true,
     };
     if bank_full {
         if let Some(bags) = world.get_mut::<Bags>(player_id) {
@@ -98,14 +93,9 @@ pub fn withdraw(
             return false;
         }
     }
-    let bags_full = if let Some(bags) = world.get_mut::<Bags>(player_id) {
-        if !grant_into(&mut bags.inventory, &stack.item_id, take) {
-            true
-        } else {
-            false
-        }
-    } else {
-        true
+    let bags_full = match world.get_mut::<Bags>(player_id) {
+        Some(bags) => !grant_into(&mut bags.inventory, &stack.item_id, take),
+        None => true,
     };
     if bags_full {
         if let Some(bank) = world.get_mut::<Bank>(player_id) {

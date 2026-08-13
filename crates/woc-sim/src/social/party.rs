@@ -285,15 +285,11 @@ fn player_exists(world: &World, id: EntityId) -> bool {
 }
 
 fn find_player_by_name(world: &World, name: &str) -> Option<EntityId> {
-    for id in world.ids::<ClassKit>() {
-        if world
+    world.ids::<ClassKit>().into_iter().find(|&id| {
+        world
             .get::<Identity>(id)
             .is_some_and(|i| i.kind == EntityKind::Player && i.name == name)
-        {
-            return Some(id);
-        }
-    }
-    None
+    })
 }
 
 fn player_name(world: &World, id: EntityId) -> Option<String> {

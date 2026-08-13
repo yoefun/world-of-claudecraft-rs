@@ -4,10 +4,10 @@ use crate::ecs::components::{
     Bags, Combat, Health, Identity, InstanceAt, Progress, Threat, Transform,
 };
 use crate::ecs::World;
-use crate::inventory::{count_item, grant_into};
+use crate::inventory::grant_into;
 use crate::zones::load_overworld_zone;
 use woc_content::{delve, mob, DelveDef};
-use woc_protocol::{EntityId, EntityKind, InteractAction, SimEvent, WorldHost};
+use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Enter a content-defined delve and spawn its first room.
 pub fn enter_delve(
@@ -219,7 +219,9 @@ fn reset_combat_state(world: &mut World, player_id: EntityId) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inventory::count_item;
     use woc_content::PlayerClass;
+    use woc_protocol::{InteractAction, WorldHost};
 
     fn defeat_current_room(world: &mut World, delve_id: &str) {
         let ids: Vec<_> = world

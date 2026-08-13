@@ -333,15 +333,9 @@ pub fn step_player_motion(
     player_id: EntityId,
     intent: &PlayerIntent,
 ) -> Option<MotionEffect> {
-    let Some(mut t) = world.get::<Transform>(player_id).cloned() else {
-        return None;
-    };
-    let Some(mut m) = world.get::<Motion>(player_id).cloned() else {
-        return None;
-    };
-    let Some(health) = world.get::<Health>(player_id).cloned() else {
-        return None;
-    };
+    let mut t = world.get::<Transform>(player_id).cloned()?;
+    let mut m = world.get::<Motion>(player_id).cloned()?;
+    let health = world.get::<Health>(player_id).cloned()?;
     let in_instance = world
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.clone())
@@ -408,20 +402,20 @@ pub fn step_player_motion(
     fall.map(|fall_damage| MotionEffect { fall_damage })
 }
 
-fn step_axes(world: &mut World, player_id: EntityId, move_x: f32, move_z: f32, facing: f32) {
-    let intent = PlayerIntent {
-        move_x,
-        move_z,
-        facing,
-        ..Default::default()
-    };
-    let _ = step_player_motion(world, player_id, &intent);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use woc_content::PlayerClass;
+
+    fn step_axes(world: &mut World, player_id: EntityId, move_x: f32, move_z: f32, facing: f32) {
+        let intent = PlayerIntent {
+            move_x,
+            move_z,
+            facing,
+            ..Default::default()
+        };
+        let _ = step_player_motion(world, player_id, &intent);
+    }
 
     fn player_at(x: f32, z: f32) -> World {
         let mut world = World::new();
