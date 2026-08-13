@@ -59,6 +59,10 @@ pub struct AuraInstance {
     pub breaks_on_damage: bool,
     /// Outgoing damage multiplier (`1.0` = unchanged).
     pub damage_mult: f32,
+    /// Damage dealt back to a melee attacker of the bearer.
+    pub thorns: f32,
+    /// Extra armor while the aura remains.
+    pub armor_flat: f32,
 }
 
 /// In-progress ability cast.

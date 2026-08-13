@@ -172,9 +172,9 @@ pub enum InteractAction {
     LeaveInstance,
     /// Toggle rogue stealth (Z). Other classes toast.
     ToggleStealth,
-    /// Cycle warrior stance (F). Reserved until class-forms.
+    /// Cycle warrior stance (F).
     CycleStance,
-    /// Toggle shaman/druid form (F). Reserved until class-forms.
+    /// Toggle shaman/druid form (F).
     ToggleForm,
     /// Need roll on pending party loot.
     LootNeed {

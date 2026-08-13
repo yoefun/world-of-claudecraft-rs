@@ -473,6 +473,34 @@ mod tests {
     }
 
     #[test]
+    fn class_forms_kit_signatures() {
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Shaman, 5)
+                .expect("shaman 5")
+                .id,
+            "lightning_shield"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Warlock, 4)
+                .expect("warlock 4")
+                .id,
+            "life_tap"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Warlock, 5)
+                .expect("warlock 5")
+                .id,
+            "fear"
+        );
+        assert!(ability("immolate").is_some());
+        assert!(ability("flame_shock").is_some());
+        assert_eq!(
+            ability("crusader_strike").unwrap().aura,
+            Some("seal_righteousness")
+        );
+    }
+
+    #[test]
     fn every_class_kit_has_distinct_effects() {
         use std::mem::discriminant;
         for class in CLASSES {

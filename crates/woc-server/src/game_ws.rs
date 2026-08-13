@@ -470,6 +470,7 @@ mod tests {
             professions: Default::default(),
             pvp_flagged: false,
             completed_deeds: Default::default(),
+            stance_id: String::new(),
         };
         // Force non-virgin by setting copper.
         assert!(!state.is_virgin());

@@ -94,20 +94,23 @@ pub fn is_stealthed(world: &World, id: EntityId) -> bool {
     world.get::<ClassKit>(id).is_some_and(|k| k.stealthed)
 }
 
-/// Strongest (lowest) move multiplier from remaining auras, then stealth.
+/// Slowest remaining slow (<1) times fastest haste (>1), then stealth min.
 pub fn move_speed_mult(world: &World, id: EntityId) -> f32 {
     let aura_mult = world
         .get::<Auras>(id)
         .map(|store| {
-            store
-                .auras
-                .iter()
-                .filter(|a| a.remaining > 0.0)
-                .map(|a| a.move_mult)
-                .fold(1.0_f32, f32::min)
+            let mut slow = 1.0_f32;
+            let mut haste = 1.0_f32;
+            for aura in store.auras.iter().filter(|a| a.remaining > 0.0) {
+                if aura.move_mult < 1.0 {
+                    slow = slow.min(aura.move_mult);
+                } else if aura.move_mult > 1.0 {
+                    haste = haste.max(aura.move_mult);
+                }
+            }
+            (slow * haste).max(0.0)
         })
-        .unwrap_or(1.0)
-        .clamp(0.0, 1.0);
+        .unwrap_or(1.0);
     if is_stealthed(world, id) {
         aura_mult.min(STEALTH_MOVE_MULT)
     } else {
@@ -138,6 +141,179 @@ pub fn toggle_stealth(world: &mut World, player_id: EntityId, events: &mut Vec<S
         "You enter stealth."
     } else {
         "You leave stealth."
+    };
+    events.push(SimEvent::Toast {
+        message: message.into(),
+    });
+}
+
+const THORNS_REBOUND: &str = "lightning_shield";
+
+fn aura_armor_flat(world: &World, id: EntityId) -> f32 {
+    world
+        .get::<Auras>(id)
+        .map(|store| {
+            store
+                .auras
+                .iter()
+                .filter(|a| a.remaining > 0.0)
+                .map(|a| a.armor_flat.max(0.0))
+                .sum()
+        })
+        .unwrap_or(0.0)
+}
+
+fn melee_thorns(world: &World, id: EntityId) -> f32 {
+    world
+        .get::<Auras>(id)
+        .map(|store| {
+            store
+                .auras
+                .iter()
+                .filter(|a| a.remaining > 0.0)
+                .map(|a| a.thorns.max(0.0))
+                .sum()
+        })
+        .unwrap_or(0.0)
+}
+
+fn remove_named_auras(world: &mut World, id: EntityId, names: &[&str]) {
+    if let Some(store) = world.get_mut::<Auras>(id) {
+        store.auras.retain(|a| !names.iter().any(|n| a.id == *n));
+    }
+}
+
+fn instance_from_def(source: EntityId, def: &woc_content::AuraDef) -> AuraInstance {
+    AuraInstance {
+        id: def.id.into(),
+        remaining: def.duration,
+        stacks: 1,
+        tick_timer: def.tick_interval.max(0.01),
+        tick_interval: def.tick_interval,
+        tick_damage: def.tick_damage,
+        tick_heal: def.tick_heal,
+        source,
+        stun: def.stun,
+        move_mult: def.move_mult,
+        absorb: def.absorb,
+        breaks_on_damage: def.breaks_on_damage,
+        damage_mult: def.damage_mult,
+        thorns: def.thorns,
+        armor_flat: def.armor_flat,
+    }
+}
+
+pub fn apply_named_aura(
+    world: &mut World,
+    source: EntityId,
+    target: EntityId,
+    aura_id: &str,
+    events: &mut Vec<SimEvent>,
+) {
+    let Some(def) = woc_content::aura(aura_id) else {
+        return;
+    };
+    apply_aura(world, target, instance_from_def(source, def), events);
+}
+
+/// Paladin devotion, warrior battle/defensive, restored shaman/druid forms.
+pub fn apply_spawn_identity(world: &mut World, player_id: EntityId) {
+    let mut events = Vec::new();
+    let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
+    let stance = world
+        .get::<ClassKit>(player_id)
+        .and_then(|k| k.stance_id.clone());
+    match class {
+        Some(woc_content::PlayerClass::Paladin) => {
+            apply_named_aura(world, player_id, player_id, "devotion_aura", &mut events);
+        }
+        Some(woc_content::PlayerClass::Warrior) => {
+            if stance.as_deref() == Some("defensive") {
+                apply_named_aura(world, player_id, player_id, "defensive_stance", &mut events);
+            } else {
+                if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                    kit.stance_id = Some("battle".into());
+                }
+                apply_named_aura(world, player_id, player_id, "battle_shout", &mut events);
+            }
+        }
+        Some(woc_content::PlayerClass::Shaman) if stance.as_deref() == Some("ghost_wolf") => {
+            apply_named_aura(world, player_id, player_id, "ghost_wolf", &mut events);
+        }
+        Some(woc_content::PlayerClass::Druid) if stance.as_deref() == Some("travel_form") => {
+            apply_named_aura(world, player_id, player_id, "travel_form", &mut events);
+        }
+        _ => {}
+    }
+}
+
+pub fn cycle_stance(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
+    let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
+    if class != Some(woc_content::PlayerClass::Warrior) {
+        events.push(SimEvent::Toast {
+            message: "You cannot change stance.".into(),
+        });
+        return;
+    }
+    let current = world
+        .get::<ClassKit>(player_id)
+        .and_then(|k| k.stance_id.clone());
+    let next = if current.as_deref() == Some("defensive") {
+        "battle"
+    } else {
+        "defensive"
+    };
+    if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+        kit.stance_id = Some(next.into());
+    }
+    remove_named_auras(world, player_id, &["battle_shout", "defensive_stance"]);
+    if next == "battle" {
+        apply_named_aura(world, player_id, player_id, "battle_shout", events);
+        events.push(SimEvent::Toast {
+            message: "Battle Stance.".into(),
+        });
+    } else {
+        apply_named_aura(world, player_id, player_id, "defensive_stance", events);
+        events.push(SimEvent::Toast {
+            message: "Defensive Stance.".into(),
+        });
+    }
+}
+
+pub fn toggle_form(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
+    let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
+    let form_id = match class {
+        Some(woc_content::PlayerClass::Shaman) => "ghost_wolf",
+        Some(woc_content::PlayerClass::Druid) => "travel_form",
+        _ => {
+            events.push(SimEvent::Toast {
+                message: "You cannot change form.".into(),
+            });
+            return;
+        }
+    };
+    let current = world
+        .get::<ClassKit>(player_id)
+        .and_then(|k| k.stance_id.clone());
+    if current.as_deref() == Some(form_id) {
+        if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+            kit.stance_id = None;
+        }
+        remove_named_auras(world, player_id, &[form_id]);
+        events.push(SimEvent::Toast {
+            message: "You return to humanoid form.".into(),
+        });
+        return;
+    }
+    if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+        kit.stance_id = Some(form_id.into());
+    }
+    remove_named_auras(world, player_id, &["ghost_wolf", "travel_form"]);
+    apply_named_aura(world, player_id, player_id, form_id, events);
+    let message = if form_id == "ghost_wolf" {
+        "You shift into Ghost Wolf."
+    } else {
+        "You shift into Travel Form."
     };
     events.push(SimEvent::Toast {
         message: message.into(),
@@ -277,7 +453,8 @@ pub fn deal_damage(
                 .fold(1.0_f32, |acc, m| acc * m)
         })
         .unwrap_or(1.0);
-    let armor = world.get::<Combat>(target).map(|c| c.armor).unwrap_or(0.0);
+    let armor = world.get::<Combat>(target).map(|c| c.armor).unwrap_or(0.0)
+        + aura_armor_flat(world, target);
     let mitigated = (amount * talent_mult * aura_mult - armor * 0.05).max(1.0);
 
     let mut remaining = mitigated;
@@ -299,6 +476,11 @@ pub fn deal_damage(
         store.auras.retain(|a| !popped.iter().any(|id| id == &a.id));
         store.auras.retain(|a| !a.breaks_on_damage);
     }
+    let rebound = if ability_name.is_none() {
+        melee_thorns(world, target)
+    } else {
+        0.0
+    };
 
     if remaining > 0.0 {
         let Some(health) = world.get_mut::<Health>(target) else {
@@ -339,6 +521,9 @@ pub fn deal_damage(
             victim_name,
         });
     }
+    if rebound > 0.0 && source != target && world.get::<Health>(source).is_some_and(|h| h.alive) {
+        deal_damage(world, target, source, rebound, Some(THORNS_REBOUND), events);
+    }
 }
 
 pub fn apply_aura(
@@ -364,6 +549,8 @@ pub fn apply_aura(
             existing.absorb = existing.absorb.max(aura.absorb);
             existing.breaks_on_damage = aura.breaks_on_damage;
             existing.damage_mult = aura.damage_mult;
+            existing.thorns = aura.thorns;
+            existing.armor_flat = aura.armor_flat;
         } else {
             store.auras.push(aura);
         }
@@ -391,26 +578,7 @@ fn apply_ability_aura(
     let Some(def) = aura_for_ability(ability_id) else {
         return;
     };
-    apply_aura(
-        world,
-        target,
-        AuraInstance {
-            id: def.id.into(),
-            remaining: def.duration,
-            stacks: 1,
-            tick_timer: def.tick_interval.max(0.01),
-            tick_interval: def.tick_interval,
-            tick_damage: def.tick_damage,
-            tick_heal: def.tick_heal,
-            source,
-            stun: def.stun,
-            move_mult: def.move_mult,
-            absorb: def.absorb,
-            breaks_on_damage: def.breaks_on_damage,
-            damage_mult: def.damage_mult,
-        },
-        events,
-    );
+    apply_aura(world, target, instance_from_def(source, def), events);
     if def.stun {
         if let Some(c) = world.get_mut::<Combat>(target) {
             c.cast = None;
@@ -1649,6 +1817,8 @@ mod tests {
                     absorb: 0.0,
                     breaks_on_damage: false,
                     damage_mult: 1.0,
+                    thorns: 0.0,
+                    armor_flat: 0.0,
                 }],
             },
         );
@@ -1681,6 +1851,8 @@ mod tests {
                     absorb: 0.0,
                     breaks_on_damage: false,
                     damage_mult: 1.0,
+                    thorns: 0.0,
+                    armor_flat: 0.0,
                 }],
             },
         );
@@ -2280,6 +2452,8 @@ mod tests {
                     absorb: 30.0,
                     breaks_on_damage: false,
                     damage_mult: 1.0,
+                    thorns: 0.0,
+                    armor_flat: 0.0,
                 }],
             },
         );
@@ -2679,5 +2853,182 @@ mod tests {
             with_aspect > without_aspect + 0.5,
             "aspect should raise outgoing damage ({with_aspect} vs {without_aspect})"
         );
+    }
+
+    fn test_aura(id: &str) -> AuraInstance {
+        AuraInstance {
+            id: id.into(),
+            remaining: 30.0,
+            stacks: 1,
+            tick_timer: 99.0,
+            tick_interval: 0.0,
+            tick_damage: 0.0,
+            tick_heal: 0.0,
+            source: 1,
+            stun: false,
+            move_mult: 1.0,
+            absorb: 0.0,
+            breaks_on_damage: false,
+            damage_mult: 1.0,
+            thorns: 0.0,
+            armor_flat: 0.0,
+        }
+    }
+
+    #[test]
+    fn lightning_shield_thorns_hits_attacker() {
+        let mut world = class_and_mob(PlayerClass::Shaman, 1);
+        let mut shield = test_aura("lightning_shield");
+        shield.thorns = 8.0;
+        apply_aura(&mut world, 1, shield, &mut Vec::new());
+        let attacker_hp = world.get::<Health>(2).unwrap().hp;
+        let mut events = Vec::new();
+        deal_damage(&mut world, 2, 1, 12.0, None, &mut events);
+        assert!(
+            world.get::<Health>(2).unwrap().hp < attacker_hp,
+            "melee attacker should take lightning shield thorns"
+        );
+        let after_melee = world.get::<Health>(2).unwrap().hp;
+        deal_damage(&mut world, 2, 1, 12.0, Some("Bite"), &mut events);
+        assert_eq!(
+            world.get::<Health>(2).unwrap().hp,
+            after_melee,
+            "named spell hits must not proc thorns"
+        );
+    }
+
+    #[test]
+    fn fear_breaks_when_damaged() {
+        let mut world = class_and_mob(PlayerClass::Warlock, 1);
+        let mut fear = test_aura("fear");
+        fear.stun = true;
+        fear.move_mult = 0.0;
+        fear.breaks_on_damage = true;
+        apply_aura(&mut world, 2, fear, &mut Vec::new());
+        assert!(is_stunned(&world, 2));
+        let mut events = Vec::new();
+        deal_damage(&mut world, 1, 2, 10.0, Some("Shadow Bolt"), &mut events);
+        assert!(
+            !is_stunned(&world, 2),
+            "fear should break when the target is damaged"
+        );
+    }
+
+    #[test]
+    fn travel_form_speeds_then_breaks_on_hit() {
+        let mut world = class_and_mob(PlayerClass::Druid, 1);
+        let mut form = test_aura("travel_form");
+        form.move_mult = 1.4;
+        form.breaks_on_damage = true;
+        apply_aura(&mut world, 1, form, &mut Vec::new());
+        assert!(
+            (move_speed_mult(&world, 1) - 1.4).abs() < 1e-3,
+            "travel form should raise move speed, got {}",
+            move_speed_mult(&world, 1)
+        );
+        let mut events = Vec::new();
+        deal_damage(&mut world, 2, 1, 10.0, None, &mut events);
+        assert!(
+            world
+                .get::<Auras>(1)
+                .unwrap()
+                .auras
+                .iter()
+                .all(|a| a.id != "travel_form"),
+            "travel form should break on damage"
+        );
+        assert!((move_speed_mult(&world, 1) - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn defensive_stance_reduces_damage() {
+        let mut world = class_and_mob(PlayerClass::Warrior, 1);
+        let baseline = {
+            let start = world.get::<Health>(1).unwrap().hp;
+            deal_damage(&mut world, 2, 1, 40.0, Some("Bite"), &mut Vec::new());
+            start - world.get::<Health>(1).unwrap().hp
+        };
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.hp = h.hp_max;
+            h.alive = true;
+        }
+        let mut stance = test_aura("defensive_stance");
+        stance.damage_mult = 0.9;
+        stance.armor_flat = 20.0;
+        apply_aura(&mut world, 1, stance, &mut Vec::new());
+        let reduced = {
+            let start = world.get::<Health>(1).unwrap().hp;
+            deal_damage(&mut world, 2, 1, 40.0, Some("Bite"), &mut Vec::new());
+            start - world.get::<Health>(1).unwrap().hp
+        };
+        assert!(
+            reduced + 0.5 < baseline,
+            "defensive stance armor_flat should cut incoming damage ({reduced} vs {baseline})"
+        );
+    }
+
+    #[test]
+    fn life_tap_and_fear_on_warlock_bar() {
+        assert_eq!(
+            woc_content::class_ability_for_slot(PlayerClass::Warlock, 4)
+                .expect("warlock 4")
+                .id,
+            "life_tap"
+        );
+        assert_eq!(
+            woc_content::class_ability_for_slot(PlayerClass::Warlock, 5)
+                .expect("warlock 5")
+                .id,
+            "fear"
+        );
+        let mut world = class_and_mob(PlayerClass::Warlock, 1);
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        assert!(
+            is_stunned(&world, 2),
+            "warlock slot 5 Fear should stun the wolf"
+        );
+    }
+
+    #[test]
+    fn cycle_stance_applies_defensive_then_battle() {
+        let mut world = class_and_mob(PlayerClass::Warrior, 1);
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("battle")
+        );
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("defensive")
+        );
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "defensive_stance"));
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("battle")
+        );
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "battle_shout"));
+    }
+
+    #[test]
+    fn toggle_form_speeds_druid() {
+        let mut world = class_and_mob(PlayerClass::Druid, 1);
+        toggle_form(&mut world, 1, &mut Vec::new());
+        assert!(
+            (move_speed_mult(&world, 1) - 1.4).abs() < 1e-3,
+            "travel form should raise move speed"
+        );
+        toggle_form(&mut world, 1, &mut Vec::new());
+        assert!((move_speed_mult(&world, 1) - 1.0).abs() < 1e-3);
     }
 }

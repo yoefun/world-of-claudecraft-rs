@@ -214,7 +214,7 @@ const SHAMAN_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 5,
-        ability_id: "flame_shock",
+        ability_id: "lightning_shield",
     },
 ];
 
@@ -256,7 +256,11 @@ const WARLOCK_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 4,
-        ability_id: "immolate",
+        ability_id: "life_tap",
+    },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "fear",
     },
 ];
 

@@ -127,6 +127,7 @@ impl MemoryStore {
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            stance_id: String::new(),
         };
         g.characters.insert(character.id, character.clone());
         Ok(character)
@@ -284,6 +285,7 @@ mod tests {
             }],
             pvp_flagged: true,
             completed_deeds: vec!["eastfen_mire_terror".into()],
+            stance_id: String::new(),
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();
         assert_eq!(saved.to_save(), save);

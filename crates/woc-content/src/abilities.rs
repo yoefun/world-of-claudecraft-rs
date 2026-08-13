@@ -109,7 +109,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
-        aura: None,
+        aura: Some("seal_righteousness"),
         effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
         flags: AbilityFlags::DEFAULT,
     },
@@ -437,6 +437,19 @@ pub static ABILITIES: &[AbilityDef] = &[
         effect: AbilityEffect::ApplyAura,
         flags: AbilityFlags::DEFAULT,
     },
+    AbilityDef {
+        id: "lightning_shield",
+        name: "Lightning Shield",
+        damage: 0.0,
+        cost: 25.0,
+        cooldown: 6.0,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("lightning_shield"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
+    },
     // —— Mage ——
     AbilityDef {
         id: "fireball",
@@ -569,6 +582,19 @@ pub static ABILITIES: &[AbilityDef] = &[
         effect: AbilityEffect::ApplyAura,
         flags: AbilityFlags::DEFAULT,
     },
+    AbilityDef {
+        id: "fear",
+        name: "Fear",
+        damage: 0.0,
+        cost: 30.0,
+        cooldown: 12.0,
+        range: 20.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("fear"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
+    },
     // —— Druid ——
     AbilityDef {
         id: "wrath",
@@ -639,7 +665,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         effect: AbilityEffect::Heal { coefficient: 1.0 },
         flags: AbilityFlags::DEFAULT,
     },
-    // —— Class-engine stubs (off-kit until 1.7 / 1.8) ——
+    // —— Class-engine stubs (off-kit; Charge/Blink/Shield/Life Tap/Aspect on 1.7 bars) ——
     AbilityDef {
         id: "power_word_shield",
         name: "Power Word: Shield",

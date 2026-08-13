@@ -190,6 +190,7 @@ pub fn create_player(
     world.insert(id, Durable::default());
     refresh_known_abilities(world, id);
     crate::stats::recalc_player_stats(world, id);
+    crate::combat::apply_spawn_identity(world, id);
     id
 }
 

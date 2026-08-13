@@ -789,20 +789,24 @@ fn format_action_bar(snap: &TickSnapshot) -> String {
         format!("   | Auras: {list}")
     };
     format!(
-        "{}{auras}{stealth}",
+        "{}{auras}{hint}",
         parts.join("   "),
-        stealth = rogue_stealth_hint(snap)
+        hint = class_interact_hint(snap)
     )
 }
 
-fn rogue_stealth_hint(snap: &TickSnapshot) -> &'static str {
-    if snap.progress.class_id != "rogue" {
-        return "";
-    }
-    if snap.stealthed {
-        "   [Z] STEALTH"
-    } else {
-        "   [Z] Stealth"
+fn class_interact_hint(snap: &TickSnapshot) -> &'static str {
+    match snap.progress.class_id.as_str() {
+        "rogue" => {
+            if snap.stealthed {
+                "   [Z] STEALTH"
+            } else {
+                "   [Z] Stealth"
+            }
+        }
+        "warrior" => "   [F] Stance",
+        "shaman" | "druid" => "   [F] Form",
+        _ => "",
     }
 }
 
@@ -1085,5 +1089,20 @@ mod tests {
         snap.stealthed = true;
         let stealthed = format_action_bar(&snap);
         assert!(stealthed.contains("[Z] STEALTH"));
+    }
+
+    #[test]
+    fn warrior_and_druid_action_bar_hint_f_key() {
+        let mut snap = chrome_snapshot();
+        snap.progress.class_id = "warrior".into();
+        assert!(format_action_bar(&snap).contains("[F] Stance"));
+        snap.progress.class_id = "druid".into();
+        assert!(format_action_bar(&snap).contains("[F] Form"));
+        snap.progress.class_id = "shaman".into();
+        assert!(format_action_bar(&snap).contains("[F] Form"));
+        snap.progress.class_id = "mage".into();
+        let mage = format_action_bar(&snap);
+        assert!(!mage.contains("[F] Stance"));
+        assert!(!mage.contains("[F] Form"));
     }
 }

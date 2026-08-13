@@ -36,6 +36,8 @@ pub struct Character {
     pub pvp_flagged: bool,
     #[serde(default)]
     pub completed_deeds: Vec<String>,
+    #[serde(default)]
+    pub stance_id: String,
 }
 
 /// Fields updated on save (position / progression / bags).
@@ -67,6 +69,8 @@ pub struct CharacterSave {
     pub pvp_flagged: bool,
     #[serde(default)]
     pub completed_deeds: Vec<String>,
+    #[serde(default)]
+    pub stance_id: String,
 }
 
 impl Default for CharacterSave {
@@ -89,6 +93,7 @@ impl Default for CharacterSave {
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            stance_id: String::new(),
         }
     }
 }
@@ -118,6 +123,8 @@ pub(crate) struct CharacterCompletionDto {
     pub pvp_flagged: bool,
     #[serde(default)]
     pub completed_deeds: Vec<String>,
+    #[serde(default)]
+    pub stance_id: String,
 }
 
 impl From<&CharacterSave> for CharacterCompletionDto {
@@ -133,6 +140,7 @@ impl From<&CharacterSave> for CharacterCompletionDto {
             professions: save.professions.clone(),
             pvp_flagged: save.pvp_flagged,
             completed_deeds: save.completed_deeds.clone(),
+            stance_id: save.stance_id.clone(),
         }
     }
 }
@@ -164,6 +172,7 @@ impl Character {
             professions: self.professions.clone(),
             pvp_flagged: self.pvp_flagged,
             completed_deeds: self.completed_deeds.clone(),
+            stance_id: self.stance_id.clone(),
         }
     }
 
@@ -185,6 +194,7 @@ impl Character {
         self.professions = save.professions;
         self.pvp_flagged = save.pvp_flagged;
         self.completed_deeds = save.completed_deeds;
+        self.stance_id = save.stance_id;
     }
 }
 
@@ -297,6 +307,7 @@ pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, se
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            stance_id: String::new(),
         },
     })
 }
@@ -332,6 +343,7 @@ mod tests {
         assert!(character.professions.is_empty());
         assert!(!character.pvp_flagged);
         assert!(character.completed_deeds.is_empty());
+        assert!(character.stance_id.is_empty());
     }
 
     #[test]
@@ -356,6 +368,7 @@ mod tests {
         assert!(save.professions.is_empty());
         assert!(!save.pvp_flagged);
         assert!(save.completed_deeds.is_empty());
+        assert!(save.stance_id.is_empty());
     }
 
     #[test]
@@ -382,6 +395,7 @@ mod tests {
             professions: Vec::new(),
             pvp_flagged: false,
             completed_deeds: Vec::new(),
+            stance_id: String::new(),
         };
         let save = CharacterSave {
             zone_id: "eastfen".into(),

@@ -38,6 +38,7 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
             .collect(),
         pvp_flagged: character.pvp_flagged,
         completed_deeds: character.completed_deeds.iter().cloned().collect(),
+        stance_id: character.stance_id.clone(),
     }
 }
 
@@ -74,6 +75,7 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
             .collect(),
         pvp_flagged: state.pvp_flagged,
         completed_deeds: state.completed_deeds.iter().cloned().collect(),
+        stance_id: state.stance_id.clone(),
     }
 }
 

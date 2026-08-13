@@ -142,6 +142,10 @@ pub struct AuraDef {
     pub breaks_on_damage: bool,
     /// Outgoing damage multiplier while the aura remains (`1.0` = none).
     pub damage_mult: f32,
+    /// Damage dealt back to a melee attacker of the bearer.
+    pub thorns: f32,
+    /// Extra armor while the aura remains (added in `deal_damage`).
+    pub armor_flat: f32,
 }
 
 const fn dot(id: &'static str, duration: f32, tick_interval: f32, tick_damage: f32) -> AuraDef {
@@ -156,6 +160,8 @@ const fn dot(id: &'static str, duration: f32, tick_interval: f32, tick_damage: f
         absorb: 0.0,
         breaks_on_damage: false,
         damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
     }
 }
 
@@ -171,6 +177,8 @@ const fn hot(id: &'static str, duration: f32, tick_interval: f32, tick_heal: f32
         absorb: 0.0,
         breaks_on_damage: false,
         damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
     }
 }
 
@@ -186,6 +194,8 @@ const fn slow(id: &'static str, duration: f32, move_mult: f32) -> AuraDef {
         absorb: 0.0,
         breaks_on_damage: false,
         damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
     }
 }
 
@@ -201,6 +211,8 @@ const fn stun(id: &'static str, duration: f32) -> AuraDef {
         absorb: 0.0,
         breaks_on_damage: false,
         damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
     }
 }
 
@@ -216,6 +228,8 @@ const fn absorb(id: &'static str, duration: f32, amount: f32) -> AuraDef {
         absorb: amount,
         breaks_on_damage: false,
         damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
     }
 }
 
@@ -231,6 +245,93 @@ const fn buff(id: &'static str, duration: f32, damage_mult: f32) -> AuraDef {
         absorb: 0.0,
         breaks_on_damage: false,
         damage_mult,
+        thorns: 0.0,
+        armor_flat: 0.0,
+    }
+}
+
+const fn form(id: &'static str, duration: f32, move_mult: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult,
+        absorb: 0.0,
+        breaks_on_damage: true,
+        damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
+    }
+}
+
+const fn fear(id: &'static str, duration: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: true,
+        move_mult: 0.0,
+        absorb: 0.0,
+        breaks_on_damage: true,
+        damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
+    }
+}
+
+const fn thorns(id: &'static str, duration: f32, thorns: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult: 1.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
+        damage_mult: 1.0,
+        thorns,
+        armor_flat: 0.0,
+    }
+}
+
+const fn armor_aura(id: &'static str, duration: f32, armor_flat: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult: 1.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
+        damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat,
+    }
+}
+
+const fn stance(id: &'static str, duration: f32, damage_mult: f32, armor_flat: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult: 1.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
+        damage_mult,
+        thorns: 0.0,
+        armor_flat,
     }
 }
 
@@ -251,6 +352,13 @@ pub static AURAS: &[AuraDef] = &[
     absorb("power_word_shield", 15.0, 45.0),
     buff("battle_shout", 120.0, 1.1),
     buff("aspect_of_the_hawk", 120.0, 1.1),
+    dot("seal_righteousness", 9.0, 3.0, 3.0),
+    thorns("lightning_shield", 120.0, 8.0),
+    fear("fear", 4.0),
+    form("ghost_wolf", 120.0, 1.4),
+    form("travel_form", 120.0, 1.4),
+    armor_aura("devotion_aura", 3600.0, 20.0),
+    stance("defensive_stance", 3600.0, 0.9, 20.0),
 ];
 
 pub fn aura(id: &str) -> Option<&'static AuraDef> {
@@ -280,6 +388,20 @@ mod tests {
         assert!(aura("power_word_shield").unwrap().absorb > 0.0);
         assert!((aura("aspect_of_the_hawk").unwrap().damage_mult - 1.1).abs() < f32::EPSILON);
         assert!(aura("missing").is_none());
+        let shield = aura("lightning_shield").expect("lightning_shield");
+        assert!(shield.thorns > 0.0);
+        assert!(aura("fear").expect("fear").breaks_on_damage);
+        let travel = aura("travel_form").expect("travel_form");
+        assert!((travel.move_mult - 1.4).abs() < f32::EPSILON);
+        assert!(travel.breaks_on_damage);
+        let wolf = aura("ghost_wolf").expect("ghost_wolf");
+        assert!((wolf.move_mult - 1.4).abs() < f32::EPSILON);
+        assert!(wolf.breaks_on_damage);
+        assert!(aura("devotion_aura").expect("devotion_aura").armor_flat > 0.0);
+        let defensive = aura("defensive_stance").expect("defensive_stance");
+        assert!((defensive.damage_mult - 0.9).abs() < f32::EPSILON);
+        assert!(defensive.armor_flat > 0.0);
+        assert!(aura("seal_righteousness").is_some());
     }
 
     #[test]
