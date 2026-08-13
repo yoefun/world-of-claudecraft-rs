@@ -3,6 +3,7 @@ pub mod duration;
 pub mod enchanting;
 pub mod gathering;
 pub mod masterwork;
+pub mod session;
 pub mod skill;
 pub mod skinning;
 pub mod stations;
