@@ -851,7 +851,7 @@ mod tests {
             AbilitySlot::Slot4,
             AbilitySlot::Slot5,
         ] {
-            let v = serde_json::to_value(&slot).unwrap();
+            let v = serde_json::to_value(slot).unwrap();
             let back: AbilitySlot = serde_json::from_value(v).unwrap();
             assert_eq!(back, slot);
         }

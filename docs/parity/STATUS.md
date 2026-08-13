@@ -40,9 +40,10 @@ Completion plan: [`docs/superpowers/plans/2026-07-28-rust-rewrite-completion.md`
 | Professions gather/craft | done | herbalism → alchemy salve |
 | Duel + PvP honor | done | |
 | World boss + deeds | done | one-shot deed completion persisted |
-| Client economy/talent chrome | done | N/K/M/U panels |
+| Client economy/talent chrome | done | N/K/I/U panels; **M** world map + minimap |
 | Heightfield terrain | done | Continuous strip seed `20061`; golden ε≈1e-3 vs upstream pin; editor custom maps deferred |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
+| Minimap / world map UI | done | Functional Bevy paint (not full DESIGN.md chrome) |
 
 ### Explicit deferred / non-goals
 

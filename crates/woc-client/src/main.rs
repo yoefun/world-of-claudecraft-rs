@@ -6,6 +6,7 @@ mod char_select;
 mod hud;
 mod input;
 mod login;
+mod map;
 mod menu_ui;
 mod online;
 mod title;
@@ -46,6 +47,7 @@ fn main() {
             char_select::plugin,
             world_setup::plugin,
             hud::plugin,
+            map::plugin,
         ))
         .add_systems(
             Update,

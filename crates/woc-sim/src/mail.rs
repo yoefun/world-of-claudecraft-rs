@@ -94,6 +94,7 @@ impl Mailbox {
             .unwrap_or_default()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn send(
         &mut self,
         entities: &mut [Entity],
