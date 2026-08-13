@@ -2,7 +2,7 @@
 
 **Current rewrite:** `1.3.0` / `online-hard`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Next:** `1.4.0` / `client-compat` version gate (planned) — [`../superpowers/specs/2026-08-13-client-version-update-design.md`](../superpowers/specs/2026-08-13-client-version-update-design.md).
+**Next:** `1.4.0` / `client-compat` version gate, then `1.5.0` / `client-update` packages — [`../superpowers/specs/2026-08-13-client-version-update-design.md`](../superpowers/specs/2026-08-13-client-version-update-design.md) · [`../superpowers/specs/2026-08-13-client-update-packages-design.md`](../superpowers/specs/2026-08-13-client-update-packages-design.md).
 
 ## Post-completion (`stable` → `online-hard`)
 

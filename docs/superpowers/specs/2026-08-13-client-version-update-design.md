@@ -38,11 +38,11 @@ This program adds a **fail-closed version gate** so a mismatched online client n
 
 | Approach | What it does | Cost | Verdict |
 | --- | --- | --- | --- |
-| **A. Native auto-update** | Packaged installers + signed feed + self-replace binary (electron-updater analogue) | Needs packaging, a host, signing, prod/dev tracks. Electron/browser are explicit non-goals | Reject |
+| **A. Native auto-update** | Packaged payload + updater + incremental patches | Needs a packer, host, signing, launcher. Separate subsystem | **Defer to 1.5.0** — [`2026-08-13-client-update-packages-design.md`](2026-08-13-client-update-packages-design.md) |
 | **B. Advisory toast only** | Fetch `/version`, banner on title, still allow Login | Old clients still spawn into a breaking snapshot | Reject |
-| **C. Handshake gate + HTTP preflight (recommended)** | Pure policy in `woc-version`; `/version` advertises `protocol_rev` + `min_client_version`; title Online fail-closed; Hello carries identity; server rejects before spawn; Welcome double-checks | No download UX; players rebuild/redownload out of band | **Adopt** |
+| **C. Handshake gate + HTTP preflight (recommended for 1.4.0)** | Pure policy in `woc-version`; `/version` advertises `protocol_rev` + `min_client_version`; title Online fail-closed; Hello carries identity; server rejects before spawn; Welcome double-checks | cargo-run players still rebuild by hand; packaged players wait for 1.5.0 | **Adopt for 1.4.0** |
 
-Approach A is the upstream Electron product. This rewrite’s client is Bevy and unpackaged. Do not import `docs/desktop-release.md` from levy-street.
+Do not import levy-street `docs/desktop-release.md` (Electron / electron-updater). The Bevy updater is specified in the 1.5.0 design.
 
 ## 4. Version map
 
@@ -50,6 +50,7 @@ Approach A is the upstream Electron product. This rewrite’s client is Bevy and
 | --- | --- | --- | --- |
 | **1.3.0** (shipped) | `online-hard` | Park/resume, AOI, Postgres notes | Disconnect → Hello resumes same entity |
 | **1.4.0** (this program) | `client-compat` | Online version gate | Title blocks mismatch; Hello rejects stale identity; Welcome kicks on rev skew |
+| **1.5.0** | `client-update` | Pack + incremental updater | Signed full + delta packages; launcher applies then execs `woc-client` |
 
 Upstream pin stays **0.31.0**. Protocol rev stays **6** (Hello fields are additive `#[serde(default)]`). Server *policy* becomes fail-closed for missing identity: an old Hello is valid JSON and is refused.
 
@@ -168,7 +169,7 @@ Behavior:
 - Online Continue / Enter: only if `Compatible`. If `Idle`, spawn fetch and stay. If `Checking`, stay. If `Incompatible` / `Unreachable`, stay and show the status line in `ERR` color.
 - Fetch failure is fail-closed for Online (do not log in “because the version host is down”).
 
-Status line on the title panel (new `CompatLabel` under the footer): English text from the resource. No download button. No URL opener.
+Status line on the title panel (new `CompatLabel` under the footer): English text from the resource. **1.4.0 has no download button.** 1.5.0 adds Update when a packaged updater binary is present.
 
 ### 5.5 Welcome double-check
 
@@ -195,10 +196,9 @@ In-world has no logout today; this is the path back to Title when the realm refu
 
 | Skip | Rationale |
 | --- | --- |
-| Packaged installers, code signing, notarization | No desktop distribution yet |
-| In-app binary download / self-replace | Needs a feed host and Approach A |
-| `electron-updater` / Steam / Epic tracks | Upstream product-shell; Electron is a rewrite non-goal |
-| Opening a browser download URL | No official binary URL |
+| Packaged installers, incremental patches, updater binary | **1.5.0** — [`2026-08-13-client-update-packages-design.md`](2026-08-13-client-update-packages-design.md) |
+| Apple notarization / Authenticode / Steam / Epic | Product-shell; not required to ship Linux deltas |
+| `electron-updater` | Upstream Electron; this client is Bevy |
 | Protocol rev 7 / snapshot schema change | Additive Hello only |
 | i18n of `user_message()` | English-only invariant |
 | Offline version checks | Offline embeds the same crate tree |

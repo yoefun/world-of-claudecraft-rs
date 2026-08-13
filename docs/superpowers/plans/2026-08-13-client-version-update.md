@@ -17,7 +17,7 @@
 - English-only `Compat::user_message()` strings; every player-facing error starts with `version:`.
 - Client never decides combat/loot/quest outcomes.
 - Prefer additive serde defaults. Missing Hello identity is valid JSON and is **refused** (fail-closed policy).
-- No packaged installers, electron-updater, download URL, or self-replace binary.
+- No packer, delta artifacts, or `woc-updater` in this plan — that is rewrite **1.5.0** / [`2026-08-13-client-update-packages.md`](2026-08-13-client-update-packages.md).
 - CI gate: `cargo test --workspace --exclude woc-client` + `cargo check -p woc-client` (+ clippy as CI). Policy tests must live in crates CI actually runs (`woc-version`, `woc-protocol`, `woc-server`).
 - Branch naming for implementation: `cursor/<workstream-id>-680e` (or unique suffix).
 
@@ -1326,7 +1326,7 @@ Rename the section heading from “planned” to current, keep the spec/plan lin
 | Hello identity | done | Additive; missing → reject |
 | Title Online preflight | done | Fail-closed |
 | Welcome kick | done | `version:` → Title |
-| Packaged auto-update | deferred | No installers |
+| Packaged auto-update | planned | Rewrite 1.5.0 / `client-update` |
 ```
 
 `docs/parity/DEMO.md` — add one line to the online path: title must show `Online: compatible` before Continue.
