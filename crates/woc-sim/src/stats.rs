@@ -48,10 +48,7 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
         .get::<Progress>(player_id)
         .map(|p| p.talents.clone())
         .unwrap_or_default();
-    let level = world
-        .get::<Health>(player_id)
-        .map(|h| h.level)
-        .unwrap_or(1);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
 
     let mut ap = def.attack_power;
     let mut armor = 0.0_f32;
@@ -78,15 +75,18 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
     let (max_hp_pct, armor_pct, armor_flat, resource_pct) = talent_sums(&talents);
     armor = (armor + armor_flat) * (1.0 + armor_pct);
 
-    let hp_max =
-        (crate::types::player_hp(def.base_hp, level) + armor * 0.5) * (1.0 + max_hp_pct);
+    let hp_max = (crate::types::player_hp(def.base_hp, level) + armor * 0.5) * (1.0 + max_hp_pct);
     let resource_max = def.resource_max * (1.0 + resource_pct);
 
     let (hp, hp_max_prev) = world
         .get::<Health>(player_id)
         .map(|h| (h.hp, h.hp_max))
         .unwrap_or((hp_max, hp_max));
-    let ratio = if hp_max_prev > 0.0 { hp / hp_max_prev } else { 1.0 };
+    let ratio = if hp_max_prev > 0.0 {
+        hp / hp_max_prev
+    } else {
+        1.0
+    };
     let new_hp = (hp_max * ratio).clamp(0.0, hp_max);
 
     if let Some(c) = world.get_mut::<Combat>(player_id) {

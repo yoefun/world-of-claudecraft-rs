@@ -18,8 +18,8 @@ use crate::combat::{
 };
 use crate::context::SimContext;
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootTable, Motion,
-    Owner, Progress, QuestLog, QuestState, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootTable, Motion, Owner,
+    Progress, QuestLog, QuestState, Transform,
 };
 use crate::ecs::World;
 use crate::interaction::vendor_snapshot;
@@ -142,14 +142,18 @@ impl Sim {
             return None;
         }
         if let Some(ref did) = state.durable_id {
-            let dup = self.world.ids::<crate::ecs::components::Durable>().into_iter().any(|id| {
-                self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
-                    && self
-                        .world
-                        .get::<crate::ecs::components::Durable>(id)
-                        .and_then(|d| d.durable_id.as_deref())
-                        == Some(did.as_str())
-            });
+            let dup = self
+                .world
+                .ids::<crate::ecs::components::Durable>()
+                .into_iter()
+                .any(|id| {
+                    self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
+                        && self
+                            .world
+                            .get::<crate::ecs::components::Durable>(id)
+                            .and_then(|d| d.durable_id.as_deref())
+                            == Some(did.as_str())
+                });
             if dup {
                 return None;
             }
@@ -281,13 +285,7 @@ impl Sim {
         item_id: &str,
         count: u32,
     ) -> Result<(), &'static str> {
-        crate::inventory::grant_item(
-            &mut self.world,
-            player_id,
-            item_id,
-            count,
-            &mut self.events,
-        )?;
+        crate::inventory::grant_item(&mut self.world, player_id, item_id, count, &mut self.events)?;
         crate::quests::on_inventory_changed(&mut self.world, player_id, &mut self.events);
         Ok(())
     }
@@ -495,10 +493,7 @@ impl Sim {
 
     pub fn snapshot_for_player(&self, player_id: EntityId) -> TickSnapshot {
         let world = &self.world;
-        let level = world
-            .get::<Health>(player_id)
-            .map(|h| h.level)
-            .unwrap_or(1);
+        let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
         let target_id = world.get::<Combat>(player_id).and_then(|c| c.target);
         let ability_cd = world
             .get::<Combat>(player_id)
@@ -634,10 +629,7 @@ impl Sim {
             player_id,
             entities,
             progress: PlayerProgress {
-                xp: world
-                    .get::<Progress>(player_id)
-                    .map(|p| p.xp)
-                    .unwrap_or(0),
+                xp: world.get::<Progress>(player_id).map(|p| p.xp).unwrap_or(0),
                 xp_to_level: xp_to_next(level),
                 level,
                 copper: world
@@ -761,11 +753,7 @@ fn entity_snapshot(world: &World, id: EntityId) -> Option<EntitySnapshot> {
     })
 }
 
-fn snapshot_includes_entity(
-    world: &World,
-    viewer_instance: Option<&str>,
-    id: EntityId,
-) -> bool {
+fn snapshot_includes_entity(world: &World, viewer_instance: Option<&str>, id: EntityId) -> bool {
     let Some(identity) = world.get::<Identity>(id) else {
         return false;
     };
@@ -820,10 +808,7 @@ fn build_ability_bar(
                     .collect::<Vec<_>>()
                     .join(" ")
             });
-            let known = kit
-                .known_abilities
-                .iter()
-                .any(|id| id == entry.ability_id);
+            let known = kit.known_abilities.iter().any(|id| id == entry.ability_id);
             let cd = kit
                 .ability_cds
                 .get(entry.ability_id)
@@ -936,7 +921,6 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
     }
     best.map(|(id, _)| id)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1134,14 +1118,7 @@ mod tests {
 
         let mut duel_events = Vec::new();
         crate::pvp::challenge_duel(&mut sim.pvp, &sim.world, winner, loser).unwrap();
-        crate::pvp::accept_duel(
-            &mut sim.pvp,
-            &sim.world,
-            loser,
-            winner,
-            &mut duel_events,
-        )
-        .unwrap();
+        crate::pvp::accept_duel(&mut sim.pvp, &sim.world, loser, winner, &mut duel_events).unwrap();
 
         let (wx, wz) = {
             let t = sim.world.get::<Transform>(winner).unwrap();
@@ -1150,10 +1127,7 @@ mod tests {
         let loot_id = sim.world.next_id();
         crate::ecs::spawn::create_loot(&mut sim.world, loot_id, wx, wz, 7, None);
 
-        assert_eq!(
-            sim.world.get::<Progress>(winner).unwrap().honor,
-            0
-        );
+        assert_eq!(sim.world.get::<Progress>(winner).unwrap().honor, 0);
 
         let (_snap, events) = sim.tick(PlayerIntent::default());
 
@@ -1198,7 +1172,11 @@ mod tests {
                     .get::<Identity>(id)
                     .and_then(|i| i.template_id.as_deref())
                     == Some("young_wolf")
-                    && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
             })
             .take(3)
             .collect();
@@ -1360,7 +1338,11 @@ mod tests {
             .live_ids()
             .find(|&id| {
                 sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
-                    && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
             })
             .unwrap();
         if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
@@ -1468,7 +1450,11 @@ mod tests {
 
         let wolf_id = sim.world.live_ids().find(|&id| {
             sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
-                && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                && sim
+                    .world
+                    .get::<Health>(id)
+                    .map(|h| h.alive)
+                    .unwrap_or(false)
         });
         if let Some(wid) = wolf_id {
             let hp_before = sim.world.get::<Health>(wid).unwrap().hp;
@@ -1555,7 +1541,11 @@ mod tests {
             .live_ids()
             .find(|&id| {
                 sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
-                    && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
             })
             .expect("mob");
         let (px, pz) = {

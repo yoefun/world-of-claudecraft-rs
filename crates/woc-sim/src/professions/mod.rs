@@ -22,10 +22,10 @@ pub fn handle_interact(
     events: &mut Vec<SimEvent>,
 ) -> bool {
     let result = match action {
-        InteractAction::TrainProfession { id } => {
-            train_profession(world, player_id, id, events)
+        InteractAction::TrainProfession { id } => train_profession(world, player_id, id, events),
+        InteractAction::Gather { node_id } => {
+            gather_from_entity(world, player_id, *node_id, events)
         }
-        InteractAction::Gather { node_id } => gather_from_entity(world, player_id, *node_id, events),
         InteractAction::Craft { recipe_id } => craft(world, player_id, recipe_id, events),
         _ => return false,
     };
@@ -121,7 +121,9 @@ pub fn gather_from_entity(
     if world.get::<ClassKit>(player_id).is_none() {
         return Err("player not found");
     }
-    let node = world.get::<Identity>(node_id).ok_or("gather node not found")?;
+    let node = world
+        .get::<Identity>(node_id)
+        .ok_or("gather node not found")?;
     let node_content_id = node
         .template_id
         .clone()
@@ -157,7 +159,12 @@ pub fn craft(
 ) -> ProfessionResult {
     ensure_active_player(world, player_id)?;
     let definition = recipe(recipe_id).ok_or("unknown recipe")?;
-    require_skill(world, player_id, definition.profession_id, definition.skill_req)?;
+    require_skill(
+        world,
+        player_id,
+        definition.profession_id,
+        definition.skill_req,
+    )?;
     let inventory = world
         .get::<Bags>(player_id)
         .map(|b| &b.inventory)
@@ -224,7 +231,12 @@ fn ensure_active_player(world: &World, player_id: EntityId) -> ProfessionResult 
     Ok(())
 }
 
-fn require_skill(world: &World, player_id: EntityId, profession_id: &str, required: u32) -> ProfessionResult {
+fn require_skill(
+    world: &World,
+    player_id: EntityId,
+    profession_id: &str,
+    required: u32,
+) -> ProfessionResult {
     let skill = world
         .get::<Progress>(player_id)
         .and_then(|p| p.professions.get(profession_id).copied())
@@ -249,7 +261,6 @@ fn bump_skill(world: &mut World, player_id: EntityId, profession_id: &str) {
     *skill = skill.saturating_add(1).min(definition.max_skill);
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,7 +277,11 @@ mod tests {
         train_profession(&mut world, 1, "herbalism", &mut events).unwrap();
         train_profession(&mut world, 1, "alchemy", &mut events).unwrap();
         assert_eq!(
-            world.get::<Progress>(1).unwrap().professions.get("herbalism"),
+            world
+                .get::<Progress>(1)
+                .unwrap()
+                .professions
+                .get("herbalism"),
             Some(&1)
         );
         gather_content(&mut world, 1, "eastbrook_meadow_silverleaf", &mut events).unwrap();

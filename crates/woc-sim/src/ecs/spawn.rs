@@ -75,10 +75,7 @@ fn insert_combat_blank(world: &mut World, id: EntityId, attack_damage: f32) {
 /// Refresh `known_abilities` on a player's ClassKit from class + level.
 pub fn refresh_known_abilities(world: &mut World, player_id: EntityId) {
     let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
-    let level = world
-        .get::<Health>(player_id)
-        .map(|h| h.level)
-        .unwrap_or(1);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     let Some(kit) = world.get_mut::<ClassKit>(player_id) else {
         return;
     };
@@ -189,7 +186,13 @@ pub fn create_mob_from_template(
     insert_transform(world, id, x, z, 0.0);
     insert_health(world, id, t.hp, t.hp, t.level);
     insert_combat_blank(world, id, t.attack_damage);
-    world.insert(id, Home { home_x: x, home_z: z });
+    world.insert(
+        id,
+        Home {
+            home_x: x,
+            home_z: z,
+        },
+    );
     world.insert(id, Threat::default());
     world.insert(
         id,
@@ -244,7 +247,14 @@ pub fn create_pet(
     z: f32,
 ) -> EntityId {
     world.adopt(id);
-    insert_identity(world, id, EntityKind::Pet, def.name, Some(def.id), "eastbrook");
+    insert_identity(
+        world,
+        id,
+        EntityKind::Pet,
+        def.name,
+        Some(def.id),
+        "eastbrook",
+    );
     insert_transform(world, id, x, z, 0.0);
     insert_health(world, id, def.hp, def.hp, def.level);
     world.insert(

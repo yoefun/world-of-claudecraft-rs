@@ -185,7 +185,6 @@ pub fn is_loot_entity(world: &World, id: EntityId) -> bool {
         && world.contains(id)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

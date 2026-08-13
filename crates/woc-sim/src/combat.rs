@@ -1,14 +1,12 @@
 //! Combat: auto-attack, primary ability, GCD, casts, auras, damage, death, XP, loot.
 
+use crate::ecs::components::{AuraInstance, CastState};
 use crate::ecs::components::{
     Auras, ClassKit, Combat, Health, Identity, LootPile, LootTable, Progress, Threat, Transform,
 };
 use crate::ecs::World;
-use crate::ecs::components::{AuraInstance, CastState};
 use crate::rng::Rng;
-use crate::types::{
-    MELEE_RANGE, MOB_SWING_SEC, PLAYER_SWING_SEC, RANGED_FALLBACK,
-};
+use crate::types::{MELEE_RANGE, MOB_SWING_SEC, PLAYER_SWING_SEC, RANGED_FALLBACK};
 use woc_content::{ability, class_ability_for_slot, mob, AbilityDef, ResourceType};
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, SimEvent, DT};
 
@@ -82,8 +80,7 @@ pub fn add_threat(world: &mut World, mob_id: EntityId, source: EntityId, amount:
 /// Prefer current living target; else highest threat in range; else `None`.
 pub fn prefer_mob_target(world: &World, mob_id: EntityId, max_range: f32) -> Option<EntityId> {
     if let Some(tid) = world.get::<Combat>(mob_id).and_then(|c| c.target) {
-        if world.get::<ClassKit>(tid).is_some()
-            && world.get::<Health>(tid).is_some_and(|h| h.alive)
+        if world.get::<ClassKit>(tid).is_some() && world.get::<Health>(tid).is_some_and(|h| h.alive)
         {
             return Some(tid);
         }
@@ -119,7 +116,10 @@ pub fn deal_damage(
     if world.get::<Health>(target).is_none_or(|h| !h.alive) {
         return;
     }
-    if world.get::<Identity>(target).is_some_and(|i| i.kind == EntityKind::Npc) {
+    if world
+        .get::<Identity>(target)
+        .is_some_and(|i| i.kind == EntityKind::Npc)
+    {
         return;
     }
     let talent_mult = world
@@ -156,7 +156,12 @@ pub fn deal_damage(
     }
 }
 
-pub fn apply_aura(world: &mut World, target: EntityId, aura: AuraInstance, events: &mut Vec<SimEvent>) {
+pub fn apply_aura(
+    world: &mut World,
+    target: EntityId,
+    aura: AuraInstance,
+    events: &mut Vec<SimEvent>,
+) {
     let id = aura.id.clone();
     let remaining = aura.remaining;
     let stacks = aura.stacks;
@@ -173,12 +178,7 @@ pub fn apply_aura(world: &mut World, target: EntityId, aura: AuraInstance, event
             store.auras.push(aura);
         }
     } else {
-        world.insert(
-            target,
-            Auras {
-                auras: vec![aura],
-            },
-        );
+        world.insert(target, Auras { auras: vec![aura] });
     }
     events.push(SimEvent::AuraApplied {
         player: target,
@@ -497,7 +497,10 @@ fn resolve_ability_hit(
     def_damage: f32,
     events: &mut Vec<SimEvent>,
 ) {
-    let attack = world.get::<Combat>(src).map(|c| c.attack_damage).unwrap_or(0.0);
+    let attack = world
+        .get::<Combat>(src)
+        .map(|c| c.attack_damage)
+        .unwrap_or(0.0);
     let rage = world
         .get::<ClassKit>(src)
         .and_then(|k| k.resource_type)
@@ -590,7 +593,9 @@ pub fn update_player_combat(
                 world.insert(player_id, combat.clone());
                 world.insert(player_id, kit.clone());
                 if let Some(def) = ability(&abil_id) {
-                    resolve_ability_hit(world, player_id, tid, &abil_id, def.name, def.damage, events);
+                    resolve_ability_hit(
+                        world, player_id, tid, &abil_id, def.name, def.damage, events,
+                    );
                 }
                 combat = world.get::<Combat>(player_id).cloned().unwrap_or(combat);
                 kit = world.get::<ClassKit>(player_id).cloned().unwrap_or(kit);
@@ -604,7 +609,9 @@ pub fn update_player_combat(
                 let abil_id = def.id;
                 let abil_range = def.range.max(RANGED_FALLBACK.min(def.range));
                 let in_slot_range = d <= abil_range;
-                if in_slot_range && !ability_on_cd(&kit, abil_id) && spend_resource(&mut kit, def.cost)
+                if in_slot_range
+                    && !ability_on_cd(&kit, abil_id)
+                    && spend_resource(&mut kit, def.cost)
                 {
                     start_ability_cd(&mut kit, &mut combat, abil_id, def.cooldown);
                     combat.gcd = GCD_SEC;
@@ -692,7 +699,6 @@ pub fn update_mob_combat(
     deal_damage(world, mob_id, focus, dmg, None, events);
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -732,7 +738,10 @@ mod tests {
         update_player_combat(1, &mut world, Some(AbilitySlot::Primary), &mut events);
         let after_first = world.get::<Health>(2).unwrap().hp;
         assert!(after_first < mob_hp, "first cast should deal damage");
-        assert!(world.get::<Combat>(1).unwrap().gcd > 0.0, "GCD should start after ability");
+        assert!(
+            world.get::<Combat>(1).unwrap().gcd > 0.0,
+            "GCD should start after ability"
+        );
 
         if let Some(c) = world.get_mut::<Combat>(1) {
             c.ability_cd = 0.0;
@@ -849,7 +858,13 @@ mod tests {
         assert!(world.get::<Combat>(1).unwrap().cast.is_some());
         assert_eq!(world.get::<Health>(2).unwrap().hp, start_hp);
         assert!(world.get::<Combat>(1).unwrap().gcd > 0.0);
-        let duration = world.get::<Combat>(1).unwrap().cast.as_ref().unwrap().duration;
+        let duration = world
+            .get::<Combat>(1)
+            .unwrap()
+            .cast
+            .as_ref()
+            .unwrap()
+            .duration;
         let ticks = (duration / DT).ceil() as u32 + 1;
         for _ in 0..ticks {
             update_player_combat(1, &mut world, None, &mut events);

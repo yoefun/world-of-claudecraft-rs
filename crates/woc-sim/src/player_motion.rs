@@ -408,7 +408,6 @@ pub fn step_player_motion(
     fall.map(|fall_damage| MotionEffect { fall_damage })
 }
 
-
 fn step_axes(world: &mut World, player_id: EntityId, move_x: f32, move_z: f32, facing: f32) {
     let intent = PlayerIntent {
         move_x,

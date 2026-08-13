@@ -98,7 +98,6 @@ pub fn tab_target(world: &World, player_id: EntityId) -> Option<EntityId> {
     tab_target_pose(t.x, t.z, t.yaw, current, &candidates)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,7 +149,11 @@ mod tests {
             .live_ids()
             .filter(|&id| {
                 sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
-                    && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                    && sim
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
             })
             .take(2)
             .collect();

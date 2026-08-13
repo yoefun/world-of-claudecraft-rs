@@ -132,10 +132,7 @@ impl Mailbox {
         if !alive {
             return false;
         }
-        let sender_copper = world
-            .get::<Progress>(from)
-            .map(|p| p.copper)
-            .unwrap_or(0);
+        let sender_copper = world.get::<Progress>(from).map(|p| p.copper).unwrap_or(0);
         if copper > sender_copper {
             events.push(SimEvent::Toast {
                 message: "Not enough copper.".into(),
@@ -269,7 +266,6 @@ impl Mailbox {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,7 +295,11 @@ mod tests {
             .unwrap()
             .inventory
             .iter()
-            .position(|s| s.as_ref().map(|st| st.item_id == "silverleaf").unwrap_or(false))
+            .position(|s| {
+                s.as_ref()
+                    .map(|st| st.item_id == "silverleaf")
+                    .unwrap_or(false)
+            })
             .unwrap() as u8;
         let mut box_ = Mailbox::new();
         let mut events = Vec::new();

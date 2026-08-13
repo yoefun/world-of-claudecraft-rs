@@ -110,23 +110,14 @@ impl WorldHost for Sim {
                 let _ = challenge_duel(&mut self.pvp, &self.world, player_id, target_id);
             }
             InteractAction::DuelAccept => {
-                let _ = accept_pending_duel(
-                    &mut self.pvp,
-                    &self.world,
-                    player_id,
-                    &mut self.events,
-                );
+                let _ =
+                    accept_pending_duel(&mut self.pvp, &self.world, player_id, &mut self.events);
             }
             InteractAction::TogglePvp => {
                 let _ = toggle_pvp(&mut self.world, player_id);
             }
             InteractAction::EnterPortal { zone_id } => {
-                let _ = enter_portal(
-                    &mut self.world,
-                    player_id,
-                    &zone_id,
-                    &mut self.events,
-                );
+                let _ = enter_portal(&mut self.world, player_id, &zone_id, &mut self.events);
             }
             InteractAction::EnterDungeon { dungeon_id } => {
                 let _ = enter_dungeon(
@@ -138,12 +129,7 @@ impl WorldHost for Sim {
                 );
             }
             InteractAction::EnterDelve { delve_id } => {
-                let _ = enter_delve(
-                    &mut self.world,
-                    player_id,
-                    &delve_id,
-                    &mut self.events,
-                );
+                let _ = enter_delve(&mut self.world, player_id, &delve_id, &mut self.events);
             }
             InteractAction::AdvanceDelve => {
                 let _ = try_advance_delve(&mut self.world, player_id, &mut self.events);

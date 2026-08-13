@@ -69,17 +69,20 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
         durable_id: world
             .get::<Durable>(player_id)
             .and_then(|d| d.durable_id.clone()),
-        level: world
-            .get::<Health>(player_id)
-            .map(|h| h.level)
-            .unwrap_or(1),
+        level: world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1),
         xp: world.get::<Progress>(player_id).map(|p| p.xp).unwrap_or(0),
         copper: world
             .get::<Progress>(player_id)
             .map(|p| p.copper)
             .unwrap_or(0),
-        pos_x: world.get::<Transform>(player_id).map(|t| t.x).unwrap_or(0.0),
-        pos_z: world.get::<Transform>(player_id).map(|t| t.z).unwrap_or(0.0),
+        pos_x: world
+            .get::<Transform>(player_id)
+            .map(|t| t.x)
+            .unwrap_or(0.0),
+        pos_z: world
+            .get::<Transform>(player_id)
+            .map(|t| t.z)
+            .unwrap_or(0.0),
         inventory: world
             .get::<Bags>(player_id)
             .map(|b| b.inventory.clone())
@@ -212,8 +215,13 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     if let Some(h) = world.get_mut::<Health>(player_id) {
         h.hp = h.hp_max;
     }
-    let rt = world.get::<ClassKit>(player_id).and_then(|k| k.resource_type);
-    let rmax = world.get::<ClassKit>(player_id).map(|k| k.resource_max).unwrap_or(0.0);
+    let rt = world
+        .get::<ClassKit>(player_id)
+        .and_then(|k| k.resource_type);
+    let rmax = world
+        .get::<ClassKit>(player_id)
+        .map(|k| k.resource_max)
+        .unwrap_or(0.0);
     if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
         if let Some(rt) = rt {
             kit.resource = match rt {
@@ -271,7 +279,6 @@ pub fn quest_state_to_str(s: QuestState) -> &'static str {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,12 +308,7 @@ mod tests {
         assert!(state.is_virgin());
         let mut world = World::new();
         create_player_from_state(&mut world, 1, "Ada", PlayerClass::Warrior, &state);
-        assert!(world
-            .get::<Bags>(1)
-            .unwrap()
-            .equipment
-            .main_hand
-            .is_some());
+        assert!(world.get::<Bags>(1).unwrap().equipment.main_hand.is_some());
     }
 
     #[test]

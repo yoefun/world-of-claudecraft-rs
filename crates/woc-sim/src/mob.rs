@@ -29,7 +29,10 @@ pub fn tick_mob_respawns(world: &mut World, dt: f32) {
         if world.get::<Health>(id).map(|h| h.alive).unwrap_or(true) {
             continue;
         }
-        let timer = world.get::<Respawn>(id).map(|r| r.respawn_timer).unwrap_or(0.0);
+        let timer = world
+            .get::<Respawn>(id)
+            .map(|r| r.respawn_timer)
+            .unwrap_or(0.0);
         if timer <= 0.0 {
             // First observation of death: arm the timer (full duration).
             if let Some(r) = world.get_mut::<Respawn>(id) {
@@ -178,8 +181,8 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
         just_engaged = true;
     }
 
-    let engaged = just_engaged
-        || world.get::<Combat>(mob_id).and_then(|c| c.target) == Some(player_id);
+    let engaged =
+        just_engaged || world.get::<Combat>(mob_id).and_then(|c| c.target) == Some(player_id);
     if engaged {
         apply_social_aggro(world, mob_id, player_id);
     }
@@ -210,7 +213,6 @@ fn move_toward_home(world: &mut World, mob_id: EntityId) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,9 +232,7 @@ mod tests {
         // First tick arms the full respawn timer.
         tick_mob_respawns(&mut world, DT);
         assert!(!world.get::<Health>(2).unwrap().alive);
-        assert!(
-            world.get::<Respawn>(2).unwrap().respawn_timer > MOB_RESPAWN_SEC - 1.0
-        );
+        assert!(world.get::<Respawn>(2).unwrap().respawn_timer > MOB_RESPAWN_SEC - 1.0);
         // Force expiry.
         if let Some(r) = world.get_mut::<Respawn>(2) {
             r.respawn_timer = DT;

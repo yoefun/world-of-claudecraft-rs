@@ -1,9 +1,9 @@
 //! Interaction commands: talk, quests, vendor, equip, use item, loot corpse.
 
-use crate::ecs::components::{Bags, Health, Identity, Progress};
-use crate::ecs::components::{dist2d, Equipment};
-use crate::ecs::World;
 use crate::ecs::components::AuraInstance;
+use crate::ecs::components::{dist2d, Equipment};
+use crate::ecs::components::{Bags, Health, Identity, Progress};
+use crate::ecs::World;
 use crate::inventory::{grant_into, remove_item};
 use crate::inventory::{grant_item, take_item};
 use crate::quests::{accept_quest, on_talked_to, quests_for_npc, turn_in_quest};
@@ -90,11 +90,7 @@ pub fn handle_interact(
             let template = world
                 .get::<Identity>(target_id)
                 .and_then(|i| i.template_id.clone());
-            if world
-                .get::<Identity>(target_id)
-                .map(|i| i.kind)
-                != Some(EntityKind::Npc)
-            {
+            if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
                 return;
             }
             if accept_quest(world, player_id, &quest_id, events) {
@@ -104,11 +100,7 @@ pub fn handle_interact(
             }
         }
         InteractAction::TurnInQuest { quest_id } => {
-            if world
-                .get::<Identity>(target_id)
-                .map(|i| i.kind)
-                != Some(EntityKind::Npc)
-            {
+            if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
                 return;
             }
             let _ = turn_in_quest(world, player_id, &quest_id, events);
@@ -124,11 +116,7 @@ pub fn handle_interact(
 }
 
 fn talk(world: &mut World, player_id: EntityId, target_id: EntityId, events: &mut Vec<SimEvent>) {
-    if world
-        .get::<Identity>(target_id)
-        .map(|i| i.kind)
-        != Some(EntityKind::Npc)
-    {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
         return;
     }
     let template_id = world
@@ -175,12 +163,7 @@ fn buy(
     count: u32,
     events: &mut Vec<SimEvent>,
 ) {
-    if world
-        .get::<Identity>(target_id)
-        .map(|i| i.kind)
-        != Some(EntityKind::Npc)
-        || count == 0
-    {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) || count == 0 {
         return;
     }
     let template_id = world
@@ -227,12 +210,7 @@ fn sell(
     count: u32,
     events: &mut Vec<SimEvent>,
 ) {
-    if world
-        .get::<Identity>(target_id)
-        .map(|i| i.kind)
-        != Some(EntityKind::Npc)
-        || count == 0
-    {
+    if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) || count == 0 {
         return;
     }
     let template_id = world
@@ -292,10 +270,7 @@ fn equip_from_bag(
         });
         return;
     };
-    let level = world
-        .get::<Health>(player_id)
-        .map(|h| h.level)
-        .unwrap_or(1);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     if level < idef.level_req {
         events.push(SimEvent::Toast {
             message: format!("Requires level {}.", idef.level_req),
@@ -378,10 +353,7 @@ fn use_item_from_bag(
             return;
         }
     }
-    let before = world
-        .get::<Health>(player_id)
-        .map(|h| h.hp)
-        .unwrap_or(0.0);
+    let before = world.get::<Health>(player_id).map(|h| h.hp).unwrap_or(0.0);
     let hp_max = world
         .get::<Health>(player_id)
         .map(|h| h.hp_max)
@@ -427,11 +399,7 @@ fn loot_corpse(
     corpse_id: EntityId,
     events: &mut Vec<SimEvent>,
 ) {
-    if world
-        .get::<Identity>(corpse_id)
-        .map(|i| i.kind)
-        != Some(EntityKind::Mob)
-    {
+    if world.get::<Identity>(corpse_id).map(|i| i.kind) != Some(EntityKind::Mob) {
         return;
     }
     if world.get::<Health>(corpse_id).is_some_and(|h| h.alive) {
@@ -469,7 +437,6 @@ pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protoco
         stock,
     })
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -1,8 +1,8 @@
 //! Quest accept, credit, and turn-in.
 
+use crate::ecs::components::QuestProgress;
 use crate::ecs::components::{ClassKit, Health, Progress, QuestLog, QuestState};
 use crate::ecs::World;
-use crate::ecs::components::QuestProgress;
 use crate::inventory::{grant_item, player_item_count, take_item};
 use crate::types::{player_hp, xp_to_next};
 use woc_content::{quest, QuestObjective, QUESTS};
@@ -200,7 +200,8 @@ pub fn on_talked_to(
                         .enumerate()
                         .filter_map(|(i, obj)| {
                             if let QuestObjective::Talk { npc_id, label } = obj {
-                                if *npc_id != npc_template_id || qp.counts.get(i).copied().unwrap_or(0) >= 1
+                                if *npc_id != npc_template_id
+                                    || qp.counts.get(i).copied().unwrap_or(0) >= 1
                                 {
                                     return None;
                                 }
@@ -262,19 +263,18 @@ pub fn recompute_ready(world: &mut World, player_id: EntityId, _events: &mut Vec
     }
 }
 
-pub fn grant_xp_world(world: &mut World, player_id: EntityId, amount: u32, events: &mut Vec<SimEvent>) {
+pub fn grant_xp_world(
+    world: &mut World,
+    player_id: EntityId,
+    amount: u32,
+    events: &mut Vec<SimEvent>,
+) {
     if let Some(p) = world.get_mut::<Progress>(player_id) {
         p.xp = p.xp.saturating_add(amount);
     }
     loop {
-        let level = world
-            .get::<Health>(player_id)
-            .map(|h| h.level)
-            .unwrap_or(1);
-        let xp = world
-            .get::<Progress>(player_id)
-            .map(|p| p.xp)
-            .unwrap_or(0);
+        let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
+        let xp = world.get::<Progress>(player_id).map(|p| p.xp).unwrap_or(0);
         let need = xp_to_next(level);
         if xp < need {
             break;
@@ -282,9 +282,7 @@ pub fn grant_xp_world(world: &mut World, player_id: EntityId, amount: u32, event
         if let Some(p) = world.get_mut::<Progress>(player_id) {
             p.xp -= need;
         }
-        let class = world
-            .get::<ClassKit>(player_id)
-            .and_then(|k| k.class_id);
+        let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
         let armor = world
             .get::<crate::ecs::components::Combat>(player_id)
             .map(|c| c.armor)
@@ -308,10 +306,7 @@ pub fn grant_xp_world(world: &mut World, player_id: EntityId, amount: u32, event
                 message: format!("You reached level {}!", h.level),
             });
         }
-        if let (Some(class), Some(kit)) = (
-            class,
-            world.get_mut::<ClassKit>(player_id),
-        ) {
+        if let (Some(class), Some(kit)) = (class, world.get_mut::<ClassKit>(player_id)) {
             kit.known_abilities = woc_content::known_abilities_at_level(class, new_level)
                 .into_iter()
                 .map(|s| s.to_string())
@@ -327,13 +322,11 @@ pub fn turn_in_quest(
     quest_id: &str,
     events: &mut Vec<SimEvent>,
 ) -> bool {
-    let ready = world
-        .get::<QuestLog>(player_id)
-        .and_then(|log| {
-            log.quest_log
-                .iter()
-                .position(|q| q.quest_id == quest_id && q.state == QuestState::Ready)
-        });
+    let ready = world.get::<QuestLog>(player_id).and_then(|log| {
+        log.quest_log
+            .iter()
+            .position(|q| q.quest_id == quest_id && q.state == QuestState::Ready)
+    });
     let Some(idx) = ready else {
         return false;
     };

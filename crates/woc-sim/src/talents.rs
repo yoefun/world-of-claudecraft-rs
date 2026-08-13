@@ -133,7 +133,6 @@ pub fn on_level_up(world: &mut World, player_id: EntityId) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,7 +150,11 @@ mod tests {
         assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
         assert_eq!(world.get::<Progress>(1).unwrap().talent_points, 0);
         assert_eq!(
-            world.get::<Progress>(1).unwrap().talents.get("warrior_cruelty"),
+            world
+                .get::<Progress>(1)
+                .unwrap()
+                .talents
+                .get("warrior_cruelty"),
             Some(&1)
         );
     }

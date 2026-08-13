@@ -244,11 +244,7 @@ impl PartyRoster {
 pub const PARTY_CREDIT_RANGE: f32 = 40.0;
 
 /// Other party members near the killer share kill credit.
-pub fn kill_credit_share(
-    roster: &PartyRoster,
-    world: &World,
-    killer: EntityId,
-) -> Vec<EntityId> {
+pub fn kill_credit_share(roster: &PartyRoster, world: &World, killer: EntityId) -> Vec<EntityId> {
     let Some(killer_t) = world.get::<Transform>(killer) else {
         return Vec::new();
     };
@@ -265,19 +261,19 @@ pub fn kill_credit_share(
                 .filter(|id| *id != killer)
                 .filter(|id| {
                     world.get::<ClassKit>(*id).is_some()
+                        && world.get::<Health>(*id).map(|h| h.alive).unwrap_or(false)
                         && world
-                            .get::<Health>(*id)
-                            .map(|h| h.alive)
+                            .get::<Transform>(*id)
+                            .map(|mate| {
+                                let dx = mate.x - killer_t.x;
+                                let dz = mate.z - killer_t.z;
+                                (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
+                                    && world
+                                        .get::<InstanceAt>(*id)
+                                        .and_then(|i| i.instance_id.clone())
+                                        == killer_inst
+                            })
                             .unwrap_or(false)
-                        && world.get::<Transform>(*id).map(|mate| {
-                            let dx = mate.x - killer_t.x;
-                            let dz = mate.z - killer_t.z;
-                            (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
-                                && world
-                                    .get::<InstanceAt>(*id)
-                                    .and_then(|i| i.instance_id.clone())
-                                    == killer_inst
-                        }).unwrap_or(false)
                 })
                 .collect()
         })
@@ -303,7 +299,6 @@ fn find_player_by_name(world: &World, name: &str) -> Option<EntityId> {
 fn player_name(world: &World, id: EntityId) -> Option<String> {
     world.get::<Identity>(id).map(|i| i.name.clone())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -337,7 +332,9 @@ mod tests {
     fn form_party(roster: &mut PartyRoster, world: &World, a: EntityId, b: EntityId) {
         let name = world.get::<Identity>(b).map(|i| i.name.clone()).unwrap();
         let effects = roster.invite(a, &name, world);
-        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { .. })));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, PartyEffect::Notice { .. })));
         let effects = roster.accept(b, world);
         assert!(effects
             .iter()

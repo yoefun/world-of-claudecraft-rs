@@ -22,15 +22,15 @@ pub fn find_pet(world: &World, owner_id: EntityId) -> Option<EntityId> {
 }
 
 /// Summon the class default pet beside the player. Replaces an existing pet.
-pub fn summon_pet(
-    world: &mut World,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
+pub fn summon_pet(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
     if world.get::<ClassKit>(player_id).is_none() {
         return false;
     }
-    if !world.get::<Health>(player_id).map(|h| h.alive).unwrap_or(false) {
+    if !world
+        .get::<Health>(player_id)
+        .map(|h| h.alive)
+        .unwrap_or(false)
+    {
         return false;
     }
     let Some(class) = world.get::<ClassKit>(player_id).and_then(|k| k.class_id) else {
@@ -60,11 +60,7 @@ pub fn summon_pet(
 }
 
 /// Remove the player's active pet from columns.
-pub fn dismiss_pet(
-    world: &mut World,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
+pub fn dismiss_pet(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
     let Some(pet_id) = find_pet(world, player_id) else {
         return false;
     };
@@ -82,7 +78,11 @@ pub fn dismiss_pet(
 pub fn tick_pets(world: &mut World, events: &mut Vec<SimEvent>) -> Vec<EntityId> {
     let pet_ids = world.ids::<Owner>();
     for pet_id in pet_ids {
-        if world.get::<Health>(pet_id).map(|h| h.alive).unwrap_or(false) {
+        if world
+            .get::<Health>(pet_id)
+            .map(|h| h.alive)
+            .unwrap_or(false)
+        {
             tick_one_pet(pet_id, world, events);
         }
     }
@@ -112,7 +112,10 @@ fn tick_one_pet(pet_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>)
         return;
     };
     if world.get::<ClassKit>(owner_id).is_none()
-        || !world.get::<Health>(owner_id).map(|h| h.alive).unwrap_or(false)
+        || !world
+            .get::<Health>(owner_id)
+            .map(|h| h.alive)
+            .unwrap_or(false)
     {
         if let Some(h) = world.get_mut::<Health>(pet_id) {
             h.alive = false;
@@ -208,9 +211,10 @@ mod tests {
         assert_eq!(world.get::<Owner>(pet).unwrap().owner_id, 1);
         assert!(dismiss_pet(&mut world, 1, &mut events));
         assert!(find_pet(&world, 1).is_none());
-        assert!(!world.ids::<Owner>().into_iter().any(|id| {
-            world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Pet)
-        }));
+        assert!(!world
+            .ids::<Owner>()
+            .into_iter()
+            .any(|id| { world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Pet) }));
     }
 
     #[test]

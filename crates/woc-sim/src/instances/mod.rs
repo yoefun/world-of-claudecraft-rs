@@ -31,10 +31,7 @@ pub fn enter_dungeon(
     if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
         return false;
     }
-    let level = world
-        .get::<Health>(player_id)
-        .map(|h| h.level)
-        .unwrap_or(1);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     let in_instance = world
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.as_ref())
@@ -43,13 +40,12 @@ pub fn enter_dungeon(
         return false;
     }
 
-    let instance_key = find_party_instance(world, parties, player_id, dungeon_id).unwrap_or_else(
-        || {
+    let instance_key =
+        find_party_instance(world, parties, player_id, dungeon_id).unwrap_or_else(|| {
             let seq = world.next_id();
             world.set_next_id(seq.saturating_add(1));
             format!("{dungeon_id}#{seq}")
-        },
-    );
+        });
 
     let need_boss = !world.ids::<Identity>().into_iter().any(|id| {
         world.get::<Identity>(id).is_some_and(|identity| {
@@ -124,11 +120,7 @@ fn find_party_instance(
 }
 
 /// Leave the active instance; only despawn boss if no players remain inside.
-pub fn leave_instance(
-    world: &mut World,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
+pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
     let Some(instance_id) = world
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.clone())
@@ -303,7 +295,11 @@ mod tests {
             })
             .expect("boss shell");
         assert_eq!(
-            world.get::<InstanceAt>(boss_id).unwrap().instance_id.as_deref(),
+            world
+                .get::<InstanceAt>(boss_id)
+                .unwrap()
+                .instance_id
+                .as_deref(),
             Some(player_inst.as_str())
         );
         assert!(world.ids::<Identity>().into_iter().any(|id| {
@@ -342,7 +338,9 @@ mod tests {
             &mut events
         ));
         assert_eq!(
-            world.get::<InstanceAt>(2).and_then(|i| i.instance_id.clone()),
+            world
+                .get::<InstanceAt>(2)
+                .and_then(|i| i.instance_id.clone()),
             Some(key)
         );
         assert_eq!(

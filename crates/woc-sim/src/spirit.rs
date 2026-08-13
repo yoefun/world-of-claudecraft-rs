@@ -10,11 +10,7 @@ use woc_protocol::{EntityId, SimEvent};
 const DEFAULT_GRAVEYARD_ID: &str = "eastbrook_graveyard";
 
 /// Respawn a dead player at the Eastbrook (or zone) graveyard.
-pub fn release_spirit(
-    world: &mut World,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
+pub fn release_spirit(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
     if world.get::<ClassKit>(player_id).is_none() {
         return false;
     }

@@ -66,7 +66,6 @@ pub fn handle_chat(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -24,7 +24,11 @@ impl<'a> SimContext<'a> {
             .live_ids()
             .filter(|&id| {
                 self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
-                    && self.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                    && self
+                        .world
+                        .get::<Health>(id)
+                        .map(|h| h.alive)
+                        .unwrap_or(false)
             })
             .collect()
     }

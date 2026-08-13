@@ -3,9 +3,7 @@
 use crate::ecs::components::{Bags, Combat, Health, Identity, InstanceAt, Threat, Transform};
 use crate::ecs::World;
 use crate::inventory::{count_item, grant_into};
-use woc_content::{
-    ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK,
-};
+use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Resolve a supported overworld zone to its spawn layout.
@@ -209,10 +207,7 @@ mod tests {
 
         assert!(enter_portal(&mut world, pid, "eastfen", &mut events));
 
-        assert_eq!(
-            world.get::<Identity>(pid).unwrap().zone_id,
-            "eastfen"
-        );
+        assert_eq!(world.get::<Identity>(pid).unwrap().zone_id, "eastfen");
         let progress = world.get::<Progress>(pid).unwrap();
         assert_eq!(progress.xp, 73);
         assert_eq!(world.get::<Health>(pid).unwrap().level, 2);

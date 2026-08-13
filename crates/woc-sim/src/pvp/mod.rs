@@ -289,7 +289,6 @@ fn award_honor(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent
     });
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

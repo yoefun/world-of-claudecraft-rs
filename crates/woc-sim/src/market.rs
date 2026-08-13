@@ -86,10 +86,7 @@ impl AuctionHouse {
         if world.get::<ClassKit>(seller).is_none() {
             return false;
         }
-        let copper = world
-            .get::<Progress>(seller)
-            .map(|p| p.copper)
-            .unwrap_or(0);
+        let copper = world.get::<Progress>(seller).map(|p| p.copper).unwrap_or(0);
         if copper < LISTING_FEE {
             events.push(SimEvent::Toast {
                 message: "Cannot afford listing fee.".into(),
@@ -166,10 +163,7 @@ impl AuctionHouse {
         if world.get::<ClassKit>(buyer).is_none() {
             return false;
         }
-        let buyer_copper = world
-            .get::<Progress>(buyer)
-            .map(|p| p.copper)
-            .unwrap_or(0);
+        let buyer_copper = world.get::<Progress>(buyer).map(|p| p.copper).unwrap_or(0);
         if buyer_copper < listing.price {
             events.push(SimEvent::Toast {
                 message: "Not enough copper.".into(),
@@ -191,7 +185,9 @@ impl AuctionHouse {
         }
         let seller_name = listing.seller_name.clone();
         let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
-            world.get::<Durable>(id).and_then(|d| d.durable_id.as_deref())
+            world
+                .get::<Durable>(id)
+                .and_then(|d| d.durable_id.as_deref())
                 == Some(listing.seller_durable.as_str())
                 || id == listing.seller_id
         });
@@ -280,7 +276,9 @@ impl AuctionHouse {
         for listing in self.listings.drain(..) {
             if listing.expires_tick <= now_tick {
                 let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
-                    world.get::<Durable>(id).and_then(|d| d.durable_id.as_deref())
+                    world
+                        .get::<Durable>(id)
+                        .and_then(|d| d.durable_id.as_deref())
                         == Some(listing.seller_durable.as_str())
                         || id == listing.seller_id
                 });
@@ -318,7 +316,6 @@ impl AuctionHouse {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,7 +343,11 @@ mod tests {
             .unwrap()
             .inventory
             .iter()
-            .position(|s| s.as_ref().map(|st| st.item_id == "silverleaf").unwrap_or(false))
+            .position(|s| {
+                s.as_ref()
+                    .map(|st| st.item_id == "silverleaf")
+                    .unwrap_or(false)
+            })
             .unwrap() as u8;
         let mut ah = AuctionHouse::new();
         let mut mail = Mailbox::new();

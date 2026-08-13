@@ -124,7 +124,6 @@ pub fn withdraw(
     true
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -22,10 +22,7 @@ pub fn enter_delve(
     if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
         return false;
     }
-    let level = world
-        .get::<Health>(player_id)
-        .map(|h| h.level)
-        .unwrap_or(1);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     let in_instance = world
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.as_ref())
