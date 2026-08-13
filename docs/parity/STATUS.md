@@ -18,7 +18,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
 | SimContext seam | done | emit/lookup/mutate |
-| Multi-player Entity economy | done | fat `Vec<Entity>` today; ECS columns [planned](../superpowers/plans/2026-08-13-sim-ecs.md) |
+| Multi-player actor economy | done | typed ECS columns in `World` (source of truth) |
 | Sticky WS realm | done | authenticated Hello + per-player snapshots |
 | Client online mode | done | token + character_id Hello |
 | Death / spirit / graveyard | done | |
@@ -48,7 +48,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | In-world NPC/mob scene load | done | Nameplates, quest/vendor markers, target ring, gather herbs, spawn lifecycle |
 | Entity walk / remove presentation | done | Locomotion hysteresis, procedural gait limbs, corpse tip, soft despawn fade |
 | Jump / swim / travel flight | done | Coyote jump, gravity + fall damage, lake tread, V-toggle flight |
-| Sim typed ECS columns | planned | Sparse `World` in `woc-sim`; Bevy stays presentation-only |
+| Sim typed ECS columns | done | Sparse `World` in `woc-sim`; Bevy stays presentation-only |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 | Minimap / world map UI | done | Functional Bevy paint (not full DESIGN.md chrome) |
 

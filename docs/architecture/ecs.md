@@ -16,17 +16,15 @@ woc-sim World  →  TickSnapshot  →  Bevy presentation ECS
 ## Rules
 
 1. `woc-sim` must not depend on Bevy.
-2. Do not add fields to `Entity`. Add a component or a `Sim` resource.
+2. Do not add a fat actor struct or grow `Sim.entities: Vec<…>`. Add a component column or a `Sim` resource.
 3. Do not use `kind` as a substitute for “has this data”. Query the column.
 4. Tick stays sequential and deterministic (insertion order, seeded RNG).
 5. Client Bevy components are presentation only.
 
 ## Catalog
 
-See the table in [`docs/superpowers/specs/2026-08-13-sim-ecs-design.md`](../superpowers/specs/2026-08-13-sim-ecs-design.md) §4.4.
+See the table in [`docs/superpowers/specs/2026-08-13-sim-ecs-design.md`](../superpowers/specs/2026-08-13-sim-ecs-design.md) §4.4 and `crates/woc-sim/src/ecs/components.rs` module docs.
 
-## Migration
+## Status
 
-Implementation tasks: [`docs/superpowers/plans/2026-08-13-sim-ecs.md`](../superpowers/plans/2026-08-13-sim-ecs.md).
-
-Until Task 12 lands, `Sim.entities` still exists. Dual-write any live-state change into columns. The `Entity` stack-size ceiling test must not go up.
+The ECS column program is **done**. `World` is the actor store; the fat `Entity` / `Sim.entities` path is deleted. New per-actor state is a new column only.

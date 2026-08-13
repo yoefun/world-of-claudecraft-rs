@@ -138,4 +138,13 @@ mod tests {
         assert!(w.ids::<crate::ecs::components::Bags>().is_empty());
         assert!(!w.contains(id));
     }
+
+    #[test]
+    fn sim_does_not_store_a_homogeneous_entity_vec() {
+        let src = include_str!("../sim.rs");
+        assert!(
+            !src.contains("entities: Vec<"),
+            "Sim must not grow a Vec of blob actors; use World columns"
+        );
+    }
 }

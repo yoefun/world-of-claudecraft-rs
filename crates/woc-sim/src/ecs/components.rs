@@ -1,4 +1,16 @@
 //! Sparse component catalog. Add a column here — never a field on a blob Entity.
+//!
+//! | Component | Who has it |
+//! | --- | --- |
+//! | `Identity`, `Transform` | all |
+//! | `Health` | player, mob, npc, pet (not loot) |
+//! | `Combat`, `Auras` | player, mob, pet |
+//! | `Home`, `Threat`, `LootTable`, `Respawn` | mob |
+//! | `LootPile` | loot |
+//! | `Owner` | pet |
+//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable` | player |
+//!
+//! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
 
 use std::collections::{BTreeSet, HashMap};
 
