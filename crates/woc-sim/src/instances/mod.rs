@@ -80,6 +80,7 @@ pub fn enter_dungeon(
         inst.instance_id = Some(instance_key);
         inst.delve_room = None;
     }
+    crate::mount::dismount(world, player_id, events);
     if let Some(combat) = world.get_mut::<Combat>(player_id) {
         combat.target = None;
         combat.auto_attack = false;

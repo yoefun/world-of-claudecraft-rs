@@ -432,6 +432,9 @@ impl Sim {
                         crate::death::on_player_death_check(&mut self.world, &mut self.events);
                     }
                 }
+                if effect.dismount {
+                    crate::mount::dismount(&mut self.world, pid, &mut self.events);
+                }
             }
             if let Some(tid) = intent.target_id {
                 if let Some(c) = self.world.get_mut::<Combat>(pid) {
@@ -455,6 +458,7 @@ impl Sim {
                         c.target = acquired;
                     }
                 }
+                crate::mount::dismount(&mut self.world, pid, &mut self.events);
             }
             credit_explore(&mut self.world, pid, &mut self.events);
         }

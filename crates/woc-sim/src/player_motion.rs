@@ -30,6 +30,7 @@ pub const MAX_GROUND_STEP: f32 = 0.85;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MotionEffect {
     pub fall_damage: f32,
+    pub dismount: bool,
 }
 
 fn clamp_to_world_padded(x: f32, z: f32) -> (f32, f32) {
@@ -393,7 +394,21 @@ pub fn step_player_motion(
         *slot = m;
     }
 
-    fall.map(|fall_damage| MotionEffect { fall_damage })
+    let swim_dismount = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_deref())
+        .and_then(woc_content::mount)
+        .is_some_and(|def| def.kind == woc_content::MountKind::Ground)
+        && is_swimming_at(t.x, t.y, t.z);
+    let fall_damage = fall.unwrap_or(0.0);
+    if fall_damage > 0.0 || swim_dismount {
+        Some(MotionEffect {
+            fall_damage,
+            dismount: swim_dismount,
+        })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

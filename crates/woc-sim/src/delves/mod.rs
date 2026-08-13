@@ -67,6 +67,7 @@ pub fn enter_delve(
         inst.instance_id = Some(def.id.to_string());
         inst.delve_room = Some(0);
     }
+    crate::mount::dismount(world, player_id, events);
     reset_combat_state(world, player_id);
 
     spawn_room(world, def, 0, &instance_zone);

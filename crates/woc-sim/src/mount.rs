@@ -278,6 +278,35 @@ mod tests {
             .collect()
     }
 
+    fn mount_pony(world: &mut World, id: EntityId) {
+        world.get_mut::<Riding>(id).unwrap().rank = 1;
+        world.get_mut::<Riding>(id).unwrap().known.insert("brown_pony".into());
+        let mut events = Vec::new();
+        assert!(summon_mount(world, id, "brown_pony", &mut events));
+    }
+
+    #[test]
+    fn damage_dismounts() {
+        let (mut world, id) = warrior();
+        mount_pony(&mut world, id);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 3.0, 0.0);
+        let mut events = Vec::new();
+        crate::combat::deal_damage(&mut world, 2, id, 5.0, None, true, &mut events);
+        assert!(world.get::<Riding>(id).unwrap().active_id.is_none());
+    }
+
+    #[test]
+    fn instance_refuses_mount() {
+        let (mut world, id) = warrior();
+        world.get_mut::<crate::ecs::components::InstanceAt>(id).unwrap().instance_id =
+            Some("eastbrook_crypt#1".into());
+        world.get_mut::<Riding>(id).unwrap().rank = 1;
+        world.get_mut::<Riding>(id).unwrap().known.insert("brown_pony".into());
+        let mut events = Vec::new();
+        assert!(!summon_mount(&mut world, id, "brown_pony", &mut events));
+        assert!(toast_text(&events).iter().any(|m| m == "You cannot mount here."));
+    }
+
     #[test]
     fn untrained_toggle_does_not_fly() {
         let (mut world, id) = warrior();

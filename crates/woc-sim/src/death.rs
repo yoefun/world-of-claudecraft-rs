@@ -31,6 +31,7 @@ pub fn on_player_death_check(world: &mut World, events: &mut Vec<SimEvent>) {
 }
 
 fn finalize_player_death(world: &mut World, id: EntityId, events: &mut Vec<SimEvent>) {
+    crate::mount::dismount(world, id, events);
     record_corpse_world(world, id);
     if let Some(c) = world.get_mut::<Combat>(id) {
         c.auto_attack = false;

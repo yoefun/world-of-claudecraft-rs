@@ -3,7 +3,7 @@
 use crate::ecs::components::{AuraInstance, CastState};
 use crate::ecs::components::{
     Auras, Bags, ClassKit, Combat, Equipment, EquipmentWear, Health, Identity, LootPile, LootTable,
-    Owner, Progress, Threat, Transform,
+    Owner, Progress, Riding, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::rng::Rng;
@@ -135,11 +135,14 @@ pub fn toggle_stealth(world: &mut World, player_id: EntityId, events: &mut Vec<S
         });
         return;
     }
-    let Some(kit) = world.get_mut::<ClassKit>(player_id) else {
-        return;
+    let entering_stealth = {
+        let Some(kit) = world.get_mut::<ClassKit>(player_id) else {
+            return;
+        };
+        kit.stealthed = !kit.stealthed;
+        kit.stealthed
     };
-    kit.stealthed = !kit.stealthed;
-    let message = if kit.stealthed {
+    let message = if entering_stealth {
         "You enter stealth."
     } else {
         "You leave stealth."
@@ -147,6 +150,9 @@ pub fn toggle_stealth(world: &mut World, player_id: EntityId, events: &mut Vec<S
     events.push(SimEvent::Toast {
         message: message.into(),
     });
+    if entering_stealth {
+        crate::mount::dismount(world, player_id, events);
+    }
 }
 
 const THORNS_REBOUND: &str = "lightning_shield";
@@ -269,6 +275,7 @@ pub fn cycle_stance(world: &mut World, player_id: EntityId, events: &mut Vec<Sim
         });
         return;
     }
+    crate::mount::dismount(world, player_id, events);
     let current = world
         .get::<ClassKit>(player_id)
         .and_then(|k| k.stance_id.clone());
@@ -306,6 +313,7 @@ pub fn toggle_form(world: &mut World, player_id: EntityId, events: &mut Vec<SimE
             return;
         }
     };
+    crate::mount::dismount(world, player_id, events);
     let current = world
         .get::<ClassKit>(player_id)
         .and_then(|k| k.stance_id.clone());
@@ -538,6 +546,9 @@ pub fn deal_damage(
             victim: target,
             victim_name,
         });
+    }
+    if world.get::<Riding>(target).is_some() {
+        crate::mount::dismount(world, target, events);
     }
     if rebound > 0.0 && source != target && world.get::<Health>(source).is_some_and(|h| h.alive) {
         deal_damage(
@@ -1709,6 +1720,7 @@ pub fn update_player_combat(
                         && !ability_on_cd(&kit, abil_id)
                         && spend_resource(&mut kit, def.cost)
                     {
+                        crate::mount::dismount(world, player_id, events);
                         if def.flags.breaks_stealth {
                             kit.stealthed = false;
                         }
