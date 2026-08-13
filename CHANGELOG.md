@@ -6,6 +6,7 @@
 
 - Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
+- Class-identity program (planned): design, implementation plan, and parallel dispatch for `1.6.0` (`class-engine`) through `1.8.0` (`class-forms`). Depends on class-kit identity PR #20. Does not use 1.4/1.5 (client-compat/update).
 - Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.
 - Wave 1 `combat-depth` on ECS columns: `AbilityEffect` (heal, cleave AoE, interrupt, taunt), miss/crit hit table, priest `flash_heal`, warrior `taunt`.
 - Wave 2 `content-depth`: mining → blacksmithing (`copper_shortsword`); dungeon trash packs; `mirefen_barrow`; ability-mod talents (`cleave_targets_plus` / `heal_pct` / `crit_pct`).
