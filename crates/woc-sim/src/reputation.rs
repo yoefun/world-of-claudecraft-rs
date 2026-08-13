@@ -41,9 +41,7 @@ pub fn award(
     if world.get::<Reputation>(player_id).is_none() {
         world.insert(player_id, Reputation::default());
     }
-    let Some(rep) = world.get_mut::<Reputation>(player_id) else {
-        return None;
-    };
+    let rep = world.get_mut::<Reputation>(player_id)?;
     let before = rep.values.get(faction_id).copied().unwrap_or(0);
     let total = clamp_reputation(before.saturating_add(amount));
     if total == before {

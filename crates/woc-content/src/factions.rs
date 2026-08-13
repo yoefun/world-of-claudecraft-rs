@@ -175,7 +175,7 @@ pub fn discounted_price(base: u32, standing: Standing) -> u32 {
         return base;
     }
     let n = (base as u64) * (100 - pct as u64);
-    ((n + 99) / 100) as u32
+    n.div_ceil(100) as u32
 }
 
 #[cfg(test)]

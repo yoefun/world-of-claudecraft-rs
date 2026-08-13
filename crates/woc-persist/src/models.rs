@@ -188,7 +188,7 @@ impl From<&CharacterSave> for CharacterCompletionDto {
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum StoredCompletionDto {
-    Current(CharacterCompletionDto),
+    Current(Box<CharacterCompletionDto>),
     Legacy(Vec<QuestProgressDto>),
 }
 
@@ -391,7 +391,7 @@ pub(crate) fn completion_to_json(save: &CharacterSave) -> Result<String, serde_j
 
 pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, serde_json::Error> {
     serde_json::from_str::<StoredCompletionDto>(s).map(|stored| match stored {
-        StoredCompletionDto::Current(state) => state,
+        StoredCompletionDto::Current(state) => *state,
         StoredCompletionDto::Legacy(quests) => CharacterCompletionDto {
             quests,
             zone_id: default_zone_id(),
