@@ -67,53 +67,44 @@ pub fn clear_death_state(world: &mut World, player_id: EntityId) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::corpse::has_corpse_marker;
-    use crate::entity::create_player;
-    use crate::entity::Entity;
+    use crate::corpse::has_corpse_marker_world;
     use crate::spirit::release_spirit;
     use woc_content::PlayerClass;
 
-    fn run_death(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
-        let mut world = crate::ecs::spawn::world_from_entities(entities);
-        on_player_death_check(&mut world, events);
-        crate::ecs::spawn::apply_world_to_entities(&world, entities);
-    }
-
-    fn run_release(entities: &mut [Entity], player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
-        let mut world = crate::ecs::spawn::world_from_entities(entities);
-        let ok = release_spirit(&mut world, player_id, events);
-        crate::ecs::spawn::apply_world_to_entities(&world, entities);
-        ok
-    }
-
     #[test]
     fn hp_zero_finalizes_death_and_emits_player_died() {
-        let mut entities = vec![create_player(1, "Hero", PlayerClass::Warrior, 10.0, -5.0)];
-        entities[0].hp = 0.0;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 10.0, -5.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.hp = 0.0;
+        }
         let mut events = Vec::new();
-        run_death(&mut entities, &mut events);
-        assert!(!entities[0].alive);
-        assert!(has_corpse_marker(&entities[0]));
+        on_player_death_check(&mut world, &mut events);
+        assert!(!world.get::<Health>(1).unwrap().alive);
+        assert!(has_corpse_marker_world(&world, 1));
         assert!(events
             .iter()
             .any(|e| matches!(e, SimEvent::PlayerDied { player: 1 })));
-        // Idempotent: no second PlayerDied.
         let before = events.len();
-        run_death(&mut entities, &mut events);
+        on_player_death_check(&mut world, &mut events);
         assert_eq!(events.len(), before);
     }
 
     #[test]
     fn release_after_death_lands_on_eastbrook_graveyard() {
         let gy = woc_content::graveyard("eastbrook_graveyard").expect("eastbrook graveyard");
-        let mut entities = vec![create_player(1, "Hero", PlayerClass::Warrior, 22.0, -20.0)];
-        entities[0].hp = 0.0;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 22.0, -20.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.hp = 0.0;
+        }
         let mut events = Vec::new();
-        run_death(&mut entities, &mut events);
-        assert!(run_release(&mut entities, 1, &mut events));
-        assert!(entities[0].alive);
-        assert!((entities[0].x - gy.x).abs() < 1e-5);
-        assert!((entities[0].z - gy.z).abs() < 1e-5);
-        assert!(!has_corpse_marker(&entities[0]));
+        on_player_death_check(&mut world, &mut events);
+        assert!(release_spirit(&mut world, 1, &mut events));
+        assert!(world.get::<Health>(1).unwrap().alive);
+        let t = world.get::<crate::ecs::components::Transform>(1).unwrap();
+        assert!((t.x - gy.x).abs() < 1e-5);
+        assert!((t.z - gy.z).abs() < 1e-5);
+        assert!(!has_corpse_marker_world(&world, 1));
     }
 }

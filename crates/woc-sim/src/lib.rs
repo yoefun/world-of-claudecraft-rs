@@ -9,7 +9,6 @@ pub mod corpse;
 pub mod death;
 pub mod delves;
 pub mod ecs;
-pub mod entity;
 pub mod entity_motion;
 pub mod host;
 pub mod instances;
@@ -40,7 +39,7 @@ pub mod world;
 pub mod worldboss;
 pub mod zones;
 
-pub use entity::QuestState;
+pub use ecs::components::QuestState;
 pub use locomotion::{
     desired_walk_pose, locomotion_time_scale, update_locomotion, LocoState, LocoTrack, WalkPose,
     GAIT_RUN_ENTER, GAIT_RUN_EXIT, MOVE_ENTER_SPEED, MOVE_HOLD_TIME,

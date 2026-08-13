@@ -1,20 +1,17 @@
-//! SimContext seam: emit + entity lookup/mutate without the full `Sim` facade.
+//! SimContext seam: emit + World lookup without the full `Sim` facade.
 
-use std::collections::HashMap;
-
-use crate::entity::Entity;
+use crate::ecs::components::{Health, Identity};
+use crate::ecs::World;
 use crate::rng::Rng;
-use woc_protocol::{EntityId, SimEvent};
+use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Callback bag held during a tick / interaction.
 ///
 /// Leaf modules should prefer `&mut SimContext` over reaching into `Sim`.
 pub struct SimContext<'a> {
     pub events: &'a mut Vec<SimEvent>,
-    pub entities: &'a mut [Entity],
-    pub by_id: &'a HashMap<EntityId, usize>,
+    pub world: &'a mut World,
     pub rng: &'a mut Rng,
-    pub next_id: &'a mut EntityId,
 }
 
 impl<'a> SimContext<'a> {
@@ -22,21 +19,13 @@ impl<'a> SimContext<'a> {
         self.events.push(event);
     }
 
-    pub fn entity(&self, id: EntityId) -> Option<&Entity> {
-        let i = *self.by_id.get(&id)?;
-        self.entities.get(i).filter(|e| e.id == id)
-    }
-
-    pub fn entity_mut(&mut self, id: EntityId) -> Option<&mut Entity> {
-        let i = *self.by_id.get(&id)?;
-        self.entities.get_mut(i).filter(|e| e.id == id)
-    }
-
     pub fn player_ids(&self) -> Vec<EntityId> {
-        self.entities
-            .iter()
-            .filter(|e| e.kind == woc_protocol::EntityKind::Player && e.alive)
-            .map(|e| e.id)
+        self.world
+            .live_ids()
+            .filter(|&id| {
+                self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
+                    && self.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+            })
             .collect()
     }
 }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
 use crate::ecs::World;
-use crate::entity::{grant_into, remove_item};
+use crate::inventory::{grant_into, remove_item};
 use woc_protocol::{EntityId, MailSnapshot, SimEvent};
 
 /// Durable mailbox entry (survives reconnect / restart when persisted).
@@ -269,47 +269,51 @@ impl Mailbox {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
-    use crate::entity::create_player;
+    use crate::ecs::components::{Bags, Durable, Progress};
+    use crate::inventory::{count_item, grant_into};
     use woc_content::PlayerClass;
 
     #[test]
     fn send_and_collect_copper_and_item() {
-        let mut entities = vec![
-            create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0),
-            create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0),
-        ];
-        entities[0].durable_id = Some("ada".into());
-        entities[1].durable_id = Some("bob".into());
-        entities[0].copper = 100;
-        assert!(grant_into(&mut entities[0].inventory, "silverleaf", 2));
-        let mut world = world_from_entities(&entities);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("ada".into());
+        }
+        if let Some(d) = world.get_mut::<Durable>(2) {
+            d.durable_id = Some("bob".into());
+        }
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "silverleaf", 2));
+        }
         let slot = world
             .get::<Bags>(1)
             .unwrap()
             .inventory
             .iter()
-            .position(|s| {
-                s.as_ref()
-                    .map(|st| st.item_id == "silverleaf")
-                    .unwrap_or(false)
-            })
+            .position(|s| s.as_ref().map(|st| st.item_id == "silverleaf").unwrap_or(false))
             .unwrap() as u8;
         let mut box_ = Mailbox::new();
         let mut events = Vec::new();
         assert!(box_.send(&mut world, 1, "Bob", 25, Some(slot), 1, &mut events));
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(entities[0].copper, 75);
-        // Reconnect Bob under new entity id — mail still addressable by durable key.
-        entities[1].id = 99;
-        let mut world = world_from_entities(&entities);
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, 75);
+        // Rebind Bob to a new id under same durable key.
+        world.despawn(2);
+        crate::ecs::spawn::create_player(&mut world, 99, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(99) {
+            d.durable_id = Some("bob".into());
+        }
         assert!(box_.collect(&mut world, 99, 1, &mut events));
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(entities[1].copper, 25);
-        assert!(crate::entity::count_item(&entities[1].inventory, "silverleaf") >= 1);
+        assert_eq!(world.get::<Progress>(99).unwrap().copper, 25);
+        assert!(count_item(&world.get::<Bags>(99).unwrap().inventory, "silverleaf") >= 1);
     }
 
     #[test]
@@ -320,9 +324,11 @@ mod tests {
         let next = box_.next_id();
         let mut box2 = Mailbox::new();
         box2.load_mails(all, next);
-        let mut p = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
-        p.durable_id = Some("ada".into());
-        let world = world_from_entities(&[p]);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("ada".into());
+        }
         assert_eq!(box2.snapshot_for_entity(1, &world).len(), 1);
     }
 }

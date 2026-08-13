@@ -1,347 +1,293 @@
-//! Dual-write: copy a fat `Entity` into sparse columns.
+//! World-native entity factories (columns only; no fat Entity).
+
+use std::collections::HashMap;
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Durable, Health, Home, Identity, InstanceAt, LootPile,
-    LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit, Threat, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, Health, Home, Identity, InstanceAt,
+    LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit, Threat, Transform,
 };
 use crate::ecs::World;
-use crate::entity::Entity;
-use woc_protocol::EntityKind;
+use crate::inventory::grant_into;
+use crate::types::{player_hp, BACKPACK_SLOTS, BANK_SLOTS};
+use crate::world::{ground_height, WORLD_SEED};
+use woc_content::{
+    class_def, known_abilities_at_level, mob, npc, PetDef, PlayerClass, ResourceType,
+};
+use woc_protocol::{EntityId, EntityKind};
 
-/// Insert columns for `entity` (adopting its id). Kind decides which columns exist.
-pub fn sync_entity_to_world(world: &mut World, entity: &Entity) {
-    world.adopt(entity.id);
+pub fn ground_at(x: f32, z: f32) -> f32 {
+    ground_height(x, z, WORLD_SEED)
+}
+
+fn insert_identity(
+    world: &mut World,
+    id: EntityId,
+    kind: EntityKind,
+    name: &str,
+    template_id: Option<&str>,
+    zone_id: &str,
+) {
     world.insert(
-        entity.id,
+        id,
         Identity {
-            kind: entity.kind,
-            name: entity.name.clone(),
-            template_id: entity.template_id.clone(),
-            zone_id: entity.zone_id.clone(),
+            kind,
+            name: name.to_string(),
+            template_id: template_id.map(|s| s.to_string()),
+            zone_id: zone_id.to_string(),
         },
     );
-    world.insert(
-        entity.id,
-        Transform {
-            x: entity.x,
-            y: entity.y,
-            z: entity.z,
-            yaw: entity.yaw,
-        },
-    );
-
-    match entity.kind {
-        EntityKind::Player => sync_player(world, entity),
-        EntityKind::Mob => sync_mob(world, entity),
-        EntityKind::Npc => sync_npc(world, entity),
-        EntityKind::Loot => sync_loot(world, entity),
-        EntityKind::Pet => sync_pet(world, entity),
-    }
 }
 
-fn sync_health(world: &mut World, entity: &Entity) {
+fn insert_transform(world: &mut World, id: EntityId, x: f32, z: f32, yaw: f32) {
+    let y = ground_at(x, z);
+    world.insert(id, Transform { x, y, z, yaw });
+}
+
+fn insert_health(world: &mut World, id: EntityId, hp: f32, hp_max: f32, level: u32) {
     world.insert(
-        entity.id,
+        id,
         Health {
-            hp: entity.hp,
-            hp_max: entity.hp_max,
-            alive: entity.alive,
-            level: entity.level,
+            hp,
+            hp_max,
+            alive: true,
+            level,
         },
     );
 }
 
-fn sync_combat(world: &mut World, entity: &Entity) {
+fn insert_combat_blank(world: &mut World, id: EntityId, attack_damage: f32) {
     world.insert(
-        entity.id,
+        id,
         Combat {
-            attack_damage: entity.attack_damage,
-            armor: entity.armor,
-            swing_timer: entity.swing_timer,
-            ability_cd: entity.ability_cd,
-            auto_attack: entity.auto_attack,
-            target: entity.target,
-            gcd: entity.gcd,
-            cast: entity.cast.clone(),
+            attack_damage,
+            armor: 0.0,
+            swing_timer: 0.0,
+            ability_cd: 0.0,
+            auto_attack: false,
+            target: None,
+            gcd: 0.0,
+            cast: None,
         },
     );
-    world.insert(
-        entity.id,
-        Auras {
-            auras: entity.auras.clone(),
-        },
-    );
+    world.insert(id, Auras { auras: Vec::new() });
 }
 
-fn sync_player(world: &mut World, entity: &Entity) {
-    sync_health(world, entity);
-    sync_combat(world, entity);
+/// Refresh `known_abilities` on a player's ClassKit from class + level.
+pub fn refresh_known_abilities(world: &mut World, player_id: EntityId) {
+    let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
+    let level = world
+        .get::<Health>(player_id)
+        .map(|h| h.level)
+        .unwrap_or(1);
+    let Some(kit) = world.get_mut::<ClassKit>(player_id) else {
+        return;
+    };
+    let Some(class) = class else {
+        kit.known_abilities.clear();
+        return;
+    };
+    kit.known_abilities = known_abilities_at_level(class, level)
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+}
+
+/// Adopt `id` and insert player columns (replaces fat `create_player`).
+pub fn create_player(
+    world: &mut World,
+    id: EntityId,
+    name: &str,
+    class: PlayerClass,
+    x: f32,
+    z: f32,
+) -> EntityId {
+    let def = class_def(class);
+    let hp = player_hp(def.base_hp, 1);
+    world.adopt(id);
+    insert_identity(
+        world,
+        id,
+        EntityKind::Player,
+        name,
+        Some(def.id.as_str()),
+        "eastbrook",
+    );
+    insert_transform(world, id, x, z, 0.0);
+    insert_health(world, id, hp, hp, 1);
+    insert_combat_blank(world, id, def.attack_power);
+    let resource = match def.resource_type {
+        ResourceType::Rage => 0.0,
+        ResourceType::Mana | ResourceType::Energy => def.resource_max * 0.5,
+    };
     world.insert(
-        entity.id,
+        id,
         ClassKit {
-            class_id: entity.class_id,
-            resource: entity.resource,
-            resource_max: entity.resource_max,
-            resource_type: entity.resource_type,
-            primary_ability: entity.primary_ability.clone(),
-            known_abilities: entity.known_abilities.clone(),
-            ability_cds: entity.ability_cds.clone(),
+            class_id: Some(class),
+            resource,
+            resource_max: def.resource_max,
+            resource_type: Some(def.resource_type),
+            primary_ability: Some(def.primary_ability.to_string()),
+            known_abilities: Vec::new(),
+            ability_cds: HashMap::new(),
         },
     );
+    let mut inventory = vec![None; BACKPACK_SLOTS];
+    for (item_id, count) in def.start_items {
+        let _ = grant_into(&mut inventory, item_id, *count);
+    }
     world.insert(
-        entity.id,
+        id,
         Bags {
-            inventory: entity.inventory.clone(),
-            equipment: entity.equipment.clone(),
-            open_vendor_npc: entity.open_vendor_npc,
+            inventory,
+            equipment: Equipment {
+                main_hand: Some(def.start_weapon.to_string()),
+                chest: Some(def.start_chest.to_string()),
+                ..Default::default()
+            },
+            open_vendor_npc: None,
         },
     );
+    world.insert(id, QuestLog::default());
+    world.insert(id, Progress::default());
     world.insert(
-        entity.id,
-        QuestLog {
-            quest_log: entity.quest_log.clone(),
-        },
-    );
-    world.insert(
-        entity.id,
-        Progress {
-            xp: entity.xp,
-            copper: entity.copper,
-            talent_points: entity.talent_points,
-            talents: entity.talents.clone(),
-            honor: entity.honor,
-            pvp_flagged: entity.pvp_flagged,
-            professions: entity.professions.clone(),
-            completed_deeds: entity.completed_deeds.clone(),
-        },
-    );
-    world.insert(
-        entity.id,
+        id,
         Bank {
-            bank: entity.bank.clone(),
+            bank: vec![None; BANK_SLOTS],
         },
     );
+    let y = ground_at(x, z);
     world.insert(
-        entity.id,
+        id,
         Motion {
-            vx: entity.vx,
-            vz: entity.vz,
-            vy: entity.vy,
-            on_ground: entity.on_ground,
-            jumping: entity.jumping,
-            fall_start_y: entity.fall_start_y,
-            flying: entity.flying,
+            vx: 0.0,
+            vz: 0.0,
+            vy: 0.0,
+            on_ground: true,
+            jumping: false,
+            fall_start_y: y,
+            flying: false,
         },
     );
-    world.insert(
-        entity.id,
-        Spirit {
-            corpse_x: entity.corpse_x,
-            corpse_z: entity.corpse_z,
-        },
-    );
-    world.insert(
-        entity.id,
-        InstanceAt {
-            instance_id: entity.instance_id.clone(),
-            delve_room: entity.delve_room,
-        },
-    );
-    world.insert(
-        entity.id,
-        Durable {
-            durable_id: entity.durable_id.clone(),
-        },
-    );
+    world.insert(id, Spirit::default());
+    world.insert(id, InstanceAt::default());
+    world.insert(id, Durable::default());
+    refresh_known_abilities(world, id);
+    crate::stats::recalc_player_stats(world, id);
+    id
 }
 
-fn sync_mob(world: &mut World, entity: &Entity) {
-    sync_health(world, entity);
-    sync_combat(world, entity);
+pub fn create_mob_from_template(
+    world: &mut World,
+    id: EntityId,
+    template_id: &str,
+    x: f32,
+    z: f32,
+) -> Option<EntityId> {
+    let t = mob(template_id)?;
+    world.adopt(id);
+    insert_identity(world, id, EntityKind::Mob, t.name, Some(t.id), "eastbrook");
+    insert_transform(world, id, x, z, 0.0);
+    insert_health(world, id, t.hp, t.hp, t.level);
+    insert_combat_blank(world, id, t.attack_damage);
+    world.insert(id, Home { home_x: x, home_z: z });
+    world.insert(id, Threat::default());
     world.insert(
-        entity.id,
-        Home {
-            home_x: entity.home_x,
-            home_z: entity.home_z,
-        },
-    );
-    world.insert(
-        entity.id,
-        Threat {
-            threat: entity.threat.clone(),
-        },
-    );
-    world.insert(
-        entity.id,
+        id,
         LootTable {
-            loot_copper: entity.loot_copper,
-            loot_item: entity.loot_item.clone(),
-            xp_value: entity.xp_value,
+            loot_copper: 0,
+            loot_item: None,
+            xp_value: t.xp,
         },
     );
-    world.insert(
-        entity.id,
-        Respawn {
-            respawn_timer: entity.respawn_timer,
-        },
-    );
-    world.insert(
-        entity.id,
-        InstanceAt {
-            instance_id: entity.instance_id.clone(),
-            delve_room: entity.delve_room,
-        },
-    );
+    world.insert(id, Respawn::default());
+    world.insert(id, InstanceAt::default());
+    Some(id)
 }
 
-fn sync_npc(world: &mut World, entity: &Entity) {
-    sync_health(world, entity);
+pub fn create_npc_from_template(
+    world: &mut World,
+    id: EntityId,
+    template_id: &str,
+    x: f32,
+    z: f32,
+) -> Option<EntityId> {
+    let t = npc(template_id)?;
+    world.adopt(id);
+    insert_identity(world, id, EntityKind::Npc, t.name, Some(t.id), "eastbrook");
+    insert_transform(world, id, x, z, 0.0);
+    insert_health(world, id, 1000.0, 1000.0, 1);
+    Some(id)
 }
 
-fn sync_loot(world: &mut World, entity: &Entity) {
+pub fn create_loot(
+    world: &mut World,
+    id: EntityId,
+    x: f32,
+    z: f32,
+    copper: u32,
+    item: Option<String>,
+) -> EntityId {
+    world.adopt(id);
+    insert_identity(world, id, EntityKind::Loot, "Loot", None, "eastbrook");
+    insert_transform(world, id, x, z, 0.0);
+    world.insert(id, LootPile { copper, item });
+    world.insert(id, InstanceAt::default());
+    id
+}
+
+pub fn create_pet(
+    world: &mut World,
+    id: EntityId,
+    def: &PetDef,
+    owner_id: EntityId,
+    x: f32,
+    z: f32,
+) -> EntityId {
+    world.adopt(id);
+    insert_identity(world, id, EntityKind::Pet, def.name, Some(def.id), "eastbrook");
+    insert_transform(world, id, x, z, 0.0);
+    insert_health(world, id, def.hp, def.hp, def.level);
     world.insert(
-        entity.id,
+        id,
+        Combat {
+            attack_damage: def.attack_damage,
+            armor: 0.0,
+            swing_timer: 0.0,
+            ability_cd: 0.0,
+            auto_attack: true,
+            target: None,
+            gcd: 0.0,
+            cast: None,
+        },
+    );
+    world.insert(id, Auras { auras: Vec::new() });
+    world.insert(id, Owner { owner_id });
+    id
+}
+
+/// Profession gather node (Loot kind + template; not auto-picked up).
+pub fn create_gather_node(
+    world: &mut World,
+    id: EntityId,
+    node: &woc_content::GatherNodeDef,
+) -> EntityId {
+    world.adopt(id);
+    insert_identity(
+        world,
+        id,
+        EntityKind::Loot,
+        node.name,
+        Some(node.id),
+        node.zone_id,
+    );
+    insert_transform(world, id, node.x, node.z, 0.0);
+    world.insert(
+        id,
         LootPile {
-            copper: entity.loot_copper,
-            item: entity.loot_item.clone(),
+            copper: 0,
+            item: Some(node.item_id.to_string()),
         },
     );
-    world.insert(
-        entity.id,
-        InstanceAt {
-            instance_id: entity.instance_id.clone(),
-            delve_room: entity.delve_room,
-        },
-    );
-}
-
-fn sync_pet(world: &mut World, entity: &Entity) {
-    sync_health(world, entity);
-    sync_combat(world, entity);
-    if let Some(owner_id) = entity.owner_id {
-        world.insert(entity.id, Owner { owner_id });
-    }
-}
-
-/// Copy columns back onto a fat `Entity` (combat writes World first).
-pub fn apply_world_to_entity(world: &World, entity: &mut Entity) {
-    let id = entity.id;
-    if let Some(identity) = world.get::<Identity>(id) {
-        entity.kind = identity.kind;
-        entity.name.clone_from(&identity.name);
-        entity.template_id.clone_from(&identity.template_id);
-        entity.zone_id.clone_from(&identity.zone_id);
-    }
-    if let Some(t) = world.get::<Transform>(id) {
-        entity.x = t.x;
-        entity.y = t.y;
-        entity.z = t.z;
-        entity.yaw = t.yaw;
-    }
-    if let Some(h) = world.get::<Health>(id) {
-        entity.hp = h.hp;
-        entity.hp_max = h.hp_max;
-        entity.alive = h.alive;
-        entity.level = h.level;
-    }
-    if let Some(c) = world.get::<Combat>(id) {
-        entity.attack_damage = c.attack_damage;
-        entity.armor = c.armor;
-        entity.swing_timer = c.swing_timer;
-        entity.ability_cd = c.ability_cd;
-        entity.auto_attack = c.auto_attack;
-        entity.target = c.target;
-        entity.gcd = c.gcd;
-        entity.cast = c.cast.clone();
-    }
-    if let Some(a) = world.get::<Auras>(id) {
-        entity.auras.clone_from(&a.auras);
-    }
-    if let Some(h) = world.get::<Home>(id) {
-        entity.home_x = h.home_x;
-        entity.home_z = h.home_z;
-    }
-    if let Some(t) = world.get::<Threat>(id) {
-        entity.threat.clone_from(&t.threat);
-    }
-    if let Some(l) = world.get::<LootTable>(id) {
-        entity.loot_copper = l.loot_copper;
-        entity.loot_item.clone_from(&l.loot_item);
-        entity.xp_value = l.xp_value;
-    }
-    if let Some(r) = world.get::<Respawn>(id) {
-        entity.respawn_timer = r.respawn_timer;
-    }
-    if let Some(l) = world.get::<LootPile>(id) {
-        entity.loot_copper = l.copper;
-        entity.loot_item.clone_from(&l.item);
-    }
-    if let Some(o) = world.get::<Owner>(id) {
-        entity.owner_id = Some(o.owner_id);
-    }
-    if let Some(k) = world.get::<ClassKit>(id) {
-        entity.class_id = k.class_id;
-        entity.resource = k.resource;
-        entity.resource_max = k.resource_max;
-        entity.resource_type = k.resource_type;
-        entity.primary_ability.clone_from(&k.primary_ability);
-        entity.known_abilities.clone_from(&k.known_abilities);
-        entity.ability_cds.clone_from(&k.ability_cds);
-    }
-    if let Some(b) = world.get::<Bags>(id) {
-        entity.inventory.clone_from(&b.inventory);
-        entity.equipment.clone_from(&b.equipment);
-        entity.open_vendor_npc = b.open_vendor_npc;
-    }
-    if let Some(q) = world.get::<QuestLog>(id) {
-        entity.quest_log.clone_from(&q.quest_log);
-    }
-    if let Some(p) = world.get::<Progress>(id) {
-        entity.xp = p.xp;
-        entity.copper = p.copper;
-        entity.talent_points = p.talent_points;
-        entity.talents.clone_from(&p.talents);
-        entity.honor = p.honor;
-        entity.pvp_flagged = p.pvp_flagged;
-        entity.professions.clone_from(&p.professions);
-        entity.completed_deeds.clone_from(&p.completed_deeds);
-    }
-    if let Some(b) = world.get::<Bank>(id) {
-        entity.bank.clone_from(&b.bank);
-    }
-    if let Some(m) = world.get::<Motion>(id) {
-        entity.vx = m.vx;
-        entity.vz = m.vz;
-        entity.vy = m.vy;
-        entity.on_ground = m.on_ground;
-        entity.jumping = m.jumping;
-        entity.fall_start_y = m.fall_start_y;
-        entity.flying = m.flying;
-    }
-    if let Some(s) = world.get::<Spirit>(id) {
-        entity.corpse_x = s.corpse_x;
-        entity.corpse_z = s.corpse_z;
-    }
-    if let Some(i) = world.get::<InstanceAt>(id) {
-        entity.instance_id.clone_from(&i.instance_id);
-        entity.delve_room = i.delve_room;
-    }
-    if let Some(d) = world.get::<Durable>(id) {
-        entity.durable_id.clone_from(&d.durable_id);
-    }
-}
-
-pub fn apply_world_to_entities(world: &World, entities: &mut [Entity]) {
-    for entity in entities {
-        apply_world_to_entity(world, entity);
-    }
-}
-
-/// Dual-write helper: adopt every fat entity into a fresh `World`.
-pub fn world_from_entities(entities: &[Entity]) -> World {
-    let mut world = World::new();
-    for entity in entities {
-        sync_entity_to_world(&mut world, entity);
-    }
-    world
+    world.insert(id, InstanceAt::default());
+    id
 }

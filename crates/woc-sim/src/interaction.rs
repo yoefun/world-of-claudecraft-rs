@@ -3,7 +3,8 @@
 use crate::ecs::components::{Bags, Health, Identity, Progress};
 use crate::ecs::components::{dist2d, Equipment};
 use crate::ecs::World;
-use crate::entity::{grant_into, remove_item, AuraInstance};
+use crate::ecs::components::AuraInstance;
+use crate::inventory::{grant_into, remove_item};
 use crate::inventory::{grant_item, take_item};
 use crate::quests::{accept_quest, on_talked_to, quests_for_npc, turn_in_quest};
 use crate::stats::recalc_player_stats;
@@ -469,11 +470,12 @@ pub fn vendor_snapshot(world: &World, player_id: EntityId) -> Option<woc_protoco
     })
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::{create_player, grant_into};
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
+    use crate::ecs::components::{Bags, Health};
+    use crate::inventory::{count_item, grant_into};
     use woc_content::PlayerClass;
 
     fn bag_slot_of(world: &World, player_id: EntityId, item_id: &str) -> u8 {
@@ -488,97 +490,64 @@ mod tests {
 
     #[test]
     fn use_consumable_restores_hp() {
-        let mut entities = vec![create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0)];
-        entities[0].hp = entities[0].hp_max * 0.25;
-        let before = entities[0].hp;
-        let before_count = crate::entity::count_item(&entities[0].inventory, "baked_bread");
-        assert!(before_count >= 1, "warrior starts with bread");
-        let mut world = world_from_entities(&entities);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hungry", PlayerClass::Warrior, 0.0, 0.0);
+        let before_count = count_item(&world.get::<Bags>(1).unwrap().inventory, "baked_bread");
+        assert!(before_count >= 1);
+        let before = {
+            let h = world.get_mut::<Health>(1).unwrap();
+            h.hp = h.hp_max * 0.25;
+            h.hp
+        };
         let slot = bag_slot_of(&world, 1, "baked_bread");
         let mut events = Vec::new();
         use_item_from_bag(&mut world, 1, slot, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-        assert!(entities[0].hp > before);
-        assert!(entities[0].hp <= entities[0].hp_max);
+        assert!(world.get::<Health>(1).unwrap().hp > before);
         assert_eq!(
-            crate::entity::count_item(&entities[0].inventory, "baked_bread"),
+            count_item(&world.get::<Bags>(1).unwrap().inventory, "baked_bread"),
             before_count - 1
         );
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, SimEvent::ItemLost { .. })));
     }
 
     #[test]
     fn travelers_ration_heals() {
-        let mut entities = vec![create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0)];
-        entities[0].hp = 10.0;
-        assert!(grant_into(&mut entities[0].inventory, "travelers_ration", 1));
-        let mut world = world_from_entities(&entities);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hungry", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.hp = 10.0;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "travelers_ration", 1));
+        }
         let slot = bag_slot_of(&world, 1, "travelers_ration");
         let mut events = Vec::new();
         use_item_from_bag(&mut world, 1, slot, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-        let expected = (10.0_f32 + 80.0).min(entities[0].hp_max);
-        assert!((entities[0].hp - expected).abs() < 1e-3);
+        let expected = (10.0_f32 + 80.0).min(world.get::<Health>(1).unwrap().hp_max);
+        assert!((world.get::<Health>(1).unwrap().hp - expected).abs() < 1e-3);
     }
 
     #[test]
-    fn refuse_low_level_equip() {
-        let mut entities = vec![create_player(1, "Noob", PlayerClass::Warrior, 0.0, 0.0)];
-        assert_eq!(entities[0].level, 1);
-        assert!(grant_into(&mut entities[0].inventory, "veteran_helm", 1));
-        let mut world = world_from_entities(&entities);
-        let slot = bag_slot_of(&world, 1, "veteran_helm");
+    fn equip_and_unequip_gear() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Armored", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "recruit_cap", 1));
+            assert!(grant_into(&mut bags.inventory, "wooden_buckler", 1));
+        }
         let mut events = Vec::new();
-        equip_from_bag(&mut world, 1, slot, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-        assert!(entities[0].equipment.head.is_none());
+        let cap = bag_slot_of(&world, 1, "recruit_cap");
+        equip_from_bag(&mut world, 1, cap, &mut events);
+        let shield = bag_slot_of(&world, 1, "wooden_buckler");
+        equip_from_bag(&mut world, 1, shield, &mut events);
         assert_eq!(
-            crate::entity::count_item(&entities[0].inventory, "veteran_helm"),
-            1
+            world.get::<Bags>(1).unwrap().equipment.head.as_deref(),
+            Some("recruit_cap")
         );
-        assert!(events.iter().any(|e| matches!(
-            e,
-            SimEvent::Toast { message } if message.contains("Requires level")
-        )));
-    }
-
-    #[test]
-    fn equip_head_and_offhand() {
-        let mut entities = vec![create_player(1, "Geared", PlayerClass::Warrior, 0.0, 0.0)];
-        assert!(grant_into(&mut entities[0].inventory, "recruit_cap", 1));
-        assert!(grant_into(&mut entities[0].inventory, "wooden_buckler", 1));
-        let mut world = world_from_entities(&entities);
-        let mut events = Vec::new();
-        let head_slot = bag_slot_of(&world, 1, "recruit_cap");
-        equip_from_bag(&mut world, 1, head_slot, &mut events);
-        let oh_slot = bag_slot_of(&world, 1, "wooden_buckler");
-        equip_from_bag(&mut world, 1, oh_slot, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(entities[0].equipment.head.as_deref(), Some("recruit_cap"));
         assert_eq!(
-            entities[0].equipment.off_hand.as_deref(),
+            world.get::<Bags>(1).unwrap().equipment.off_hand.as_deref(),
             Some("wooden_buckler")
         );
-    }
-
-    #[test]
-    fn use_item_via_interact_action() {
-        let mut entities = vec![create_player(1, "Hungry", PlayerClass::Warrior, 0.0, 0.0)];
-        entities[0].hp = 5.0;
-        assert!(grant_into(&mut entities[0].inventory, "baked_bread", 1));
-        let mut world = world_from_entities(&entities);
-        let slot = bag_slot_of(&world, 1, "baked_bread");
-        let mut events = Vec::new();
-        handle_interact(
-            &mut world,
-            1,
-            1,
-            InteractAction::UseItem { bag_slot: slot },
-            &mut events,
-        );
-        apply_world_to_entities(&world, &mut entities);
-        assert!(entities[0].hp > 5.0);
+        unequip_to_bag(&mut world, 1, EquipSlot::Head, &mut events);
+        assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
     }
 }

@@ -6,7 +6,6 @@
 
 use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Transform};
 use crate::ecs::World;
-use crate::entity::Entity;
 use crate::physics::{eastbrook_buildings, sweep_character_xz};
 use crate::types::{
     AIR_CONTROL_ACCEL, COYOTE_TIME, FALL_SAFE_DISTANCE, FLY_SPEED_MULT, FLY_VERTICAL_SPEED,
@@ -51,11 +50,6 @@ pub fn is_swimming_at(x: f32, y: f32, z: f32) -> bool {
     let ground = ground_height(x, z, WORLD_SEED);
     let water = water_level_at(x, z);
     ground < water - PLAYER_SWIM_DEPTH && y <= swim_surface_y(x, z) + 0.15
-}
-
-/// Snapshot helper: swimming from a fat entity pose (until snapshot reads columns).
-pub fn is_swimming(player: &Entity) -> bool {
-    is_swimming_at(player.x, player.y, player.z)
 }
 
 /// Accept a proposed ground sample only if climb slope / rise is walkable.
@@ -414,45 +408,37 @@ pub fn step_player_motion(
     fall.map(|fall_damage| MotionEffect { fall_damage })
 }
 
-/// Dual-write helper for tests / uncut callers that still hold a fat `Entity`.
-pub fn step_player_motion_entity(player: &mut Entity, intent: &PlayerIntent) -> Option<MotionEffect> {
-    let mut world = World::new();
-    crate::ecs::spawn::sync_entity_to_world(&mut world, player);
-    let effect = step_player_motion(&mut world, player.id, intent);
-    crate::ecs::spawn::apply_world_to_entity(&world, player);
-    effect
-}
 
-/// Legacy helper used by older call sites / tests that only pass wish axes.
-pub fn step_player_motion_axes(player: &mut Entity, move_x: f32, move_z: f32, facing: f32) {
+fn step_axes(world: &mut World, player_id: EntityId, move_x: f32, move_z: f32, facing: f32) {
     let intent = PlayerIntent {
         move_x,
         move_z,
         facing,
         ..Default::default()
     };
-    let _ = step_player_motion_entity(player, &intent);
+    let _ = step_player_motion(world, player_id, &intent);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
     use woc_content::PlayerClass;
+
+    fn player_at(x: f32, z: f32) -> World {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, x, z);
+        world
+    }
 
     #[test]
     fn slope_following_keeps_feet_on_terrain() {
-        let mut player = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        let mut world = player_at(0.0, 0.0);
         for _ in 0..40 {
-            step_player_motion_axes(&mut player, 0.0, 1.0, 0.0);
-            let expected = ground_height(player.x, player.z, WORLD_SEED);
-            assert!(
-                (player.y - expected).abs() < 1e-3,
-                "feet left terrain: y={} expected={}",
-                player.y,
-                expected
-            );
-            assert!(player.on_ground);
+            step_axes(&mut world, 1, 0.0, 1.0, 0.0);
+            let t = world.get::<Transform>(1).unwrap();
+            let expected = ground_height(t.x, t.z, WORLD_SEED);
+            assert!((t.y - expected).abs() < 1e-3);
+            assert!(world.get::<Motion>(1).unwrap().on_ground);
         }
     }
 
@@ -468,9 +454,9 @@ mod tests {
 
     #[test]
     fn world_bounds_clamp_x() {
-        let mut player = create_player(1, "Edge", PlayerClass::Warrior, WORLD_MAX_X - 0.1, 0.0);
-        step_player_motion_axes(&mut player, 1.0, 0.0, 0.0);
-        assert!(player.x <= WORLD_MAX_X - PLAYER_RADIUS + 1e-3);
+        let mut world = player_at(WORLD_MAX_X - 0.1, 0.0);
+        step_axes(&mut world, 1, 1.0, 0.0, 0.0);
+        assert!(world.get::<Transform>(1).unwrap().x <= WORLD_MAX_X - PLAYER_RADIUS + 1e-3);
     }
 
     #[test]
@@ -480,72 +466,70 @@ mod tests {
 
     #[test]
     fn jump_leaves_ground_and_lands() {
-        let mut player = create_player(1, "Jumpy", PlayerClass::Warrior, 0.0, 0.0);
-        let ground = player.y;
+        let mut world = player_at(0.0, 0.0);
+        let ground = world.get::<Transform>(1).unwrap().y;
         let intent = PlayerIntent {
             jump: true,
             ..Default::default()
         };
-        let _ = step_player_motion_entity(&mut player, &intent);
-        assert!(!player.on_ground, "jump should leave the ground");
-        assert!(player.y > ground + 0.05, "should rise after jump");
-        assert!(player.jumping);
-
-        // Coast until landing (no further jump presses).
+        let _ = step_player_motion(&mut world, 1, &intent);
+        assert!(!world.get::<Motion>(1).unwrap().on_ground);
+        assert!(world.get::<Transform>(1).unwrap().y > ground + 0.05);
+        assert!(world.get::<Motion>(1).unwrap().jumping);
         let coast = PlayerIntent::default();
         for _ in 0..40 {
-            let _ = step_player_motion_entity(&mut player, &coast);
-            if player.on_ground {
+            let _ = step_player_motion(&mut world, 1, &coast);
+            if world.get::<Motion>(1).unwrap().on_ground {
                 break;
             }
         }
-        assert!(player.on_ground, "should land");
-        assert!((player.y - ground_height(player.x, player.z, WORLD_SEED)).abs() < 1e-2);
-        assert!(!player.jumping);
+        assert!(world.get::<Motion>(1).unwrap().on_ground);
+        let t = world.get::<Transform>(1).unwrap();
+        assert!((t.y - ground_height(t.x, t.z, WORLD_SEED)).abs() < 1e-2);
+        assert!(!world.get::<Motion>(1).unwrap().jumping);
     }
 
     #[test]
     fn fly_toggle_enables_vertical_ascend() {
-        let mut player = create_player(1, "Flyer", PlayerClass::Mage, 0.0, 0.0);
-        let start_y = player.y;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Flyer", PlayerClass::Mage, 0.0, 0.0);
+        let start_y = world.get::<Transform>(1).unwrap().y;
         let toggle = PlayerIntent {
             fly_toggle: true,
             ..Default::default()
         };
-        let _ = step_player_motion_entity(&mut player, &toggle);
-        assert!(player.flying);
+        let _ = step_player_motion(&mut world, 1, &toggle);
+        assert!(world.get::<Motion>(1).unwrap().flying);
         let up = PlayerIntent {
             jump: true,
             ..Default::default()
         };
         for _ in 0..10 {
-            let _ = step_player_motion_entity(&mut player, &up);
+            let _ = step_player_motion(&mut world, 1, &up);
         }
-        assert!(
-            player.y > start_y + 2.0,
-            "flight ascend should gain altitude"
-        );
+        assert!(world.get::<Transform>(1).unwrap().y > start_y + 2.0);
     }
 
     #[test]
     fn long_fall_reports_damage() {
-        let mut player = create_player(1, "Cliff", PlayerClass::Warrior, 0.0, 0.0);
-        player.on_ground = false;
-        player.jumping = false;
-        player.y = player.y + 25.0;
-        player.fall_start_y = player.y;
-        player.vy = 0.0;
+        let mut world = player_at(0.0, 0.0);
+        {
+            let y = world.get::<Transform>(1).unwrap().y + 25.0;
+            world.get_mut::<Transform>(1).unwrap().y = y;
+            let m = world.get_mut::<Motion>(1).unwrap();
+            m.on_ground = false;
+            m.jumping = false;
+            m.fall_start_y = y;
+            m.vy = 0.0;
+        }
         let mut hit = None;
         for _ in 0..80 {
-            hit = step_player_motion_entity(&mut player, &PlayerIntent::default());
-            if player.on_ground {
+            hit = step_player_motion(&mut world, 1, &PlayerIntent::default());
+            if world.get::<Motion>(1).unwrap().on_ground {
                 break;
             }
         }
-        assert!(player.on_ground);
-        assert!(
-            hit.map(|e| e.fall_damage > 0.0).unwrap_or(false),
-            "25yd fall should deal damage"
-        );
+        assert!(world.get::<Motion>(1).unwrap().on_ground);
+        assert!(hit.map(|e| e.fall_damage > 0.0).unwrap_or(false));
     }
 }

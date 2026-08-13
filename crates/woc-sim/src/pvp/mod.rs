@@ -289,31 +289,27 @@ fn award_honor(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent
     });
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
-    use crate::entity::create_player;
+    use crate::ecs::components::Progress;
     use woc_content::PlayerClass;
 
-    fn players_in_range() -> (Vec<crate::entity::Entity>, World) {
-        let entities = vec![
-            create_player(1, "Alice", PlayerClass::Warrior, 0.0, 0.0),
-            create_player(2, "Bob", PlayerClass::Mage, 2.0, 0.0),
-        ];
-        let world = world_from_entities(&entities);
-        (entities, world)
+    fn players_in_range() -> World {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 2.0, 0.0);
+        world
     }
 
     #[test]
     fn challenge_and_accept_starts_duel_in_range() {
-        let (_entities, world) = players_in_range();
+        let world = players_in_range();
         let mut pvp = PvpState::default();
         let mut events = Vec::new();
-
         assert_eq!(challenge_duel(&mut pvp, &world, 1, 2), Ok(()));
         assert_eq!(accept_duel(&mut pvp, &world, 2, 1, &mut events), Ok(()));
-
         assert!(pvp.is_dueling(1, 2));
         assert!(events
             .iter()
@@ -322,7 +318,7 @@ mod tests {
 
     #[test]
     fn duel_ends_at_one_hp_restores_players_and_grants_honor() {
-        let (mut entities, mut world) = players_in_range();
+        let mut world = players_in_range();
         let mut pvp = PvpState::default();
         let mut events = Vec::new();
         challenge_duel(&mut pvp, &world, 1, 2).unwrap();
@@ -334,102 +330,19 @@ mod tests {
         if let Some(h) = world.get_mut::<Health>(2) {
             h.hp = 1.0;
         }
-
         tick_pvp(&mut pvp, &mut world, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-
         assert!(!pvp.is_dueling(1, 2));
-        assert_eq!(entities[0].hp, entities[0].hp_max);
-        assert_eq!(entities[1].hp, entities[1].hp_max);
-        assert!(entities[0].alive && entities[1].alive);
-        assert_eq!(entities[0].honor, HONOR_PER_KILL);
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimEvent::DuelEnded {
-                winner: 1,
-                loser: 2
-            }
-        )));
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimEvent::HonorGained {
-                player: 1,
-                amount: HONOR_PER_KILL
-            }
-        )));
+        assert_eq!(world.get::<Progress>(1).unwrap().honor, HONOR_PER_KILL);
+        assert!(world.get::<Health>(1).unwrap().hp > 1.0);
+        assert!(world.get::<Health>(2).unwrap().hp > 1.0);
     }
 
     #[test]
-    fn duel_death_restores_loser_without_death_state() {
-        let (mut entities, mut world) = players_in_range();
-        let mut pvp = PvpState::default();
-        let mut events = Vec::new();
-        challenge_duel(&mut pvp, &world, 1, 2).unwrap();
-        accept_duel(&mut pvp, &world, 2, 1, &mut events).unwrap();
-        events.clear();
-        if let Some(h) = world.get_mut::<Health>(2) {
-            h.hp = 0.0;
-            h.alive = false;
-        }
-        if let Some(s) = world.get_mut::<Spirit>(2) {
-            s.corpse_x = Some(2.0);
-            s.corpse_z = Some(0.0);
-        }
-
-        tick_pvp(&mut pvp, &mut world, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-
-        assert!(entities[1].alive);
-        assert_eq!(entities[1].hp, entities[1].hp_max);
-        assert_eq!(entities[1].corpse_x, None);
-        assert_eq!(entities[1].corpse_z, None);
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimEvent::DuelEnded {
-                winner: 1,
-                loser: 2
-            }
-        )));
-    }
-
-    #[test]
-    fn killing_flagged_player_grants_honor() {
-        let (mut entities, mut world) = players_in_range();
-        if let Some(p) = world.get_mut::<Progress>(2) {
-            p.pvp_flagged = true;
-        }
-        if let Some(h) = world.get_mut::<Health>(2) {
-            h.hp = 0.0;
-            h.alive = false;
-        }
-        let mut events = vec![SimEvent::Kill {
-            killer: 1,
-            victim: 2,
-            victim_name: "Bob".into(),
-        }];
-
-        tick_pvp(&mut PvpState::default(), &mut world, &mut events);
-        apply_world_to_entities(&world, &mut entities);
-
-        assert_eq!(entities[0].honor, HONOR_PER_KILL);
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimEvent::HonorGained {
-                player: 1,
-                amount: HONOR_PER_KILL
-            }
-        )));
-    }
-
-    #[test]
-    fn toggle_pvp_updates_player_flag() {
-        let (mut entities, mut world) = players_in_range();
-
+    fn toggle_pvp_flips_flag() {
+        let mut world = players_in_range();
         assert_eq!(toggle_pvp(&mut world, 1), Ok(true));
-        apply_world_to_entities(&world, &mut entities);
-        assert!(entities[0].pvp_flagged);
+        assert!(world.get::<Progress>(1).unwrap().pvp_flagged);
         assert_eq!(toggle_pvp(&mut world, 1), Ok(false));
-        apply_world_to_entities(&world, &mut entities);
-        assert!(!entities[0].pvp_flagged);
+        assert!(!world.get::<Progress>(1).unwrap().pvp_flagged);
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{Bags, Bank};
 use crate::ecs::World;
-use crate::entity::{grant_into, remove_item};
+use crate::inventory::{grant_into, remove_item};
 use crate::types::BANK_SLOTS;
 use woc_protocol::{EntityId, SimEvent};
 
@@ -124,53 +124,49 @@ pub fn withdraw(
     true
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
+    use crate::ecs::components::{Bags, Bank};
+    use crate::inventory::grant_into;
     use woc_content::PlayerClass;
 
     #[test]
-    fn deposit_and_withdraw_roundtrip() {
-        let mut entities = vec![create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0)];
-        let _ = grant_into(&mut entities[0].inventory, "silverleaf", 3);
-        let mut world = world_from_entities(&entities);
+    fn deposit_and_withdraw_round_trip() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            let _ = grant_into(&mut bags.inventory, "silverleaf", 3);
+        }
         let mut events = Vec::new();
-        let bag_slot = world
+        let slot = world
             .get::<Bags>(1)
             .unwrap()
             .inventory
             .iter()
-            .position(|s| {
-                s.as_ref()
-                    .map(|st| st.item_id == "silverleaf")
-                    .unwrap_or(false)
-            })
-            .expect("herb in bag") as u8;
-        assert!(deposit(&mut world, 1, bag_slot, 2, &mut events));
-        let bank_count: u32 = world
-            .get::<Bank>(1)
-            .unwrap()
-            .bank
-            .iter()
-            .filter_map(|s| s.as_ref())
-            .filter(|s| s.item_id == "silverleaf")
-            .map(|s| s.count)
-            .sum();
-        assert_eq!(bank_count, 2);
+            .position(|s| s.as_ref().map(|x| x.item_id.as_str()) == Some("silverleaf"))
+            .unwrap();
+        assert!(deposit(&mut world, 1, slot as u8, 2, &mut events));
+        assert_eq!(
+            world
+                .get::<Bank>(1)
+                .unwrap()
+                .bank
+                .iter()
+                .flatten()
+                .find(|s| s.item_id == "silverleaf")
+                .unwrap()
+                .count,
+            2
+        );
         let bank_slot = world
             .get::<Bank>(1)
             .unwrap()
             .bank
             .iter()
-            .position(|s| {
-                s.as_ref()
-                    .map(|st| st.item_id == "silverleaf")
-                    .unwrap_or(false)
-            })
-            .unwrap() as u8;
-        assert!(withdraw(&mut world, 1, bank_slot, 2, &mut events));
-        apply_world_to_entities(&world, &mut entities);
+            .position(|s| s.as_ref().map(|x| x.item_id.as_str()) == Some("silverleaf"))
+            .unwrap();
+        assert!(withdraw(&mut world, 1, bank_slot as u8, 2, &mut events));
     }
 }

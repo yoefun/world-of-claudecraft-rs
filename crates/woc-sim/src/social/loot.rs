@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::ecs::components::{Bags, Identity, LootPile, Progress};
 use crate::ecs::World;
-use crate::entity::grant_into;
+use crate::inventory::grant_into;
 use crate::rng::Rng;
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
@@ -185,45 +185,25 @@ pub fn is_loot_entity(world: &World, id: EntityId) -> bool {
         && world.contains(id)
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::spawn::world_from_entities;
-    use crate::entity::{create_player, Entity};
     use crate::rng::Rng;
     use woc_content::PlayerClass;
-    use woc_protocol::EntityKind;
 
     #[test]
     fn need_beats_greed() {
         let mut rules = LootRules::default();
         rules.start_roll(99, "wolf_fang".into(), 5, vec![1, 2]);
-        let mut entities = vec![
-            create_player(1, "A", PlayerClass::Warrior, 0.0, 0.0),
-            create_player(2, "B", PlayerClass::Mage, 1.0, 0.0),
-            Entity::blank(99, EntityKind::Loot, "loot", None, 0.0, 0.0),
-        ];
-        entities[2].alive = true;
-        entities[2].loot_item = Some("wolf_fang".into());
-        let mut world = world_from_entities(&entities);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_loot(&mut world, 99, 0.0, 0.0, 5, Some("wolf_fang".into()));
         let mut rng = Rng::new(1);
         let mut events = Vec::new();
-        assert!(rules.roll(
-            99,
-            1,
-            RollChoice::Greed,
-            &mut rng,
-            &mut world,
-            &mut events
-        ));
-        assert!(rules.roll(
-            99,
-            2,
-            RollChoice::Need,
-            &mut rng,
-            &mut world,
-            &mut events
-        ));
+        assert!(rules.roll(99, 1, RollChoice::Greed, &mut rng, &mut world, &mut events));
+        assert!(rules.roll(99, 2, RollChoice::Need, &mut rng, &mut world, &mut events));
         assert!(events
             .iter()
             .any(|e| matches!(e, SimEvent::LootAwarded { winner: 2, .. })));

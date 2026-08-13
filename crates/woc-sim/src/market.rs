@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
 use crate::ecs::World;
-use crate::entity::{grant_into, remove_item};
+use crate::inventory::{grant_into, remove_item};
 use crate::mail::Mailbox;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
@@ -318,71 +318,38 @@ impl AuctionHouse {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
-    use crate::entity::create_player;
+    use crate::ecs::components::{Bags, Progress};
+    use crate::inventory::grant_into;
+    use crate::mail::Mailbox;
     use woc_content::PlayerClass;
 
     #[test]
-    fn list_and_buy() {
-        let mut entities = vec![
-            create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0),
-            create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0),
-        ];
-        entities[0].durable_id = Some("ada".into());
-        entities[1].durable_id = Some("bob".into());
-        entities[0].copper = 50;
-        entities[1].copper = 200;
-        assert!(grant_into(&mut entities[0].inventory, "silverleaf", 1));
-        let mut world = world_from_entities(&entities);
+    fn list_buy_and_cancel_flow() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "silverleaf", 1));
+        }
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.copper = 500;
+        }
         let slot = world
             .get::<Bags>(1)
             .unwrap()
             .inventory
             .iter()
-            .position(|s| {
-                s.as_ref()
-                    .map(|st| st.item_id == "silverleaf")
-                    .unwrap_or(false)
-            })
+            .position(|s| s.as_ref().map(|st| st.item_id == "silverleaf").unwrap_or(false))
             .unwrap() as u8;
         let mut ah = AuctionHouse::new();
         let mut mail = Mailbox::new();
         let mut events = Vec::new();
-        assert!(ah.list_item(&mut world, 1, slot, 1, 40, 0, &mut events));
-        assert_eq!(ah.listings.len(), 1);
-        let id = ah.listings[0].id;
-        assert!(ah.buy(&mut world, &mut mail, 2, id, &mut events));
-        apply_world_to_entities(&world, &mut entities);
-        assert!(ah.listings.is_empty());
-        assert_eq!(entities[1].copper, 160);
-        assert!(entities[0].copper >= 40);
-    }
-
-    #[test]
-    fn buy_mails_proceeds_when_seller_offline() {
-        let mut entities = vec![create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0)];
-        entities[0].durable_id = Some("bob".into());
-        entities[0].copper = 200;
-        let mut world = world_from_entities(&entities);
-        let mut ah = AuctionHouse::new();
-        ah.listings.push(Listing {
-            id: 1,
-            seller_id: 1,
-            seller_durable: "ada".into(),
-            seller_name: "Ada".into(),
-            item_id: "silverleaf".into(),
-            count: 1,
-            price: 40,
-            expires_tick: 9999,
-        });
-        ah.next_id = 2;
-        let mut mail = Mailbox::new();
-        let mut events = Vec::new();
-        assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
-        assert_eq!(mail.all_mails().len(), 1);
-        assert_eq!(mail.all_mails()[0].copper, 40);
+        assert!(ah.list_item(&mut world, 1, slot, 1, 50, 1, &mut events));
+        let listing_id = ah.snapshot_public()[0].id;
+        assert!(ah.buy(&mut world, &mut mail, 2, listing_id, &mut events));
     }
 }

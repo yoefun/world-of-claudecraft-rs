@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{ClassKit, Health, Progress, QuestLog, QuestState};
 use crate::ecs::World;
-use crate::entity::QuestProgress;
+use crate::ecs::components::QuestProgress;
 use crate::inventory::{grant_item, player_item_count, take_item};
 use crate::types::{player_hp, xp_to_next};
 use woc_content::{quest, QuestObjective, QUESTS};
@@ -262,7 +262,7 @@ pub fn recompute_ready(world: &mut World, player_id: EntityId, _events: &mut Vec
     }
 }
 
-fn grant_xp_world(world: &mut World, player_id: EntityId, amount: u32, events: &mut Vec<SimEvent>) {
+pub fn grant_xp_world(world: &mut World, player_id: EntityId, amount: u32, events: &mut Vec<SimEvent>) {
     if let Some(p) = world.get_mut::<Progress>(player_id) {
         p.xp = p.xp.saturating_add(amount);
     }

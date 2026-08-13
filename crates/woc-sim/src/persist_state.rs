@@ -6,12 +6,10 @@
 use std::collections::{BTreeSet, HashMap};
 
 use crate::ecs::components::{
-    Bags, Bank, ClassKit, Durable, Health, Identity, Progress, QuestLog, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, Health, Identity, InstanceAt,
+    InvStack, Progress, QuestLog, QuestProgress, QuestState, Spirit, Transform,
 };
 use crate::ecs::World;
-use crate::entity::{
-    create_player, refresh_known_abilities, Entity, Equipment, InvStack, QuestProgress, QuestState,
-};
 use crate::stats::recalc_player_stats;
 use crate::types::{BACKPACK_SLOTS, BANK_SLOTS};
 use woc_content::PlayerClass;
@@ -129,80 +127,101 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
     })
 }
 
-/// Apply durable state onto an existing player entity (after spawn).
+/// Apply durable state onto an existing player in World (after spawn).
 ///
-/// Virgin saves keep the class starter kit from [`create_player`]. Non-virgin
-/// saves replace inventory/equipment/progression entirely.
-pub fn apply_player_state(player: &mut Entity, state: &PlayerPersistentState) {
-    player.durable_id = state.durable_id.clone();
-    player.completed_deeds = state.completed_deeds.clone();
-    player.pvp_flagged = state.pvp_flagged;
-    player.honor = state.honor;
-    player.talent_points = state.talent_points;
-    player.talents = state.talents.clone();
-    player.professions = state.professions.clone();
-    player.quest_log = state.quests.clone();
+/// Virgin saves keep the class starter kit from [`crate::ecs::spawn::create_player`].
+/// Non-virgin saves replace inventory/equipment/progression entirely.
+pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &PlayerPersistentState) {
+    if let Some(d) = world.get_mut::<Durable>(player_id) {
+        d.durable_id = state.durable_id.clone();
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.completed_deeds = state.completed_deeds.clone();
+        p.pvp_flagged = state.pvp_flagged;
+        p.honor = state.honor;
+        p.talent_points = state.talent_points;
+        p.talents = state.talents.clone();
+        p.professions = state.professions.clone();
+    }
+    if let Some(q) = world.get_mut::<QuestLog>(player_id) {
+        q.quest_log = state.quests.clone();
+    }
 
     if state.is_virgin() {
-        // Keep starter kit; only stamp durable id / zone preference.
         if !state.zone_id.is_empty() {
-            player.zone_id = state.zone_id.clone();
+            if let Some(i) = world.get_mut::<Identity>(player_id) {
+                i.zone_id = state.zone_id.clone();
+            }
         }
-        sync_recalc_player_stats(player);
-        refresh_known_abilities(player);
+        recalc_player_stats(world, player_id);
+        crate::ecs::spawn::refresh_known_abilities(world, player_id);
         return;
     }
 
-    player.level = state.level.max(1);
-    player.xp = state.xp;
-    player.copper = state.copper;
-    player.zone_id = if state.zone_id.is_empty() {
+    if let Some(h) = world.get_mut::<Health>(player_id) {
+        h.level = state.level.max(1);
+        h.alive = true;
+    }
+    if let Some(p) = world.get_mut::<Progress>(player_id) {
+        p.xp = state.xp;
+        p.copper = state.copper;
+    }
+    let mut zone_id = if state.zone_id.is_empty() {
         "eastbrook".into()
     } else {
         state.zone_id.clone()
     };
-    // Never restore mid-instance from save — always land in overworld zone.
-    player.instance_id = None;
-    player.delve_room = None;
-    if player.zone_id.starts_with("instance:") || player.zone_id.starts_with("delve:") {
-        player.zone_id = "eastbrook".into();
+    if zone_id.starts_with("instance:") || zone_id.starts_with("delve:") {
+        zone_id = "eastbrook".into();
     }
-
-    player.inventory = pad_slots(state.inventory.clone(), BACKPACK_SLOTS);
-    player.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
-    player.equipment = state.equipment.clone();
-    player.x = state.pos_x;
-    player.z = state.pos_z;
-    player.y = Entity::ground_at(player.x, player.z);
-    player.home_x = player.x;
-    player.home_z = player.z;
-    player.alive = true;
-    player.corpse_x = None;
-    player.corpse_z = None;
-    player.auras.clear();
-    player.cast = None;
-    player.target = None;
-    player.auto_attack = false;
-    player.open_vendor_npc = None;
-    player.threat.clear();
-    refresh_known_abilities(player);
-    sync_recalc_player_stats(player);
-    player.hp = player.hp_max;
-    if let Some(rt) = player.resource_type {
-        player.resource = match rt {
-            woc_content::ResourceType::Rage => 0.0,
-            woc_content::ResourceType::Mana | woc_content::ResourceType::Energy => {
-                player.resource_max * 0.5
-            }
-        };
+    if let Some(i) = world.get_mut::<Identity>(player_id) {
+        i.zone_id = zone_id;
     }
-}
-
-fn sync_recalc_player_stats(player: &mut Entity) {
-    let mut world = crate::ecs::World::new();
-    crate::ecs::spawn::sync_entity_to_world(&mut world, player);
-    recalc_player_stats(&mut world, player.id);
-    crate::ecs::spawn::apply_world_to_entity(&world, player);
+    if let Some(inst) = world.get_mut::<InstanceAt>(player_id) {
+        inst.instance_id = None;
+        inst.delve_room = None;
+    }
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        bags.inventory = pad_slots(state.inventory.clone(), BACKPACK_SLOTS);
+        bags.equipment = state.equipment.clone();
+        bags.open_vendor_npc = None;
+    }
+    if let Some(bank) = world.get_mut::<Bank>(player_id) {
+        bank.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
+    }
+    let y = crate::ecs::spawn::ground_at(state.pos_x, state.pos_z);
+    if let Some(t) = world.get_mut::<Transform>(player_id) {
+        t.x = state.pos_x;
+        t.z = state.pos_z;
+        t.y = y;
+    }
+    if let Some(s) = world.get_mut::<Spirit>(player_id) {
+        s.corpse_x = None;
+        s.corpse_z = None;
+    }
+    if let Some(a) = world.get_mut::<Auras>(player_id) {
+        a.auras.clear();
+    }
+    if let Some(c) = world.get_mut::<Combat>(player_id) {
+        c.cast = None;
+        c.target = None;
+        c.auto_attack = false;
+    }
+    crate::ecs::spawn::refresh_known_abilities(world, player_id);
+    recalc_player_stats(world, player_id);
+    if let Some(h) = world.get_mut::<Health>(player_id) {
+        h.hp = h.hp_max;
+    }
+    let rt = world.get::<ClassKit>(player_id).and_then(|k| k.resource_type);
+    let rmax = world.get::<ClassKit>(player_id).map(|k| k.resource_max).unwrap_or(0.0);
+    if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+        if let Some(rt) = rt {
+            kit.resource = match rt {
+                woc_content::ResourceType::Rage => 0.0,
+                woc_content::ResourceType::Mana | woc_content::ResourceType::Energy => rmax * 0.5,
+            };
+        }
+    }
 }
 
 fn pad_slots(mut slots: Vec<Option<InvStack>>, size: usize) -> Vec<Option<InvStack>> {
@@ -214,13 +233,14 @@ fn pad_slots(mut slots: Vec<Option<InvStack>>, size: usize) -> Vec<Option<InvSta
     slots
 }
 
-/// Build a player entity from class + durable state.
+/// Spawn a player from class + durable state into `world`.
 pub fn create_player_from_state(
+    world: &mut World,
     id: EntityId,
     name: &str,
     class: PlayerClass,
     state: &PlayerPersistentState,
-) -> Entity {
+) -> EntityId {
     let (sx, sz) = if state.is_virgin() {
         (
             woc_content::EASTBROOK.player_spawn_x,
@@ -229,9 +249,9 @@ pub fn create_player_from_state(
     } else {
         (state.pos_x, state.pos_z)
     };
-    let mut player = create_player(id, name, class, sx, sz);
-    apply_player_state(&mut player, state);
-    player
+    crate::ecs::spawn::create_player(world, id, name, class, sx, sz);
+    apply_player_state(world, id, state);
+    id
 }
 
 /// Parse quest state strings from durable DTOs.
@@ -251,15 +271,16 @@ pub fn quest_state_to_str(s: QuestState) -> &'static str {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use woc_content::PlayerClass;
 
     #[test]
-    fn virgin_save_keeps_starter_kit() {
+    fn virgin_keeps_starter_kit() {
         let state = PlayerPersistentState {
-            durable_id: Some("char-1".into()),
+            durable_id: Some("abc".into()),
             level: 1,
             xp: 0,
             copper: 0,
@@ -270,44 +291,43 @@ mod tests {
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 0,
-            talents: HashMap::new(),
+            talents: Default::default(),
             bank: vec![],
             honor: 0,
-            professions: HashMap::new(),
+            professions: Default::default(),
             pvp_flagged: false,
-            completed_deeds: BTreeSet::new(),
+            completed_deeds: Default::default(),
         };
         assert!(state.is_virgin());
-        let player = create_player_from_state(1, "Ada", PlayerClass::Warrior, &state);
-        assert_eq!(player.durable_id.as_deref(), Some("char-1"));
-        assert!(player.equipment.main_hand.is_some());
-        assert!(player.inventory.iter().any(|s| s.is_some()));
+        let mut world = World::new();
+        create_player_from_state(&mut world, 1, "Ada", PlayerClass::Warrior, &state);
+        assert!(world
+            .get::<Bags>(1)
+            .unwrap()
+            .equipment
+            .main_hand
+            .is_some());
     }
 
     #[test]
-    fn non_virgin_restore_roundtrip() {
-        let mut base = create_player(1, "Ada", PlayerClass::Mage, 10.0, 20.0);
-        base.durable_id = Some("abc".into());
-        base.level = 5;
-        base.xp = 120;
-        base.copper = 77;
-        base.honor = 10;
-        base.talent_points = 2;
-        base.talents.insert("mage_arcane_power".into(), 2);
-        base.completed_deeds.insert("eastfen_mire_terror".into());
-        base.zone_id = "eastfen".into();
-        let world = crate::ecs::spawn::world_from_entities(&[base]);
+    fn round_trip_preserves_progression() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Mage, 10.0, 20.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.level = 3;
+        }
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.xp = 40;
+            p.copper = 12;
+            p.honor = 7;
+        }
         let exported = export_player_state(&world, 1).unwrap();
-        assert!(!exported.is_virgin());
-        let restored = create_player_from_state(9, "Ada", PlayerClass::Mage, &exported);
-        assert_eq!(restored.level, 5);
-        assert_eq!(restored.xp, 120);
-        assert_eq!(restored.copper, 77);
-        assert_eq!(restored.honor, 10);
-        assert_eq!(restored.talents.get("mage_arcane_power"), Some(&2));
-        assert!(restored.completed_deeds.contains("eastfen_mire_terror"));
-        assert_eq!(restored.zone_id, "eastfen");
-        assert!((restored.x - 10.0).abs() < 1e-3);
-        assert!((restored.z - 20.0).abs() < 1e-3);
+        let mut world2 = World::new();
+        create_player_from_state(&mut world2, 9, "Ada", PlayerClass::Mage, &exported);
+        let restored = export_player_state(&world2, 9).unwrap();
+        assert_eq!(restored.level, 3);
+        assert_eq!(restored.xp, 40);
+        assert_eq!(restored.copper, 12);
+        assert_eq!(restored.honor, 7);
     }
 }

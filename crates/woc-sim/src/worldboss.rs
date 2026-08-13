@@ -2,7 +2,6 @@
 
 use crate::ecs::components::Progress;
 use crate::ecs::World;
-use crate::entity::Entity;
 use woc_protocol::{EntityId, SimEvent};
 
 /// Minimal deed definition.
@@ -48,37 +47,25 @@ pub fn on_boss_killed(
     true
 }
 
-/// Dual-write shim for kill-reward code still holding a fat `Entity`.
-pub fn on_boss_killed_entity(
-    player: &mut Entity,
-    template_id: &str,
-    events: &mut Vec<SimEvent>,
-) -> bool {
-    let mut world = World::new();
-    crate::ecs::spawn::sync_entity_to_world(&mut world, player);
-    let ok = on_boss_killed(&mut world, player.id, template_id, events);
-    crate::ecs::spawn::apply_world_to_entity(&world, player);
-    ok
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
     use woc_content::PlayerClass;
 
     #[test]
     fn deed_credits_honor_once() {
-        let mut player = create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
         let mut events = Vec::new();
-        let mut world = crate::ecs::spawn::world_from_entities(std::slice::from_ref(&player));
         assert!(on_boss_killed(&mut world, 1, "mire_terror", &mut events));
-        crate::ecs::spawn::apply_world_to_entity(&world, &mut player);
-        assert_eq!(player.honor, 25);
-        assert!(player.completed_deeds.contains("eastfen_mire_terror"));
+        assert_eq!(world.get::<Progress>(1).unwrap().honor, 25);
+        assert!(world
+            .get::<Progress>(1)
+            .unwrap()
+            .completed_deeds
+            .contains("eastfen_mire_terror"));
         events.clear();
         assert!(!on_boss_killed(&mut world, 1, "mire_terror", &mut events));
-        crate::ecs::spawn::apply_world_to_entity(&world, &mut player);
-        assert_eq!(player.honor, 25);
+        assert_eq!(world.get::<Progress>(1).unwrap().honor, 25);
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{Bags, ClassKit, Health, Identity, Progress, Transform};
 use crate::ecs::World;
-use crate::entity::{count_item, grant_into, remove_item};
+use crate::inventory::{count_item, grant_into, remove_item};
 use crate::quests::on_inventory_changed;
 use crate::types::INTERACT_RANGE;
 use woc_content::{gather_node, profession, recipe};
@@ -249,54 +249,41 @@ fn bump_skill(world: &mut World, player_id: EntityId, profession_id: &str) {
     *skill = skill.saturating_add(1).min(definition.max_skill);
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
-    use crate::entity::{count_item, create_player, Entity};
+    use crate::ecs::components::{Bags, Progress};
+    use crate::inventory::count_item;
     use woc_content::PlayerClass;
-    use woc_protocol::{EntityKind, InteractAction, SimEvent};
+    use woc_protocol::{InteractAction, SimEvent};
 
     #[test]
     fn train_gather_and_craft_minor_healing_salve() {
-        let mut entities = vec![create_player(
-            1,
-            "Herbalist",
-            PlayerClass::Druid,
-            0.0,
-            0.0,
-        )];
-        let mut world = world_from_entities(&entities);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Herbalist", PlayerClass::Druid, 0.0, 0.0);
         let mut events = Vec::new();
-
         train_profession(&mut world, 1, "herbalism", &mut events).unwrap();
         train_profession(&mut world, 1, "alchemy", &mut events).unwrap();
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(entities[0].professions.get("herbalism"), Some(&1));
-        assert_eq!(entities[0].professions.get("alchemy"), Some(&1));
-
+        assert_eq!(
+            world.get::<Progress>(1).unwrap().professions.get("herbalism"),
+            Some(&1)
+        );
         gather_content(&mut world, 1, "eastbrook_meadow_silverleaf", &mut events).unwrap();
         gather_content(&mut world, 1, "eastbrook_meadow_silverleaf", &mut events).unwrap();
         gather_content(&mut world, 1, "eastbrook_brook_peacebloom", &mut events).unwrap();
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(count_item(&entities[0].inventory, "silverleaf"), 2);
-        assert_eq!(count_item(&entities[0].inventory, "peacebloom"), 1);
-
+        assert_eq!(
+            count_item(&world.get::<Bags>(1).unwrap().inventory, "silverleaf"),
+            2
+        );
         craft(&mut world, 1, "minor_healing_salve", &mut events).unwrap();
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(count_item(&entities[0].inventory, "silverleaf"), 0);
-        assert_eq!(count_item(&entities[0].inventory, "peacebloom"), 0);
-        assert_eq!(count_item(&entities[0].inventory, "minor_healing_salve"), 1);
-        assert!(entities[0].professions["herbalism"] > 1);
-        assert!(entities[0].professions["alchemy"] > 1);
-        assert!(events.iter().any(|event| matches!(
-            event,
-            SimEvent::Gathered {
-                node_id,
-                item_id,
-                ..
-            } if node_id == "eastbrook_meadow_silverleaf" && item_id == "silverleaf"
-        )));
+        assert_eq!(
+            count_item(
+                &world.get::<Bags>(1).unwrap().inventory,
+                "minor_healing_salve"
+            ),
+            1
+        );
         assert!(events.iter().any(|event| matches!(
             event,
             SimEvent::Crafted {
@@ -309,20 +296,11 @@ mod tests {
 
     #[test]
     fn interact_gather_resolves_node_entity_template() {
-        let player = create_player(1, "Herbalist", PlayerClass::Druid, 0.0, 0.0);
-        let mut node = Entity::blank(
-            2,
-            EntityKind::Loot,
-            "Silverleaf Patch",
-            Some("eastbrook_meadow_silverleaf"),
-            0.0,
-            0.0,
-        );
-        node.zone_id = "eastbrook".into();
-        let mut entities = vec![player, node];
-        let mut world = world_from_entities(&entities);
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Herbalist", PlayerClass::Druid, 0.0, 0.0);
+        let node = woc_content::gather_node("eastbrook_meadow_silverleaf").unwrap();
+        crate::ecs::spawn::create_gather_node(&mut world, 2, node);
         let mut events = Vec::new();
-
         assert!(handle_interact(
             &mut world,
             1,
@@ -337,7 +315,9 @@ mod tests {
             &InteractAction::Gather { node_id: 2 },
             &mut events,
         ));
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(count_item(&entities[0].inventory, "silverleaf"), 1);
+        assert_eq!(
+            count_item(&world.get::<Bags>(1).unwrap().inventory, "silverleaf"),
+            1
+        );
     }
 }

@@ -4,7 +4,7 @@ use woc_persist::{
     Character, CharacterSave, EquipmentDto, InvStackDto, MailDto, MarketListingDto,
     ProfessionSkillDto, QuestProgressDto, RealmEconomy, TalentRankDto,
 };
-use woc_sim::entity::{Equipment, InvStack, QuestProgress};
+use woc_sim::ecs::components::{Equipment, InvStack, QuestProgress};
 use woc_sim::mail::MailItem;
 use woc_sim::market::Listing;
 use woc_sim::persist_state::{quest_state_from_str, quest_state_to_str, PlayerPersistentState};

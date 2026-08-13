@@ -321,10 +321,16 @@ async fn ensure_tick_loop(shared: Arc<Shared>) {
                         let (_primary_snap, events) = realm.sim.tick_all();
                         let players: Vec<EntityId> = realm
                             .sim
-                            .entities
-                            .iter()
-                            .filter(|e| e.kind == woc_protocol::EntityKind::Player)
-                            .map(|e| e.id)
+                            .world
+                            .live_ids()
+                            .filter(|&id| {
+                                realm
+                                    .sim
+                                    .world
+                                    .get::<woc_sim::ecs::components::Identity>(id)
+                                    .map(|i| i.kind)
+                                    == Some(woc_protocol::EntityKind::Player)
+                            })
                             .collect();
                         let mut snaps = Vec::new();
                         for pid in players {
@@ -388,9 +394,16 @@ mod tests {
         let mut realm = Realm::new(Sim::new_empty_eastbrook());
         let npc_before = realm
             .sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Npc)
+            .world
+            .live_ids()
+            .filter(|&id| {
+                realm
+                    .sim
+                    .world
+                    .get::<woc_sim::ecs::components::Identity>(id)
+                    .map(|i| i.kind)
+                    == Some(EntityKind::Npc)
+            })
             .count();
         assert!(npc_before >= 3);
         let a = realm
@@ -404,13 +417,20 @@ mod tests {
         assert_ne!(a, b);
         let npc_after = realm
             .sim
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Npc)
+            .world
+            .live_ids()
+            .filter(|&id| {
+                realm
+                    .sim
+                    .world
+                    .get::<woc_sim::ecs::components::Identity>(id)
+                    .map(|i| i.kind)
+                    == Some(EntityKind::Npc)
+            })
             .count();
         assert_eq!(npc_before, npc_after);
         realm.sim.despawn_player(a);
-        assert!(realm.sim.entities.iter().any(|e| e.id == b));
+        assert!(realm.sim.world.contains(b));
     }
 
     #[test]
@@ -424,7 +444,7 @@ mod tests {
             pos_x: 12.0,
             pos_z: 8.0,
             inventory: vec![],
-            equipment: woc_sim::entity::Equipment {
+            equipment: woc_sim::ecs::components::Equipment {
                 main_hand: Some("worn_sword".into()),
                 chest: Some("recruit_tunic".into()),
                 ..Default::default()
@@ -456,8 +476,12 @@ mod tests {
         let a = realm.sim.spawn_player("A", PlayerClass::Warrior).unwrap();
         let b = realm.sim.spawn_player("B", PlayerClass::Rogue).unwrap();
         let (ax0, az0) = {
-            let p = realm.sim.entities.iter().find(|e| e.id == a).unwrap();
-            (p.x, p.z)
+            let t = realm
+                .sim
+                .world
+                .get::<woc_sim::ecs::components::Transform>(a)
+                .unwrap();
+            (t.x, t.z)
         };
         WorldHost::push_intent(
             &mut realm.sim,
@@ -477,8 +501,12 @@ mod tests {
         );
         let _ = realm.sim.tick_all();
         let (ax1, az1) = {
-            let p = realm.sim.entities.iter().find(|e| e.id == a).unwrap();
-            (p.x, p.z)
+            let t = realm
+                .sim
+                .world
+                .get::<woc_sim::ecs::components::Transform>(a)
+                .unwrap();
+            (t.x, t.z)
         };
         assert!(
             (az1 - az0).abs() > 1e-3 || (ax1 - ax0).abs() > 1e-3,

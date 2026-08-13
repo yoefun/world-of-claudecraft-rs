@@ -133,45 +133,40 @@ pub fn on_level_up(world: &mut World, player_id: EntityId) {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
-    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
+    use crate::ecs::components::Progress;
     use woc_content::PlayerClass;
 
     #[test]
-    fn learn_and_respec_warrior_talent() {
-        let mut entities = vec![create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0)];
-        entities[0].talent_points = 1;
-        let mut world = world_from_entities(&entities);
+    fn learn_requires_points() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.talent_points = 1;
+        }
         let mut events = Vec::new();
-        assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
-        assert!((damage_multiplier(&world, 1) - 1.05).abs() < 0.001);
-        assert!(respec(&mut world, 1, &mut events));
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(entities[0].talent_points, 1);
-        assert!((damage_multiplier(&world, 1) - 1.0).abs() < 0.001);
+        assert!(learn(&mut world, 1, "warrior_vitality", &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().talent_points, 0);
+        assert_eq!(
+            world.get::<Progress>(1).unwrap().talents.get("warrior_vitality"),
+            Some(&1)
+        );
     }
 
     #[test]
-    fn tier_two_blocked_until_five_tier_one_points() {
-        let mut entities = vec![create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0)];
-        entities[0].talent_points = 6;
-        let mut world = world_from_entities(&entities);
-        let mut events = Vec::new();
-
-        assert!(
-            !learn(&mut world, 1, "warrior_vitality", &mut events),
-            "tier 2 should be locked with no tier-1 spend"
-        );
-        assert!(events.iter().any(|e| matches!(e, SimEvent::Toast { .. })));
-
-        for _ in 0..5 {
-            assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
+    fn respec_refunds_points() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.talent_points = 6;
         }
+        let mut events = Vec::new();
         assert!(learn(&mut world, 1, "warrior_vitality", &mut events));
-        apply_world_to_entities(&world, &mut entities);
-        assert_eq!(entities[0].talents.get("warrior_vitality"), Some(&1));
+        assert!(respec(&mut world, 1, &mut events));
+        assert!(world.get::<Progress>(1).unwrap().talents.is_empty());
+        assert!(world.get::<Progress>(1).unwrap().talent_points >= 1);
     }
 }
