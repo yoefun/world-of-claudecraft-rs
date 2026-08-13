@@ -270,6 +270,14 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     }
                 }
             }
+            WsClientMsg::PartyDecline
+            | WsClientMsg::PartyKick { .. }
+            | WsClientMsg::PartyPromote { .. }
+            | WsClientMsg::PartyDisband
+            | WsClientMsg::PartyReadyCheck
+            | WsClientMsg::PartyReadyRespond { .. }
+            | WsClientMsg::ConvertToRaid
+            | WsClientMsg::ConvertToParty => {}
             WsClientMsg::Chat { channel, text } => {
                 if let Some(b) = &binding {
                     let mut realm = shared.realm.lock().await;
