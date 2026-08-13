@@ -77,14 +77,22 @@ fn total_craft_fee(recipe: &RecipeDef, count: u16) -> u32 {
     craft_fee(recipe) * u32::from(count)
 }
 
+fn can_fit_craft(trial: &mut Inventory, recipe: &RecipeDef) -> bool {
+    if !remove_reagents(trial, recipe.reagents) {
+        return false;
+    }
+    trial
+        .try_add(ItemStack {
+            item: recipe.result,
+            count: recipe.result_count,
+        })
+        .is_ok()
+}
+
 fn can_fit_batch(inv: &Inventory, recipe: &RecipeDef, count: u16) -> bool {
     let mut trial = inv.clone();
     for _ in 0..count {
-        let stack = ItemStack {
-            item: recipe.result,
-            count: recipe.result_count,
-        };
-        if trial.try_add(stack).is_err() {
+        if !can_fit_craft(&mut trial, recipe) {
             return false;
         }
     }
@@ -154,12 +162,8 @@ pub fn complete_craft(
         if gold.copper < fee {
             break;
         }
-        let stack = ItemStack {
-            item: recipe.result,
-            count: recipe.result_count,
-        };
         let mut trial = inv.clone();
-        if trial.try_add(stack).is_err() {
+        if !can_fit_craft(&mut trial, recipe) {
             break;
         }
 
@@ -367,6 +371,48 @@ mod tests {
 
         assert_eq!(inv.count(ItemId::CopperOre), 0);
         assert_eq!(inv.count(ItemId::FineCopperOre), 0);
+    }
+
+    #[test]
+    fn full_bag_fits_result_after_reagents_consumed() {
+        let mut inv = Inventory::with_capacity(1);
+        inv.try_add(ItemStack {
+            item: ItemId::CopperOre,
+            count: 2,
+        })
+        .unwrap();
+        let gold = Gold { copper: 100 };
+
+        evaluate_craft_admission(
+            RecipeId::SmeltCopper,
+            1,
+            field_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let mut gold = gold;
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+        let grant = complete_craft(
+            RecipeId::SmeltCopper,
+            1,
+            field_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::CopperBar), 1);
+        assert_eq!(inv.count(ItemId::CopperOre), 0);
     }
 
     #[test]
