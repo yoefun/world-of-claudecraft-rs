@@ -16,13 +16,14 @@ mod visuals;
 mod world_setup;
 
 use bevy::prelude::*;
+use std::sync::mpsc::Receiver;
 use std::sync::Mutex;
 use uuid::Uuid;
 use woc_protocol::{
     EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg,
 };
 use woc_sim::Sim;
-use woc_version::footer;
+use woc_version::{footer, VersionInfo};
 
 fn main() {
     App::new()
@@ -37,6 +38,7 @@ fn main() {
         .init_state::<AppState>()
         .init_resource::<PlayMode>()
         .init_resource::<AuthSession>()
+        .init_resource::<RealmCompat>()
         .insert_resource(ClearColor(Color::srgb(0.45, 0.62, 0.78)))
         .insert_resource(AmbientLight {
             color: Color::srgb(0.92, 0.94, 0.88),
@@ -103,6 +105,93 @@ pub(crate) enum PlayMode {
     #[default]
     Offline,
     Online,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) enum RealmCompatState {
+    #[default]
+    Idle,
+    Checking,
+    Compatible {
+        realm_rewrite: String,
+        protocol_rev: u32,
+    },
+    Incompatible {
+        message: String,
+    },
+    Unreachable {
+        message: String,
+    },
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct RealmCompat {
+    pub(crate) state: RealmCompatState,
+    pub(crate) pending: Option<Receiver<Result<VersionInfo, String>>>,
+}
+
+impl RealmCompat {
+    pub(crate) fn status_line(&self) -> String {
+        match &self.state {
+            RealmCompatState::Idle => "Online: not checked".into(),
+            RealmCompatState::Checking => "Online: checking realm version…".into(),
+            RealmCompatState::Compatible {
+                realm_rewrite,
+                protocol_rev,
+            } => format!("Online: compatible · realm {realm_rewrite} · proto {protocol_rev}"),
+            RealmCompatState::Incompatible { message }
+            | RealmCompatState::Unreachable { message } => message.clone(),
+        }
+    }
+
+    pub(crate) fn begin_probe(&mut self) {
+        if matches!(self.state, RealmCompatState::Checking) {
+            return;
+        }
+        self.state = RealmCompatState::Checking;
+        self.pending = Some(crate::api::spawn_fetch_version());
+    }
+
+    pub(crate) fn poll(&mut self) {
+        let Some(rx) = self.pending.as_mut() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(Ok(info)) => {
+                self.pending = None;
+                let client = woc_version::ClientIdentity {
+                    rewrite_version: woc_version::REWRITE_VERSION.to_string(),
+                    protocol_rev: woc_protocol::PROTOCOL_REV,
+                };
+                match woc_version::check_compat(&client, &info.realm_identity()) {
+                    woc_version::Compat::Compatible => {
+                        self.state = RealmCompatState::Compatible {
+                            realm_rewrite: info.rewrite_version,
+                            protocol_rev: info.protocol_rev,
+                        };
+                    }
+                    other => {
+                        self.state = RealmCompatState::Incompatible {
+                            message: other.user_message(),
+                        };
+                    }
+                }
+            }
+            Ok(Err(message)) => {
+                self.pending = None;
+                self.state = RealmCompatState::Unreachable {
+                    message: format!("version: unreachable ({message})"),
+                };
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.pending = None;
+                self.state = RealmCompatState::Unreachable {
+                    message: "version: unreachable (version thread disconnected)".into(),
+                };
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

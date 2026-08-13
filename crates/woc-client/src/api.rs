@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use woc_version::VersionInfo;
 
 /// HTTP API base (same host as the WS game server).
 pub const API_BASE: &str = "http://127.0.0.1:8787";
@@ -162,6 +163,17 @@ fn enter_character_blocking(token: &str, id: Uuid) -> CharacterResult {
     }
 }
 
+fn fetch_version_blocking() -> Result<VersionInfo, String> {
+    let url = format!("{API_BASE}/version");
+    match agent().get(&url).call() {
+        Ok(resp) => resp
+            .into_json::<VersionInfo>()
+            .map_err(|e| format!("bad version response: {e}")),
+        Err(ureq::Error::Status(_, resp)) => Err(read_error(resp)),
+        Err(e) => Err(format!("request failed: {e}")),
+    }
+}
+
 /// Spawn a thread that registers a new account.
 pub fn spawn_register(username: String, password: String) -> Receiver<AuthResult> {
     let (tx, rx) = mpsc::channel();
@@ -226,6 +238,18 @@ pub fn spawn_enter_character(token: String, id: Uuid) -> Receiver<CharacterResul
     rx
 }
 
+/// Spawn a thread that GETs `/version`.
+pub fn spawn_fetch_version() -> Receiver<Result<VersionInfo, String>> {
+    let (tx, rx) = mpsc::channel();
+    thread::Builder::new()
+        .name("woc-api-version".into())
+        .spawn(move || {
+            let _ = tx.send(fetch_version_blocking());
+        })
+        .expect("spawn api version");
+    rx
+}
+
 fn delete_character_blocking(token: &str, id: Uuid) -> Result<(), String> {
     let url = format!("{API_BASE}/api/characters/{id}");
     match agent()
@@ -277,5 +301,21 @@ mod tests {
         let list: CharacterListResponse = serde_json::from_str(json).unwrap();
         assert_eq!(list.characters.len(), 1);
         assert_eq!(list.characters[0].name, "Aldric");
+    }
+
+    #[test]
+    fn version_info_from_server_json() {
+        let json = r#"{
+            "rewrite_version": "1.3.0",
+            "upstream_version": "0.31.0",
+            "upstream_commit": "abc",
+            "upstream_repo": "https://example.invalid",
+            "parity_target": "online-hard",
+            "protocol_rev": 6,
+            "min_client_version": "1.3.0"
+        }"#;
+        let info: woc_version::VersionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.protocol_rev, 6);
+        assert_eq!(info.min_client_version, "1.3.0");
     }
 }
