@@ -1,7 +1,7 @@
-# Economy-depth design — `1.15.0` / `economy-depth`
+# Economy-depth design — `1.16.0` / `economy-depth`
 
-**Status:** Implemented (1.15.0).  
-**Baseline:** rewrite `1.14.0` / `auction-depth` (Auctioneer Lise, instance listings, 5% cut, mail-always proceeds).  
+**Status:** Implemented (1.16.0).  
+**Baseline:** rewrite `1.15.0` / `gear-more` on `develop` (plus auctioneer/instance-listing work from this wave).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `economy-depth`.
 
@@ -9,7 +9,7 @@ Related: auction depth [`2026-08-13-auction-depth-design.md`](2026-08-13-auction
 
 ## 1. Goal
 
-Auction-depth left five honest non-goals: bidding, duration tiers, search/pagination, soulbound, and banker/mailbox NPCs. This program ships those on the same buyout house without a second WoW auction client.
+Auction-depth left five honest non-goals: bidding, duration tiers, search/pagination, soulbound, and banker/mailbox NPCs. This program ships those on the same buyout house without a second WoW auction client — and lands Auctioneer Lise / instance listings that were parallel to reputation and gear-more on `develop`.
 
 > Bid or buyout at Auctioneer Lise. Pick 12 / 24 / 48 hours. Bound gear cannot leave the character. Talk to the banker and the post to use vault and mail.
 
@@ -25,8 +25,9 @@ Auction-depth left five honest non-goals: bidding, duration tiers, search/pagina
 
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
-| **1.14.0** | `auction-depth` | Auctioneer, instance listings, house cut, mail settlement |
-| **1.15.0** | `economy-depth` | Bids, 12/24/48 h, client search pages, soulbound, banker + mailbox NPCs |
+| **1.14.0** | `reputation` | Hub factions, standing, vendor gates |
+| **1.15.0** | `gear-more` | Extra slots, Hunter DW, OH enchant, loot quality |
+| **1.16.0** | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox |
 
 Tick-phase fingerprint stays **`3214741777866168171`**. Auction house stays a **per-realm** `Sim.market` resource. English-only toasts. Client never decides prices, bids, binds, or cuts.
 

@@ -132,6 +132,7 @@ impl MemoryStore {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Vec::new(),
         };
         g.characters.insert(character.id, character.clone());
         Ok(character)
@@ -263,6 +264,7 @@ mod tests {
                 count: 2,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
             })],
             equipment: EquipmentDto {
@@ -286,6 +288,7 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
             })],
             bank_copper: 0,
@@ -301,6 +304,7 @@ mod tests {
             hearth_z: 34.0,
             hearth_ready_tick: 77,
             stance_id: String::new(),
+            reputation: vec![],
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();
         assert_eq!(saved.to_save(), save);

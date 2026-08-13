@@ -7,6 +7,7 @@ pub mod classes;
 pub mod delves;
 pub mod dungeons;
 pub mod enchants;
+pub mod factions;
 pub mod gather_nodes;
 pub mod graveyards;
 pub mod items;
@@ -40,6 +41,12 @@ pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
 pub use enchants::{
     disenchant_yield, profession_enchant, EnchantReagent, ProfessionEnchantDef, PROFESSION_ENCHANTS,
+};
+pub use factions::{
+    clamp_reputation, discounted_price, faction, standing_at, standing_from_value, standing_next,
+    vendor_discount_pct, FactionDef, RepAward, Standing, EXALTED_AT, FACTIONS,
+    FACTION_EASTBROOK_WATCH, FACTION_EASTFEN_CIRCLE, FACTION_HIGHWATCH, FACTION_MIREFEN_FERRY,
+    FRIENDLY_AT, HONORED_AT, STANDING_CAP, STANDING_FLOOR,
 };
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
@@ -120,7 +127,7 @@ mod tests {
                         assert!(it.armor_class.is_none(), "{}", it.id);
                     } else if matches!(
                         it.equip_slot,
-                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger)
+                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger | ItemEquipSlot::Trinket)
                     ) {
                         assert!(style.is_none(), "{}", it.id);
                         assert!(it.armor_class.is_none(), "{}", it.id);
@@ -561,6 +568,15 @@ mod tests {
         assert!(npc("auctioneer_lise").unwrap().is_auctioneer());
         assert!(npc("banker_holme").unwrap().is_banker());
         assert!(npc("mailbox_post").unwrap().is_mailbox());
+        assert_eq!(
+            npc("trader_wilkes").unwrap().faction,
+            Some("eastbrook_watch")
+        );
+        assert!(npc("trader_wilkes")
+            .unwrap()
+            .vendor_stock
+            .iter()
+            .any(|o| o.item_id == "watch_signet" && o.min_standing == crate::Standing::Friendly));
     }
 
     #[test]
@@ -604,6 +620,74 @@ mod tests {
         assert_eq!(item("boar_tusk").unwrap().bind, ItemBind::OnPickup);
         assert_eq!(item("silverleaf").unwrap().bind, ItemBind::None);
         assert_eq!(item("travelers_ration").unwrap().bind, ItemBind::None);
+    }
+
+    #[test]
+    fn factions_and_reputation_tables_are_consistent() {
+        use crate::{faction, FACTIONS};
+
+        assert_eq!(FACTIONS.len(), 4);
+        for n in NPCS.iter() {
+            if let Some(id) = n.faction {
+                assert!(faction(id).is_some(), "{} unknown faction {id}", n.id);
+            }
+            for offer in n.vendor_stock {
+                assert!(
+                    ITEMS.iter().any(|i| i.id == offer.item_id),
+                    "vendor {} missing gated item {}",
+                    n.id,
+                    offer.item_id
+                );
+            }
+        }
+        for q in QUESTS.iter() {
+            if let Some(rep) = q.reward.reputation {
+                assert!(
+                    faction(rep.faction_id).is_some(),
+                    "quest {} unknown faction {}",
+                    q.id,
+                    rep.faction_id
+                );
+                assert!(rep.amount > 0, "quest {} reputation must be positive", q.id);
+            }
+        }
+        for m in MOBS.iter() {
+            if let Some(rep) = m.kill_reputation {
+                assert!(
+                    faction(rep.faction_id).is_some(),
+                    "mob {} unknown faction {}",
+                    m.id,
+                    rep.faction_id
+                );
+                assert!(
+                    rep.amount > 0,
+                    "mob {} kill reputation must be positive",
+                    m.id
+                );
+            }
+        }
+        assert_eq!(
+            quest("report_to_alden")
+                .unwrap()
+                .reward
+                .reputation
+                .unwrap()
+                .amount,
+            150
+        );
+        assert_eq!(
+            quest("wolves_at_the_gate")
+                .unwrap()
+                .reward
+                .reputation
+                .unwrap()
+                .faction_id,
+            "eastbrook_watch"
+        );
+        assert_eq!(
+            item("watch_signet").unwrap().equip_slot,
+            Some(ItemEquipSlot::Finger)
+        );
     }
 
     #[test]

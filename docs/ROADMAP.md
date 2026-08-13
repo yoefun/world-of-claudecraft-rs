@@ -21,9 +21,9 @@
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
 | **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
-| **1.14.0** (shipped) | `auction-depth` | Auctioneer NPC, instance-preserving buyout listings, 5% house cut, mail settlement |
-| **1.15.0** (this branch) | `economy-depth` | Bids, 12/24/48 h, search pages, soulbound, banker + mailbox NPCs |
-
+| **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
+| **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
+| **1.16.0** (this branch) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
 ## Completion program (closed)
 
 **Definition of done:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](superpowers/specs/2026-07-28-rust-rewrite-completion-design.md)  
@@ -39,6 +39,12 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
 
+## Reputation (shipped as `1.14.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-reputation-design.md`](superpowers/specs/2026-08-13-reputation-design.md)
+
+Four hub factions on a player `Reputation` column. Quest and kill grants; Friendly vendor discount and gated `watch_signet`; Unfriendly refuse. Protocol rev stays **8**.
+
 ## Gear depth (shipped as `1.12.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-depth-design.md`](superpowers/specs/2026-08-13-gear-depth-design.md)  
@@ -53,18 +59,18 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
 
-## Auction depth (shipped as `1.14.0`)
+## Gear more (shipped as `1.15.0`)
 
-**Definition of done:** [`docs/superpowers/specs/2026-08-13-auction-depth-design.md`](superpowers/specs/2026-08-13-auction-depth-design.md)  
-**Implementation:** [`docs/superpowers/plans/2026-08-13-auction-depth.md`](superpowers/plans/2026-08-13-auction-depth.md)
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-more-design.md`](superpowers/specs/2026-08-13-gear-more-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
 
-The 1.0-pre market is a buyout bulletin board that forgets durability and enchants. Auction-depth adds Eastbrook Auctioneer Lise, slot-accurate instance listings, a 5% sale cut, and mail-always proceeds. Protocol rev stays **8**.
+Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
 
-## Economy depth (shipped as `1.15.0`)
+## Economy depth (shipped as `1.16.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-economy-depth-design.md`](superpowers/specs/2026-08-13-economy-depth-design.md)
 
-Auction-depth left bids, duration tiers, search, soulbound, and banker/mailbox NPCs out. Economy-depth ships those on the same house: 12/24/48 h listings, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
+Auctioneer Lise, instance listings, 5% cut, mail-always proceeds, then bids, 12/24/48 h, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
 
 ## Client version gate (current)
 

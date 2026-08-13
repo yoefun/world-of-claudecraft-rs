@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::ecs::components::{Bags, ClassKit, Durable, Identity, InvStack, Progress};
 use crate::ecs::World;
 use crate::inventory::{grant_stack, take_from_slot};
+use woc_content::ItemQuality;
 use woc_protocol::{EntityId, MailSnapshot, SimEvent};
 
 /// Durable mailbox entry (survives reconnect / restart when persisted).
@@ -20,6 +21,7 @@ pub struct MailItem {
     pub item_count: u32,
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
+    pub quality: Option<ItemQuality>,
     pub bound: bool,
 }
 
@@ -91,6 +93,7 @@ impl Mailbox {
                         item_count: m.item_count,
                         durability: m.durability,
                         enchant_id: m.enchant_id.clone(),
+                        quality: m.quality.map(|q| q.as_str().to_string()),
                         bound: m.bound,
                     })
                     .collect()
@@ -150,6 +153,7 @@ impl Mailbox {
         let mut item_count = 0u32;
         let mut durability = None;
         let mut enchant_id = None;
+        let mut quality = None;
         let mut bound = false;
         if let Some(slot) = bag_slot {
             let stack = world
@@ -176,6 +180,7 @@ impl Mailbox {
             item_count = taken.count;
             durability = taken.durability;
             enchant_id = taken.enchant_id;
+            quality = taken.quality;
             bound = taken.bound;
         }
 
@@ -201,6 +206,7 @@ impl Mailbox {
                 item_count,
                 durability,
                 enchant_id,
+                quality,
                 bound,
             });
         events.push(SimEvent::MailSent {
@@ -222,15 +228,16 @@ impl Mailbox {
     ) -> u32 {
         let mail_id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
-        let (item_id, item_count, durability, enchant_id, bound) = match attachment {
+        let (item_id, item_count, durability, enchant_id, quality, bound) = match attachment {
             Some(stack) => (
                 Some(stack.item_id),
                 stack.count,
                 stack.durability,
                 stack.enchant_id,
+                stack.quality,
                 stack.bound,
             ),
-            None => (None, 0, None, None, false),
+            None => (None, 0, None, None, None, false),
         };
         self.inbox
             .entry(to_durable.to_string())
@@ -245,6 +252,7 @@ impl Mailbox {
                 item_count,
                 durability,
                 enchant_id,
+                quality,
                 bound,
             });
         mail_id
@@ -274,6 +282,7 @@ impl Mailbox {
                 stack.durability = mail.durability;
             }
             stack.enchant_id = mail.enchant_id.clone();
+            stack.quality = mail.quality;
             stack.bound = mail.bound;
             let granted = if let Some(bags) = world.get_mut::<Bags>(player) {
                 grant_stack(&mut bags.inventory, stack)
@@ -380,6 +389,7 @@ mod tests {
                 count: 1,
                 durability: Some(7),
                 enchant_id: Some("coarse_sharpening".into()),
+                quality: Some(ItemQuality::Uncommon),
                 bound: false,
             }),
         );
@@ -400,6 +410,7 @@ mod tests {
             .unwrap();
         assert_eq!(sword.durability, Some(7));
         assert_eq!(sword.enchant_id.as_deref(), Some("coarse_sharpening"));
+        assert_eq!(sword.quality, Some(ItemQuality::Uncommon));
     }
 
     #[test]
@@ -416,6 +427,7 @@ mod tests {
                 count: 1,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: true,
             });
         }

@@ -141,6 +141,7 @@ pub struct CraftGrant {
     pub gold_spent: u32,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn complete_craft(
     recipe_id: RecipeId,
     count: u16,

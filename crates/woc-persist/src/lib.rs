@@ -35,7 +35,7 @@ pub use memory::MemoryStore;
 pub use models::{
     equipment_from_json, equipment_to_json, inventory_from_json, inventory_to_json,
     quests_from_json, quests_to_json, Character, CharacterSave, CharacterSummary, EquipmentDto,
-    InvStackDto, ProfessionSkillDto, QuestProgressDto, TalentRankDto,
+    InvStackDto, ProfessionSkillDto, QuestProgressDto, ReputationDto, TalentRankDto,
 };
 pub use password::{hash_password, verify_password};
 pub use store::{validate_character_name, validate_username};
@@ -211,6 +211,7 @@ mod serialize_tests {
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
         assert!(eq.off_hand_enchant.is_none());
+        assert!(eq.back.is_none());
     }
 
     #[test]
@@ -221,6 +222,7 @@ mod serialize_tests {
                 count: 3,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
             }),
             None,

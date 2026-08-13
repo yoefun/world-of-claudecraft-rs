@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.15.0` / `economy-depth`.  
+**Current rewrite:** `1.16.0` / `economy-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; auction depth shipped as `1.14.0`; economy depth shipped as `1.15.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`.
 
 ## Economy depth (`economy-depth`) — done
 
@@ -10,27 +10,38 @@ Design: [`../superpowers/specs/2026-08-13-economy-depth-design.md`](../superpowe
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
+| Auctioneer Lise | done | Eastbrook `(4, 6)`; Talk opens session; `[U]` |
+| Instance listings | done | Slot take; durability + enchant persist |
 | Bidding | done | `MarketBid`; outbid mail; expire-win mails item + proceeds |
 | Duration 12/24/48h | done | Fees 5/10/20c; ticks 864k / 1.728M / 3.456M |
 | Search / pages | done | Client filter `/`; `[` `]` pages of 8 |
 | Soulbound | done | OnEquip gear / OnPickup quest; blocks list + mail |
-| Banker Holme | done | Eastbrook `(6, 6)`; `[B]`; `"Talk to a banker first."` |
-| Eastbrook Post | done | Eastbrook `(0, 8)`; `[M]`; `"Talk to a mailbox first."` |
+| Banker Holme | done | Eastbrook `(6, 6)`; `[K]`; `"Talk to a banker first."` |
+| Eastbrook Post | done | Eastbrook `(0, 8)`; `[I]`; `"Talk to a mailbox first."` |
 | Protocol | done | Rev 8 additive bid/bound/`can_bank`/`can_mail` |
 
-## Auction depth (`auction-depth`) — done
-
-Design: [`../superpowers/specs/2026-08-13-auction-depth-design.md`](../superpowers/specs/2026-08-13-auction-depth-design.md)  
-Plan: [`../superpowers/plans/2026-08-13-auction-depth.md`](../superpowers/plans/2026-08-13-auction-depth.md)
+## Gear more (`gear-more`) — done
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Auctioneer Lise | done | Eastbrook `(4, 6)`; Talk opens session; `[A]` |
-| Instance listings | done | Slot take; durability + enchant persist |
-| Quest block | done | Same toast as vendor sell |
-| House cut 5% | done | `price / 20` destroyed; proceeds mailed |
-| Mail settlement | done | Online sellers get mail, not silent copper |
-| Protocol | done | Rev 8 additive fields |
+| Extra slots | done | Shoulder/Back/Wrist/Hands/Waist + Trinket/Trinket2 |
+| Hunter dual-wield | done | Warrior/Rogue/Hunter; shaman still no |
+| OH enchant | done | Second oil → OH; full AP/SP; sheet `[enchant]` |
+| Loot quality | done | Stack quality; `max(catalog, roll)` after drop list |
+| Client sheet | done | Extra lines; unequip `0-=[]\;` |
+| Protocol | done | Rev 8; additive extra slots / `off_hand_enchant` / `quality` |
+
+## Reputation (`reputation`) — done
+
+Design: [`../superpowers/specs/2026-08-13-reputation-design.md`](../superpowers/specs/2026-08-13-reputation-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Faction table + standing ladder | done | Watch / Circle / Ferry / Highwatch; Neutral 0 |
+| Quest + kill grants | done | Party-shared on kills; `Reputation` column |
+| Vendor discount / gates | done | Friendly 5%…Exalted 20%; Unfriendly refuse; `watch_signet` |
+| Snapshot + persist | done | Additive `reputation` on rev **8**; completion JSON |
+| Client sheet | done | **C** lists standing |
 
 ## Gear slots (`gear-slots`) — done
 
@@ -181,8 +192,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.15.0` / economy-depth (upstream still 0.31.0) |
-| Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
+| Version / upstream pin | done | `1.16.0` / economy-depth (upstream still 0.31.0) || Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |

@@ -6,7 +6,7 @@ use woc_protocol::{EntityId, SimEvent};
 use crate::ecs::components::{Bags, InvStack};
 use crate::ecs::World;
 
-/// Remove `count` from a specific bag slot, preserving durability / enchant.
+/// Remove `count` from a specific bag slot, preserving instance state.
 pub fn take_from_slot(inv: &mut [Option<InvStack>], slot: u8, count: u32) -> Option<InvStack> {
     let entry = inv.get_mut(slot as usize)?;
     let mut stack = entry.take()?;
@@ -20,6 +20,7 @@ pub fn take_from_slot(inv: &mut [Option<InvStack>], slot: u8, count: u32) -> Opt
         count: take,
         durability: stack.durability,
         enchant_id: stack.enchant_id.clone(),
+        quality: stack.quality,
         bound: stack.bound,
     };
     stack.count -= take;
@@ -29,7 +30,7 @@ pub fn take_from_slot(inv: &mut [Option<InvStack>], slot: u8, count: u32) -> Opt
     Some(taken)
 }
 
-/// Insert a concrete stack. Merge only with the same item_id + durability + enchant_id
+/// Insert a concrete stack. Merge only with matching instance state
 /// when the catalog stack size allows. Weapons/armor stay unstacked.
 pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
     if incoming.count == 0 {
@@ -48,6 +49,7 @@ pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
             if stack.item_id == incoming.item_id
                 && stack.durability == incoming.durability
                 && stack.enchant_id == incoming.enchant_id
+                && stack.quality == incoming.quality
                 && stack.bound == incoming.bound
                 && stack.count < max_stack
             {
@@ -71,6 +73,7 @@ pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
             count: add,
             durability: incoming.durability,
             enchant_id: incoming.enchant_id.clone(),
+            quality: incoming.quality,
             bound: incoming.bound,
         });
         remaining -= add;
@@ -185,6 +188,7 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
         });
         inv[1] = Some(InvStack {
@@ -192,6 +196,7 @@ mod tests {
             count: 2,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
         });
         let taken = take_from_slot(&mut inv, 1, 1).unwrap();
@@ -208,6 +213,7 @@ mod tests {
             count: 1,
             durability: Some(7),
             enchant_id: Some("coarse_sharpening".into()),
+            quality: Some(woc_content::ItemQuality::Uncommon),
             bound: false,
         };
         assert!(grant_stack(&mut inv, worn.clone()));

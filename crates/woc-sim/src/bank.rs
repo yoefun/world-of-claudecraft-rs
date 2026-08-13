@@ -257,6 +257,7 @@ mod tests {
                 count: 1,
                 durability: Some(7),
                 enchant_id: None,
+                quality: None,
                 bound: true,
             });
         }

@@ -4,6 +4,7 @@ use crate::ecs::components::{Bags, ClassKit, Durable, Identity, InvStack, Progre
 use crate::ecs::World;
 use crate::inventory::{grant_stack, take_from_slot};
 use crate::mail::Mailbox;
+use woc_content::ItemQuality;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
 /// Ticks in one real-time hour at 20 Hz.
@@ -68,6 +69,7 @@ pub struct Listing {
     pub count: u32,
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
+    pub quality: Option<ItemQuality>,
     pub bound: bool,
     pub price: u32,
     pub start_bid: u32,
@@ -235,6 +237,7 @@ impl AuctionHouse {
             count: taken.count,
             durability: taken.durability,
             enchant_id: taken.enchant_id,
+            quality: taken.quality,
             bound: taken.bound,
             price,
             start_bid,
@@ -569,6 +572,7 @@ fn listing_snapshot(listing: &Listing, mine: bool) -> MarketListingSnapshot {
         mine,
         durability: listing.durability,
         enchant_id: listing.enchant_id.clone(),
+        quality: listing.quality.map(|q| q.as_str().to_string()),
         expires_tick: listing.expires_tick,
         start_bid: listing.start_bid,
         current_bid: listing.current_bid,
@@ -583,6 +587,7 @@ fn listing_stack(listing: &Listing) -> InvStack {
         count: listing.count,
         durability: listing.durability,
         enchant_id: listing.enchant_id.clone(),
+        quality: listing.quality,
         bound: listing.bound,
     }
 }
@@ -649,6 +654,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
             price: 40,
             start_bid: 0,
@@ -681,6 +687,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
             price: 40,
             start_bid: 0,
@@ -717,6 +724,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
             price: 40,
             start_bid: 0,
@@ -745,6 +753,7 @@ mod tests {
                 count: 3,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
             });
             bags.inventory[1] = Some(InvStack {
@@ -752,6 +761,7 @@ mod tests {
                 count: 2,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
             });
         }
@@ -805,6 +815,7 @@ mod tests {
                 count: 1,
                 durability: Some(7),
                 enchant_id: Some("coarse_sharpening".into()),
+                quality: Some(ItemQuality::Rare),
                 bound: false,
             });
         }
@@ -816,6 +827,7 @@ mod tests {
             ah.listings[0].enchant_id.as_deref(),
             Some("coarse_sharpening")
         );
+        assert_eq!(ah.listings[0].quality, Some(ItemQuality::Rare));
     }
 
     #[test]
@@ -850,6 +862,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
             price: 50,
             start_bid: 0,
@@ -886,6 +899,7 @@ mod tests {
             count: 1,
             durability: Some(7),
             enchant_id: Some("coarse_sharpening".into()),
+            quality: Some(ItemQuality::Uncommon),
             bound: false,
             price: 40,
             start_bid: 0,
@@ -908,6 +922,7 @@ mod tests {
             .unwrap();
         assert_eq!(sword.durability, Some(7));
         assert_eq!(sword.enchant_id.as_deref(), Some("coarse_sharpening"));
+        assert_eq!(sword.quality, Some(ItemQuality::Uncommon));
     }
 
     fn npc_id_by_template(world: &World, template: &str) -> EntityId {
@@ -1001,6 +1016,7 @@ mod tests {
                 count: 1,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: true,
             });
         }
@@ -1078,6 +1094,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
             price: 80,
             start_bid: 10,
@@ -1139,6 +1156,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            quality: None,
             bound: false,
             price: 40,
             start_bid: 0,

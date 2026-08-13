@@ -16,6 +16,8 @@ pub struct MailDto {
     #[serde(default)]
     pub enchant_id: Option<String>,
     #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
     pub bound: bool,
 }
 
@@ -32,6 +34,8 @@ pub struct MarketListingDto {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
     #[serde(default)]
     pub bound: bool,
     #[serde(default)]
@@ -85,6 +89,7 @@ mod tests {
                 item_count: 0,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
             }],
             market: vec![MarketListingDto {
@@ -97,6 +102,7 @@ mod tests {
                 expires_tick: 100,
                 durability: None,
                 enchant_id: None,
+                quality: None,
                 bound: false,
                 start_bid: 0,
                 current_bid: 0,
@@ -118,6 +124,8 @@ mod tests {
         .unwrap();
         assert!(eco.mail[0].durability.is_none());
         assert!(eco.market[0].enchant_id.is_none());
+        assert!(eco.mail[0].quality.is_none());
+        assert!(eco.market[0].quality.is_none());
         assert!(!eco.mail[0].bound);
         assert_eq!(eco.market[0].start_bid, 0);
         assert!(eco.market[0].bidder_durable.is_none());

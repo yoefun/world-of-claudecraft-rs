@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Rewrite crate / product version (semver).
-pub const REWRITE_VERSION: &str = "1.15.0";
+pub const REWRITE_VERSION: &str = "1.16.0";
 
 /// Upstream TypeScript World of ClaudeCraft version this rewrite tracks.
 pub const UPSTREAM_VERSION: &str = "0.31.0";
@@ -18,7 +18,6 @@ pub const UPSTREAM_REPO: &str = "https://github.com/levy-street/world-of-claudec
 
 /// Current parity milestone name.
 pub const PARITY_TARGET: &str = "economy-depth";
-
 /// Short footer string for HUD / window titles.
 pub fn footer() -> String {
     format!("WoC-rs {REWRITE_VERSION} · upstream {UPSTREAM_VERSION}")
