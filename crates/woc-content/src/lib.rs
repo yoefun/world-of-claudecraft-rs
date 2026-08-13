@@ -28,8 +28,8 @@ pub mod zone1;
 pub mod zone2;
 pub mod zone3;
 
-pub use abilities::{ability, AbilityDef, ABILITIES};
-pub use ability_effects::{aura_for_ability, AbilityEffect, AuraDef, DamageSchool};
+pub use abilities::{ability, aura_for_ability, AbilityDef, ABILITIES};
+pub use ability_effects::{aura, AbilityEffect, AbilityFlags, AuraDef, DamageSchool, AURAS};
 pub use classes::{
     class_ability_for_slot, class_def, known_abilities_at_level, ClassDef, ClassKitEntry,
     PlayerClass, ResourceType, CLASSES,
@@ -117,8 +117,8 @@ mod tests {
         assert_eq!(CLASSES.len(), 9);
         for class in CLASSES {
             assert!(
-                class.kit.len() >= 3,
-                "{} kit needs ≥3 abilities, got {}",
+                class.kit.len() >= 4,
+                "{} kit needs ≥4 abilities, got {}",
                 class.name,
                 class.kit.len()
             );
@@ -177,6 +177,7 @@ mod tests {
             assert_eq!(primary.id, class.primary_ability);
             assert!(class_ability_for_slot(class.id, 2).is_some());
             assert!(class_ability_for_slot(class.id, 3).is_some());
+            assert!(class_ability_for_slot(class.id, 4).is_some());
         }
     }
 
@@ -382,9 +383,24 @@ mod tests {
 
     #[test]
     fn every_ability_declares_an_effect() {
-        assert_eq!(ABILITIES.len(), 29);
+        assert_eq!(ABILITIES.len(), 51);
         for def in ABILITIES {
             let _ = def.effect;
+            if let Some(aura_id) = def.aura {
+                assert!(
+                    aura(aura_id).is_some(),
+                    "ability {} aura {} missing from AURAS",
+                    def.id,
+                    aura_id
+                );
+            }
+            if matches!(def.effect, AbilityEffect::ApplyAura) {
+                assert!(
+                    def.aura.is_some(),
+                    "ApplyAura ability {} needs an aura id",
+                    def.id
+                );
+            }
         }
         assert!(matches!(
             ability("cleave").unwrap().effect,
@@ -402,6 +418,122 @@ mod tests {
             ability("earth_shock").unwrap().effect,
             AbilityEffect::Interrupt
         ));
+        assert!(matches!(
+            ability("execute").unwrap().effect,
+            AbilityEffect::Execute { .. }
+        ));
+        assert!(matches!(
+            ability("holy_shock").unwrap().effect,
+            AbilityEffect::HealOrHarm { .. }
+        ));
+        assert!(matches!(
+            ability("power_word_shield").unwrap().effect,
+            AbilityEffect::Absorb { .. }
+        ));
+        assert!(matches!(
+            ability("charge").unwrap().effect,
+            AbilityEffect::Charge { .. }
+        ));
+        assert_eq!(
+            class_def(PlayerClass::Hunter).resource_type,
+            ResourceType::Mana
+        );
+    }
+
+    #[test]
+    fn class_identity_slot5_signatures() {
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Priest, 5)
+                .expect("priest 5")
+                .id,
+            "power_word_shield"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Warrior, 5)
+                .expect("warrior 5")
+                .id,
+            "charge"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Mage, 5)
+                .expect("mage 5")
+                .id,
+            "blink"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Hunter, 5)
+                .expect("hunter 5")
+                .id,
+            "aspect_of_the_hawk"
+        );
+        assert!(ability("rend").is_some());
+        assert!(ability("shadow_word_pain").is_some());
+        assert!(ability("counterspell").is_some());
+        assert!(ability("multi_shot").is_some());
+    }
+
+    #[test]
+    fn class_forms_kit_signatures() {
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Shaman, 5)
+                .expect("shaman 5")
+                .id,
+            "lightning_shield"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Warlock, 4)
+                .expect("warlock 4")
+                .id,
+            "life_tap"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Warlock, 5)
+                .expect("warlock 5")
+                .id,
+            "fear"
+        );
+        assert!(ability("immolate").is_some());
+        assert!(ability("flame_shock").is_some());
+        assert_eq!(
+            ability("crusader_strike").unwrap().aura,
+            Some("seal_righteousness")
+        );
+    }
+
+    #[test]
+    fn every_class_kit_has_distinct_effects() {
+        use std::mem::discriminant;
+        for class in CLASSES {
+            let mut unique = Vec::new();
+            for entry in class.kit {
+                let def = ability(entry.ability_id).expect(entry.ability_id);
+                let kind = discriminant(&def.effect);
+                if !unique.contains(&kind) {
+                    unique.push(kind);
+                }
+            }
+            assert!(
+                unique.len() >= 2,
+                "{} kit needs ≥2 distinct AbilityEffect kinds, got {}",
+                class.name,
+                unique.len()
+            );
+        }
+        for class_id in ["paladin", "shaman", "druid", "priest"] {
+            let class = CLASSES
+                .iter()
+                .find(|c| c.id.as_str() == class_id)
+                .expect(class_id);
+            assert!(
+                class.kit.iter().any(|e| {
+                    matches!(
+                        ability(e.ability_id).map(|a| a.effect),
+                        Some(AbilityEffect::Heal { .. } | AbilityEffect::HealOrHarm { .. })
+                    )
+                }),
+                "{class_id} needs a heal"
+            );
+        }
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Ability definitions for class kits (slots 1–5).
 
-use crate::ability_effects::{AbilityEffect, DamageSchool};
+use crate::ability_effects::{aura, AbilityEffect, AbilityFlags, AuraDef, DamageSchool};
 
 #[derive(Debug, Clone)]
 pub struct AbilityDef {
@@ -14,7 +14,16 @@ pub struct AbilityDef {
     pub cast_time: f32,
     /// Minimum player level required to know / use this ability.
     pub min_level: u32,
+    /// Optional on-hit / ApplyAura id from the aura table.
+    pub aura: Option<&'static str>,
     pub effect: AbilityEffect,
+    pub flags: AbilityFlags,
+}
+
+/// Resolve the aura applied when `ability_id` lands. Combat must not match on
+/// ability id strings — this is the content-table lookup.
+pub fn aura_for_ability(ability_id: &str) -> Option<&'static AuraDef> {
+    ability(ability_id)?.aura.and_then(aura)
 }
 
 pub static ABILITIES: &[AbilityDef] = &[
@@ -28,7 +37,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "cleave",
@@ -39,10 +50,12 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 3,
+        aura: None,
         effect: AbilityEffect::AoeDamage {
             radius: 4.0,
             max_targets: 3,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "execute",
@@ -53,7 +66,38 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 6,
-        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
+        aura: None,
+        effect: AbilityEffect::Execute {
+            hp_pct: 0.2,
+            coefficient: 1.75,
+        },
+        flags: AbilityFlags::DEFAULT.dump_rage(),
+    },
+    AbilityDef {
+        id: "taunt",
+        name: "Taunt",
+        damage: 0.0,
+        cost: 0.0,
+        cooldown: 8.0,
+        range: 8.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Taunt { threat: 80.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "rend",
+        name: "Rend",
+        damage: 8.0,
+        cost: 10.0,
+        cooldown: 6.0,
+        range: 3.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("rend"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     // —— Paladin ——
     AbilityDef {
@@ -65,7 +109,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: Some("seal_righteousness"),
         effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "judgment",
@@ -76,9 +122,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 12.0,
         cast_time: 0.0,
         min_level: 3,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Holy,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "holy_shock",
@@ -89,9 +137,35 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 6,
-        effect: AbilityEffect::SpellDamage {
-            school: DamageSchool::Holy,
-        },
+        aura: None,
+        effect: AbilityEffect::HealOrHarm { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "holy_light",
+        name: "Holy Light",
+        damage: 32.0,
+        cost: 30.0,
+        cooldown: 2.5,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Heal { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "hammer_of_justice",
+        name: "Hammer of Justice",
+        damage: 12.0,
+        cost: 20.0,
+        cooldown: 8.0,
+        range: 8.0,
+        cast_time: 0.0,
+        min_level: 3,
+        aura: Some("hammer_of_justice"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     // —— Hunter ——
     AbilityDef {
@@ -103,9 +177,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Arcane,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "serpent_sting",
@@ -116,9 +192,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
-        effect: AbilityEffect::SpellDamage {
-            school: DamageSchool::Nature,
-        },
+        aura: Some("serpent_sting"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "aimed_shot",
@@ -129,9 +205,42 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 22.0,
         cast_time: 1.5,
         min_level: 6,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Physical,
         },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "concussive_shot",
+        name: "Concussive Shot",
+        damage: 10.0,
+        cost: 20.0,
+        cooldown: 8.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("chill"),
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Physical,
+        },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "multi_shot",
+        name: "Multi-Shot",
+        damage: 20.0,
+        cost: 35.0,
+        cooldown: 6.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 6,
+        aura: None,
+        effect: AbilityEffect::AoeDamage {
+            radius: 6.0,
+            max_targets: 3,
+        },
+        flags: AbilityFlags::DEFAULT,
     },
     // —— Rogue ——
     AbilityDef {
@@ -143,7 +252,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT.combo_builder(1),
     },
     AbilityDef {
         id: "eviscerate",
@@ -154,18 +265,35 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 3.0,
         cast_time: 0.0,
         min_level: 3,
-        effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
+        aura: None,
+        effect: AbilityEffect::WeaponDamage { coefficient: 1.4 },
+        flags: AbilityFlags::DEFAULT.combo_finisher(0.4),
     },
     AbilityDef {
         id: "cheap_shot",
         name: "Cheap Shot",
-        damage: 30.0,
+        damage: 18.0,
         cost: 40.0,
         cooldown: 6.0,
         range: 3.0,
         cast_time: 0.0,
         min_level: 6,
+        aura: Some("cheap_shot"),
         effect: AbilityEffect::WeaponDamage { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT.stealth_opener(),
+    },
+    AbilityDef {
+        id: "kick",
+        name: "Kick",
+        damage: 8.0,
+        cost: 25.0,
+        cooldown: 6.0,
+        range: 3.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Interrupt,
+        flags: AbilityFlags::DEFAULT.lockout(1.5),
     },
     // —— Priest ——
     AbilityDef {
@@ -177,9 +305,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Holy,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "holy_fire",
@@ -190,9 +320,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
+        aura: Some("holy_fire"),
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Holy,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "mind_blast",
@@ -203,9 +335,37 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 1.0,
         min_level: 6,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Shadow,
         },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "flash_heal",
+        name: "Flash Heal",
+        damage: 36.0,
+        cost: 30.0,
+        cooldown: 2.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Heal { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "shadow_word_pain",
+        name: "Shadow Word: Pain",
+        damage: 10.0,
+        cost: 25.0,
+        cooldown: 4.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 3,
+        aura: Some("shadow_word_pain"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     // —— Shaman ——
     AbilityDef {
@@ -217,9 +377,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Nature,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "earth_shock",
@@ -230,7 +392,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 14.0,
         cast_time: 0.0,
         min_level: 3,
+        aura: None,
         effect: AbilityEffect::Interrupt,
+        flags: AbilityFlags::DEFAULT.lockout(1.5),
     },
     AbilityDef {
         id: "lava_burst",
@@ -241,9 +405,50 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 1.2,
         min_level: 6,
+        aura: Some("ignite"),
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Fire,
         },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "healing_wave",
+        name: "Healing Wave",
+        damage: 34.0,
+        cost: 30.0,
+        cooldown: 2.5,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Heal { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "flame_shock",
+        name: "Flame Shock",
+        damage: 14.0,
+        cost: 25.0,
+        cooldown: 5.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 3,
+        aura: Some("flame_shock"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "lightning_shield",
+        name: "Lightning Shield",
+        damage: 0.0,
+        cost: 25.0,
+        cooldown: 6.0,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("lightning_shield"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     // —— Mage ——
     AbilityDef {
@@ -255,9 +460,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 1.5,
         min_level: 1,
+        aura: Some("ignite"),
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Fire,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "frostbolt",
@@ -268,9 +475,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 1.0,
         min_level: 3,
+        aura: Some("chill"),
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Frost,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "arcane_missiles",
@@ -281,9 +490,40 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 0.0,
         min_level: 6,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Arcane,
         },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "frost_nova",
+        name: "Frost Nova",
+        damage: 16.0,
+        cost: 30.0,
+        cooldown: 8.0,
+        range: 8.0,
+        cast_time: 0.0,
+        min_level: 3,
+        aura: Some("chill"),
+        effect: AbilityEffect::AoeDamage {
+            radius: 8.0,
+            max_targets: 5,
+        },
+        flags: AbilityFlags::DEFAULT.around_self(),
+    },
+    AbilityDef {
+        id: "counterspell",
+        name: "Counterspell",
+        damage: 6.0,
+        cost: 20.0,
+        cooldown: 8.0,
+        range: 20.0,
+        cast_time: 0.0,
+        min_level: 6,
+        aura: None,
+        effect: AbilityEffect::Interrupt,
+        flags: AbilityFlags::DEFAULT.lockout(1.5),
     },
     // —— Warlock ——
     AbilityDef {
@@ -295,9 +535,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Shadow,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "corruption",
@@ -308,7 +550,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
+        aura: Some("corruption"),
         effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "incinerate",
@@ -319,9 +563,37 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 1.2,
         min_level: 6,
+        aura: Some("ignite"),
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Fire,
         },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "immolate",
+        name: "Immolate",
+        damage: 12.0,
+        cost: 25.0,
+        cooldown: 4.0,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("immolate"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "fear",
+        name: "Fear",
+        damage: 0.0,
+        cost: 30.0,
+        cooldown: 12.0,
+        range: 20.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("fear"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     // —— Druid ——
     AbilityDef {
@@ -333,9 +605,11 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Nature,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "moonfire",
@@ -346,9 +620,9 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 18.0,
         cast_time: 0.0,
         min_level: 3,
-        effect: AbilityEffect::SpellDamage {
-            school: DamageSchool::Arcane,
-        },
+        aura: Some("moonfire"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
         id: "starfire",
@@ -359,34 +633,180 @@ pub static ABILITIES: &[AbilityDef] = &[
         range: 20.0,
         cast_time: 1.5,
         min_level: 6,
+        aura: None,
         effect: AbilityEffect::SpellDamage {
             school: DamageSchool::Arcane,
         },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
-        id: "flash_heal",
-        name: "Flash Heal",
-        damage: 36.0,
-        cost: 30.0,
-        cooldown: 2.0,
+        id: "rejuvenation",
+        name: "Rejuvenation",
+        damage: 12.0,
+        cost: 20.0,
+        cooldown: 3.0,
         range: 18.0,
         cast_time: 0.0,
         min_level: 1,
-        effect: AbilityEffect::Heal { coefficient: 1.0 },
+        aura: Some("rejuvenation"),
+        effect: AbilityEffect::Heal { coefficient: 0.4 },
+        flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
-        id: "taunt",
-        name: "Taunt",
+        id: "healing_touch",
+        name: "Healing Touch",
+        damage: 38.0,
+        cost: 35.0,
+        cooldown: 2.5,
+        range: 18.0,
+        cast_time: 0.0,
+        min_level: 6,
+        aura: None,
+        effect: AbilityEffect::Heal { coefficient: 1.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    // —— Class-engine stubs (off-kit; Charge/Blink/Shield/Life Tap/Aspect on 1.7 bars) ——
+    AbilityDef {
+        id: "power_word_shield",
+        name: "Power Word: Shield",
         damage: 0.0,
-        cost: 0.0,
+        cost: 30.0,
         cooldown: 8.0,
-        range: 8.0,
+        range: 18.0,
         cast_time: 0.0,
         min_level: 1,
-        effect: AbilityEffect::Taunt { threat: 80.0 },
+        aura: Some("power_word_shield"),
+        effect: AbilityEffect::Absorb { amount: 45.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "charge",
+        name: "Charge",
+        damage: 22.0,
+        cost: 0.0,
+        cooldown: 12.0,
+        range: 25.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Charge { gap: 25.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "blink",
+        name: "Blink",
+        damage: 0.0,
+        cost: 20.0,
+        cooldown: 15.0,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Blink { distance: 20.0 },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "life_tap",
+        name: "Life Tap",
+        damage: 0.0,
+        cost: 0.0,
+        cooldown: 1.5,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::Convert {
+            hp_cost: 25.0,
+            resource_gain: 40.0,
+        },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "battle_shout",
+        name: "Battle Shout",
+        damage: 0.0,
+        cost: 10.0,
+        cooldown: 8.0,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("battle_shout"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
+        id: "aspect_of_the_hawk",
+        name: "Aspect of the Hawk",
+        damage: 0.0,
+        cost: 0.0,
+        cooldown: 6.0,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("aspect_of_the_hawk"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
     },
 ];
 
 pub fn ability(id: &str) -> Option<&'static AbilityDef> {
     ABILITIES.iter().find(|a| a.id == id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_class_auras_resolve_from_ability_table() {
+        assert_eq!(aura_for_ability("rend").unwrap().id, "rend");
+        assert_eq!(aura_for_ability("fireball").unwrap().id, "ignite");
+        assert_eq!(
+            aura_for_ability("serpent_sting").unwrap().id,
+            "serpent_sting"
+        );
+        assert_eq!(aura_for_ability("frostbolt").unwrap().id, "chill");
+        assert!(aura_for_ability("cheap_shot").unwrap().stun);
+        assert!(aura_for_ability("heroic_strike").is_none());
+        assert!(aura_for_ability("flash_heal").is_none());
+        assert!(aura_for_ability("taunt").is_none());
+    }
+
+    #[test]
+    fn execute_and_holy_shock_use_special_effects() {
+        assert!(matches!(
+            ability("execute").unwrap().effect,
+            AbilityEffect::Execute { hp_pct, .. } if (hp_pct - 0.2).abs() < f32::EPSILON
+        ));
+        assert!(matches!(
+            ability("holy_shock").unwrap().effect,
+            AbilityEffect::HealOrHarm { .. }
+        ));
+    }
+
+    #[test]
+    fn class_engine_stubs_and_flags_resolve() {
+        assert!(matches!(
+            ability("power_word_shield").unwrap().effect,
+            AbilityEffect::Absorb { amount } if (amount - 45.0).abs() < f32::EPSILON
+        ));
+        assert!(matches!(
+            ability("charge").unwrap().effect,
+            AbilityEffect::Charge { .. }
+        ));
+        assert!(matches!(
+            ability("blink").unwrap().effect,
+            AbilityEffect::Blink { .. }
+        ));
+        assert!(matches!(
+            ability("life_tap").unwrap().effect,
+            AbilityEffect::Convert { .. }
+        ));
+        assert_eq!(ability("sinister_strike").unwrap().flags.combo_add, 1);
+        assert!(ability("eviscerate").unwrap().flags.combo_spend);
+        assert!(ability("cheap_shot").unwrap().flags.requires_stealth);
+        assert!(ability("execute").unwrap().flags.rage_dump);
+        assert!(ability("frost_nova").unwrap().flags.self_aoe);
+        assert!(ability("kick").unwrap().flags.interrupt_lockout > 0.0);
+    }
 }

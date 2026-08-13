@@ -542,12 +542,25 @@ pub(crate) fn update_hud(
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
         if let Ok(mut t) = hp.single_mut() {
             **t = format!(
-                "HP {:.0}/{:.0}   {} {:.0}/{:.0}",
+                "HP {:.0}/{:.0}   {} {:.0}/{:.0}{absorb}{stealth}{combo}",
                 player.hp,
                 player.hp_max,
                 snap.progress.resource_type,
                 player.resource,
                 player.resource_max,
+                absorb = if snap.absorb > 0.5 {
+                    format!("   absorb {:.0}", snap.absorb)
+                } else {
+                    String::new()
+                },
+                stealth = if snap.stealthed { "   STEALTH" } else { "" },
+                combo = if snap.combo_points > 0 {
+                    let filled = "●".repeat(snap.combo_points as usize);
+                    let empty = "○".repeat(5usize.saturating_sub(snap.combo_points as usize));
+                    format!("   {filled}{empty}")
+                } else {
+                    String::new()
+                },
             );
         }
     } else if let Ok(mut t) = hp.single_mut() {
@@ -775,7 +788,26 @@ fn format_action_bar(snap: &TickSnapshot) -> String {
             .join(" · ");
         format!("   | Auras: {list}")
     };
-    format!("{}{auras}", parts.join("   "))
+    format!(
+        "{}{auras}{hint}",
+        parts.join("   "),
+        hint = class_interact_hint(snap)
+    )
+}
+
+fn class_interact_hint(snap: &TickSnapshot) -> &'static str {
+    match snap.progress.class_id.as_str() {
+        "rogue" => {
+            if snap.stealthed {
+                "   [Z] STEALTH"
+            } else {
+                "   [Z] Stealth"
+            }
+        }
+        "warrior" => "   [F] Stance",
+        "shaman" | "druid" => "   [F] Form",
+        _ => "",
+    }
 }
 
 /// Show vendor panel when `open_vendor` is set; rebuild buy buttons as stock changes.
@@ -1037,5 +1069,40 @@ mod tests {
         assert!(text.contains("[1] Heroic Strike READY"));
         assert!(text.contains("[2] Cleave locked"));
         assert!(text.contains("Auras: rend 6s"));
+        assert!(!text.contains("[Z] Stealth"));
+    }
+
+    #[test]
+    fn rogue_action_bar_hints_stealth_key() {
+        let mut snap = chrome_snapshot();
+        snap.progress.class_id = "rogue".into();
+        snap.ability_bar = vec![woc_protocol::AbilityBarSlot {
+            slot: 1,
+            ability_id: "sinister_strike".into(),
+            name: "Sinister Strike".into(),
+            known: true,
+            ready: true,
+            cooldown: 0.0,
+        }];
+        let text = format_action_bar(&snap);
+        assert!(text.contains("[Z] Stealth"));
+        snap.stealthed = true;
+        let stealthed = format_action_bar(&snap);
+        assert!(stealthed.contains("[Z] STEALTH"));
+    }
+
+    #[test]
+    fn warrior_and_druid_action_bar_hint_f_key() {
+        let mut snap = chrome_snapshot();
+        snap.progress.class_id = "warrior".into();
+        assert!(format_action_bar(&snap).contains("[F] Stance"));
+        snap.progress.class_id = "druid".into();
+        assert!(format_action_bar(&snap).contains("[F] Form"));
+        snap.progress.class_id = "shaman".into();
+        assert!(format_action_bar(&snap).contains("[F] Form"));
+        snap.progress.class_id = "mage".into();
+        let mage = format_action_bar(&snap);
+        assert!(!mage.contains("[F] Stance"));
+        assert!(!mage.contains("[F] Form"));
     }
 }

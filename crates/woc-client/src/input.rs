@@ -147,7 +147,13 @@ pub(crate) fn collect_intent(
     }
 
     let bags_consume_f = ui.show_bags;
-    if mouse.just_pressed(MouseButton::Left) || (keys.pressed(KeyCode::KeyF) && !bags_consume_f) {
+    let class_id = host.snapshot.progress.class_id.as_str();
+    let form_f = matches!(class_id, "warrior" | "shaman" | "druid")
+        && keys.just_pressed(KeyCode::KeyF)
+        && !bags_consume_f;
+    if mouse.just_pressed(MouseButton::Left)
+        || (keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f)
+    {
         intent.attack = true;
         host.local_auto_attack = true;
         if let Some(p) = host.player_snap() {
@@ -342,6 +348,29 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.interact(player_id, InteractAction::SummonPet);
             host.recent_toasts.push(("Summoning pet…".into(), 1.5));
+        }
+    }
+    // Rogue stealth (Z). Other classes toast from the sim.
+    if !ui.show_mail
+        && !ui.show_bank
+        && !ui.show_market
+        && !ui.show_talents
+        && keys.just_pressed(KeyCode::KeyZ)
+    {
+        host.interact(player_id, InteractAction::ToggleStealth);
+    }
+    // Warrior stance / shaman+druid form (F). Held F still attacks for other classes.
+    if !ui.show_mail
+        && !ui.show_bank
+        && !ui.show_market
+        && !ui.show_talents
+        && !ui.show_bags
+        && keys.just_pressed(KeyCode::KeyF)
+    {
+        match host.snapshot.progress.class_id.as_str() {
+            "warrior" => host.interact(player_id, InteractAction::CycleStance),
+            "shaman" | "druid" => host.interact(player_id, InteractAction::ToggleForm),
+            _ => {}
         }
     }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyG) {

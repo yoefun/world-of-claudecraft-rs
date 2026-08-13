@@ -36,6 +36,7 @@ pub struct PlayerPersistentState {
     pub professions: HashMap<String, u32>,
     pub pvp_flagged: bool,
     pub completed_deeds: BTreeSet<String>,
+    pub stance_id: String,
 }
 
 impl PlayerPersistentState {
@@ -131,6 +132,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
             .get::<Progress>(player_id)
             .map(|p| p.completed_deeds.clone())
             .unwrap_or_default(),
+        stance_id: world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.stance_id.clone())
+            .unwrap_or_default(),
     })
 }
 
@@ -215,8 +220,16 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         c.target = None;
         c.auto_attack = false;
     }
+    if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+        kit.stance_id = if state.stance_id.is_empty() {
+            None
+        } else {
+            Some(state.stance_id.clone())
+        };
+    }
     crate::ecs::spawn::refresh_known_abilities(world, player_id);
     recalc_player_stats(world, player_id);
+    crate::combat::apply_spawn_identity(world, player_id);
     if let Some(h) = world.get_mut::<Health>(player_id) {
         h.hp = h.hp_max;
     }
@@ -310,6 +323,7 @@ mod tests {
             professions: Default::default(),
             pvp_flagged: false,
             completed_deeds: Default::default(),
+            stance_id: String::new(),
         };
         assert!(state.is_virgin());
         let mut world = World::new();
@@ -367,5 +381,31 @@ mod tests {
         assert!((restored.pos_x - 10.0).abs() < 1e-3);
         assert!((restored.pos_z - 20.0).abs() < 1e-3);
         assert!(!restored.is_virgin());
+    }
+
+    #[test]
+    fn warrior_stance_id_roundtrips() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Tank", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 5;
+        }
+        crate::combat::cycle_stance(&mut world, 1, &mut Vec::new());
+        let exported = export_player_state(&world, 1).unwrap();
+        assert_eq!(exported.stance_id, "defensive");
+        assert!(!exported.is_virgin());
+
+        let mut world2 = World::new();
+        create_player_from_state(&mut world2, 2, "Tank", PlayerClass::Warrior, &exported);
+        assert_eq!(
+            world2.get::<ClassKit>(2).unwrap().stance_id.as_deref(),
+            Some("defensive")
+        );
+        assert!(world2
+            .get::<Auras>(2)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "defensive_stance"));
     }
 }

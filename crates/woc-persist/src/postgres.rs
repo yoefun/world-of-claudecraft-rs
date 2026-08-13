@@ -326,6 +326,7 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         professions: completion.professions,
         pvp_flagged: completion.pvp_flagged,
         completed_deeds: completion.completed_deeds,
+        stance_id: completion.stance_id,
     })
 }
 

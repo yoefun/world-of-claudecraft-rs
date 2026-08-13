@@ -14,6 +14,10 @@ pub const BANK_SLOTS: usize = 24;
 pub const PLAYER_SWING_SEC: f32 = 2.0;
 pub const MOB_SWING_SEC: f32 = 2.0;
 pub const MOB_SPEED: f32 = 5.5;
+/// Rage gained per point of HP damage taken (warrior).
+pub const RAGE_FROM_TAKEN: f32 = 0.05;
+/// Stealthed horizontal speed multiplier (stacked with chill via `min`).
+pub const STEALTH_MOVE_MULT: f32 = 0.7;
 
 /// White-hit table (player auto-attack and damaging abilities).
 pub const MISS_CHANCE: f32 = 0.05;

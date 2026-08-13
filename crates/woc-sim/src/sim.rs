@@ -820,6 +820,18 @@ impl Sim {
                 .get::<Bank>(player_id)
                 .map(|b| b.bank_copper)
                 .unwrap_or(0),
+            combo_points: world
+                .get::<ClassKit>(player_id)
+                .map(|k| k.combo_points)
+                .unwrap_or(0),
+            stealthed: world
+                .get::<ClassKit>(player_id)
+                .is_some_and(|k| k.stealthed),
+            stance_id: world
+                .get::<ClassKit>(player_id)
+                .and_then(|k| k.stance_id.clone())
+                .unwrap_or_default(),
+            absorb: crate::combat::remaining_absorb(world, player_id),
         }
     }
 
@@ -1571,8 +1583,8 @@ mod tests {
         let sim = Sim::new_eastbrook("Kit", PlayerClass::Warrior);
         let snap = sim.snapshot();
         assert!(
-            snap.ability_bar.len() >= 3,
-            "warrior kit should expose ≥3 slots"
+            snap.ability_bar.len() >= 4,
+            "warrior kit should expose ≥4 slots"
         );
         assert_eq!(snap.ability_bar[0].slot, 1);
         assert_eq!(snap.ability_bar[0].ability_id, "heroic_strike");
@@ -1580,6 +1592,106 @@ mod tests {
         assert_eq!(snap.ability_bar[1].ability_id, "cleave");
         assert!(!snap.ability_bar[1].known, "cleave gated above level 1");
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
+        assert_eq!(snap.combo_points, 0);
+        assert!(!snap.stealthed);
+        assert_eq!(snap.stance_id, "battle");
+        assert_eq!(snap.absorb, 0.0);
+    }
+
+    #[test]
+    fn toggle_stealth_rogue_only() {
+        let mut rogue = Sim::new_eastbrook("Sneak", PlayerClass::Rogue);
+        let pid = rogue.player_id;
+        woc_protocol::WorldHost::interact(&mut rogue, pid, pid, InteractAction::ToggleStealth);
+        assert!(rogue.world.get::<ClassKit>(pid).unwrap().stealthed);
+        let snap = rogue.snapshot_for_player(pid);
+        assert!(snap.stealthed);
+        woc_protocol::WorldHost::interact(&mut rogue, pid, pid, InteractAction::ToggleStealth);
+        assert!(!rogue.world.get::<ClassKit>(pid).unwrap().stealthed);
+
+        let mut warrior = Sim::new_eastbrook("Tank", PlayerClass::Warrior);
+        let wid = warrior.player_id;
+        woc_protocol::WorldHost::interact(&mut warrior, wid, wid, InteractAction::ToggleStealth);
+        assert!(!warrior.world.get::<ClassKit>(wid).unwrap().stealthed);
+    }
+
+    #[test]
+    fn cycle_stance_warrior_only() {
+        let mut warrior = Sim::new_eastbrook("Tank", PlayerClass::Warrior);
+        let wid = warrior.player_id;
+        assert_eq!(
+            warrior
+                .world
+                .get::<ClassKit>(wid)
+                .unwrap()
+                .stance_id
+                .as_deref(),
+            Some("battle")
+        );
+        woc_protocol::WorldHost::interact(&mut warrior, wid, wid, InteractAction::CycleStance);
+        assert_eq!(
+            warrior
+                .world
+                .get::<ClassKit>(wid)
+                .unwrap()
+                .stance_id
+                .as_deref(),
+            Some("defensive")
+        );
+        let snap = warrior.snapshot_for_player(wid);
+        assert_eq!(snap.stance_id, "defensive");
+        woc_protocol::WorldHost::interact(&mut warrior, wid, wid, InteractAction::CycleStance);
+        assert_eq!(
+            warrior
+                .world
+                .get::<ClassKit>(wid)
+                .unwrap()
+                .stance_id
+                .as_deref(),
+            Some("battle")
+        );
+
+        let mut mage = Sim::new_eastbrook("Glass", PlayerClass::Mage);
+        let mid = mage.player_id;
+        woc_protocol::WorldHost::interact(&mut mage, mid, mid, InteractAction::CycleStance);
+        assert!(mage.world.get::<ClassKit>(mid).unwrap().stance_id.is_none());
+    }
+
+    #[test]
+    fn toggle_form_druid_and_shaman() {
+        let mut druid = Sim::new_eastbrook("Cat", PlayerClass::Druid);
+        let did = druid.player_id;
+        woc_protocol::WorldHost::interact(&mut druid, did, did, InteractAction::ToggleForm);
+        assert_eq!(
+            druid
+                .world
+                .get::<ClassKit>(did)
+                .unwrap()
+                .stance_id
+                .as_deref(),
+            Some("travel_form")
+        );
+        assert!((crate::combat::move_speed_mult(&druid.world, did) - 1.4).abs() < 1e-3);
+        woc_protocol::WorldHost::interact(&mut druid, did, did, InteractAction::ToggleForm);
+        assert!(druid
+            .world
+            .get::<ClassKit>(did)
+            .unwrap()
+            .stance_id
+            .is_none());
+
+        let mut shaman = Sim::new_eastbrook("Wolf", PlayerClass::Shaman);
+        let sid = shaman.player_id;
+        woc_protocol::WorldHost::interact(&mut shaman, sid, sid, InteractAction::ToggleForm);
+        assert_eq!(
+            shaman
+                .world
+                .get::<ClassKit>(sid)
+                .unwrap()
+                .stance_id
+                .as_deref(),
+            Some("ghost_wolf")
+        );
     }
 
     #[test]

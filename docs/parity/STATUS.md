@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.5.0` / `client-update`.  
+**Current rewrite:** `1.8.0` / `class-forms`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md).
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.
 
 ## Client version gate (`client-compat`)
 
@@ -27,6 +27,36 @@
 | Linux tag publish workflow | done | `.github/workflows/client-release.yml` |
 | Runbook | done | [`docs/client-update.md`](../client-update.md) |
 
+## Class identity (`class-engine` → `class-forms`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Protocol rev 7 identity snapshot | done | `combo_points` / `stealthed` / `stance_id` / `absorb`; `ToggleStealth` / `CycleStance` / `ToggleForm`. |
+| Absorb before HP | done | Shield auras soak; depleted shields pop. |
+| Interrupt lockout | done | Kick / Earth Shock / Counterspell set `cast_lockout` (≥1.5s). |
+| Combo points | done | Sinister Strike builds; Eviscerate spends (`combo_per_point`). |
+| Stealth | done | Rogue **Z**; aggro skip until melee; 0.7 move; breaks on damage / ability. |
+| Charge / Blink / Convert | done | Engine verbs; Charge/Blink/Life Tap stubs off-kit until 1.7. |
+| Hunter mana | done | Hunter `resource_type` is Mana. |
+| Self-AoE | done | Frost Nova fires without a hostile target. |
+| Rage from taken + Execute dump | done | Warriors gain rage when hit; Execute dumps leftover rage into damage. |
+| 1.7 kit swaps (Charge/Blink/Shield on bar) | done | Warrior Charge; mage Blink; priest PW:S; hunter Aspect (1.1 damage). Dropped on-bar: rend, SW:P, Counterspell, Multi-Shot (still in `ABILITIES`). |
+| 1.8 stance / form / shout / fear | done | **F** CycleStance / ToggleForm; Lightning Shield thorns; Fear/Travel Form break on damage. |
+
+### Nine-class signatures
+
+| Class | Signature |
+| --- | --- |
+| Warrior | Charge; **F** battle/defensive (Battle Shout 1.1 / armor_flat + outgoing 0.9) |
+| Paladin | Devotion Aura at spawn; Crusader Strike seal DoT |
+| Hunter | Aspect of the Hawk (1.1 dmg); mana |
+| Rogue | **Z** stealth, combo, Cheap Shot |
+| Priest | Power Word: Shield |
+| Shaman | Lightning Shield thorns; **F** Ghost Wolf |
+| Mage | Blink; Frost Nova self-AoE |
+| Warlock | Life Tap; Fear (stun, breaks on damage) |
+| Druid | **F** Travel Form (1.4 move, breaks on hit) |
+
 ## Post-completion (`stable` → `online-hard`)
 
 Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
@@ -38,7 +68,7 @@ Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
 | Protocol/crate “stub” / “framework slice” copy | done | Shipped interact actions; crate blurbs. |
 | 1.0.0 acceptance demo doc | done | `docs/parity/DEMO.md`. |
 | Data-driven `AbilityEffect` | done | Content tables; combat dispatches on the enum. |
-| Heal / AoE / interrupt / taunt | done | Priest `flash_heal`; warrior cleave AoE + `taunt`; shaman `earth_shock` interrupt. |
+| Heal / AoE / interrupt / taunt | done | Priest `flash_heal`; paladin `holy_light` / `holy_shock`; shaman `healing_wave`; druid `rejuvenation`; warrior cleave AoE + `taunt`; shaman `earth_shock` / rogue `kick` / mage `counterspell` interrupt. |
 | Miss / crit hit table | done | 5% miss / 10% crit via sim RNG; heals do not miss. |
 | Mining + blacksmithing | done | Copper veins in Eastbrook + Eastfen; smelt bar; craft/equip `copper_shortsword`. |
 | Dungeon trash packs | done | Crypt and barrow spawn `DungeonTrashSpot` packs on enter. |
@@ -62,7 +92,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.5.0` / client-update (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.8.0` / class-forms (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
@@ -71,14 +101,14 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Sticky WS realm | done | authenticated Hello + per-player snapshots |
 | Client online mode | done | token + character_id Hello |
 | Death / spirit / graveyard | done | |
-| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT; ability bar + Tab/Esc combat UX |
+| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT; ability bar + Tab/Esc combat UX; class-kit identity (Execute, CC, dual Holy Shock) |
 | Deeper bags / consumables | done | absolute inventory/bank slot indices |
 | Tab targeting | done | |
 | Player motion / colliders | done | |
 | Mob respawn / social aggro | done | |
 | `woc-persist` + auth API | done | R4 fields + deeds; WS load/save loop |
 | Client login / char select | done | |
-| Multi-ability kits | done | |
+| Multi-ability kits | done | 4–5 slots/class; Execute / HealOrHarm / named DoT-HoT-CC auras |
 | Talents / loadouts | done | 4/class; tier gates; numbered spend + pet key; stat + ability-mod effects |
 | Pets | done | hunter/warlock |
 | Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen + Thornpeak quests/mobs |

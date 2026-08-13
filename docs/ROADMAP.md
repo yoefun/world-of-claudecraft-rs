@@ -12,7 +12,10 @@
 | **1.2.0** (this branch) | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
 | **1.3.0** (shipped) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
 | **1.4.0** (shipped) | `client-compat` | Online version gate (title preflight + Hello identity) |
-| **1.5.0** (this branch) | `client-update` | Signed full + bsdiff delta packages; `woc-updater` launcher (Linux x86_64) |
+| **1.5.0** (shipped) | `client-update` | Signed full + bsdiff delta packages; `woc-updater` launcher (Linux x86_64) |
+| **1.6.0** (shipped) | `class-engine` | Combo, stealth, absorb, interrupt lockout, Charge/Blink/Life Tap, hunter mana |
+| **1.7.0** (shipped) | `class-identity` | Rogue stealth+combo, priest shield, warrior Charge, mage Blink, hunter Aspect |
+| **1.8.0** (this branch) | `class-forms` | Warrior stances, shaman/druid forms, paladin aura/seal, warlock Fear |
 
 ## Completion program (closed)
 
@@ -34,7 +37,7 @@ Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-client-version-update-design.md`](superpowers/specs/2026-08-13-client-version-update-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-client-version-update.md`](superpowers/plans/2026-08-13-client-version-update.md)
 
-Online Bevy clients must not enter a realm with a mismatched rewrite version or `protocol_rev`. `PROTOCOL_REV` stays 6 (additive Hello fields). Packaged incremental updates are **1.5.0**, not part of the gate.
+Online Bevy clients must not enter a realm with a mismatched rewrite version or `protocol_rev`. Hello identity fields stay additive; class-identity snapshot is protocol rev **7**. Packaged incremental updates shipped in **1.5.0**.
 
 ## Client update packages (current)
 

@@ -379,6 +379,13 @@ fn use_item_from_bag(
             tick_damage: 0.0,
             tick_heal: hot_tick,
             source: player_id,
+            stun: false,
+            move_mult: 1.0,
+            absorb: 0.0,
+            breaks_on_damage: false,
+            damage_mult: 1.0,
+            thorns: 0.0,
+            armor_flat: 0.0,
         },
         events,
     );

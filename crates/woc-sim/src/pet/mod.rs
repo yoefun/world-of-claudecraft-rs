@@ -1,6 +1,6 @@
 //! Hunter / warlock pet summon, dismiss, and combat AI.
 
-use crate::combat::{deal_damage, dist2d_ids, face_toward_ids};
+use crate::combat::{deal_damage, dist2d_ids, face_toward_ids, is_stunned, move_speed_mult};
 use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Owner, Transform};
 use crate::ecs::World;
 use crate::entity_motion::step_toward;
@@ -140,12 +140,21 @@ fn tick_one_pet(pet_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>)
     }
 
     if let Some(tid) = attack_tid {
+        if is_stunned(world, pet_id) {
+            return;
+        }
         let d = dist2d_ids(world, pet_id, tid);
         if d > MELEE_RANGE * 0.85 {
             let Some(tt) = world.get::<Transform>(tid).copied() else {
                 return;
             };
-            let _ = step_toward(world, pet_id, tt.x, tt.z, MOB_SPEED * 1.05);
+            let _ = step_toward(
+                world,
+                pet_id,
+                tt.x,
+                tt.z,
+                MOB_SPEED * 1.05 * move_speed_mult(world, pet_id),
+            );
         } else {
             let yaw = face_toward_ids(world, pet_id, tid);
             if let Some(t) = world.get_mut::<Transform>(pet_id) {
