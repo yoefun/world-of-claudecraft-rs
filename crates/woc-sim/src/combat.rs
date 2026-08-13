@@ -1271,6 +1271,10 @@ pub struct KillReward {
     pub xp: u32,
 }
 
+fn credit_actor(world: &World, id: EntityId) -> EntityId {
+    world.get::<Owner>(id).map(|o| o.owner_id).unwrap_or(id)
+}
+
 pub fn collect_pending_mob_kills(events: &[SimEvent], world: &World) -> Vec<KillReward> {
     let mut out = Vec::new();
     for ev in events {
@@ -1289,7 +1293,7 @@ pub fn collect_pending_mob_kills(events: &[SimEvent], world: &World) -> Vec<Kill
                 .get::<Identity>(*victim)
                 .and_then(|i| i.template_id.clone());
             out.push(KillReward {
-                killer: *killer,
+                killer: credit_actor(world, *killer),
                 victim: *victim,
                 template_id,
                 x: t.x,
@@ -1866,7 +1870,7 @@ pub fn update_mob_combat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Auras, Bags, ClassKit, Combat, Health, Transform};
+    use crate::ecs::components::{Auras, Bags, ClassKit, Combat, Health, Progress, Transform};
     use woc_content::PlayerClass;
     use woc_protocol::AbilitySlot;
 
@@ -3351,5 +3355,35 @@ mod tests {
                 assert!(world.get::<LootPile>(id).is_some());
             }
         }
+    }
+
+    #[test]
+    fn pet_last_hit_credits_owner_xp() {
+        let mut sim = crate::sim::Sim::new_eastbrook("Hunt", woc_content::PlayerClass::Hunter);
+        let pid = sim.player_id;
+        assert!(crate::pet::summon_pet(&mut sim.world, pid, &mut sim.events));
+        let pet = crate::pet::find_pet(&sim.world, pid).expect("pet");
+        let mob_id = sim.world.next_id();
+        let mob = crate::ecs::spawn::create_mob_from_template(
+            &mut sim.world,
+            mob_id,
+            "young_wolf",
+            0.0,
+            0.0,
+        )
+        .unwrap();
+        let xp_before = sim.world.get::<Progress>(pid).unwrap().xp;
+        if let Some(h) = sim.world.get_mut::<Health>(mob) {
+            h.hp = 1.0;
+        }
+        crate::combat::deal_damage(&mut sim.world, pet, mob, 50.0, None, true, &mut sim.events);
+        // Drive kill_rewards the same way tick_all does:
+        let rewards = collect_pending_mob_kills(&sim.events, &sim.world);
+        assert_eq!(rewards[0].killer, pid);
+        for reward in rewards {
+            grant_xp(&mut sim.world, reward.killer, reward.xp, &mut sim.events);
+        }
+        let xp_after = sim.world.get::<Progress>(pid).unwrap().xp;
+        assert!(xp_after > xp_before);
     }
 }
