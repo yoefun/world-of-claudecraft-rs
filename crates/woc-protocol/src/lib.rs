@@ -52,6 +52,7 @@ pub enum EquipSlot {
     Feet,
     Neck,
     Finger,
+    Finger2,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -285,6 +286,8 @@ pub struct InvSlotSnapshot {
     pub count: u32,
     #[serde(default)]
     pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -302,6 +305,10 @@ pub struct EquipmentSnapshot {
     pub neck: Option<String>,
     #[serde(default)]
     pub finger: Option<String>,
+    #[serde(default)]
+    pub finger2: Option<String>,
+    #[serde(default)]
+    pub main_hand_enchant: Option<String>,
     #[serde(default)]
     pub main_hand_durability: Option<u32>,
     #[serde(default)]
@@ -1386,6 +1393,37 @@ mod tests {
         assert_eq!(eq.main_hand.as_deref(), Some("worn_sword"));
         assert!(eq.neck.is_none());
         assert!(eq.finger.is_none());
+        assert!(eq.finger2.is_none());
+        assert!(eq.main_hand_enchant.is_none());
+    }
+
+    #[test]
+    fn finger2_and_enchant_defaults() {
+        let eq: EquipmentSnapshot = serde_json::from_str(
+            r#"{"main_hand":null,"off_hand":null,"chest":null}"#,
+        )
+        .unwrap();
+        assert!(eq.finger2.is_none());
+        assert!(eq.main_hand_enchant.is_none());
+        let slot: InvSlotSnapshot =
+            serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
+        assert!(slot.enchant_id.is_none());
+        assert_eq!(PROTOCOL_REV, 8);
+    }
+
+    #[test]
+    fn unequip_finger2_roundtrip() {
+        let a = InteractAction::Unequip {
+            equip_slot: EquipSlot::Finger2,
+        };
+        let v = serde_json::to_value(&a).unwrap();
+        let back: InteractAction = serde_json::from_value(v).unwrap();
+        assert!(matches!(
+            back,
+            InteractAction::Unequip {
+                equip_slot: EquipSlot::Finger2
+            }
+        ));
     }
 
     #[test]
