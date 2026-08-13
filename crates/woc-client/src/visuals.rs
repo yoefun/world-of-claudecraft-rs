@@ -316,13 +316,7 @@ pub(crate) fn respawn_parts_if_needed(
         0.0
     };
     spawn_parts(
-        commands,
-        meshes,
-        materials,
-        entity,
-        &spec,
-        snap.alive,
-        rider_lift,
+        commands, meshes, materials, entity, &spec, snap.alive, rider_lift,
     );
     if let Some(mount_id) = mounted.as_deref() {
         let mount_spec = mount_visual_spec(mount_id);

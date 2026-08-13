@@ -79,7 +79,11 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         id: "trader_wilkes",
         name: "Trader Wilkes",
         greeting: "Fresh rations and a fair price, traveler.",
-        services: &[NpcService::QuestGiver, NpcService::Vendor, NpcService::ProfessionTrainer],
+        services: &[
+            NpcService::QuestGiver,
+            NpcService::Vendor,
+            NpcService::ProfessionTrainer,
+        ],
         vendor_stock: &[
             VendorOffer {
                 item_id: "travelers_ration",

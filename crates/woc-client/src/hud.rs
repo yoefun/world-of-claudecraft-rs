@@ -209,9 +209,7 @@ fn riding_chrome_lines(snap: &TickSnapshot) -> Vec<String> {
         }
     }
     if let Some(mount_id) = snap.mounted.as_deref() {
-        let name = mount(mount_id)
-            .map(|m| m.name)
-            .unwrap_or(mount_id);
+        let name = mount(mount_id).map(|m| m.name).unwrap_or(mount_id);
         lines.push(format!("Mounted: {name}"));
     }
     lines

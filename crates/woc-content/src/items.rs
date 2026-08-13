@@ -418,15 +418,36 @@ const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell:
 }
 
 const fn gathered(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
-    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 20)
+    valued_misc(
+        id,
+        name,
+        ItemKind::Junk,
+        vendor_sell,
+        vendor_sell.saturating_mul(4),
+        20,
+    )
 }
 
 const fn vendor_mat(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
-    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 20)
+    valued_misc(
+        id,
+        name,
+        ItemKind::Junk,
+        vendor_sell,
+        vendor_sell.saturating_mul(4),
+        20,
+    )
 }
 
 const fn tool(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
-    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 1)
+    valued_misc(
+        id,
+        name,
+        ItemKind::Junk,
+        vendor_sell,
+        vendor_sell.saturating_mul(4),
+        1,
+    )
 }
 
 const fn valued_misc(
@@ -640,7 +661,13 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
     consumable("minor_healing_salve", "Minor Healing Salve", 8, 2, 55.0),
     consumable("briar_tonic", "Briar Tonic", 10, 3, 35.0),
     consumable("minor_healing_potion", "Minor Healing Potion", 0, 12, 80.0),
-    consumable("elixir_of_minor_strength", "Elixir of Minor Strength", 0, 14, 0.0),
+    consumable(
+        "elixir_of_minor_strength",
+        "Elixir of Minor Strength",
+        0,
+        14,
+        0.0,
+    ),
     // Mining / blacksmithing / manufacturing products.
     misc("copper_bar", "Copper Bar", ItemKind::Junk, 8),
     vendor_mat("smithing_flux", "Smithing Flux", 4),
@@ -669,7 +696,12 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         1,
         ArmorClass::Mail,
     ),
-    misc("cured_light_leather", "Cured Light Leather", ItemKind::Junk, 10),
+    misc(
+        "cured_light_leather",
+        "Cured Light Leather",
+        ItemKind::Junk,
+        10,
+    ),
     armor(
         "light_leather_jerkin",
         "Light Leather Jerkin",
@@ -728,7 +760,12 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         1,
         &[],
     ),
-    misc("rough_blasting_powder", "Rough Blasting Powder", ItemKind::Junk, 3),
+    misc(
+        "rough_blasting_powder",
+        "Rough Blasting Powder",
+        ItemKind::Junk,
+        3,
+    ),
     misc("copper_bolt", "Copper Bolt", ItemKind::Junk, 3),
     misc("copper_grenade", "Copper Grenade", ItemKind::Junk, 8),
     misc("arcane_dust", "Arcane Dust", ItemKind::Junk, 6),

@@ -2,7 +2,7 @@
 
 use crate::ecs::components::AuraInstance;
 use crate::ecs::components::{
-    dist2d,     Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
+    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
     Hearth, Identity, InvStack, Progress, Riding, Transform,
 };
 use crate::ecs::World;
@@ -1367,7 +1367,11 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
         world.get_mut::<Health>(1).unwrap().level = 2;
         world.get_mut::<Riding>(1).unwrap().rank = 1;
-        world.get_mut::<Riding>(1).unwrap().known.insert("brown_pony".into());
+        world
+            .get_mut::<Riding>(1)
+            .unwrap()
+            .known
+            .insert("brown_pony".into());
         let slot = {
             let bags = world.get_mut::<Bags>(1).unwrap();
             let idx = bags.inventory.iter().position(|s| s.is_none()).unwrap();

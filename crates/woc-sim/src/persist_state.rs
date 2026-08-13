@@ -177,10 +177,7 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
             .get::<ClassKit>(player_id)
             .and_then(|k| k.stance_id.clone())
             .unwrap_or_default(),
-        riding_rank: world
-            .get::<Riding>(player_id)
-            .map(|r| r.rank)
-            .unwrap_or(0),
+        riding_rank: world.get::<Riding>(player_id).map(|r| r.rank).unwrap_or(0),
         known_mounts: world
             .get::<Riding>(player_id)
             .map(|r| r.known.clone())
