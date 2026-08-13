@@ -51,14 +51,8 @@ pub struct RealmIdentity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Compat {
     Compatible,
-    ClientTooOld {
-        client: String,
-        min_client: String,
-    },
-    ProtocolMismatch {
-        client_rev: u32,
-        realm_rev: u32,
-    },
+    ClientTooOld { client: String, min_client: String },
+    ProtocolMismatch { client_rev: u32, realm_rev: u32 },
     BadClientVersion(String),
     BadMinVersion(String),
 }

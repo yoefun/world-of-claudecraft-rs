@@ -68,9 +68,7 @@ pub fn pack_delta(
         ar.append_data(&mut header, "delta.json", json.as_slice())?;
 
         for entry in &meta.patches {
-            let patch = patch_blobs
-                .get(&entry.path)
-                .expect("patch blob for entry");
+            let patch = patch_blobs.get(&entry.path).expect("patch blob for entry");
             let archive_name = format!("{}.bsdiff", entry.path);
             let mut header = tar::Header::new_gnu();
             header.set_size(patch.len() as u64);
@@ -94,10 +92,7 @@ pub fn apply_delta(blob: &[u8], layout_dir: &Path) -> Result<DeltaMeta, UpdateEr
         let mut ar = tar::Archive::new(tar_buf.as_slice());
         for entry in ar.entries()? {
             let mut entry = entry?;
-            let path = entry
-                .path()?
-                .to_string_lossy()
-                .into_owned();
+            let path = entry.path()?.to_string_lossy().into_owned();
             let mut data = Vec::new();
             entry.read_to_end(&mut data)?;
             if path == "delta.json" {
@@ -118,9 +113,9 @@ pub fn apply_delta(blob: &[u8], layout_dir: &Path) -> Result<DeltaMeta, UpdateEr
 
     let apply_result = (|| {
         for patch_entry in &meta.patches {
-            let patch = patch_blobs
-                .get(&patch_entry.path)
-                .ok_or_else(|| UpdateError::Delta(format!("missing patch for {}", patch_entry.path)))?;
+            let patch = patch_blobs.get(&patch_entry.path).ok_or_else(|| {
+                UpdateError::Delta(format!("missing patch for {}", patch_entry.path))
+            })?;
 
             let old_path = layout_dir.join(&patch_entry.path);
             let old_bytes = fs::read(&old_path)?;

@@ -84,7 +84,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("woc-release-{tag}-{nanos}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("woc-release-{tag}-{nanos}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root
@@ -159,13 +160,13 @@ mod tests {
 
         verify_manifest(&manifest, &pk).unwrap();
 
-        let written: Manifest = serde_json::from_slice(&fs::read(
-            out.join(format!(
+        let written: Manifest = serde_json::from_slice(
+            &fs::read(out.join(format!(
                 "woc-rs-{}-{}.manifest.json",
                 manifest.rewrite_version, manifest.target
-            )),
+            )))
+            .unwrap(),
         )
-        .unwrap())
         .unwrap();
         verify_manifest(&written, &pk).unwrap();
     }

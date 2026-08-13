@@ -127,7 +127,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("woc-apply-{tag}-{nanos}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("woc-apply-{tag}-{nanos}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root
@@ -191,7 +192,12 @@ mod tests {
         m
     }
 
-    fn write_store(store_dir: &Path, manifest: &Manifest, full_blob: &[u8], delta_blob: Option<&[u8]>) {
+    fn write_store(
+        store_dir: &Path,
+        manifest: &Manifest,
+        full_blob: &[u8],
+        delta_blob: Option<&[u8]>,
+    ) {
         fs::create_dir_all(store_dir).unwrap();
         fs::write(store_dir.join(&manifest.full.name), full_blob).unwrap();
         if let Some(blob) = delta_blob {
@@ -255,7 +261,12 @@ mod tests {
             Some("1.0.0"),
             &fx.sk,
         );
-        write_store(&fx.store_dir, &manifest, &fx.full_blob, Some(&fx.delta_blob));
+        write_store(
+            &fx.store_dir,
+            &manifest,
+            &fx.full_blob,
+            Some(&fx.delta_blob),
+        );
         let store = DirStore {
             root: fx.store_dir.clone(),
         };
@@ -281,7 +292,12 @@ mod tests {
             Some("1.0.0"),
             &fx.sk,
         );
-        write_store(&fx.store_dir, &manifest, &fx.full_blob, Some(&fx.delta_blob));
+        write_store(
+            &fx.store_dir,
+            &manifest,
+            &fx.full_blob,
+            Some(&fx.delta_blob),
+        );
         let delta_path = fx.store_dir.join("delta.wocdelta");
         let mut stored = fs::read(&delta_path).unwrap();
         let flip = stored.len() / 2;

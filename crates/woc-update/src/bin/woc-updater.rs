@@ -119,7 +119,10 @@ fn maybe_self_update(args: &Args, manifest: &Manifest) -> Result<(), UpdateError
     }
 
     let local = read_install_state(&args.prefix)?;
-    if matches!(plan_fetch(&local, manifest)?, woc_update::FetchPlan::Nothing) {
+    if matches!(
+        plan_fetch(&local, manifest)?,
+        woc_update::FetchPlan::Nothing
+    ) {
         return Ok(());
     }
 
@@ -203,7 +206,10 @@ fn run() -> Result<(), UpdateError> {
     let args = parse_args();
     let manifest = load_manifest(&args.manifest)?;
 
-    let pubkey_hex = args.pubkey.as_deref().unwrap_or_else(|| default_pubkey_hex());
+    let pubkey_hex = args
+        .pubkey
+        .as_deref()
+        .unwrap_or_else(|| default_pubkey_hex());
     let pk = verifying_key_from_hex(pubkey_hex)?;
     verify_manifest(&manifest, &pk)?;
 

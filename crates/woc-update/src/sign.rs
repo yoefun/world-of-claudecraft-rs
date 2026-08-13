@@ -3,9 +3,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
 pub fn signing_key_from_hex(seed32: &str) -> Result<SigningKey, UpdateError> {
     let bytes = hex::decode(seed32).map_err(|_| UpdateError::Signature)?;
-    let seed: [u8; 32] = bytes
-        .try_into()
-        .map_err(|_| UpdateError::Signature)?;
+    let seed: [u8; 32] = bytes.try_into().map_err(|_| UpdateError::Signature)?;
     Ok(SigningKey::from_bytes(&seed))
 }
 

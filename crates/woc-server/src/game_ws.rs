@@ -11,10 +11,10 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 use uuid::Uuid;
 use woc_content::PlayerClass;
 use woc_protocol::{EntityId, WorldHost, WsClientMsg, WsServerMsg, PROTOCOL_REV, TICK_RATE};
+use woc_sim::Sim;
 use woc_version::{
     check_compat, min_client_version_from_env, ClientIdentity, RealmIdentity, REWRITE_VERSION,
 };
-use woc_sim::Sim;
 
 use crate::bridge::{
     apply_economy_to_sim, character_to_state, export_economy_from_sim, state_to_save,
@@ -145,10 +145,7 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     protocol_rev: Some(PROTOCOL_REV),
                     min_client_version: min_client_version_from_env(),
                 };
-                let client = ClientIdentity::from_hello(
-                    protocol_rev,
-                    rewrite_version.as_deref(),
-                );
+                let client = ClientIdentity::from_hello(protocol_rev, rewrite_version.as_deref());
                 match check_compat(&client, &realm) {
                     woc_version::Compat::Compatible => {}
                     other => {
@@ -397,7 +394,10 @@ mod tests {
     use super::*;
     use woc_protocol::{EntityKind, PlayerIntent, WorldHost};
     use woc_sim::persist_state::PlayerPersistentState;
-    use woc_version::{check_compat, min_client_version_from_env, ClientIdentity, Compat, RealmIdentity, REWRITE_VERSION};
+    use woc_version::{
+        check_compat, min_client_version_from_env, ClientIdentity, Compat, RealmIdentity,
+        REWRITE_VERSION,
+    };
 
     fn test_realm() -> RealmIdentity {
         RealmIdentity {
@@ -426,7 +426,10 @@ mod tests {
     #[test]
     fn hello_wrong_protocol_rejected() {
         let c = check_compat(
-            &ClientIdentity::from_hello(Some(PROTOCOL_REV.saturating_sub(1)), Some(REWRITE_VERSION)),
+            &ClientIdentity::from_hello(
+                Some(PROTOCOL_REV.saturating_sub(1)),
+                Some(REWRITE_VERSION),
+            ),
             &test_realm(),
         );
         assert!(matches!(c, Compat::ProtocolMismatch { .. }));

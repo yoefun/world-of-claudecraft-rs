@@ -10,7 +10,10 @@ fn unique_tmp(tag: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!("woc-updater-bin-{tag}-{nanos}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "woc-updater-bin-{tag}-{nanos}-{}",
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     root

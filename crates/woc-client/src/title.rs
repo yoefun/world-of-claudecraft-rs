@@ -47,10 +47,7 @@ struct UpdateBtn;
 struct UpdateRow;
 
 fn updater_path() -> Option<std::path::PathBuf> {
-    let path = std::env::current_exe()
-        .ok()?
-        .parent()?
-        .join("woc-updater");
+    let path = std::env::current_exe().ok()?.parent()?.join("woc-updater");
     if path.exists() {
         Some(path)
     } else {

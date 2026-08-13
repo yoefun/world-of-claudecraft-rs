@@ -12,11 +12,7 @@ pub fn pack_full(layout_dir: &Path) -> Result<Vec<u8>, UpdateError> {
             let mut header = tar::Header::new_gnu();
             let meta = file.metadata()?;
             header.set_size(meta.len());
-            header.set_mode(if name == "install.json" {
-                0o644
-            } else {
-                0o755
-            });
+            header.set_mode(if name == "install.json" { 0o644 } else { 0o755 });
             header.set_cksum();
             ar.append_data(&mut header, name, &mut file)?;
         }
@@ -26,8 +22,7 @@ pub fn pack_full(layout_dir: &Path) -> Result<Vec<u8>, UpdateError> {
 }
 
 pub fn unpack_full(archive: &[u8], dest: &Path) -> Result<(), UpdateError> {
-    let tar_buf =
-        zstd::decode_all(archive).map_err(|e| UpdateError::Msg(e.to_string()))?;
+    let tar_buf = zstd::decode_all(archive).map_err(|e| UpdateError::Msg(e.to_string()))?;
     let mut ar = tar::Archive::new(tar_buf.as_slice());
     ar.unpack(dest)?;
     Ok(())
@@ -63,7 +58,11 @@ mod tests {
         fs::create_dir_all(&layout).unwrap();
         fs::write(layout.join("woc-client"), b"GAME").unwrap();
         fs::write(layout.join("woc-updater"), b"UP").unwrap();
-        fs::write(layout.join("install.json"), b"{\"rewrite_version\":\"1.0.0\",\"target\":\"t\"}").unwrap();
+        fs::write(
+            layout.join("install.json"),
+            b"{\"rewrite_version\":\"1.0.0\",\"target\":\"t\"}",
+        )
+        .unwrap();
 
         let blob = pack_full(&layout).expect("pack");
         assert!(!blob.is_empty());
