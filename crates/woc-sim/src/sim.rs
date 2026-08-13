@@ -1241,6 +1241,53 @@ mod tests {
     }
 
     #[test]
+    fn kill_loop_wolf_loot_zone_and_respawn() {
+        let mut sim = Sim::new_eastbrook("Ada", woc_content::PlayerClass::Warrior);
+        let pid = sim.player_id;
+        let mob_id = sim.world.next_id();
+        let mob = crate::ecs::spawn::create_mob_from_template(
+            &mut sim.world,
+            mob_id,
+            "young_wolf",
+            1.0,
+            0.0,
+        )
+        .unwrap();
+        if let Some(id) = sim.world.get_mut::<Identity>(mob) {
+            id.zone_id = "eastfen".into();
+        }
+        if let Some(h) = sim.world.get_mut::<Health>(mob) {
+            h.hp = 1.0;
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(pid) {
+            c.target = Some(mob);
+            c.auto_attack = true;
+        }
+        let mut saw_kill = false;
+        for _ in 0..80 {
+            let (_snap, ev) = sim.tick_all();
+            if ev.iter().any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob)) {
+                saw_kill = true;
+                break;
+            }
+        }
+        assert!(saw_kill);
+        let pile_zone = sim
+            .world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| sim.world.get::<Identity>(id).map(|i| i.zone_id.clone()))
+            .find(|z| z == "eastfen");
+        assert_eq!(pile_zone.as_deref(), Some("eastfen"));
+        assert!(!sim.world.get::<Health>(mob).unwrap().alive);
+        let ticks = (30.0 / DT).ceil() as u32 + 2;
+        for _ in 0..ticks {
+            let _ = sim.tick_all();
+        }
+        assert!(sim.world.get::<Health>(mob).unwrap().alive);
+    }
+
+    #[test]
     fn sim_context_emit_and_lookup() {
         let mut sim = Sim::new_eastbrook("Ctx", PlayerClass::Warrior);
         {
