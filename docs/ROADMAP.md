@@ -21,6 +21,7 @@
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
 | **1.13.0** (this branch) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
+| **1.14.0** (planned) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
 
 ## Completion program (closed)
 
@@ -43,6 +44,13 @@ Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-depth.md`](superpowers/plans/2026-08-13-gear-depth.md)
 
 Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services.
+
+## Guilds (planned as `1.14.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-guilds-design.md`](superpowers/specs/2026-08-13-guilds-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-guilds.md`](superpowers/plans/2026-08-13-guilds.md)
+
+`GuildRoster` on `Sim`, keyed by durable character id (like mail). Parties stay ephemeral. Protocol rev **9**. Guild bank, calendar, friends/ignore stay out of scope.
 
 ## Gear slots (shipped as `1.13.0`)
 

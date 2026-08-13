@@ -2,7 +2,24 @@
 
 **Current rewrite:** `1.13.0` / `gear-slots`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`. Guilds are planned as `1.14.0`.
+
+## Guilds (`guilds`) — planned
+
+Design: [`../superpowers/specs/2026-08-13-guilds-design.md`](../superpowers/specs/2026-08-13-guilds-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-guilds.md`](../superpowers/plans/2026-08-13-guilds.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `GuildRoster` on `Sim` | planned | Durable id; not a `World` column |
+| Create / invite / accept / leave | planned | Tick TTL 1_200; last member disbands |
+| Ranks / kick / transfer / disband | planned | leader / officer / member |
+| Guild + officer chat | planned | Member-only fan-out; no `notices` leak |
+| MOTD | planned | Officer+; max 240 |
+| Persist | planned | Additive `RealmEconomy.guilds` |
+| Client **J** panel | planned | Compose + target invite |
+| Protocol rev 9 | planned | Snapshot `guild` / `guild_invite` |
+| Guild bank / calendar / friends | n/a | Explicit non-goals |
 
 ## Gear slots (`gear-slots`) — done
 
