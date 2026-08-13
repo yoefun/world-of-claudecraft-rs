@@ -2,8 +2,8 @@
 
 use crate::ecs::components::AuraInstance;
 use crate::ecs::components::{
-    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
-    Hearth, Identity, InvStack, Progress, Transform,
+    dist2d,     Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
+    Hearth, Identity, InvStack, Progress, Riding, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::remove_item;
@@ -971,6 +971,39 @@ fn use_item_from_bag(
         });
         return;
     }
+    if idef.kind == ItemKind::Mount {
+        let Some(mdef) = woc_content::mount_by_item(&stack.item_id) else {
+            events.push(SimEvent::Toast {
+                message: "Cannot use that.".into(),
+            });
+            return;
+        };
+        let known = world
+            .get::<Riding>(player_id)
+            .is_some_and(|r| r.known.contains(mdef.id));
+        if !known {
+            if let Some(bags) = world.get_mut::<Bags>(player_id) {
+                if !remove_item(&mut bags.inventory, &stack.item_id, 1) {
+                    return;
+                }
+            }
+            let _ = crate::mount::learn_mount(world, player_id, mdef.id, events);
+        } else {
+            events.push(SimEvent::Toast {
+                message: "You already know that mount.".into(),
+            });
+        }
+        if world
+            .get::<Riding>(player_id)
+            .and_then(|r| r.active_id.as_deref())
+            == Some(mdef.id)
+        {
+            let _ = crate::mount::dismount(world, player_id, events);
+        } else {
+            let _ = crate::mount::summon_mount(world, player_id, mdef.id, events);
+        }
+        return;
+    }
     if idef.kind != ItemKind::Consumable || idef.heal_hp <= 0.0 {
         events.push(SimEvent::Toast {
             message: "Cannot use that.".into(),
@@ -1121,7 +1154,7 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Health, InvStack};
+    use crate::ecs::components::{Bags, Health, InvStack, Riding};
     use crate::inventory::{count_item, grant_into};
     use woc_content::PlayerClass;
 
@@ -1291,6 +1324,77 @@ mod tests {
             e,
             SimEvent::Toast { message } if message.contains("Inventory full")
         )));
+    }
+
+    #[test]
+    fn use_pony_item_learns_and_mounts() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        world.get_mut::<Health>(1).unwrap().level = 2;
+        world.get_mut::<Riding>(1).unwrap().rank = 1;
+        let slot = {
+            let bags = world.get_mut::<Bags>(1).unwrap();
+            let idx = bags.inventory.iter().position(|s| s.is_none()).unwrap();
+            bags.inventory[idx] = Some(InvStack::new("brown_pony", 1));
+            idx as u8
+        };
+        let mut events = Vec::new();
+        handle_interact(
+            &mut world,
+            1,
+            0,
+            InteractAction::UseItem { bag_slot: slot },
+            0,
+            &mut events,
+        );
+        assert!(world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .all(|s| s.item_id != "brown_pony"));
+        assert!(world.get::<Riding>(1).unwrap().known.contains("brown_pony"));
+        assert_eq!(
+            world.get::<Riding>(1).unwrap().active_id.as_deref(),
+            Some("brown_pony")
+        );
+    }
+
+    #[test]
+    fn duplicate_pony_not_consumed() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        world.get_mut::<Health>(1).unwrap().level = 2;
+        world.get_mut::<Riding>(1).unwrap().rank = 1;
+        world.get_mut::<Riding>(1).unwrap().known.insert("brown_pony".into());
+        let slot = {
+            let bags = world.get_mut::<Bags>(1).unwrap();
+            let idx = bags.inventory.iter().position(|s| s.is_none()).unwrap();
+            bags.inventory[idx] = Some(InvStack::new("brown_pony", 1));
+            idx as u8
+        };
+        let mut events = Vec::new();
+        handle_interact(
+            &mut world,
+            1,
+            0,
+            InteractAction::UseItem { bag_slot: slot },
+            0,
+            &mut events,
+        );
+        assert_eq!(
+            count_item(&world.get::<Bags>(1).unwrap().inventory, "brown_pony"),
+            1
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "You already know that mount."
+        )));
+        assert_eq!(
+            world.get::<Riding>(1).unwrap().active_id.as_deref(),
+            Some("brown_pony")
+        );
     }
 
     #[test]
