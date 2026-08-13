@@ -583,7 +583,7 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
 }
 
 fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
-    let mut lines = vec!["Guild  [J]".into()];
+    let mut lines = vec!["Guild  [J] open · Esc close".into()];
     if let Some(inv) = &snap.guild_invite {
         lines.push(format!(
             "{} invited you to <{}>. Enter accept · Ctrl+X decline",

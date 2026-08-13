@@ -29,9 +29,9 @@ pub(crate) fn grab_cursor(
         return;
     };
     if keys.just_pressed(KeyCode::Escape) {
-        // Close map first; otherwise clear combat target / stop AA and release cursor.
-        if ui.show_map {
-            // map close handled in handle_interact_keys
+        // Close map / guild first; otherwise clear combat target / stop AA and release cursor.
+        if ui.show_map || ui.show_guild {
+            // panel close handled in handle_interact_keys
         } else {
             host.pending_intent.clear_target = true;
             host.local_auto_attack = false;
@@ -381,15 +381,13 @@ pub(crate) fn handle_interact_keys(
             ui.show_guild = false;
         }
     }
-    if !ui.show_bank && keys.just_pressed(KeyCode::KeyJ) {
-        ui.show_guild = !ui.show_guild;
-        if ui.show_guild {
-            ui.show_character = false;
-            ui.show_map = false;
-            ui.show_bank = false;
-            ui.show_mail = false;
-            ui.show_market = false;
-        }
+    if !ui.show_bank && !ui.show_guild && keys.just_pressed(KeyCode::KeyJ) {
+        ui.show_guild = true;
+        ui.show_character = false;
+        ui.show_map = false;
+        ui.show_bank = false;
+        ui.show_mail = false;
+        ui.show_market = false;
     }
     if keys.just_pressed(KeyCode::KeyU) && !ui.show_guild {
         ui.show_market = !ui.show_market;
@@ -397,6 +395,10 @@ pub(crate) fn handle_interact_keys(
             ui.show_character = false;
             ui.show_map = false;
         }
+    }
+    if keys.just_pressed(KeyCode::Escape) && ui.show_guild {
+        ui.show_guild = false;
+        ui.guild_compose.clear();
     }
     if keys.just_pressed(KeyCode::Escape) && ui.show_map {
         ui.show_map = false;
@@ -1050,7 +1052,7 @@ fn handle_guild_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui:
     }
 }
 
-const GUILD_COMPOSE_KEYS: [KeyCode; 39] = [
+const GUILD_COMPOSE_KEYS: [KeyCode; 40] = [
     KeyCode::KeyA,
     KeyCode::KeyB,
     KeyCode::KeyC,
@@ -1060,6 +1062,7 @@ const GUILD_COMPOSE_KEYS: [KeyCode; 39] = [
     KeyCode::KeyG,
     KeyCode::KeyH,
     KeyCode::KeyI,
+    KeyCode::KeyJ,
     KeyCode::KeyK,
     KeyCode::KeyL,
     KeyCode::KeyM,
@@ -1103,6 +1106,7 @@ fn guild_compose_char_from_key(key: KeyCode, shift: bool) -> Option<char> {
         KeyCode::KeyG => 'g',
         KeyCode::KeyH => 'h',
         KeyCode::KeyI => 'i',
+        KeyCode::KeyJ => 'j',
         KeyCode::KeyK => 'k',
         KeyCode::KeyL => 'l',
         KeyCode::KeyM => 'm',
@@ -1355,6 +1359,15 @@ mod tests {
         );
         assert_eq!(
             compose(&[
+                (KeyCode::KeyJ, true),
+                (KeyCode::KeyA, false),
+                (KeyCode::KeyD, false),
+                (KeyCode::KeyE, false),
+            ]),
+            "Jade"
+        );
+        assert_eq!(
+            compose(&[
                 (KeyCode::Slash, false),
                 (KeyCode::KeyM, false),
                 (KeyCode::KeyO, false),
@@ -1383,15 +1396,14 @@ mod tests {
     }
 
     #[test]
-    fn compose_keys_cover_every_typed_char_except_panel_toggle() {
+    fn compose_keys_cover_every_typed_char() {
         for key in GUILD_COMPOSE_KEYS {
             assert!(
                 guild_compose_char_from_key(key, false).is_some(),
                 "{key:?} is listed but types nothing"
             );
         }
-        // J toggles the panel, so it must never reach the compose line.
-        assert!(!GUILD_COMPOSE_KEYS.contains(&KeyCode::KeyJ));
+        assert!(GUILD_COMPOSE_KEYS.contains(&KeyCode::KeyJ));
         // Guild verbs are Ctrl+letter; their letters still type on their own.
         for key in [
             KeyCode::KeyV,

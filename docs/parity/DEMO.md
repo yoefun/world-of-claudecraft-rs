@@ -19,7 +19,7 @@ Manual. Requires a GPU client. CI does not run this.
 15. Rogue: equip a second dagger into OffHand; wear two rings; buy a Coarse Whetstone from Smith Brann, use it, see AP rise and `[Coarse Sharpening]` on the C-sheet.
 16. After Report + Wolves + Scout, Eastbrook Watch is Friendly; Wilkes sells Watch Signet (**C** sheet lists standing).
 17. Hunter: replace the bow with a hatchet, equip a second hatchet into OffHand. Wear a Wool Cloak and two Lucky Pebbles. Use a second whetstone so Off shows `[Coarse Sharpening]`.
-18. Two clients: Alice **J** types `Vale Watch` (Shift for capitals) Enter; target Bob, **Ctrl+V**; Bob Enter. Billboard `/motd Kill wolves at dusk` Enter; guild chat by typing + Enter; `/o hello` for officer chat. Relog still in guild. Transfer **Ctrl+T**, leave **Ctrl+Q**, disband **Ctrl+D** (every online member sees `<Vale Watch> has been disbanded.`). While the panel is open no key moves, attacks, or hearths.
+18. Two clients: Alice **J** types `Vale Watch` (Shift for capitals) Enter; target Bob, **Ctrl+V**; Bob Enter. Billboard `/motd Kill wolves at dusk` Enter; guild chat by typing + Enter; `/o hello` for officer chat. Relog still in guild. Transfer **Ctrl+T**, leave **Ctrl+Q**, disband **Ctrl+D** (every online member sees `<Vale Watch> has been disbanded.`). **Esc** closes the panel (J types `j` while it is open). While the panel is open no key moves, attacks, or hearths.
 
 Footer reads `WoC-rs 1.16.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
