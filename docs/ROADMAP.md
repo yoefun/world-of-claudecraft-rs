@@ -20,8 +20,8 @@
 | **1.10.0** (shipped) | `quest-depth` | Abandon, party share, daily reset, explore/escort objectives, choice rewards |
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
-| **1.13.0** (this branch) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
-| **1.14.0** (planned) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
+| **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
+| **1.14.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
 | **1.15.0** (planned) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
 
 ## Completion program (closed)
@@ -53,7 +53,7 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
 
-## Party depth (planned as `1.14.0`) + raid (planned as `1.15.0`)
+## Party depth (shipped as `1.14.0`) + raid (planned as `1.15.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-party-raid-design.md`](superpowers/specs/2026-08-13-party-raid-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-party-raid.md`](superpowers/plans/2026-08-13-party-raid.md)

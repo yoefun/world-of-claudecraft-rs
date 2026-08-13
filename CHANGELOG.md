@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `party-depth`:** Playable 5-man parties in the Bevy client.
+- Client **G** invite (player target), **O** accept / **P** decline, **P** party panel, snapshot frames with HP.
+- Leader kick / promote / disband (panel **Y** / **-** / **Backspace**); **X** leave; **R** ready check.
+- Invite TTL **600** ticks (pending dropped silently).
+- Snapshot roster frames (`party_members`) even when a mate is outside AOI; disconnect shows **AFK**.
+- Park-safe membership: `park_player` keeps the roster; resume restores the same party.
+- Classic-era `group_xp` split (2-man = 75% each).
+- Ready check (300 ticks; parked members do not block early complete).
+- Protocol rev **9** (roster snapshot fields + kick/promote/disband/ready/raid-convert verbs). Raid convert stays planned for `1.15.0`.
+
 ## 1.13.0 — 2026-08-13
 
 ### Added
