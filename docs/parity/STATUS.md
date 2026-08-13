@@ -1,21 +1,20 @@
 # Parity status
 
-**Current rewrite:** `1.8.0` / `class-forms`.  
-**Next:** `1.9.0` / `gear-depth` — [`../superpowers/specs/2026-08-13-gear-depth-design.md`](../superpowers/specs/2026-08-13-gear-depth-design.md).  
+**Current rewrite:** `1.9.0` / `gear-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; gear depth is `1.9.0`.
 
-## Gear depth (`gear-depth`) — planned
+## Gear depth (`gear-depth`)
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| `can_equip` class / armor cap | planned | Cloth→Plate; weapon `allowed_classes` |
-| Two-hand / ranged occupancy | planned | Clears off-hand into bags |
-| Jewelry | planned | Neck + one Finger; additive protocol rev 7 |
-| Stamina / spell power | planned | `sta * 2` HP; SP on heal + `SpellDamage` |
-| Independent loot rolls | planned | One pile per successful `LootEntry` (no `break`) |
-| Upgrade ladder | planned | Pendant, ring, `crypt_cleaver`, `fen_staff`, `hag_focus` |
-| Client sheet / numbered bags | planned | Snapshot AP/Armor/SP; keys 1–9 / 1–8 |
+| `can_equip` class/armor | done | Cloth→Plate caps; weapon `allowed_classes` |
+| Two-hand occupancy | done | Bow/staff/cleaver clear OH |
+| Jewelry | done | Neck + one Finger |
+| Stamina / spell power | done | `sta*2` HP; SP on heal/spell |
+| Independent loot | done | One pile per successful `LootEntry` |
+| Crypt / hag gear | done | `crypt_cleaver` / `hag_focus` |
+| Client sheet | done | AP/Armor/SP; 1–9 bags; 1–8 unequip |
 | Durability / repair | n/a | NPC-services draft |
 | Quality / enchants / sockets | n/a | Manufacturing draft / non-goal |
 
@@ -107,7 +106,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.8.0` / class-forms (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.9.0` / gear-depth (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |

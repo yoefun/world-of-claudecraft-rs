@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.9.0 — 2026-08-13
 
-### Planned
+### Added
 
-- **1.9.0 `gear-depth`:** class/armor equip rules, two-hand occupancy, Neck/Finger, stamina + spell power, independent loot rolls, character-sheet stats. Design: `docs/superpowers/specs/2026-08-13-gear-depth-design.md`. Plan: `docs/superpowers/plans/2026-08-13-gear-depth.md`.
+- **1.9.0 `gear-depth`:** `can_equip` class/armor caps (Cloth→Plate) and weapon `allowed_classes`; two-hand/ranged weapons clear off-hand into bags.
+- Jewelry slots: Neck + one Finger (additive protocol rev **7**).
+- Stamina (`sta * 2` HP) and spell power on heals/spells; sim-authoritative secondary stats on equip.
+- Independent loot rolls: one pile per successful `LootEntry` (no early `break`).
+- Upgrade drops: `crypt_cleaver`, `hag_focus`, pendant/ring ladder.
+- Client character sheet shows AP/Armor/SP from snapshot; numbered bag keys **1–9**; unequip keys **1–8**.
 
 ## 1.8.0 — 2026-08-13
 
