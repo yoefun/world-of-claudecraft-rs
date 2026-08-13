@@ -185,6 +185,13 @@ fn sync_mob(world: &mut World, entity: &Entity) {
             respawn_timer: entity.respawn_timer,
         },
     );
+    world.insert(
+        entity.id,
+        InstanceAt {
+            instance_id: entity.instance_id.clone(),
+            delve_room: entity.delve_room,
+        },
+    );
 }
 
 fn sync_npc(world: &mut World, entity: &Entity) {
@@ -197,6 +204,13 @@ fn sync_loot(world: &mut World, entity: &Entity) {
         LootPile {
             copper: entity.loot_copper,
             item: entity.loot_item.clone(),
+        },
+    );
+    world.insert(
+        entity.id,
+        InstanceAt {
+            instance_id: entity.instance_id.clone(),
+            delve_room: entity.delve_room,
         },
     );
 }

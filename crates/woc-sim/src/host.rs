@@ -158,10 +158,21 @@ impl WorldHost for Sim {
                 crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::EnterPortal { zone_id } => {
-                let _ = enter_portal(&mut self.entities, player_id, &zone_id, &mut self.events);
+                self.rebuild_world();
+                let _ = enter_portal(
+                    &mut self.world,
+                    &mut self.entities,
+                    player_id,
+                    &zone_id,
+                    &mut self.events,
+                );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
+                self.next_id = self.next_id.max(self.world.next_id());
             }
             InteractAction::EnterDungeon { dungeon_id } => {
+                self.rebuild_world();
                 let _ = enter_dungeon(
+                    &mut self.world,
                     &mut self.entities,
                     &mut self.next_id,
                     &self.parties,
@@ -169,33 +180,43 @@ impl WorldHost for Sim {
                     &dungeon_id,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
+                self.next_id = self.next_id.max(self.world.next_id());
             }
             InteractAction::EnterDelve { delve_id } => {
-                if enter_delve(&mut self.entities, player_id, &delve_id, &mut self.events) {
-                    self.next_id = self
-                        .entities
-                        .iter()
-                        .map(|entity| entity.id)
-                        .max()
-                        .unwrap_or(0)
-                        .saturating_add(1)
-                        .max(self.next_id);
+                self.rebuild_world();
+                if enter_delve(
+                    &mut self.world,
+                    &mut self.entities,
+                    player_id,
+                    &delve_id,
+                    &mut self.events,
+                ) {
+                    crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
+                    self.next_id = self.next_id.max(self.world.next_id());
                 }
             }
             InteractAction::AdvanceDelve => {
-                if try_advance_delve(&mut self.entities, player_id, &mut self.events) {
-                    self.next_id = self
-                        .entities
-                        .iter()
-                        .map(|entity| entity.id)
-                        .max()
-                        .unwrap_or(0)
-                        .saturating_add(1)
-                        .max(self.next_id);
+                self.rebuild_world();
+                if try_advance_delve(
+                    &mut self.world,
+                    &mut self.entities,
+                    player_id,
+                    &mut self.events,
+                ) {
+                    crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
+                    self.next_id = self.next_id.max(self.world.next_id());
                 }
             }
             InteractAction::LeaveInstance => {
-                let _ = leave_instance(&mut self.entities, player_id, &mut self.events);
+                self.rebuild_world();
+                let _ = leave_instance(
+                    &mut self.world,
+                    &mut self.entities,
+                    player_id,
+                    &mut self.events,
+                );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::LootNeed { loot_id } => {
                 self.roll_loot(loot_id, player_id, RollChoice::Need);

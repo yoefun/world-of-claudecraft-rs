@@ -1,5 +1,9 @@
 //! Dedicated multi-room delve lifecycle.
 
+use crate::ecs::components::{
+    Bags, Combat, Health, Identity, InstanceAt, Progress, Threat, Transform,
+};
+use crate::ecs::World;
 use crate::entity::{create_mob_from_template, grant_into, Entity};
 use crate::zones::load_overworld_zone;
 use woc_content::{delve, mob, DelveDef};
@@ -7,6 +11,7 @@ use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Enter a content-defined delve and spawn its first room.
 pub fn enter_delve(
+    world: &mut World,
     entities: &mut Vec<Entity>,
     player_id: EntityId,
     delve_id: &str,
@@ -15,14 +20,23 @@ pub fn enter_delve(
     let Some(def) = delve(delve_id) else {
         return false;
     };
-    let Some(player) = entities
-        .iter()
-        .find(|entity| entity.id == player_id && entity.kind == EntityKind::Player)
-    else {
+    if world
+        .get::<Identity>(player_id)
+        .map(|i| i.kind)
+        != Some(EntityKind::Player)
+    {
         return false;
-    };
-    if player.level < def.min_level
-        || player.instance_id.is_some()
+    }
+    let level = world
+        .get::<Health>(player_id)
+        .map(|h| h.level)
+        .unwrap_or(1);
+    let in_instance = world
+        .get::<InstanceAt>(player_id)
+        .and_then(|i| i.instance_id.as_ref())
+        .is_some();
+    if level < def.min_level
+        || in_instance
         || def.rooms.is_empty()
         || def
             .rooms
@@ -32,7 +46,20 @@ pub fn enter_delve(
         return false;
     }
 
-    let mut next_id = next_entity_id(entities);
+    let to_remove: Vec<EntityId> = world
+        .live_ids()
+        .filter(|&id| {
+            world.get::<Identity>(id).is_some_and(|identity| {
+                matches!(
+                    identity.kind,
+                    EntityKind::Mob | EntityKind::Npc | EntityKind::Loot
+                )
+            })
+        })
+        .collect();
+    for id in to_remove {
+        world.despawn(id);
+    }
     entities.retain(|entity| {
         !matches!(
             entity.kind,
@@ -40,20 +67,30 @@ pub fn enter_delve(
         )
     });
 
+    let mut next_id = next_entity_id(entities, world);
     let instance_zone = format!("delve:{}", def.id);
-    let player = entities
-        .iter_mut()
-        .find(|entity| entity.id == player_id)
-        .expect("validated player must survive delve cleanup");
-    player.x = def.entrance_x;
-    player.z = def.entrance_z;
-    player.y = Entity::ground_at(player.x, player.z);
-    player.zone_id = instance_zone.clone();
-    player.instance_id = Some(def.id.to_string());
-    player.delve_room = Some(0);
-    reset_combat_state(player);
+    let spawn_y = Entity::ground_at(def.entrance_x, def.entrance_z);
+    if let Some(t) = world.get_mut::<Transform>(player_id) {
+        t.x = def.entrance_x;
+        t.z = def.entrance_z;
+        t.y = spawn_y;
+    }
+    if let Some(identity) = world.get_mut::<Identity>(player_id) {
+        identity.zone_id = instance_zone.clone();
+    }
+    if let Some(inst) = world.get_mut::<InstanceAt>(player_id) {
+        inst.instance_id = Some(def.id.to_string());
+        inst.delve_room = Some(0);
+    }
+    reset_combat_state(world, player_id);
 
-    spawn_room(entities, &mut next_id, def, 0, &instance_zone);
+    spawn_room(world, entities, &mut next_id, def, 0, &instance_zone);
+    world.set_next_id(next_id);
+
+    if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        crate::ecs::spawn::apply_world_to_entity(world, entity);
+    }
+
     events.push(SimEvent::InstanceEntered {
         player: player_id,
         dungeon_id: def.id.to_string(),
@@ -63,13 +100,13 @@ pub fn enter_delve(
 
 /// Advance after every mob in the current room is dead, or finish the delve.
 pub fn try_advance_delve(
+    world: &mut World,
     entities: &mut Vec<Entity>,
     player_id: EntityId,
     events: &mut Vec<SimEvent>,
 ) -> bool {
-    let Some((delve_id, room_index)) = entities
-        .iter()
-        .find(|entity| entity.id == player_id && entity.kind == EntityKind::Player)
+    let Some((delve_id, room_index)) = world
+        .get::<InstanceAt>(player_id)
         .and_then(|player| Some((player.instance_id.clone()?, player.delve_room? as usize)))
     else {
         return false;
@@ -78,10 +115,15 @@ pub fn try_advance_delve(
         return false;
     };
     if room_index >= def.rooms.len()
-        || entities.iter().any(|entity| {
-            entity.kind == EntityKind::Mob
-                && entity.alive
-                && entity.instance_id.as_deref() == Some(delve_id.as_str())
+        || world.ids::<Identity>().into_iter().any(|id| {
+            world.get::<Identity>(id).is_some_and(|identity| {
+                identity.kind == EntityKind::Mob
+                    && world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+                    && world
+                        .get::<InstanceAt>(id)
+                        .and_then(|i| i.instance_id.as_deref())
+                        == Some(delve_id.as_str())
+            })
         })
     {
         return false;
@@ -95,31 +137,47 @@ pub fn try_advance_delve(
 
     let next_room = room_index + 1;
     if next_room < def.rooms.len() {
+        let to_remove: Vec<EntityId> = world
+            .live_ids()
+            .filter(|&id| {
+                world.get::<Identity>(id).is_some_and(|identity| {
+                    matches!(identity.kind, EntityKind::Mob | EntityKind::Loot)
+                })
+            })
+            .collect();
+        for id in to_remove {
+            world.despawn(id);
+        }
         entities.retain(|entity| !matches!(entity.kind, EntityKind::Mob | EntityKind::Loot));
-        let mut next_id = next_entity_id(entities);
+
+        let mut next_id = next_entity_id(entities, world);
         let instance_zone = format!("delve:{}", def.id);
-        let player = entities
-            .iter_mut()
-            .find(|entity| entity.id == player_id)
-            .expect("active delve player must exist");
-        player.delve_room = Some(next_room as u32);
-        player.x = def.entrance_x;
-        player.z = def.entrance_z + next_room as f32 * 10.0;
-        player.y = Entity::ground_at(player.x, player.z);
-        reset_combat_state(player);
-        spawn_room(entities, &mut next_id, def, next_room, &instance_zone);
+        let spawn_y = Entity::ground_at(def.entrance_x, def.entrance_z + next_room as f32 * 10.0);
+        if let Some(t) = world.get_mut::<Transform>(player_id) {
+            t.x = def.entrance_x;
+            t.z = def.entrance_z + next_room as f32 * 10.0;
+            t.y = spawn_y;
+        }
+        if let Some(inst) = world.get_mut::<InstanceAt>(player_id) {
+            inst.delve_room = Some(next_room as u32);
+        }
+        reset_combat_state(world, player_id);
+        spawn_room(world, entities, &mut next_id, def, next_room, &instance_zone);
+        world.set_next_id(next_id);
+
+        if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+            crate::ecs::spawn::apply_world_to_entity(world, entity);
+        }
         return true;
     }
 
     let mut granted_item = None;
-    {
-        let player = entities
-            .iter_mut()
-            .find(|entity| entity.id == player_id)
-            .expect("active delve player must exist");
-        player.copper = player.copper.saturating_add(def.reward.copper);
-        if let Some(item_id) = def.reward.item_id {
-            if grant_into(&mut player.inventory, item_id, def.reward.item_count) {
+    if let Some(progress) = world.get_mut::<Progress>(player_id) {
+        progress.copper = progress.copper.saturating_add(def.reward.copper);
+    }
+    if let Some(item_id) = def.reward.item_id {
+        if let Some(bags) = world.get_mut::<crate::ecs::components::Bags>(player_id) {
+            if grant_into(&mut bags.inventory, item_id, def.reward.item_count) {
                 granted_item = Some(item_id.to_string());
                 events.push(SimEvent::ItemGained {
                     player: player_id,
@@ -134,14 +192,15 @@ pub fn try_advance_delve(
         }
     }
 
-    if !load_overworld_zone(entities, player_id, def.zone_id) {
+    if !load_overworld_zone(world, entities, player_id, def.zone_id) {
         return false;
     }
-    let player = entities
-        .iter_mut()
-        .find(|entity| entity.id == player_id)
-        .expect("completed delve player must survive zone load");
-    player.delve_room = None;
+    if let Some(inst) = world.get_mut::<InstanceAt>(player_id) {
+        inst.delve_room = None;
+    }
+    if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        crate::ecs::spawn::apply_world_to_entity(world, entity);
+    }
 
     events.push(SimEvent::DelveCompleted {
         player: player_id,
@@ -154,6 +213,7 @@ pub fn try_advance_delve(
 }
 
 fn spawn_room(
+    world: &mut World,
     entities: &mut Vec<Entity>,
     next_id: &mut EntityId,
     def: &DelveDef,
@@ -170,25 +230,33 @@ fn spawn_room(
         *next_id = next_id.saturating_add(1);
         entity.zone_id = zone_id.to_string();
         entity.instance_id = Some(def.id.to_string());
+        crate::ecs::spawn::sync_entity_to_world(world, &entity);
         entities.push(entity);
     }
 }
 
-fn next_entity_id(entities: &[Entity]) -> EntityId {
+fn next_entity_id(entities: &[Entity], world: &World) -> EntityId {
     entities
         .iter()
         .map(|entity| entity.id)
         .max()
         .unwrap_or(0)
         .saturating_add(1)
+        .max(world.next_id())
 }
 
-fn reset_combat_state(player: &mut Entity) {
-    player.target = None;
-    player.auto_attack = false;
-    player.open_vendor_npc = None;
-    player.cast = None;
-    player.threat.clear();
+fn reset_combat_state(world: &mut World, player_id: EntityId) {
+    if let Some(combat) = world.get_mut::<Combat>(player_id) {
+        combat.target = None;
+        combat.auto_attack = false;
+        combat.cast = None;
+    }
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        bags.open_vendor_npc = None;
+    }
+    if let Some(threat) = world.get_mut::<Threat>(player_id) {
+        threat.threat.clear();
+    }
 }
 
 #[cfg(test)]
@@ -213,9 +281,11 @@ mod tests {
         let player = create_player(1, "Delver", PlayerClass::Warrior, 5.0, 5.0);
         let world_mob = create_mob_from_template(2, "young_boar", 6.0, 5.0).expect("world mob");
         let mut entities = vec![player, world_mob];
+        let mut world = crate::ecs::spawn::world_from_entities(&entities);
         let mut events = Vec::new();
 
         assert!(enter_delve(
+            &mut world,
             &mut entities,
             1,
             "eastbrook_hollow",
@@ -240,7 +310,10 @@ mod tests {
         )));
 
         defeat_current_room(&mut entities);
-        assert!(try_advance_delve(&mut entities, 1, &mut events));
+        for entity in &entities {
+            crate::ecs::spawn::sync_entity_to_world(&mut world, entity);
+        }
+        assert!(try_advance_delve(&mut world, &mut entities, 1, &mut events));
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
         assert_eq!(player.delve_room, Some(1));
         assert_eq!(
@@ -256,7 +329,10 @@ mod tests {
         );
 
         defeat_current_room(&mut entities);
-        assert!(try_advance_delve(&mut entities, 1, &mut events));
+        for entity in &entities {
+            crate::ecs::spawn::sync_entity_to_world(&mut world, entity);
+        }
+        assert!(try_advance_delve(&mut world, &mut entities, 1, &mut events));
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
         assert_eq!(player.delve_room, Some(2));
         assert_eq!(
@@ -272,7 +348,10 @@ mod tests {
         );
 
         defeat_current_room(&mut entities);
-        assert!(try_advance_delve(&mut entities, 1, &mut events));
+        for entity in &entities {
+            crate::ecs::spawn::sync_entity_to_world(&mut world, entity);
+        }
+        assert!(try_advance_delve(&mut world, &mut entities, 1, &mut events));
 
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
         assert_eq!(player.instance_id, None);
@@ -302,8 +381,10 @@ mod tests {
     fn cannot_advance_while_current_room_has_living_mobs() {
         let player = create_player(1, "Delver", PlayerClass::Warrior, 5.0, 5.0);
         let mut entities = vec![player];
+        let mut world = crate::ecs::spawn::world_from_entities(&entities);
         let mut events = Vec::new();
         assert!(enter_delve(
+            &mut world,
             &mut entities,
             1,
             "eastbrook_hollow",
@@ -311,7 +392,7 @@ mod tests {
         ));
         events.clear();
 
-        assert!(!try_advance_delve(&mut entities, 1, &mut events));
+        assert!(!try_advance_delve(&mut world, &mut entities, 1, &mut events));
         assert_eq!(entities[0].delve_room, Some(0));
         assert!(events.is_empty());
     }
@@ -340,6 +421,7 @@ mod tests {
         assert!(sim.next_id > sim.entities.iter().map(|entity| entity.id).max().unwrap());
 
         defeat_current_room(&mut sim.entities);
+        sim.rebuild_world();
         WorldHost::interact(&mut sim, player_id, 0, InteractAction::AdvanceDelve);
         assert_eq!(
             sim.entities

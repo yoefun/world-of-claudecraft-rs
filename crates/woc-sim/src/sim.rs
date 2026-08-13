@@ -17,7 +17,10 @@ use crate::combat::{
     update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
-use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Motion, Owner, Transform};
+use crate::ecs::components::{
+    Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootTable, Motion, Owner,
+    Progress, QuestLog, Transform,
+};
 use crate::ecs::World;
 use crate::entity::{create_player, Entity, QuestState};
 use crate::interaction::vendor_snapshot;
@@ -603,26 +606,37 @@ impl Sim {
     }
 
     pub fn snapshot_for_player(&self, player_id: EntityId) -> TickSnapshot {
-        let player = self.entity_ref(player_id);
-        let level = player.map(|p| p.level).unwrap_or(1);
-        let target_id = player.and_then(|p| p.target);
-        let ability_cd = player.map(|p| p.ability_cd).unwrap_or(0.0);
-        let ability_name = player
-            .and_then(|p| p.primary_ability.as_deref())
+        let world = &self.world;
+        let level = world
+            .get::<Health>(player_id)
+            .map(|h| h.level)
+            .unwrap_or(1);
+        let target_id = world.get::<Combat>(player_id).and_then(|c| c.target);
+        let ability_cd = world
+            .get::<Combat>(player_id)
+            .map(|c| c.ability_cd)
+            .unwrap_or(0.0);
+        let primary_ability = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.primary_ability.clone());
+        let ability_name = primary_ability
+            .as_deref()
             .and_then(ability)
             .map(|a| a.name.to_string())
             .unwrap_or_default();
-        let cd_max = player
-            .and_then(|p| p.primary_ability.as_deref())
+        let cd_max = primary_ability
+            .as_deref()
             .and_then(ability)
             .map(|a| a.cooldown)
             .unwrap_or(3.0);
-        let class_id = player
-            .and_then(|p| p.class_id)
+        let class_id = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.class_id)
             .map(|c| c.as_str().to_string())
             .unwrap_or_default();
-        let resource_type = player
-            .and_then(|p| p.class_id)
+        let resource_type = world
+            .get::<ClassKit>(player_id)
+            .and_then(|k| k.class_id)
             .map(|c| class_def(c).resource_type)
             .map(|rt| match rt {
                 woc_content::ResourceType::Rage => "rage",
@@ -632,9 +646,10 @@ impl Sim {
             .unwrap_or("")
             .to_string();
 
-        let inventory = player
-            .map(|p| {
-                p.inventory
+        let inventory = world
+            .get::<Bags>(player_id)
+            .map(|bags| {
+                bags.inventory
                     .iter()
                     .enumerate()
                     .filter_map(|(i, s)| {
@@ -648,100 +663,82 @@ impl Sim {
             })
             .unwrap_or_default();
 
-        let equipment = player
-            .map(|p| EquipmentSnapshot {
-                main_hand: p.equipment.main_hand.clone(),
-                off_hand: p.equipment.off_hand.clone(),
-                head: p.equipment.head.clone(),
-                chest: p.equipment.chest.clone(),
-                legs: p.equipment.legs.clone(),
-                feet: p.equipment.feet.clone(),
+        let equipment = world
+            .get::<Bags>(player_id)
+            .map(|bags| EquipmentSnapshot {
+                main_hand: bags.equipment.main_hand.clone(),
+                off_hand: bags.equipment.off_hand.clone(),
+                head: bags.equipment.head.clone(),
+                chest: bags.equipment.chest.clone(),
+                legs: bags.equipment.legs.clone(),
+                feet: bags.equipment.feet.clone(),
             })
             .unwrap_or_default();
 
-        let quest_log = player
-            .map(|p| {
-                p.quest_log
+        let quest_log = world
+            .get::<QuestLog>(player_id)
+            .map(|q| {
+                q.quest_log
                     .iter()
-                    .map(|q| QuestLogEntry {
-                        quest_id: q.quest_id.clone(),
-                        state: match q.state {
+                    .map(|quest| QuestLogEntry {
+                        quest_id: quest.quest_id.clone(),
+                        state: match quest.state {
                             QuestState::Active => "active",
                             QuestState::Ready => "ready",
                             QuestState::Completed => "completed",
                         }
                         .to_string(),
-                        counts: q.counts.clone(),
+                        counts: quest.counts.clone(),
                     })
                     .collect()
             })
             .unwrap_or_default();
 
-        let open_vendor = vendor_snapshot(&self.world, player_id);
+        let open_vendor = vendor_snapshot(world, player_id);
 
-        let auras = player
-            .map(|p| {
-                p.auras
+        let auras = world
+            .get::<Auras>(player_id)
+            .map(|a| {
+                a.auras
                     .iter()
-                    .map(|a| AuraSnapshot {
-                        id: a.id.clone(),
-                        remaining: a.remaining.max(0.0),
-                        stacks: a.stacks,
+                    .map(|aura| AuraSnapshot {
+                        id: aura.id.clone(),
+                        remaining: aura.remaining.max(0.0),
+                        stacks: aura.stacks,
                     })
                     .collect()
             })
             .unwrap_or_default();
 
-        let cast = player.and_then(|p| {
-            p.cast.as_ref().map(|c| CastSnapshot {
-                ability_id: c.ability_id.clone(),
-                progress: if c.duration > 0.0 {
-                    (c.elapsed / c.duration).clamp(0.0, 1.0)
+        let cast = world.get::<Combat>(player_id).and_then(|c| {
+            c.cast.as_ref().map(|cast_state| CastSnapshot {
+                ability_id: cast_state.ability_id.clone(),
+                progress: if cast_state.duration > 0.0 {
+                    (cast_state.elapsed / cast_state.duration).clamp(0.0, 1.0)
                 } else {
                     1.0
                 },
             })
         });
 
-        let gcd = player.map(|p| p.gcd).unwrap_or(0.0);
-        let casting = player.map(|p| p.cast.is_some()).unwrap_or(false);
-        let auto_attack = player.map(|p| p.auto_attack).unwrap_or(false);
-        let ability_bar = player
-            .map(|p| build_ability_bar(p, gcd, casting))
-            .unwrap_or_default();
+        let gcd = world.get::<Combat>(player_id).map(|c| c.gcd).unwrap_or(0.0);
+        let casting = world
+            .get::<Combat>(player_id)
+            .map(|c| c.cast.is_some())
+            .unwrap_or(false);
+        let auto_attack = world
+            .get::<Combat>(player_id)
+            .map(|c| c.auto_attack)
+            .unwrap_or(false);
+        let ability_bar = build_ability_bar(world, player_id, gcd, casting);
 
-        let viewer_instance = player.and_then(|p| p.instance_id.clone());
-        let entities = self
-            .entities
-            .iter()
-            .filter(|e| e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc)
-            .filter(|e| match (&viewer_instance, &e.instance_id) {
-                (None, None) => true,
-                (Some(a), Some(b)) => a == b,
-                // Overworld viewers see overworld actors; instance players see
-                // their instance plus other players (for co-presence at portals).
-                (Some(_), None) => e.kind == EntityKind::Player,
-                (None, Some(_)) => e.kind == EntityKind::Player,
-            })
-            .map(|e| EntitySnapshot {
-                id: e.id,
-                kind: e.kind,
-                x: e.x,
-                y: e.y,
-                z: e.z,
-                yaw: e.yaw,
-                hp: e.hp,
-                hp_max: e.hp_max,
-                level: e.level,
-                name: e.name.clone(),
-                resource: e.resource,
-                resource_max: e.resource_max,
-                alive: e.alive,
-                template_id: e.template_id.clone(),
-                on_ground: e.on_ground,
-                flying: e.flying,
-                swimming: crate::player_motion::is_swimming(e),
-            })
+        let viewer_instance = world
+            .get::<InstanceAt>(player_id)
+            .and_then(|i| i.instance_id.clone());
+        let entities = world
+            .live_ids()
+            .filter(|&id| snapshot_includes_entity(world, viewer_instance.as_deref(), id))
+            .filter_map(|id| entity_snapshot(world, id))
             .collect();
 
         TickSnapshot {
@@ -749,10 +746,16 @@ impl Sim {
             player_id,
             entities,
             progress: PlayerProgress {
-                xp: player.map(|p| p.xp).unwrap_or(0),
+                xp: world
+                    .get::<Progress>(player_id)
+                    .map(|p| p.xp)
+                    .unwrap_or(0),
                 xp_to_level: xp_to_next(level),
                 level,
-                copper: player.map(|p| p.copper).unwrap_or(0),
+                copper: world
+                    .get::<Progress>(player_id)
+                    .map(|p| p.copper)
+                    .unwrap_or(0),
                 bag_item: None,
                 class_id,
                 resource_type,
@@ -775,13 +778,21 @@ impl Sim {
             ability_bar,
             gcd,
             auto_attack,
-            is_dead: player.map(|p| !p.alive).unwrap_or(false),
+            is_dead: world
+                .get::<Health>(player_id)
+                .map(|h| !h.alive)
+                .unwrap_or(false),
             party_id: self.parties.party_id(player_id),
-            zone_id: player
-                .map(|p| p.zone_id.clone())
+            zone_id: world
+                .get::<Identity>(player_id)
+                .map(|i| i.zone_id.clone())
                 .unwrap_or_else(|| "eastbrook".into()),
-            talent_points: player.map(|p| p.talent_points).unwrap_or(0),
-            talents: player
+            talent_points: world
+                .get::<Progress>(player_id)
+                .map(|p| p.talent_points)
+                .unwrap_or(0),
+            talents: world
+                .get::<Progress>(player_id)
                 .map(|p| {
                     p.talents
                         .iter()
@@ -792,9 +803,10 @@ impl Sim {
                         .collect()
                 })
                 .unwrap_or_default(),
-            bank: player
-                .map(|p| {
-                    p.bank
+            bank: world
+                .get::<Bank>(player_id)
+                .map(|bank| {
+                    bank.bank
                         .iter()
                         .enumerate()
                         .filter_map(|(i, s)| {
@@ -807,14 +819,18 @@ impl Sim {
                         .collect()
                 })
                 .unwrap_or_default(),
-            mail: {
-                let world = crate::ecs::spawn::world_from_entities(&self.entities);
-                self.mail.snapshot_for_entity(player_id, &world)
-            },
+            mail: self.mail.snapshot_for_entity(player_id, world),
             market: self.market.snapshot_public(),
-            honor: player.map(|p| p.honor).unwrap_or(0),
-            pvp_flagged: player.map(|p| p.pvp_flagged).unwrap_or(false),
-            professions: player
+            honor: world
+                .get::<Progress>(player_id)
+                .map(|p| p.honor)
+                .unwrap_or(0),
+            pvp_flagged: world
+                .get::<Progress>(player_id)
+                .map(|p| p.pvp_flagged)
+                .unwrap_or(false),
+            professions: world
+                .get::<Progress>(player_id)
                 .map(|p| {
                     p.professions
                         .iter()
@@ -830,10 +846,72 @@ impl Sim {
     }
 }
 
-fn build_ability_bar(player: &Entity, gcd: f32, casting: bool) -> Vec<AbilityBarSlot> {
-    let Some(class) = player.class_id else {
+fn entity_snapshot(world: &World, id: EntityId) -> Option<EntitySnapshot> {
+    let identity = world.get::<Identity>(id)?;
+    let t = world.get::<Transform>(id)?;
+    let health = world.get::<Health>(id);
+    let motion = world.get::<Motion>(id);
+    let kit = world.get::<ClassKit>(id);
+    Some(EntitySnapshot {
+        id,
+        kind: identity.kind,
+        x: t.x,
+        y: t.y,
+        z: t.z,
+        yaw: t.yaw,
+        hp: health.map(|h| h.hp).unwrap_or(0.0),
+        hp_max: health.map(|h| h.hp_max).unwrap_or(0.0),
+        level: health.map(|h| h.level).unwrap_or(1),
+        name: identity.name.clone(),
+        resource: kit.map(|k| k.resource).unwrap_or(0.0),
+        resource_max: kit.map(|k| k.resource_max).unwrap_or(0.0),
+        alive: health.map(|h| h.alive).unwrap_or(true),
+        template_id: identity.template_id.clone(),
+        on_ground: motion.map(|m| m.on_ground).unwrap_or(true),
+        flying: motion.map(|m| m.flying).unwrap_or(false),
+        swimming: crate::player_motion::is_swimming_at(t.x, t.y, t.z),
+    })
+}
+
+fn snapshot_includes_entity(
+    world: &World,
+    viewer_instance: Option<&str>,
+    id: EntityId,
+) -> bool {
+    let Some(identity) = world.get::<Identity>(id) else {
+        return false;
+    };
+    let alive = world.get::<Health>(id).map(|h| h.alive).unwrap_or(true);
+    if !alive && identity.kind != EntityKind::Mob && identity.kind != EntityKind::Npc {
+        return false;
+    }
+    let entity_instance = world
+        .get::<InstanceAt>(id)
+        .and_then(|i| i.instance_id.as_deref());
+    match (viewer_instance, entity_instance) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a == b,
+        (Some(_), None) => identity.kind == EntityKind::Player,
+        (None, Some(_)) => identity.kind == EntityKind::Player,
+    }
+}
+
+fn build_ability_bar(
+    world: &World,
+    player_id: EntityId,
+    gcd: f32,
+    casting: bool,
+) -> Vec<AbilityBarSlot> {
+    let Some(kit) = world.get::<ClassKit>(player_id) else {
         return Vec::new();
     };
+    let Some(class) = kit.class_id else {
+        return Vec::new();
+    };
+    let ability_cd = world
+        .get::<Combat>(player_id)
+        .map(|c| c.ability_cd)
+        .unwrap_or(0.0);
     let def = class_def(class);
     def.kit
         .iter()
@@ -854,22 +932,18 @@ fn build_ability_bar(player: &Entity, gcd: f32, casting: bool) -> Vec<AbilityBar
                     .collect::<Vec<_>>()
                     .join(" ")
             });
-            let known = player
+            let known = kit
                 .known_abilities
                 .iter()
                 .any(|id| id == entry.ability_id);
-            let cd = player
+            let cd = kit
                 .ability_cds
                 .get(entry.ability_id)
                 .copied()
                 .unwrap_or(0.0)
-                .max(if entry.slot == 1 {
-                    player.ability_cd
-                } else {
-                    0.0
-                });
+                .max(if entry.slot == 1 { ability_cd } else { 0.0 });
             let cost = abil.map(|a| a.cost).unwrap_or(0.0);
-            let affordable = player.resource + 1e-3 >= cost;
+            let affordable = kit.resource + 1e-3 >= cost;
             let ready = known && cd <= 0.0 && gcd <= 0.0 && !casting && affordable;
             AbilityBarSlot {
                 slot: entry.slot,
@@ -980,6 +1054,25 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost, WsServerMsg};
+
+    #[test]
+    fn snapshot_entity_ids_match_live_ids() {
+        let sim = Sim::new_eastbrook("Snap", PlayerClass::Warrior);
+        let snap = sim.snapshot_for_player(sim.player_id);
+        let viewer_instance = sim
+            .world
+            .get::<InstanceAt>(sim.player_id)
+            .and_then(|i| i.instance_id.clone());
+        let expected: Vec<EntityId> = sim
+            .world
+            .live_ids()
+            .filter(|&id| snapshot_includes_entity(&sim.world, viewer_instance.as_deref(), id))
+            .filter(|&id| entity_snapshot(&sim.world, id).is_some())
+            .collect();
+        let snap_ids: Vec<EntityId> = snap.entities.iter().map(|e| e.id).collect();
+        assert_eq!(snap_ids, expected);
+        assert_eq!(snap.entities.len(), expected.len());
+    }
 
     #[test]
     fn tick_phase_order_fingerprint_locked() {

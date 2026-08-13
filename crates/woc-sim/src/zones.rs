@@ -1,5 +1,7 @@
 //! Overworld zone transitions on the continuous strip.
 
+use crate::ecs::components::{Bags, Combat, Identity, InstanceAt, Threat, Transform};
+use crate::ecs::World;
 use crate::entity::{create_mob_from_template, create_npc_from_template, Entity};
 use woc_content::{
     GatherNodeDef, ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK,
@@ -29,12 +31,13 @@ fn layout_zone_tag(zone_id: &str) -> &'static str {
 
 /// Teleport through a portal without wiping other-zone actors.
 pub fn enter_portal(
+    world: &mut World,
     entities: &mut Vec<Entity>,
     player_id: EntityId,
     zone_id: &str,
     events: &mut Vec<SimEvent>,
 ) -> bool {
-    if !load_overworld_zone(entities, player_id, zone_id) {
+    if !load_overworld_zone(world, entities, player_id, zone_id) {
         return false;
     }
 
@@ -47,6 +50,7 @@ pub fn enter_portal(
 
 /// Ensure the destination zone population exists, then teleport the player.
 pub(crate) fn load_overworld_zone(
+    world: &mut World,
     entities: &mut Vec<Entity>,
     player_id: EntityId,
     zone_id: &str,
@@ -54,51 +58,73 @@ pub(crate) fn load_overworld_zone(
     let Some(layout) = zone_layout(zone_id) else {
         return false;
     };
-    if !entities
-        .iter()
-        .any(|entity| entity.id == player_id && entity.kind == EntityKind::Player)
+    if world
+        .get::<Identity>(player_id)
+        .map(|i| i.kind)
+        != Some(EntityKind::Player)
     {
         return false;
     }
 
     let tag = layout_zone_tag(zone_id);
-    ensure_zone_population(entities, layout, tag);
+    ensure_zone_population(world, entities, layout, tag);
 
-    let player = entities
-        .iter_mut()
-        .find(|entity| entity.id == player_id)
-        .expect("validated player must survive zone load");
-    player.x = layout.player_spawn_x;
-    player.z = layout.player_spawn_z;
-    player.y = Entity::ground_at(player.x, player.z);
-    player.zone_id = tag.to_string();
-    player.instance_id = None;
-    player.target = None;
-    player.auto_attack = false;
-    player.open_vendor_npc = None;
-    player.cast = None;
-    player.threat.clear();
+    let spawn_y = Entity::ground_at(layout.player_spawn_x, layout.player_spawn_z);
+    if let Some(t) = world.get_mut::<Transform>(player_id) {
+        t.x = layout.player_spawn_x;
+        t.z = layout.player_spawn_z;
+        t.y = spawn_y;
+    }
+    if let Some(identity) = world.get_mut::<Identity>(player_id) {
+        identity.zone_id = tag.to_string();
+    }
+    if let Some(inst) = world.get_mut::<InstanceAt>(player_id) {
+        inst.instance_id = None;
+        inst.delve_room = None;
+    }
+    if let Some(combat) = world.get_mut::<Combat>(player_id) {
+        combat.target = None;
+        combat.auto_attack = false;
+        combat.cast = None;
+    }
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        bags.open_vendor_npc = None;
+    }
+    if let Some(threat) = world.get_mut::<Threat>(player_id) {
+        threat.threat.clear();
+    }
+
+    if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        crate::ecs::spawn::apply_world_to_entity(world, entity);
+    }
     true
 }
 
-fn ensure_zone_population(entities: &mut Vec<Entity>, layout: &ZoneLayout, tag: &str) {
-    let has_zone_npc = entities
-        .iter()
-        .any(|e| e.kind == EntityKind::Npc && e.zone_id == tag && e.template_id.is_some());
+fn ensure_zone_population(
+    world: &mut World,
+    entities: &mut Vec<Entity>,
+    layout: &ZoneLayout,
+    tag: &str,
+) {
+    let has_zone_npc = world.ids::<Identity>().into_iter().any(|id| {
+        world
+            .get::<Identity>(id)
+            .is_some_and(|identity| {
+                identity.kind == EntityKind::Npc
+                    && identity.zone_id == tag
+                    && identity.template_id.is_some()
+            })
+    });
     if has_zone_npc {
         return;
     }
-    let mut next_id = entities
-        .iter()
-        .map(|entity| entity.id)
-        .max()
-        .unwrap_or(0)
-        .saturating_add(1);
+    let mut next_id = next_entity_id(entities, world);
     for spot in layout.npcs {
         let id = next_id;
         next_id = next_id.saturating_add(1);
         if let Some(mut npc) = create_npc_from_template(id, spot.npc_id, spot.x, spot.z) {
             npc.zone_id = tag.to_string();
+            crate::ecs::spawn::sync_entity_to_world(world, &npc);
             entities.push(npc);
         }
     }
@@ -107,9 +133,21 @@ fn ensure_zone_population(entities: &mut Vec<Entity>, layout: &ZoneLayout, tag: 
         next_id = next_id.saturating_add(1);
         if let Some(mut mob) = create_mob_from_template(id, spot.mob_id, spot.x, spot.z) {
             mob.zone_id = tag.to_string();
+            crate::ecs::spawn::sync_entity_to_world(world, &mob);
             entities.push(mob);
         }
     }
+    world.set_next_id(next_id);
+}
+
+fn next_entity_id(entities: &[Entity], world: &World) -> EntityId {
+    entities
+        .iter()
+        .map(|entity| entity.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1)
+        .max(world.next_id())
 }
 
 /// Populate all overworld layouts into one continuous realm.
@@ -198,9 +236,16 @@ mod tests {
         let mut next_id = 2;
         let mut rng = crate::rng::Rng::new(1);
         populate_all_overworld(&mut entities, &mut next_id, &mut rng);
+        let mut world = crate::ecs::spawn::world_from_entities(&entities);
         let mut events = Vec::new();
 
-        assert!(enter_portal(&mut entities, 1, "eastfen", &mut events));
+        assert!(enter_portal(
+            &mut world,
+            &mut entities,
+            1,
+            "eastfen",
+            &mut events
+        ));
 
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
         assert_eq!(player.zone_id, "eastfen");
@@ -243,9 +288,16 @@ mod tests {
         let mut next_id = 2;
         let mut rng = crate::rng::Rng::new(2);
         populate_all_overworld(&mut entities, &mut next_id, &mut rng);
+        let mut world = crate::ecs::spawn::world_from_entities(&entities);
         let mut events = Vec::new();
 
-        assert!(enter_portal(&mut entities, 1, "mirefen", &mut events));
+        assert!(enter_portal(
+            &mut world,
+            &mut entities,
+            1,
+            "mirefen",
+            &mut events
+        ));
 
         let player = entities.iter().find(|entity| entity.id == 1).unwrap();
         assert_eq!(player.zone_id, "mirefen");
@@ -293,9 +345,16 @@ mod tests {
     fn unsupported_zone_does_not_mutate_player() {
         let player = create_player(1, "Traveler", PlayerClass::Warrior, 9.0, 11.0);
         let mut entities = vec![player];
+        let mut world = crate::ecs::spawn::world_from_entities(&entities);
         let mut events = Vec::new();
 
-        assert!(!enter_portal(&mut entities, 1, "missing_zone", &mut events));
+        assert!(!enter_portal(
+            &mut world,
+            &mut entities,
+            1,
+            "missing_zone",
+            &mut events
+        ));
         assert_eq!((entities[0].x, entities[0].z), (9.0, 11.0));
         assert!(events.is_empty());
     }
