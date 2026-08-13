@@ -10,10 +10,7 @@ use woc_manufacturing::professions::types::{DenyReason, ProfessionId, RecipeId, 
 #[test]
 fn spec_lists_ten_profession_ids() {
     assert_eq!(ProfessionId::ALL.len(), 10);
-    let names: Vec<_> = ProfessionId::ALL
-        .iter()
-        .map(|p| format!("{p:?}"))
-        .collect();
+    let names: Vec<_> = ProfessionId::ALL.iter().map(|p| format!("{p:?}")).collect();
     assert_eq!(
         names,
         [

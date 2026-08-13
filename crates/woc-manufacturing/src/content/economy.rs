@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod tests {
+    use crate::content::enchants::disenchant_yield;
     use crate::content::enchants::ENCHANT_DEFS;
     use crate::content::items::{item_def, ITEM_DEFS};
     use crate::content::recipes::RECIPES;
     use crate::content::vendors::VENDOR_ITEMS;
     use crate::item::{reagent_unit_value, ItemId, Quality};
-    use crate::content::enchants::disenchant_yield;
 
     #[test]
     fn every_recipe_costs_more_than_it_vendors() {
@@ -40,8 +40,7 @@ mod tests {
                     assert!(
                         !def.gathered,
                         "{:?} reagent {:?} must not be gathered",
-                        enchant.id,
-                        r.item
+                        enchant.id, r.item
                     );
                     reagent_unit_value(def) * u32::from(r.count)
                 })

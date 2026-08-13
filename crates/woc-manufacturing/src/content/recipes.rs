@@ -1,5 +1,5 @@
 use crate::item::ItemId;
-use crate::professions::types::{ProfessionId, RecipeDef, RecipeId, Reagent, StationType};
+use crate::professions::types::{ProfessionId, Reagent, RecipeDef, RecipeId, StationType};
 
 pub const RECIPES: &[RecipeDef] = &[
     RecipeDef {
@@ -493,15 +493,8 @@ mod tests {
         let mut last_masterwork = None;
         let mut rng = ScriptedRng::from_seq(&[99]);
 
-        evaluate_craft_admission(
-            RecipeId::ProspectCopper,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap();
+        evaluate_craft_admission(RecipeId::ProspectCopper, 1, field_pos(), &inv, &gold, false)
+            .unwrap();
 
         let grant = complete_craft(
             RecipeId::ProspectCopper,
@@ -526,15 +519,9 @@ mod tests {
     fn tigerseye_band_requires_jewelers_bench() {
         let inv = inv_with_tigerseye_band_reagents();
         let gold = Gold { copper: 100 };
-        let err = evaluate_craft_admission(
-            RecipeId::TigerseyeBand,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_craft_admission(RecipeId::TigerseyeBand, 1, field_pos(), &inv, &gold, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::StationRequired);
 
         let mut inv = inv_with_tigerseye_band_reagents();
@@ -581,15 +568,8 @@ mod tests {
         let mut last_masterwork = None;
         let mut rng = ScriptedRng::from_seq(&[99]);
 
-        evaluate_craft_admission(
-            RecipeId::BoltOfLinen,
-            1,
-            field_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap();
+        evaluate_craft_admission(RecipeId::BoltOfLinen, 1, field_pos(), &inv, &gold, false)
+            .unwrap();
 
         let grant = complete_craft(
             RecipeId::BoltOfLinen,
@@ -615,15 +595,9 @@ mod tests {
     fn trousers_require_loom() {
         let inv = inv_with_trousers_reagents();
         let gold = Gold { copper: 100 };
-        let err = evaluate_craft_admission(
-            RecipeId::LinenTrousers,
-            1,
-            forge_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_craft_admission(RecipeId::LinenTrousers, 1, forge_pos(), &inv, &gold, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::StationRequired);
 
         let mut inv = inv_with_trousers_reagents();
@@ -632,15 +606,8 @@ mod tests {
         let mut last_masterwork = None;
         let mut rng = ScriptedRng::from_seq(&[99]);
 
-        evaluate_craft_admission(
-            RecipeId::LinenTrousers,
-            1,
-            loom_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap();
+        evaluate_craft_admission(RecipeId::LinenTrousers, 1, loom_pos(), &inv, &gold, false)
+            .unwrap();
 
         let grant = complete_craft(
             RecipeId::LinenTrousers,
@@ -866,15 +833,9 @@ mod tests {
     fn grenade_requires_toolworks_and_consumes_bolts() {
         let inv = inv_with_grenade_reagents();
         let gold = Gold { copper: 100 };
-        let err = evaluate_craft_admission(
-            RecipeId::CopperGrenade,
-            1,
-            forge_pos(),
-            &inv,
-            &gold,
-            false,
-        )
-        .unwrap_err();
+        let err =
+            evaluate_craft_admission(RecipeId::CopperGrenade, 1, forge_pos(), &inv, &gold, false)
+                .unwrap_err();
         assert_eq!(err, DenyReason::StationRequired);
 
         let mut inv = inv_with_grenade_reagents();
