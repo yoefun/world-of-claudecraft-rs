@@ -23,7 +23,7 @@ use crate::combat::{
 use crate::context::SimContext;
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Health, Hearth, Identity, InstanceAt, LootPile, LootTable,
-    Motion, Owner, Progress, Transform,
+    Motion, Owner, Progress, Riding, Transform,
 };
 use crate::ecs::World;
 use crate::interaction::{npc_session_snapshot, vendor_snapshot};
@@ -878,9 +878,14 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
-            riding_rank: 0,
-            known_mounts: Vec::new(),
-            mounted: None,
+            riding_rank: world.get::<Riding>(player_id).map(|r| r.rank).unwrap_or(0),
+            known_mounts: world
+                .get::<Riding>(player_id)
+                .map(|r| r.known.iter().cloned().collect())
+                .unwrap_or_default(),
+            mounted: world
+                .get::<Riding>(player_id)
+                .and_then(|r| r.active_id.clone()),
         }
     }
 
@@ -954,7 +959,9 @@ fn entity_snapshot(world: &World, id: EntityId) -> Option<EntitySnapshot> {
         on_ground: motion.map(|m| m.on_ground).unwrap_or(true),
         flying: motion.map(|m| m.flying).unwrap_or(false),
         swimming: crate::player_motion::is_swimming_at(t.x, t.y, t.z),
-        mounted: None,
+        mounted: world
+            .get::<Riding>(id)
+            .and_then(|r| r.active_id.clone()),
     })
 }
 
@@ -1210,6 +1217,25 @@ mod tests {
         let snap_ids: Vec<EntityId> = snap.entities.iter().map(|e| e.id).collect();
         assert_eq!(snap_ids, expected);
         assert_eq!(snap.entities.len(), expected.len());
+    }
+
+    #[test]
+    fn snapshot_includes_mounted() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let id = sim.spawn_player("Ada", PlayerClass::Warrior).unwrap();
+        {
+            let r = sim.world.get_mut::<crate::ecs::components::Riding>(id).unwrap();
+            r.rank = 1;
+            r.known.insert("brown_pony".into());
+        }
+        let mut events = Vec::new();
+        assert!(crate::mount::summon_mount(&mut sim.world, id, "brown_pony", &mut events));
+        let snap = sim.snapshot_for_player(id);
+        assert_eq!(snap.riding_rank, 1);
+        assert!(snap.known_mounts.iter().any(|m| m == "brown_pony"));
+        assert_eq!(snap.mounted.as_deref(), Some("brown_pony"));
+        let me = snap.entities.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(me.mounted.as_deref(), Some("brown_pony"));
     }
 
     #[test]
