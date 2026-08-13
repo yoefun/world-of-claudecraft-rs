@@ -709,17 +709,24 @@ impl GuildRoster {
                 message: "Only the Guild Master may disband the guild.".into(),
             }];
         }
-        let Some(guild) = self.guilds.remove(&guild_id) else {
-            return Vec::new();
-        };
+        // Resolve recipients before the guild is gone: a `GuildNotice` here would
+        // expand against a roster the host can no longer find.
         let guild_name = guild.name.clone();
-        for member in &guild.members {
-            self.membership.remove(&member.durable_id);
+        let member_keys: Vec<String> = guild.members.iter().map(|m| m.durable_id.clone()).collect();
+        let message = format!("<{guild_name}> has been disbanded.");
+        let effects: Vec<GuildEffect> = member_keys
+            .iter()
+            .filter_map(|key| find_player_by_durable(world, key))
+            .map(|to| GuildEffect::Notice {
+                to,
+                message: message.clone(),
+            })
+            .collect();
+        self.guilds.remove(&guild_id);
+        for key in &member_keys {
+            self.membership.remove(key);
         }
-        vec![GuildEffect::GuildNotice {
-            guild_id,
-            message: format!("<{guild_name}> has been disbanded."),
-        }]
+        effects
     }
 
     pub fn set_motd(&mut self, actor: EntityId, text: &str, world: &World) -> Vec<GuildEffect> {
@@ -770,6 +777,27 @@ impl GuildRoster {
             to: actor,
             message: "Guild billboard updated.".into(),
         }]
+    }
+
+    /// Re-read the cached name / class / level projection for a live character.
+    pub fn refresh_member(&mut self, world: &World, player_id: EntityId) {
+        if world.get::<ClassKit>(player_id).is_none() {
+            return;
+        }
+        let key = Self::member_key(world, player_id);
+        let Some(&guild_id) = self.membership.get(&key) else {
+            return;
+        };
+        let Some(guild) = self.guilds.get_mut(&guild_id) else {
+            return;
+        };
+        let Some(member) = guild.members.iter_mut().find(|m| m.durable_id == key) else {
+            return;
+        };
+        let fresh = live_member(world, player_id, member.rank);
+        member.name = fresh.name;
+        member.class_id = fresh.class_id;
+        member.level = fresh.level;
     }
 
     pub fn remove_member(&mut self, durable_id: &str) {
@@ -1097,6 +1125,31 @@ mod tests {
         let gone = roster.disband(1, &world);
         assert!(gone
             .iter()
+            .any(|e| matches!(e, GuildEffect::Notice { to: 1, .. })));
+        assert!(roster
+            .guild_id_of(&GuildRoster::member_key(&world, 1))
+            .is_none());
+        assert!(roster
+            .guild_id_of(&GuildRoster::member_key(&world, 2))
+            .is_none());
+    }
+
+    #[test]
+    fn disband_notifies_every_live_member() {
+        let (world, mut roster) = formed_duo(0);
+        let effects = roster.disband(1, &world);
+        for id in [1, 2] {
+            assert!(
+                effects.iter().any(|e| matches!(
+                    e,
+                    GuildEffect::Notice { to, message }
+                        if *to == id && message == "<Vale Watch> has been disbanded."
+                )),
+                "expected a disband notice to {id}: {effects:?}"
+            );
+        }
+        assert!(!effects
+            .iter()
             .any(|e| matches!(e, GuildEffect::GuildNotice { .. })));
         assert!(roster
             .guild_id_of(&GuildRoster::member_key(&world, 1))
@@ -1104,5 +1157,37 @@ mod tests {
         assert!(roster
             .guild_id_of(&GuildRoster::member_key(&world, 2))
             .is_none());
+    }
+
+    #[test]
+    fn remove_member_promotes_next_member_and_deletes_empty_guild() {
+        let (world, mut roster) = formed_duo(0);
+        let alice = GuildRoster::member_key(&world, 1);
+        let bob = GuildRoster::member_key(&world, 2);
+        let gid = roster.guild_id_of(&alice).unwrap();
+        roster.remove_member(&alice);
+        assert!(roster.guild_id_of(&alice).is_none());
+        let g = roster.guild(gid).expect("guild survives losing its leader");
+        assert_eq!(g.members.len(), 1);
+        assert_eq!(g.members[0].durable_id, bob);
+        assert_eq!(g.members[0].rank, GuildRank::Leader);
+        roster.remove_member(&bob);
+        assert!(roster.guild(gid).is_none(), "empty guild is deleted");
+        assert!(roster.guild_id_of(&bob).is_none());
+    }
+
+    #[test]
+    fn refresh_member_updates_cached_name_class_and_level() {
+        let mut world = world_with_players(2);
+        let mut roster = GuildRoster::new();
+        let _ = roster.create(1, "Vale Watch", &world);
+        assert_eq!(roster.snapshot_for(1, &world).unwrap().members[0].level, 1);
+        world.get_mut::<Health>(1).unwrap().level = 12;
+        world.get_mut::<Identity>(1).unwrap().name = "Alicia".into();
+        roster.refresh_member(&world, 1);
+        let snap = roster.snapshot_for(1, &world).unwrap();
+        assert_eq!(snap.members[0].name, "Alicia");
+        assert_eq!(snap.members[0].level, 12);
+        assert_eq!(snap.members[0].class_id, "warrior");
     }
 }

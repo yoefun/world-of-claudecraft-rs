@@ -211,6 +211,7 @@ impl Sim {
             EASTBROOK.player_spawn_z,
         );
         self.intents.insert(id, PlayerIntent::default());
+        self.guilds.refresh_member(&self.world, id);
         if self.player_id == 0 {
             self.player_id = id;
         }
@@ -226,6 +227,7 @@ impl Sim {
     ) -> Option<EntityId> {
         if let Some(ref did) = state.durable_id {
             if let Some(id) = self.resume_player(did) {
+                self.guilds.refresh_member(&self.world, id);
                 return Some(id);
             }
         }
@@ -271,6 +273,7 @@ impl Sim {
             }
         }
         self.intents.insert(id, PlayerIntent::default());
+        self.guilds.refresh_member(&self.world, id);
         if self.player_id == 0 {
             self.player_id = id;
         }
@@ -2848,6 +2851,33 @@ mod tests {
         assert_eq!(
             sim.snapshot_for_player(a).guild.as_ref().unwrap().name,
             "Vale Watch"
+        );
+    }
+
+    #[test]
+    fn spawn_refreshes_cached_guild_level() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(a) {
+            d.durable_id = Some("char-alice".into());
+        }
+        let _ = sim.guild_create(a, "Vale Watch");
+        assert_eq!(
+            sim.snapshot_for_player(a).guild.as_ref().unwrap().members[0].level,
+            1
+        );
+        if let Some(h) = sim.world.get_mut::<Health>(a) {
+            h.level = 9;
+        }
+        sim.park_player(a);
+        let state = sim.export_player_state(a).expect("export parked state");
+        let resumed = sim
+            .spawn_player_with_state("Alice", PlayerClass::Warrior, &state)
+            .expect("resume on hello");
+        assert_eq!(resumed, a);
+        assert_eq!(
+            sim.snapshot_for_player(a).guild.as_ref().unwrap().members[0].level,
+            9
         );
     }
 }
