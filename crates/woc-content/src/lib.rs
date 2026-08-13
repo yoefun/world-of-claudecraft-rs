@@ -29,7 +29,7 @@ pub mod zone2;
 pub mod zone3;
 
 pub use abilities::{ability, aura_for_ability, AbilityDef, ABILITIES};
-pub use ability_effects::{aura, AbilityEffect, AuraDef, DamageSchool, AURAS};
+pub use ability_effects::{aura, AbilityEffect, AbilityFlags, AuraDef, DamageSchool, AURAS};
 pub use classes::{
     class_ability_for_slot, class_def, known_abilities_at_level, ClassDef, ClassKitEntry,
     PlayerClass, ResourceType, CLASSES,
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn every_ability_declares_an_effect() {
-        assert_eq!(ABILITIES.len(), 43);
+        assert_eq!(ABILITIES.len(), 49);
         for def in ABILITIES {
             let _ = def.effect;
             if let Some(aura_id) = def.aura {
@@ -426,6 +426,18 @@ mod tests {
             ability("holy_shock").unwrap().effect,
             AbilityEffect::HealOrHarm { .. }
         ));
+        assert!(matches!(
+            ability("power_word_shield").unwrap().effect,
+            AbilityEffect::Absorb { .. }
+        ));
+        assert!(matches!(
+            ability("charge").unwrap().effect,
+            AbilityEffect::Charge { .. }
+        ));
+        assert_eq!(
+            class_def(PlayerClass::Hunter).resource_type,
+            ResourceType::Mana
+        );
     }
 
     #[test]

@@ -313,14 +313,14 @@ pub static CLASSES: &[ClassDef] = &[
     ClassDef {
         id: PlayerClass::Hunter,
         name: "Hunter",
-        resource_type: ResourceType::Energy,
+        resource_type: ResourceType::Mana,
         base_hp: 100.0,
         resource_max: 100.0,
         primary_ability: "arcane_shot",
         kit: HUNTER_KIT,
         start_weapon: "worn_bow",
         start_chest: "recruit_tunic",
-        start_items: RATIONS,
+        start_items: RATIONS_MANA,
         attack_power: 14.0,
     },
     ClassDef {

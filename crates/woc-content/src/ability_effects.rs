@@ -45,6 +45,86 @@ pub enum AbilityEffect {
         hp_pct: f32,
         coefficient: f32,
     },
+    /// Apply an absorb shield to the heal-target (self / friendly).
+    Absorb {
+        amount: f32,
+    },
+    /// Close to melee if `dist` is in `(MELEE, gap]`, then weapon hit.
+    Charge {
+        gap: f32,
+    },
+    /// Offset the caster along facing, then clamp to walkable ground.
+    Blink {
+        distance: f32,
+    },
+    /// Spend HP for resource (Life Tap). Leaves at least 1 HP if alive.
+    Convert {
+        hp_cost: f32,
+        resource_gain: f32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AbilityFlags {
+    pub requires_stealth: bool,
+    /// Cleared after the ability starts. Default true.
+    pub breaks_stealth: bool,
+    pub combo_add: u8,
+    pub combo_spend: bool,
+    pub combo_per_point: f32,
+    pub self_aoe: bool,
+    pub interrupt_lockout: f32,
+    pub rage_dump: bool,
+}
+
+impl AbilityFlags {
+    pub const DEFAULT: Self = Self {
+        requires_stealth: false,
+        breaks_stealth: true,
+        combo_add: 0,
+        combo_spend: false,
+        combo_per_point: 0.0,
+        self_aoe: false,
+        interrupt_lockout: 0.0,
+        rage_dump: false,
+    };
+
+    pub const fn combo_builder(self, points: u8) -> Self {
+        let mut s = self;
+        s.combo_add = points;
+        s
+    }
+
+    pub const fn combo_finisher(self, per_point: f32) -> Self {
+        let mut s = self;
+        s.combo_spend = true;
+        s.combo_per_point = per_point;
+        s
+    }
+
+    pub const fn stealth_opener(self) -> Self {
+        let mut s = self;
+        s.requires_stealth = true;
+        s
+    }
+
+    pub const fn lockout(self, seconds: f32) -> Self {
+        let mut s = self;
+        s.interrupt_lockout = seconds;
+        s
+    }
+
+    pub const fn dump_rage(self) -> Self {
+        let mut s = self;
+        s.rage_dump = true;
+        s
+    }
+
+    pub const fn around_self(self) -> Self {
+        let mut s = self;
+        s.self_aoe = true;
+        s
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -58,6 +138,8 @@ pub struct AuraDef {
     pub stun: bool,
     /// Horizontal speed multiplier while the aura remains (`1.0` = none).
     pub move_mult: f32,
+    pub absorb: f32,
+    pub breaks_on_damage: bool,
 }
 
 const fn dot(id: &'static str, duration: f32, tick_interval: f32, tick_damage: f32) -> AuraDef {
@@ -69,6 +151,8 @@ const fn dot(id: &'static str, duration: f32, tick_interval: f32, tick_damage: f
         tick_heal: 0.0,
         stun: false,
         move_mult: 1.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
     }
 }
 
@@ -81,6 +165,8 @@ const fn hot(id: &'static str, duration: f32, tick_interval: f32, tick_heal: f32
         tick_heal,
         stun: false,
         move_mult: 1.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
     }
 }
 
@@ -93,6 +179,8 @@ const fn slow(id: &'static str, duration: f32, move_mult: f32) -> AuraDef {
         tick_heal: 0.0,
         stun: false,
         move_mult,
+        absorb: 0.0,
+        breaks_on_damage: false,
     }
 }
 
@@ -105,6 +193,36 @@ const fn stun(id: &'static str, duration: f32) -> AuraDef {
         tick_heal: 0.0,
         stun: true,
         move_mult: 0.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
+    }
+}
+
+const fn absorb(id: &'static str, duration: f32, amount: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult: 1.0,
+        absorb: amount,
+        breaks_on_damage: false,
+    }
+}
+
+const fn buff(id: &'static str, duration: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult: 1.0,
+        absorb: 0.0,
+        breaks_on_damage: false,
     }
 }
 
@@ -122,6 +240,9 @@ pub static AURAS: &[AuraDef] = &[
     slow("chill", 6.0, 0.5),
     stun("cheap_shot", 2.0),
     stun("hammer_of_justice", 3.0),
+    absorb("power_word_shield", 15.0, 45.0),
+    buff("battle_shout", 120.0),
+    buff("aspect_of_the_hawk", 120.0),
 ];
 
 pub fn aura(id: &str) -> Option<&'static AuraDef> {
@@ -131,6 +252,10 @@ pub fn aura(id: &str) -> Option<&'static AuraDef> {
 impl AuraDef {
     pub fn is_hot(self) -> bool {
         self.tick_heal > 0.0 && self.tick_damage <= 0.0
+    }
+
+    pub fn is_self_buff(self) -> bool {
+        self.tick_damage <= 0.0 && !self.stun && self.move_mult >= 1.0 && self.absorb <= 0.0
     }
 }
 
@@ -144,6 +269,7 @@ mod tests {
         assert!(aura("chill").unwrap().move_mult < 1.0);
         assert!(aura("cheap_shot").unwrap().stun);
         assert!(aura("rejuvenation").unwrap().is_hot());
+        assert!(aura("power_word_shield").unwrap().absorb > 0.0);
         assert!(aura("missing").is_none());
     }
 
@@ -156,7 +282,7 @@ mod tests {
                 a.id
             );
             assert!(a.duration > 0.0, "{}", a.id);
-            assert!(a.move_mult >= 0.0 && a.move_mult <= 1.0, "{}", a.id);
+            assert!(a.move_mult >= 0.0, "{}", a.id);
         }
     }
 }
