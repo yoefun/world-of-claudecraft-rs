@@ -11,7 +11,7 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 use uuid::Uuid;
 use woc_content::PlayerClass;
 use woc_protocol::{EntityId, WorldHost, WsClientMsg, WsServerMsg, PROTOCOL_REV, TICK_RATE};
-use woc_sim::Sim;
+use woc_sim::{GuildDelivery, Sim};
 use woc_version::{
     check_compat, min_client_version_from_env, ClientIdentity, RealmIdentity, REWRITE_VERSION,
 };
@@ -53,6 +53,8 @@ struct Shared {
     persist: woc_persist::Persist,
 }
 
+static SHARED: tokio::sync::OnceCell<Arc<Shared>> = tokio::sync::OnceCell::const_new();
+
 async fn build_shared(persist: woc_persist::Persist) -> Arc<Shared> {
     let mut sim = Sim::new_empty_eastbrook();
     match persist.load_economy().await {
@@ -74,14 +76,95 @@ pub async fn ws_handler(
 ) -> impl IntoResponse {
     let persist = state.persist.clone();
     ws.on_upgrade(move |socket| async move {
-        // One shared realm per process, initialized lazily with persist.
-        static SHARED: tokio::sync::OnceCell<Arc<Shared>> = tokio::sync::OnceCell::const_new();
         let shared = SHARED
             .get_or_init(|| build_shared(persist.clone()))
             .await
             .clone();
         handle_socket(socket, shared).await;
     })
+}
+
+fn expand_deliveries(sim: &Sim, outs: Vec<GuildDelivery>) -> Vec<(Vec<EntityId>, String)> {
+    outs.into_iter()
+        .map(|d| match d {
+            GuildDelivery::To { player, msg } => {
+                (vec![player], serde_json::to_string(&msg).unwrap_or_default())
+            }
+            GuildDelivery::Guild {
+                guild_id,
+                officer_only,
+                msg,
+            } => (
+                sim.live_guild_recipients(guild_id, officer_only),
+                serde_json::to_string(&msg).unwrap_or_default(),
+            ),
+        })
+        .collect()
+}
+
+async fn send_to_players(shared: &Shared, recips: Vec<(Vec<EntityId>, String)>) {
+    let tx_map = shared.player_tx.lock().await;
+    for (ids, json) in recips {
+        for id in ids {
+            if let Some(tx) = tx_map.get(&id) {
+                let _ = tx.send(json.clone());
+            }
+        }
+    }
+}
+
+async fn run_guild_op(
+    shared: &Arc<Shared>,
+    op: impl FnOnce(&mut Sim) -> Vec<GuildDelivery>,
+) {
+    let recips = {
+        let mut realm = shared.realm.lock().await;
+        let outs = op(&mut realm.sim);
+        let recips = expand_deliveries(&realm.sim, outs);
+        realm.economy_dirty = true;
+        drop(realm);
+        recips
+    };
+    send_to_players(shared, recips).await;
+}
+
+fn remove_member_from_economy(economy: &mut woc_persist::RealmEconomy, durable_id: &str) {
+    economy.guilds.retain_mut(|guild| {
+        guild.members.retain(|m| m.durable_id != durable_id);
+        if guild.members.is_empty() {
+            return false;
+        }
+        if !guild.members.iter().any(|m| m.rank == "leader") {
+            guild.members[0].rank = "leader".into();
+        }
+        true
+    });
+}
+
+/// Drop a deleted character from guild rosters (live sim or cold economy).
+pub async fn on_character_deleted(id: Uuid, persist: &woc_persist::Persist) {
+    let durable = id.to_string();
+    if let Some(shared) = SHARED.get() {
+        let economy = {
+            let mut realm = shared.realm.lock().await;
+            realm.sim.guilds.remove_member(&durable);
+            realm.economy_dirty = true;
+            export_economy_from_sim(&realm.sim)
+        };
+        if let Err(e) = persist.save_economy(economy).await {
+            tracing::warn!("failed to save economy after character delete: {e}");
+        }
+    } else {
+        match persist.load_economy().await {
+            Ok(mut economy) => {
+                remove_member_from_economy(&mut economy, &durable);
+                if let Err(e) = persist.save_economy(economy).await {
+                    tracing::warn!("failed to save economy after character delete: {e}");
+                }
+            }
+            Err(e) => tracing::warn!("failed to load economy for character delete: {e}"),
+        }
+    }
 }
 
 async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
@@ -270,15 +353,76 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     }
                 }
             }
+            WsClientMsg::GuildCreate { name } => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_create(b.player_id, &name)).await;
+                }
+            }
+            WsClientMsg::GuildInvite { name } => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_invite(b.player_id, &name)).await;
+                }
+            }
+            WsClientMsg::GuildAccept => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_accept(b.player_id)).await;
+                }
+            }
+            WsClientMsg::GuildDecline => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_decline(b.player_id)).await;
+                }
+            }
+            WsClientMsg::GuildLeave => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_leave(b.player_id)).await;
+                }
+            }
+            WsClientMsg::GuildKick { name } => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_kick(b.player_id, &name)).await;
+                }
+            }
+            WsClientMsg::GuildSetRank { name, rank } => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_set_rank(b.player_id, &name, &rank))
+                        .await;
+                }
+            }
+            WsClientMsg::GuildTransferLeader { name } => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_transfer_leader(b.player_id, &name))
+                        .await;
+                }
+            }
+            WsClientMsg::GuildDisband => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_disband(b.player_id)).await;
+                }
+            }
+            WsClientMsg::GuildSetMotd { text } => {
+                if let Some(b) = &binding {
+                    run_guild_op(&shared, |sim| sim.guild_set_motd(b.player_id, &text)).await;
+                }
+            }
             WsClientMsg::Chat { channel, text } => {
                 if let Some(b) = &binding {
                     let mut realm = shared.realm.lock().await;
-                    let outs = realm.sim.chat(b.player_id, &channel, &text);
-                    drop(realm);
-                    for msg in outs {
-                        let _ = shared
-                            .notices
-                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    if channel.eq_ignore_ascii_case("guild")
+                        || channel.eq_ignore_ascii_case("officer")
+                    {
+                        let outs = realm.sim.guild_chat(b.player_id, &channel, &text);
+                        let recips = expand_deliveries(&realm.sim, outs);
+                        drop(realm);
+                        send_to_players(&shared, recips).await;
+                    } else {
+                        let outs = realm.sim.chat(b.player_id, &channel, &text);
+                        drop(realm);
+                        for msg in outs {
+                            let _ = shared
+                                .notices
+                                .send(serde_json::to_string(&msg).unwrap_or_default());
+                        }
                     }
                 }
             }
