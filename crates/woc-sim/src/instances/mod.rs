@@ -304,6 +304,51 @@ mod tests {
     use woc_content::{PlayerClass, EASTBROOK, MIREFEN};
 
     #[test]
+    fn enter_dungeon_dismounts_active_mount() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Rider", PlayerClass::Warrior, 2.0, 4.0);
+        world
+            .get_mut::<crate::ecs::components::Health>(1)
+            .unwrap()
+            .level = 10;
+        world
+            .get_mut::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .rank = 1;
+        world
+            .get_mut::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .known
+            .insert("brown_pony".into());
+        let mut events = Vec::new();
+        assert!(crate::mount::summon_mount(
+            &mut world,
+            1,
+            "brown_pony",
+            &mut events
+        ));
+        assert!(world
+            .get::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .active_id
+            .is_some());
+
+        let parties = PartyRoster::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        assert!(world
+            .get::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .active_id
+            .is_none());
+    }
+
+    #[test]
     fn enter_preserves_overworld_and_uses_unique_instance() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);

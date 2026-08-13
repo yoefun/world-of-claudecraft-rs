@@ -6,7 +6,7 @@ use crate::ecs::components::{Health, InstanceAt, Motion, Progress, Riding, Trans
 use crate::ecs::World;
 use crate::player_motion::is_swimming_at;
 use crate::world::{ground_height, WORLD_SEED};
-use woc_content::{mount, MountKind, riding_rank_by_n};
+use woc_content::{mount, riding_rank_by_n, MountKind};
 use woc_protocol::{EntityId, SimEvent};
 
 pub fn is_mounted(world: &World, player_id: EntityId) -> bool {
@@ -27,6 +27,7 @@ pub fn dismount(world: &mut World, player_id: EntityId, events: &mut Vec<SimEven
     if let Some(m) = world.get_mut::<Motion>(player_id) {
         if m.flying {
             m.flying = false;
+            m.vy = 0.0;
         }
     }
     events.push(SimEvent::Toast {
@@ -81,10 +82,7 @@ pub fn summon_mount(
         return false;
     }
 
-    let rank = world
-        .get::<Riding>(player_id)
-        .map(|r| r.rank)
-        .unwrap_or(0);
+    let rank = world.get::<Riding>(player_id).map(|r| r.rank).unwrap_or(0);
     if rank == 0 {
         events.push(SimEvent::Toast {
             message: "You need riding training.".into(),
@@ -132,12 +130,9 @@ pub fn summon_mount(
     combat::strip_travel_forms(world, player_id);
 
     if def.kind == MountKind::Flying {
-        let lift = world.get::<Transform>(player_id).map(|t| {
-            (
-                t.x,
-                t.y.max(ground_height(t.x, t.z, WORLD_SEED) + 1.5),
-            )
-        });
+        let lift = world
+            .get::<Transform>(player_id)
+            .map(|t| (t.x, t.y.max(ground_height(t.x, t.z, WORLD_SEED) + 1.5)));
         if let Some((_, y)) = lift {
             if let Some(t) = world.get_mut::<Transform>(player_id) {
                 t.y = y;
@@ -206,15 +201,8 @@ pub fn learn_mount(
     true
 }
 
-pub fn train_riding(
-    world: &mut World,
-    player_id: EntityId,
-    events: &mut Vec<SimEvent>,
-) -> bool {
-    let rank = world
-        .get::<Riding>(player_id)
-        .map(|r| r.rank)
-        .unwrap_or(0);
+pub fn train_riding(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
+    let rank = world.get::<Riding>(player_id).map(|r| r.rank).unwrap_or(0);
     let next = rank + 1;
     let Some(def) = riding_rank_by_n(next) else {
         events.push(SimEvent::Toast {
@@ -222,10 +210,7 @@ pub fn train_riding(
         });
         return false;
     };
-    let level = world
-        .get::<Health>(player_id)
-        .map(|h| h.level)
-        .unwrap_or(1);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     if level < def.level_req {
         events.push(SimEvent::Toast {
             message: "You are too low level.".into(),
@@ -257,8 +242,8 @@ pub fn train_riding(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::spawn::create_player;
     use crate::ecs::components::{Health, Motion, Progress, Riding};
+    use crate::ecs::spawn::create_player;
     use woc_content::PlayerClass;
     use woc_protocol::{EntityId, PlayerIntent, SimEvent};
 
@@ -280,7 +265,11 @@ mod tests {
 
     fn mount_pony(world: &mut World, id: EntityId) {
         world.get_mut::<Riding>(id).unwrap().rank = 1;
-        world.get_mut::<Riding>(id).unwrap().known.insert("brown_pony".into());
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("brown_pony".into());
         let mut events = Vec::new();
         assert!(summon_mount(world, id, "brown_pony", &mut events));
     }
@@ -298,13 +287,21 @@ mod tests {
     #[test]
     fn instance_refuses_mount() {
         let (mut world, id) = warrior();
-        world.get_mut::<crate::ecs::components::InstanceAt>(id).unwrap().instance_id =
-            Some("eastbrook_crypt#1".into());
+        world
+            .get_mut::<crate::ecs::components::InstanceAt>(id)
+            .unwrap()
+            .instance_id = Some("eastbrook_crypt#1".into());
         world.get_mut::<Riding>(id).unwrap().rank = 1;
-        world.get_mut::<Riding>(id).unwrap().known.insert("brown_pony".into());
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("brown_pony".into());
         let mut events = Vec::new();
         assert!(!summon_mount(&mut world, id, "brown_pony", &mut events));
-        assert!(toast_text(&events).iter().any(|m| m == "You cannot mount here."));
+        assert!(toast_text(&events)
+            .iter()
+            .any(|m| m == "You cannot mount here."));
     }
 
     #[test]
@@ -314,31 +311,56 @@ mod tests {
         toggle_mount(&mut world, id, &mut events);
         assert!(!world.get::<Motion>(id).unwrap().flying);
         assert!(world.get::<Riding>(id).unwrap().active_id.is_none());
-        assert!(toast_text(&events).iter().any(|m| m == "You do not know a mount."));
+        assert!(toast_text(&events)
+            .iter()
+            .any(|m| m == "You do not know a mount."));
     }
 
     #[test]
     fn summon_mount_failure_checks_prefer_training_over_unknown() {
         let (mut world, id) = warrior();
         let mut events = Vec::new();
-        assert!(!summon_mount(&mut world, id, "nonexistent_mount", &mut events));
-        assert_eq!(toast_text(&events), vec!["You need riding training.".to_string()]);
+        assert!(!summon_mount(
+            &mut world,
+            id,
+            "nonexistent_mount",
+            &mut events
+        ));
+        assert_eq!(
+            toast_text(&events),
+            vec!["You need riding training.".to_string()]
+        );
     }
 
     #[test]
     fn summon_mount_failure_checks_prefer_stealth_over_unknown() {
         let (mut world, id) = warrior();
-        world.get_mut::<crate::ecs::components::ClassKit>(id).unwrap().stealthed = true;
+        world
+            .get_mut::<crate::ecs::components::ClassKit>(id)
+            .unwrap()
+            .stealthed = true;
         let mut events = Vec::new();
-        assert!(!summon_mount(&mut world, id, "nonexistent_mount", &mut events));
-        assert_eq!(toast_text(&events), vec!["You cannot mount here.".to_string()]);
+        assert!(!summon_mount(
+            &mut world,
+            id,
+            "nonexistent_mount",
+            &mut events
+        ));
+        assert_eq!(
+            toast_text(&events),
+            vec!["You cannot mount here.".to_string()]
+        );
     }
 
     #[test]
     fn pony_is_faster_than_foot() {
         let (mut world, id) = warrior();
         world.get_mut::<Riding>(id).unwrap().rank = 1;
-        world.get_mut::<Riding>(id).unwrap().known.insert("brown_pony".into());
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("brown_pony".into());
         let mut events = Vec::new();
         assert!(summon_mount(&mut world, id, "brown_pony", &mut events));
         let z0 = world.get::<Transform>(id).unwrap().z;
@@ -362,7 +384,11 @@ mod tests {
         let (mut world, id) = warrior();
         world.get_mut::<Health>(id).unwrap().level = 8;
         world.get_mut::<Riding>(id).unwrap().rank = 3;
-        world.get_mut::<Riding>(id).unwrap().known.insert("tawny_gryphon".into());
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("tawny_gryphon".into());
         world.get_mut::<Riding>(id).unwrap().last_id = Some("tawny_gryphon".into());
         let mut events = Vec::new();
         toggle_mount(&mut world, id, &mut events);
@@ -376,6 +402,81 @@ mod tests {
             let _ = crate::player_motion::step_player_motion(&mut world, id, &up);
         }
         assert!(world.get::<Transform>(id).unwrap().y > start_y + 2.0);
+    }
+
+    #[test]
+    fn dismount_clears_flying_vy() {
+        let (mut world, id) = warrior();
+        world.get_mut::<Riding>(id).unwrap().rank = 3;
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("tawny_gryphon".into());
+        let mut events = Vec::new();
+        assert!(summon_mount(&mut world, id, "tawny_gryphon", &mut events));
+        world.get_mut::<Motion>(id).unwrap().vy = 5.0;
+        assert!(dismount(&mut world, id, &mut events));
+        assert_eq!(world.get::<Motion>(id).unwrap().vy, 0.0);
+        assert!(!world.get::<Motion>(id).unwrap().flying);
+    }
+
+    #[test]
+    fn gryphon_grounded_jump_reengages_flying() {
+        let (mut world, id) = warrior();
+        world.get_mut::<Health>(id).unwrap().level = 8;
+        world.get_mut::<Riding>(id).unwrap().rank = 3;
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("tawny_gryphon".into());
+        world.get_mut::<Riding>(id).unwrap().last_id = Some("tawny_gryphon".into());
+        let mut events = Vec::new();
+        toggle_mount(&mut world, id, &mut events);
+        assert!(world.get::<Motion>(id).unwrap().flying);
+
+        let coast = PlayerIntent::default();
+        let descend = PlayerIntent {
+            descend: true,
+            ..Default::default()
+        };
+        let mut landed = false;
+        for _ in 0..300 {
+            let _ = crate::player_motion::step_player_motion(&mut world, id, &descend);
+            if !world.get::<Motion>(id).unwrap().flying
+                && world.get::<Riding>(id).unwrap().active_id.is_some()
+            {
+                landed = true;
+                break;
+            }
+        }
+        if !landed {
+            for _ in 0..40 {
+                let _ = crate::player_motion::step_player_motion(&mut world, id, &coast);
+                if !world.get::<Motion>(id).unwrap().flying
+                    && world.get::<Riding>(id).unwrap().active_id.is_some()
+                {
+                    landed = true;
+                    break;
+                }
+            }
+        }
+        assert!(landed, "flying mount should auto-land without dismounting");
+        assert_eq!(
+            world.get::<Riding>(id).unwrap().active_id.as_deref(),
+            Some("tawny_gryphon")
+        );
+
+        let takeoff = PlayerIntent {
+            jump: true,
+            ..Default::default()
+        };
+        let _ = crate::player_motion::step_player_motion(&mut world, id, &takeoff);
+        assert!(
+            world.get::<Motion>(id).unwrap().flying,
+            "jump on grounded flying mount should re-engage flight"
+        );
     }
 
     #[test]

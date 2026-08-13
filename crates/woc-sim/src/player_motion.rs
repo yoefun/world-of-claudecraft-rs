@@ -380,7 +380,25 @@ pub fn step_player_motion(
         grounded,
     );
 
+    let flying_mount = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_deref())
+        .and_then(woc_content::mount)
+        .is_some_and(|def| def.kind == woc_content::MountKind::Flying);
+    if flying_mount && !m.flying && intent.jump && m.on_ground {
+        m.flying = true;
+        m.on_ground = false;
+        m.jumping = false;
+    }
+
     let fall = vertical_pass(&mut t, &mut m, health.hp_max, &intent, speed);
+
+    let swim_dismount = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_ref())
+        .is_some()
+        && !m.flying
+        && is_swimming_at(t.x, t.y, t.z);
 
     if !in_instance {
         if let Some(ident) = world.get_mut::<Identity>(player_id) {
@@ -394,12 +412,6 @@ pub fn step_player_motion(
         *slot = m;
     }
 
-    let swim_dismount = world
-        .get::<Riding>(player_id)
-        .and_then(|r| r.active_id.as_deref())
-        .and_then(woc_content::mount)
-        .is_some_and(|def| def.kind == woc_content::MountKind::Ground)
-        && is_swimming_at(t.x, t.y, t.z);
     let fall_damage = fall.unwrap_or(0.0);
     if fall_damage > 0.0 || swim_dismount {
         Some(MotionEffect {
@@ -526,6 +538,45 @@ mod tests {
         }
         assert!(world.get::<Motion>(1).unwrap().on_ground);
         assert!(hit.map(|e| e.fall_damage > 0.0).unwrap_or(false));
+    }
+
+    #[test]
+    fn landed_gryphon_swim_dismounts() {
+        let mut world = player_at(0.0, 0.0);
+        let id = 1;
+        world.get_mut::<Riding>(id).unwrap().rank = 3;
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("tawny_gryphon".into());
+        let mut events = Vec::new();
+        assert!(crate::mount::summon_mount(
+            &mut world,
+            id,
+            "tawny_gryphon",
+            &mut events
+        ));
+        {
+            let m = world.get_mut::<Motion>(id).unwrap();
+            m.flying = false;
+            m.on_ground = true;
+            m.vy = 0.0;
+        }
+        let x = -92.0;
+        let z = 88.0;
+        let y = swim_surface_y(x, z);
+        if let Some(t) = world.get_mut::<Transform>(id) {
+            t.x = x;
+            t.z = z;
+            t.y = y;
+        }
+        assert!(is_swimming_at(x, y, z));
+        let effect = step_player_motion(&mut world, id, &PlayerIntent::default());
+        assert!(
+            effect.map(|e| e.dismount).unwrap_or(false),
+            "landed flying mount in water should request dismount"
+        );
     }
 
     #[test]
