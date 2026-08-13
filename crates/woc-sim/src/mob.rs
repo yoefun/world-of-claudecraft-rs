@@ -1,11 +1,11 @@
 //! Wolf aggro, chase, leash, respawn, and social pack aggro.
 
-use crate::combat::dist2d;
-use crate::entity::Entity;
-use crate::entity_motion::{step_toward_entity, step_toward_home_entity};
+use crate::ecs::components::{Auras, Combat, Health, Home, LootTable, Respawn, Threat, Transform};
+use crate::ecs::World;
+use crate::entity_motion::{step_toward, step_toward_home};
 use crate::types::{AGGRO_RANGE, LEASH_RANGE, MELEE_RANGE, MOB_SPEED};
 use crate::world::{ground_height, WORLD_SEED};
-use woc_protocol::{EntityId, EntityKind};
+use woc_protocol::EntityId;
 
 /// Seconds before a dead mob revives at home with full HP.
 pub const MOB_RESPAWN_SEC: f32 = 30.0;
@@ -14,70 +14,106 @@ pub const SOCIAL_AGGRO_RANGE: f32 = 16.0;
 /// Max home-to-home distance for two mobs to count as the same camp.
 pub const CAMP_HOME_RADIUS: f32 = 20.0;
 
+fn is_living_mob(world: &World, id: EntityId) -> bool {
+    world.get::<LootTable>(id).is_some()
+        && world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+}
+
 /// Count down dead-mob respawn timers; revive at home with full HP when ready.
 ///
 /// Call once per sim tick (e.g. after combat / alongside aura ticks):
-/// `tick_mob_respawns(&mut entities, DT)`.
-pub fn tick_mob_respawns(entities: &mut [Entity], dt: f32) {
-    for e in entities.iter_mut() {
-        if e.kind != EntityKind::Mob || e.alive {
+/// `tick_mob_respawns(world, DT)`.
+pub fn tick_mob_respawns(world: &mut World, dt: f32) {
+    let ids = world.ids::<Respawn>();
+    for id in ids {
+        if world.get::<Health>(id).map(|h| h.alive).unwrap_or(true) {
             continue;
         }
-        if e.respawn_timer <= 0.0 {
+        let timer = world.get::<Respawn>(id).map(|r| r.respawn_timer).unwrap_or(0.0);
+        if timer <= 0.0 {
             // First observation of death: arm the timer (full duration).
-            e.respawn_timer = MOB_RESPAWN_SEC;
+            if let Some(r) = world.get_mut::<Respawn>(id) {
+                r.respawn_timer = MOB_RESPAWN_SEC;
+            }
             continue;
         }
-        e.respawn_timer -= dt;
-        if e.respawn_timer <= 0.0 {
-            revive_mob(e);
+        let remaining = timer - dt;
+        if remaining <= 0.0 {
+            revive_mob(world, id);
+        } else if let Some(r) = world.get_mut::<Respawn>(id) {
+            r.respawn_timer = remaining;
         }
     }
 }
 
-fn revive_mob(mob: &mut Entity) {
-    mob.alive = true;
-    mob.hp = mob.hp_max;
-    mob.x = mob.home_x;
-    mob.z = mob.home_z;
-    mob.y = ground_height(mob.x, mob.z, WORLD_SEED);
-    mob.target = None;
-    mob.threat.clear();
-    mob.auras.clear();
-    mob.cast = None;
-    mob.swing_timer = 0.0;
-    mob.ability_cd = 0.0;
-    mob.gcd = 0.0;
-    mob.respawn_timer = 0.0;
+fn revive_mob(world: &mut World, id: EntityId) {
+    let hp_max = world.get::<Health>(id).map(|h| h.hp_max).unwrap_or(1.0);
+    let home = world.get::<Home>(id).copied();
+    if let Some(h) = world.get_mut::<Health>(id) {
+        h.alive = true;
+        h.hp = hp_max;
+    }
+    if let Some(home) = home {
+        if let Some(t) = world.get_mut::<Transform>(id) {
+            t.x = home.home_x;
+            t.z = home.home_z;
+            t.y = ground_height(t.x, t.z, WORLD_SEED);
+        }
+    }
+    if let Some(c) = world.get_mut::<Combat>(id) {
+        c.target = None;
+        c.cast = None;
+        c.swing_timer = 0.0;
+        c.ability_cd = 0.0;
+        c.gcd = 0.0;
+    }
+    if let Some(th) = world.get_mut::<Threat>(id) {
+        th.threat.clear();
+    }
+    if let Some(a) = world.get_mut::<Auras>(id) {
+        a.auras.clear();
+    }
+    if let Some(r) = world.get_mut::<Respawn>(id) {
+        r.respawn_timer = 0.0;
+    }
 }
 
 /// When `source` is engaged on `target`, nearby same-camp allies acquire that target.
-pub fn apply_social_aggro(source_id: EntityId, target: EntityId, entities: &mut [Entity]) {
-    let Some(si) = entities.iter().position(|e| e.id == source_id) else {
-        return;
-    };
-    if !entities[si].alive || entities[si].kind != EntityKind::Mob {
+pub fn apply_social_aggro(world: &mut World, source_id: EntityId, target: EntityId) {
+    if !is_living_mob(world, source_id) {
         return;
     }
-    let (sx, sz) = (entities[si].x, entities[si].z);
-    let (shx, shz) = (entities[si].home_x, entities[si].home_z);
+    let Some(st) = world.get::<Transform>(source_id).copied() else {
+        return;
+    };
+    let Some(sh) = world.get::<Home>(source_id).copied() else {
+        return;
+    };
 
-    let ally_ids: Vec<EntityId> = entities
-        .iter()
-        .filter(|e| {
-            e.id != source_id
-                && e.kind == EntityKind::Mob
-                && e.alive
-                && e.target.is_none()
-                && same_camp(shx, shz, e.home_x, e.home_z)
-                && dist_xz(sx, sz, e.x, e.z) <= SOCIAL_AGGRO_RANGE
+    let ally_ids: Vec<EntityId> = world
+        .ids::<Home>()
+        .into_iter()
+        .filter(|&id| {
+            id != source_id
+                && is_living_mob(world, id)
+                && world
+                    .get::<Combat>(id)
+                    .map(|c| c.target.is_none())
+                    .unwrap_or(false)
+                && world
+                    .get::<Home>(id)
+                    .map(|h| same_camp(sh.home_x, sh.home_z, h.home_x, h.home_z))
+                    .unwrap_or(false)
+                && world
+                    .get::<Transform>(id)
+                    .map(|t| dist_xz(st.x, st.z, t.x, t.z) <= SOCIAL_AGGRO_RANGE)
+                    .unwrap_or(false)
         })
-        .map(|e| e.id)
         .collect();
 
     for aid in ally_ids {
-        if let Some(e) = entities.iter_mut().find(|e| e.id == aid) {
-            e.target = Some(target);
+        if let Some(c) = world.get_mut::<Combat>(aid) {
+            c.target = Some(target);
         }
     }
 }
@@ -92,82 +128,92 @@ fn dist_xz(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
-pub fn update_mob_ai(mob_id: EntityId, player_id: EntityId, entities: &mut [Entity]) {
-    let Some(mi) = entities.iter().position(|e| e.id == mob_id) else {
-        return;
-    };
-    if !entities[mi].alive || entities[mi].kind != EntityKind::Mob {
+pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
+    if !is_living_mob(world, mob_id) {
         return;
     }
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
-        return;
-    };
-    if !entities[pi].alive {
+    let player_alive = world
+        .get::<Health>(player_id)
+        .map(|h| h.alive)
+        .unwrap_or(false);
+    if !player_alive {
         // Lost target / not in combat → return home.
-        entities[mi].target = None;
-        entities[mi].threat.clear();
-        move_toward_home(&mut entities[mi]);
+        if let Some(c) = world.get_mut::<Combat>(mob_id) {
+            c.target = None;
+        }
+        if let Some(t) = world.get_mut::<Threat>(mob_id) {
+            t.threat.clear();
+        }
+        move_toward_home(world, mob_id);
         return;
     }
 
-    let d_player = dist2d(&entities[mi], &entities[pi]);
-    let home_dx = entities[mi].x - entities[mi].home_x;
-    let home_dz = entities[mi].z - entities[mi].home_z;
-    let d_home = (home_dx * home_dx + home_dz * home_dz).sqrt();
+    let d_player = crate::ecs::components::dist2d(world, mob_id, player_id).unwrap_or(f32::MAX);
+    let Some(t) = world.get::<Transform>(mob_id).copied() else {
+        return;
+    };
+    let Some(home) = world.get::<Home>(mob_id).copied() else {
+        return;
+    };
+    let d_home = dist_xz(t.x, t.z, home.home_x, home.home_z);
 
     // Leash: too far from home → drop combat and return.
     if d_home > LEASH_RANGE {
-        entities[mi].target = None;
-        entities[mi].threat.clear();
-        move_toward_home(&mut entities[mi]);
+        if let Some(c) = world.get_mut::<Combat>(mob_id) {
+            c.target = None;
+        }
+        if let Some(th) = world.get_mut::<Threat>(mob_id) {
+            th.threat.clear();
+        }
+        move_toward_home(world, mob_id);
         return;
     }
 
     let mut just_engaged = false;
-    if entities[mi].target.is_none() && d_player <= AGGRO_RANGE {
-        entities[mi].target = Some(player_id);
+    let current_target = world.get::<Combat>(mob_id).and_then(|c| c.target);
+    if current_target.is_none() && d_player <= AGGRO_RANGE {
+        if let Some(c) = world.get_mut::<Combat>(mob_id) {
+            c.target = Some(player_id);
+        }
         just_engaged = true;
     }
 
-    if just_engaged || entities[mi].target == Some(player_id) {
-        apply_social_aggro(mob_id, player_id, entities);
+    let engaged = just_engaged
+        || world.get::<Combat>(mob_id).and_then(|c| c.target) == Some(player_id);
+    if engaged {
+        apply_social_aggro(world, mob_id, player_id);
     }
 
-    // Re-resolve index after social aggro (borrow ended).
-    let Some(mi) = entities.iter().position(|e| e.id == mob_id) else {
-        return;
-    };
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
-        return;
-    };
-
-    let (px, pz) = (entities[pi].x, entities[pi].z);
-    if entities[mi].target == Some(player_id) {
+    let target = world.get::<Combat>(mob_id).and_then(|c| c.target);
+    if target == Some(player_id) {
         if d_player > MELEE_RANGE * 0.85 {
-            move_toward(&mut entities[mi], px, pz, MOB_SPEED);
+            let Some(pt) = world.get::<Transform>(player_id).copied() else {
+                return;
+            };
+            let _ = step_toward(world, mob_id, pt.x, pt.z, MOB_SPEED);
         }
     } else {
         // Not in combat → return home.
-        move_toward_home(&mut entities[mi]);
+        move_toward_home(world, mob_id);
     }
 }
 
-fn move_toward(mob: &mut Entity, tx: f32, tz: f32, speed: f32) {
-    let _ = step_toward_entity(mob, tx, tz, speed);
-}
-
-fn move_toward_home(mob: &mut Entity) {
-    if step_toward_home_entity(mob, MOB_SPEED * 0.85, 0.2) {
+fn move_toward_home(world: &mut World, mob_id: EntityId) {
+    if step_toward_home(world, mob_id, MOB_SPEED * 0.85, 0.2) {
         // Reset after leash / idle return.
-        mob.hp = mob.hp_max;
-        mob.threat.clear();
+        if let Some(h) = world.get_mut::<Health>(mob_id) {
+            h.hp = h.hp_max;
+        }
+        if let Some(t) = world.get_mut::<Threat>(mob_id) {
+            t.threat.clear();
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::{create_mob_from_template, create_player};
+    use crate::entity::{create_mob_from_template, create_player, Entity};
     use crate::types::LEASH_RANGE;
     use woc_content::PlayerClass;
     use woc_protocol::DT;
@@ -177,6 +223,18 @@ mod tests {
         m.home_x = x;
         m.home_z = z;
         m
+    }
+
+    fn run_respawns(entities: &mut [Entity], dt: f32) {
+        let mut world = crate::ecs::spawn::world_from_entities(entities);
+        tick_mob_respawns(&mut world, dt);
+        crate::ecs::spawn::apply_world_to_entities(&world, entities);
+    }
+
+    fn run_ai(entities: &mut [Entity], mob_id: EntityId, player_id: EntityId) {
+        let mut world = crate::ecs::spawn::world_from_entities(entities);
+        update_mob_ai(&mut world, mob_id, player_id);
+        crate::ecs::spawn::apply_world_to_entities(&world, entities);
     }
 
     #[test]
@@ -191,7 +249,7 @@ mod tests {
 
         let mut entities = vec![mob];
 
-        tick_mob_respawns(&mut entities, DT);
+        run_respawns(&mut entities, DT);
         assert!(
             (entities[0].respawn_timer - MOB_RESPAWN_SEC).abs() < 1e-4,
             "first tick arms full respawn timer"
@@ -200,7 +258,7 @@ mod tests {
 
         // Almost ready: leave a sliver of timer.
         entities[0].respawn_timer = DT * 0.5;
-        tick_mob_respawns(&mut entities, DT);
+        run_respawns(&mut entities, DT);
 
         assert!(entities[0].alive, "mob should revive when timer elapses");
         assert!((entities[0].hp - entities[0].hp_max).abs() < 1e-3);
@@ -224,7 +282,7 @@ mod tests {
         mob.hp = mob.hp_max * 0.4;
 
         let mut entities = vec![player, mob];
-        update_mob_ai(2, 1, &mut entities);
+        run_ai(&mut entities, 2, 1);
 
         let mob = entities.iter().find(|e| e.id == 2).unwrap();
         assert!(mob.target.is_none(), "leash drops target");
@@ -245,7 +303,7 @@ mod tests {
         mob.target = Some(1);
 
         let mut entities = vec![player, mob];
-        update_mob_ai(2, 1, &mut entities);
+        run_ai(&mut entities, 2, 1);
 
         let mob = entities.iter().find(|e| e.id == 2).unwrap();
         assert!(mob.target.is_none());
@@ -267,7 +325,7 @@ mod tests {
         b.y = Entity::ground_at(b.x, b.z);
 
         let mut entities = vec![player, a, b];
-        update_mob_ai(2, 1, &mut entities);
+        run_ai(&mut entities, 2, 1);
 
         let a = entities.iter().find(|e| e.id == 2).unwrap();
         let b = entities.iter().find(|e| e.id == 3).unwrap();
@@ -290,7 +348,7 @@ mod tests {
         b.y = Entity::ground_at(b.x, b.z);
 
         let mut entities = vec![player, a, b];
-        update_mob_ai(2, 1, &mut entities);
+        run_ai(&mut entities, 2, 1);
 
         let b = entities.iter().find(|e| e.id == 3).unwrap();
         assert!(b.target.is_none(), "different camp must not social-aggro");
@@ -307,7 +365,7 @@ mod tests {
         mob.target = None;
 
         let mut entities = vec![player, mob];
-        update_mob_ai(2, 1, &mut entities);
+        run_ai(&mut entities, 2, 1);
 
         let mob = entities.iter().find(|e| e.id == 2).unwrap();
         assert!((mob.x - mob.home_x).abs() < 1e-3);

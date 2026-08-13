@@ -74,7 +74,7 @@ impl Sim {
         self.world = world;
     }
 
-    fn reindex(&mut self) {
+    pub(crate) fn reindex(&mut self) {
         self.by_id.clear();
         for (i, e) in self.entities.iter().enumerate() {
             self.by_id.insert(e.id, i);
@@ -232,7 +232,12 @@ impl Sim {
 
     /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
     pub fn despawn_player(&mut self, player_id: EntityId) {
-        let _ = dismiss_pet(&mut self.entities, player_id, &mut self.events);
+        let _ = dismiss_pet(
+            &mut self.world,
+            &mut self.entities,
+            player_id,
+            &mut self.events,
+        );
         let _ = self.parties.on_despawn(player_id);
         self.entities
             .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
@@ -470,33 +475,36 @@ impl Sim {
         crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
 
         // Pet AI (after player combat; keeps TICK_PHASES fingerprint stable).
-        tick_pets(&mut self.entities, &mut self.events);
+        let dropped = tick_pets(&mut self.world, &mut self.events);
+        if !dropped.is_empty() {
+            self.entities.retain(|e| !dropped.contains(&e.id));
+        }
         self.reindex();
-        self.rebuild_world();
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
 
         // Phase 3: mob AI + combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
-            .entities
-            .iter()
-            .filter(|e| e.kind == EntityKind::Mob && e.alive)
-            .map(|e| e.id)
+            .world
+            .ids::<LootTable>()
+            .into_iter()
+            .filter(|&id| {
+                self.world
+                    .get::<Health>(id)
+                    .map(|h| h.alive)
+                    .unwrap_or(false)
+            })
             .collect();
         for mid in &mob_ids {
-            let focus = {
-                let Some(mob) = self.entity_ref(*mid) else {
-                    continue;
-                };
-                nearest_alive_player(&self.entities, mob, 40.0)
-            };
-            if let Some(pid) = focus {
-                update_mob_ai(*mid, pid, &mut self.entities);
+            if let Some(pid) = nearest_alive_player(&self.world, *mid, 40.0) {
+                update_mob_ai(&mut self.world, *mid, pid);
             }
         }
         for mid in &mob_ids {
-            let focus = self.entity_ref(*mid).and_then(|m| m.target).or_else(|| {
-                let mob = self.entity_ref(*mid)?;
-                nearest_alive_player(&self.entities, mob, 40.0)
-            });
+            let focus = self
+                .world
+                .get::<Combat>(*mid)
+                .and_then(|c| c.target)
+                .or_else(|| nearest_alive_player(&self.world, *mid, 40.0));
             if let Some(pid) = focus {
                 update_mob_combat(*mid, pid, &mut self.world, &mut self.events);
             }
@@ -504,8 +512,8 @@ impl Sim {
 
         // Aura/timer decay (hook into tick after combat; keeps TICK_PHASES fingerprint stable).
         tick_auras(&mut self.world, &mut self.events);
+        tick_mob_respawns(&mut self.world, DT);
         crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
-        tick_mob_respawns(&mut self.entities, DT);
 
         // Phase 4: kill rewards → killer (+ party share stub)
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);
@@ -522,7 +530,7 @@ impl Sim {
                         grant_xp(&mut self.entities[pi], reward.xp, &mut self.events);
                         if let Some(ref tid) = reward.template_id {
                             on_mob_killed(&mut self.entities[pi], tid, &mut self.events);
-                            crate::worldboss::on_boss_killed(
+                            crate::worldboss::on_boss_killed_entity(
                                 &mut self.entities[pi],
                                 tid,
                                 &mut self.events,
@@ -917,20 +925,27 @@ fn nearest_mob(world: &World, from: EntityId, max_range: f32) -> Option<EntityId
     best.map(|(id, _)| id)
 }
 
-fn nearest_alive_player(entities: &[Entity], from: &Entity, max_range: f32) -> Option<EntityId> {
+fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option<EntityId> {
+    let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
-    for e in entities {
-        if e.kind != EntityKind::Player || !e.alive {
+    for id in world.ids::<ClassKit>() {
+        let Some(h) = world.get::<Health>(id) else {
+            continue;
+        };
+        if !h.alive {
             continue;
         }
-        let dx = e.x - from.x;
-        let dz = e.z - from.z;
+        let Some(t) = world.get::<Transform>(id) else {
+            continue;
+        };
+        let dx = t.x - from_t.x;
+        let dz = t.z - from_t.z;
         let d = (dx * dx + dz * dz).sqrt();
         if d > max_range {
             continue;
         }
         if best.map(|(_, bd)| d < bd).unwrap_or(true) {
-            best = Some((e.id, d));
+            best = Some((id, d));
         }
     }
     best.map(|(id, _)| id)

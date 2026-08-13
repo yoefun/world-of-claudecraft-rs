@@ -23,15 +23,25 @@ impl WorldHost for Sim {
     fn interact(&mut self, player_id: EntityId, target_id: EntityId, action: InteractAction) {
         match action {
             InteractAction::SummonPet => {
+                self.rebuild_world();
                 let _ = summon_pet(
+                    &mut self.world,
                     &mut self.entities,
                     &mut self.next_id,
                     player_id,
                     &mut self.events,
                 );
+                self.reindex();
             }
             InteractAction::DismissPet => {
-                let _ = dismiss_pet(&mut self.entities, player_id, &mut self.events);
+                self.rebuild_world();
+                let _ = dismiss_pet(
+                    &mut self.world,
+                    &mut self.entities,
+                    player_id,
+                    &mut self.events,
+                );
+                self.reindex();
             }
             InteractAction::LearnTalent { talent_id } => {
                 let _ = talents::learn(&mut self.entities, player_id, &talent_id, &mut self.events);

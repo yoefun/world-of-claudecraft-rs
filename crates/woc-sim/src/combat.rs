@@ -43,11 +43,11 @@ pub fn face_toward(from: &Entity, to: &Entity) -> f32 {
     (to.x - from.x).atan2(to.z - from.z)
 }
 
-fn dist2d_ids(world: &World, a: EntityId, b: EntityId) -> f32 {
+pub(crate) fn dist2d_ids(world: &World, a: EntityId, b: EntityId) -> f32 {
     crate::ecs::components::dist2d(world, a, b).unwrap_or(f32::MAX)
 }
 
-fn face_toward_ids(world: &World, from: EntityId, to: EntityId) -> f32 {
+pub(crate) fn face_toward_ids(world: &World, from: EntityId, to: EntityId) -> f32 {
     let Some(a) = world.get::<Transform>(from) else {
         return 0.0;
     };
@@ -154,23 +154,6 @@ pub fn deal_damage(
             victim_name,
         });
     }
-}
-
-/// Bridge for modules still on `&mut [Entity]` (pets).
-pub fn deal_damage_entities(
-    entities: &mut [Entity],
-    source: EntityId,
-    target: EntityId,
-    amount: f32,
-    ability_name: Option<&str>,
-    events: &mut Vec<SimEvent>,
-) {
-    let mut world = World::new();
-    for e in entities.iter() {
-        crate::ecs::spawn::sync_entity_to_world(&mut world, e);
-    }
-    deal_damage(&mut world, source, target, amount, ability_name, events);
-    crate::ecs::spawn::apply_world_to_entities(&world, entities);
 }
 
 pub fn apply_aura(world: &mut World, target: EntityId, aura: AuraInstance, events: &mut Vec<SimEvent>) {
