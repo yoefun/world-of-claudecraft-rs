@@ -1,4 +1,4 @@
-//! Personal bank deposit / withdraw.
+//! Personal bank deposit / withdraw (items + copper vault).
 
 use crate::entity::{grant_into, remove_item, Entity};
 use crate::types::BANK_SLOTS;
@@ -79,6 +79,54 @@ pub fn withdraw(
     true
 }
 
+pub fn deposit_copper(
+    entities: &mut [Entity],
+    player_id: EntityId,
+    amount: u32,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let Some(player) = entities.iter_mut().find(|e| e.id == player_id) else {
+        return false;
+    };
+    let take = amount.min(player.copper);
+    if take == 0 {
+        events.push(SimEvent::Toast {
+            message: "No copper to deposit.".into(),
+        });
+        return false;
+    }
+    player.copper -= take;
+    player.bank_copper = player.bank_copper.saturating_add(take);
+    events.push(SimEvent::Toast {
+        message: format!("Deposited {take}c to bank."),
+    });
+    true
+}
+
+pub fn withdraw_copper(
+    entities: &mut [Entity],
+    player_id: EntityId,
+    amount: u32,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    let Some(player) = entities.iter_mut().find(|e| e.id == player_id) else {
+        return false;
+    };
+    let take = amount.min(player.bank_copper);
+    if take == 0 {
+        events.push(SimEvent::Toast {
+            message: "Bank vault is empty.".into(),
+        });
+        return false;
+    }
+    player.bank_copper -= take;
+    player.copper = player.copper.saturating_add(take);
+    events.push(SimEvent::Toast {
+        message: format!("Withdrew {take}c from bank."),
+    });
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,5 +166,18 @@ mod tests {
             })
             .unwrap() as u8;
         assert!(withdraw(&mut entities, 1, bank_slot, 2, &mut events));
+    }
+
+    #[test]
+    fn copper_vault_roundtrip() {
+        let mut entities = vec![create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0)];
+        entities[0].copper = 100;
+        let mut events = Vec::new();
+        assert!(deposit_copper(&mut entities, 1, 40, &mut events));
+        assert_eq!(entities[0].copper, 60);
+        assert_eq!(entities[0].bank_copper, 40);
+        assert!(withdraw_copper(&mut entities, 1, 25, &mut events));
+        assert_eq!(entities[0].copper, 85);
+        assert_eq!(entities[0].bank_copper, 15);
     }
 }

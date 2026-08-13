@@ -52,14 +52,33 @@ impl AuctionHouse {
     }
 
     pub fn snapshot_public(&self) -> Vec<MarketListingSnapshot> {
+        self.snapshot_for(0, &[])
+    }
+
+    /// Public listings with `mine` flagged for the viewing seller.
+    pub fn snapshot_for(
+        &self,
+        viewer: EntityId,
+        entities: &[Entity],
+    ) -> Vec<MarketListingSnapshot> {
+        let viewer_key = entities
+            .iter()
+            .find(|e| e.id == viewer)
+            .map(Mailbox::mailbox_key);
         self.listings
             .iter()
-            .map(|l| MarketListingSnapshot {
-                id: l.id,
-                seller: l.seller_name.clone(),
-                item_id: l.item_id.clone(),
-                count: l.count,
-                price: l.price,
+            .map(|l| {
+                let mine = viewer != 0
+                    && (l.seller_id == viewer
+                        || viewer_key.as_ref().is_some_and(|k| k == &l.seller_durable));
+                MarketListingSnapshot {
+                    id: l.id,
+                    seller: l.seller_name.clone(),
+                    item_id: l.item_id.clone(),
+                    count: l.count,
+                    price: l.price,
+                    mine,
+                }
             })
             .collect()
     }

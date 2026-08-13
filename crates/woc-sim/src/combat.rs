@@ -362,7 +362,12 @@ pub fn spawn_mob_loot(
     id
 }
 
-pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimEvent>) {
+pub fn try_pickup_loot(
+    player_id: EntityId,
+    entities: &mut [Entity],
+    events: &mut Vec<SimEvent>,
+    pending: &crate::social::LootRules,
+) {
     let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
         return;
     };
@@ -373,6 +378,7 @@ pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mu
             *i != pi
                 && e.kind == EntityKind::Loot
                 && e.alive
+                && !pending.is_pending(e.id)
                 // Profession gather nodes are harvested via Interact, not auto-loot.
                 && e.template_id
                     .as_deref()
@@ -405,6 +411,149 @@ pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mu
             item,
         });
     }
+}
+
+/// Claim a specific loot pile (or loot near a corpse) via Interact.
+pub fn claim_loot_target(
+    player_id: EntityId,
+    target_id: EntityId,
+    entities: &mut [Entity],
+    events: &mut Vec<SimEvent>,
+    pending: &crate::social::LootRules,
+) -> bool {
+    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
+        return false;
+    };
+    if !entities[pi].alive {
+        return false;
+    }
+
+    // Direct loot pile.
+    if let Some(li) = entities
+        .iter()
+        .position(|e| e.id == target_id && e.kind == EntityKind::Loot && e.alive)
+    {
+        if dist2d(&entities[pi], &entities[li]) > crate::types::INTERACT_RANGE {
+            events.push(SimEvent::Toast {
+                message: "Too far to loot.".into(),
+            });
+            return false;
+        }
+        if pending.is_pending(target_id) {
+            events.push(SimEvent::Toast {
+                message: "Need/Greed roll in progress (1 Need / 2 Greed / 3 Pass).".into(),
+            });
+            return false;
+        }
+        if entities[li]
+            .template_id
+            .as_deref()
+            .and_then(woc_content::gather_node)
+            .is_some()
+        {
+            return false;
+        }
+        let c = entities[li].loot_copper;
+        let item = entities[li].loot_item.clone();
+        if let Some(ref it) = item {
+            if crate::inventory::grant_item(&mut entities[pi], it, 1, events).is_err() {
+                events.push(SimEvent::Toast {
+                    message: "Inventory full.".into(),
+                });
+                return false;
+            }
+            crate::quests::on_inventory_changed(&mut entities[pi], events);
+        }
+        entities[li].alive = false;
+        entities[pi].copper = entities[pi].copper.saturating_add(c);
+        events.push(SimEvent::Loot {
+            player: player_id,
+            copper: c,
+            item,
+        });
+        return true;
+    }
+
+    // Dead mob corpse: vacuum nearby loot piles.
+    let Some(ci) = entities
+        .iter()
+        .position(|e| e.id == target_id && e.kind == EntityKind::Mob && !e.alive)
+    else {
+        return false;
+    };
+    if dist2d(&entities[pi], &entities[ci]) > crate::types::INTERACT_RANGE {
+        events.push(SimEvent::Toast {
+            message: "Too far to loot.".into(),
+        });
+        return false;
+    }
+    let cx = entities[ci].x;
+    let cz = entities[ci].z;
+    let loot_ids: Vec<EntityId> = entities
+        .iter()
+        .filter(|e| {
+            e.kind == EntityKind::Loot
+                && e.alive
+                && !pending.is_pending(e.id)
+                && e.template_id
+                    .as_deref()
+                    .and_then(woc_content::gather_node)
+                    .is_none()
+                && {
+                    let dx = e.x - cx;
+                    let dz = e.z - cz;
+                    (dx * dx + dz * dz).sqrt() < crate::types::LOOT_RANGE
+                }
+        })
+        .map(|e| e.id)
+        .collect();
+    if loot_ids.is_empty() {
+        // Pending rolls near corpse?
+        let pending_near = entities.iter().any(|e| {
+            e.kind == EntityKind::Loot && e.alive && pending.is_pending(e.id) && {
+                let dx = e.x - cx;
+                let dz = e.z - cz;
+                (dx * dx + dz * dz).sqrt() < crate::types::LOOT_RANGE
+            }
+        });
+        if pending_near {
+            events.push(SimEvent::Toast {
+                message: "Need/Greed roll in progress (1 Need / 2 Greed / 3 Pass).".into(),
+            });
+        } else {
+            events.push(SimEvent::Toast {
+                message: "Nothing to loot.".into(),
+            });
+        }
+        return false;
+    }
+    let before = events.len();
+    for lid in loot_ids {
+        // Reuse pickup logic by temporarily placing player next to pile distance-wise
+        // (already verified range via corpse). Call through a one-shot filter.
+        let Some(li) = entities.iter().position(|e| e.id == lid) else {
+            continue;
+        };
+        let c = entities[li].loot_copper;
+        let item = entities[li].loot_item.clone();
+        if let Some(ref it) = item {
+            if crate::inventory::grant_item(&mut entities[pi], it, 1, events).is_err() {
+                events.push(SimEvent::Toast {
+                    message: "Inventory full.".into(),
+                });
+                continue;
+            }
+            crate::quests::on_inventory_changed(&mut entities[pi], events);
+        }
+        entities[li].alive = false;
+        entities[pi].copper = entities[pi].copper.saturating_add(c);
+        events.push(SimEvent::Loot {
+            player: player_id,
+            copper: c,
+            item,
+        });
+    }
+    events.len() > before
 }
 
 fn ability_range(player: &Entity) -> f32 {

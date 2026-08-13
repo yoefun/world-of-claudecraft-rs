@@ -29,6 +29,7 @@ pub struct PlayerPersistentState {
     pub talent_points: u32,
     pub talents: HashMap<String, u32>,
     pub bank: Vec<Option<InvStack>>,
+    pub bank_copper: u32,
     pub honor: u32,
     pub professions: HashMap<String, u32>,
     pub pvp_flagged: bool,
@@ -43,6 +44,7 @@ impl PlayerPersistentState {
             && self.copper == 0
             && self.inventory.iter().all(|s| s.is_none())
             && self.bank.iter().all(|s| s.is_none())
+            && self.bank_copper == 0
             && self.equipment.main_hand.is_none()
             && self.equipment.off_hand.is_none()
             && self.equipment.head.is_none()
@@ -77,6 +79,7 @@ pub fn export_player_state(player: &Entity) -> Option<PlayerPersistentState> {
         talent_points: player.talent_points,
         talents: player.talents.clone(),
         bank: player.bank.clone(),
+        bank_copper: player.bank_copper,
         honor: player.honor,
         professions: player.professions.clone(),
         pvp_flagged: player.pvp_flagged,
@@ -125,6 +128,7 @@ pub fn apply_player_state(player: &mut Entity, state: &PlayerPersistentState) {
 
     player.inventory = pad_slots(state.inventory.clone(), BACKPACK_SLOTS);
     player.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
+    player.bank_copper = state.bank_copper;
     player.equipment = state.equipment.clone();
     player.x = state.pos_x;
     player.z = state.pos_z;
@@ -220,6 +224,7 @@ mod tests {
             talent_points: 0,
             talents: HashMap::new(),
             bank: vec![],
+            bank_copper: 0,
             honor: 0,
             professions: HashMap::new(),
             pvp_flagged: false,
@@ -239,6 +244,7 @@ mod tests {
         base.level = 5;
         base.xp = 120;
         base.copper = 77;
+        base.bank_copper = 30;
         base.honor = 10;
         base.talent_points = 2;
         base.talents.insert("mage_arcane_power".into(), 2);
@@ -250,6 +256,7 @@ mod tests {
         assert_eq!(restored.level, 5);
         assert_eq!(restored.xp, 120);
         assert_eq!(restored.copper, 77);
+        assert_eq!(restored.bank_copper, 30);
         assert_eq!(restored.honor, 10);
         assert_eq!(restored.talents.get("mage_arcane_power"), Some(&2));
         assert!(restored.completed_deeds.contains("eastfen_mire_terror"));

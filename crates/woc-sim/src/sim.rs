@@ -451,13 +451,30 @@ impl Sim {
                     }
                 }
             }
-            spawn_mob_loot(
+            let loot_id = spawn_mob_loot(
                 &mut self.next_id,
                 &mut self.entities,
                 &mut self.rng,
                 reward.template_id.as_deref(),
                 reward.x,
                 reward.z,
+            );
+            if let Some(killer_inst) = self
+                .entities
+                .iter()
+                .find(|e| e.id == reward.killer)
+                .and_then(|e| e.instance_id.clone())
+            {
+                if let Some(loot) = self.entities.iter_mut().find(|e| e.id == loot_id) {
+                    loot.instance_id = Some(killer_inst);
+                }
+            }
+            self.loot_rules.maybe_start_party_roll(
+                &self.parties,
+                &self.entities,
+                reward.killer,
+                loot_id,
+                &mut self.events,
             );
         }
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
@@ -470,7 +487,7 @@ impl Sim {
 
         // Phase 5: loot pickup for all players
         for &pid in &player_ids {
-            try_pickup_loot(pid, &mut self.entities, &mut self.events);
+            try_pickup_loot(pid, &mut self.entities, &mut self.events, &self.loot_rules);
         }
 
         // Phase 6: snapshot
@@ -694,7 +711,7 @@ impl Sim {
                 })
                 .unwrap_or_default(),
             mail: self.mail.snapshot_for_entity(player_id, &self.entities),
-            market: self.market.snapshot_public(),
+            market: self.market.snapshot_for(player_id, &self.entities),
             honor: player.map(|p| p.honor).unwrap_or(0),
             pvp_flagged: player.map(|p| p.pvp_flagged).unwrap_or(false),
             professions: player
@@ -709,6 +726,8 @@ impl Sim {
                 })
                 .unwrap_or_default(),
             loot_mode: self.parties.loot_mode(player_id),
+            pending_loot: self.loot_rules.snapshot_for(player_id),
+            bank_copper: player.map(|p| p.bank_copper).unwrap_or(0),
         }
     }
 }

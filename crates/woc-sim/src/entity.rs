@@ -130,6 +130,8 @@ pub struct Entity {
     pub talents: HashMap<String, u32>,
     /// Personal bank inventory (fixed slot count).
     pub bank: Vec<Option<InvStack>>,
+    /// Copper stored in the personal bank vault.
+    pub bank_copper: u32,
     /// PvP honor currency.
     pub honor: u32,
     /// Open-world PvP flag.
@@ -223,6 +225,7 @@ impl Entity {
             talent_points: 0,
             talents: HashMap::new(),
             bank: vec![None; crate::types::BANK_SLOTS],
+            bank_copper: 0,
             honor: 0,
             pvp_flagged: false,
             professions: HashMap::new(),

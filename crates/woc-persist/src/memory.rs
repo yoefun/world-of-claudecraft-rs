@@ -122,6 +122,7 @@ impl MemoryStore {
             talent_points: 0,
             talents: Vec::new(),
             bank: Vec::new(),
+            bank_copper: 0,
             honor: 0,
             professions: Vec::new(),
             pvp_flagged: false,
@@ -275,6 +276,7 @@ mod tests {
                 item_id: "silverleaf".into(),
                 count: 8,
             })],
+            bank_copper: 0,
             honor: 125,
             professions: vec![ProfessionSkillDto {
                 id: "herbalism".into(),
