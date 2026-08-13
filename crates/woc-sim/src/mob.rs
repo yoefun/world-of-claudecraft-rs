@@ -33,10 +33,13 @@ pub fn tick_mob_respawns(world: &mut World, dt: f32) {
             .get::<Respawn>(id)
             .map(|r| r.respawn_timer)
             .unwrap_or(0.0);
+        let delay = world.get::<Respawn>(id).map(|r| r.delay_sec).unwrap_or(0.0);
+        if delay <= 0.0 {
+            continue;
+        }
         if timer <= 0.0 {
-            // First observation of death: arm the timer (full duration).
             if let Some(r) = world.get_mut::<Respawn>(id) {
-                r.respawn_timer = MOB_RESPAWN_SEC;
+                r.respawn_timer = delay;
             }
             continue;
         }
@@ -226,6 +229,31 @@ mod tests {
     use crate::types::LEASH_RANGE;
     use woc_content::PlayerClass;
     use woc_protocol::DT;
+
+    #[test]
+    fn young_wolf_delay_matches_template() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        let delay = world.get::<Respawn>(2).unwrap().delay_sec;
+        assert!((delay - 30.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn zero_delay_never_revives() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(r) = world.get_mut::<Respawn>(2) {
+            r.delay_sec = 0.0;
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.alive = false;
+            h.hp = 0.0;
+        }
+        for _ in 0..700 {
+            tick_mob_respawns(&mut world, DT);
+        }
+        assert!(!world.get::<Health>(2).unwrap().alive);
+    }
 
     #[test]
     fn dead_mob_respawns_after_timer() {

@@ -234,6 +234,8 @@ pub struct LootTable {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Respawn {
     pub respawn_timer: f32,
+    /// Seconds after death before revive. `0.0` = never.
+    pub delay_sec: f32,
 }
 
 #[derive(Debug, Clone, Default)]

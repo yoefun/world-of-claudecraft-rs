@@ -244,6 +244,9 @@ pub fn create_mob_from_template(
         },
     );
     world.insert(id, Respawn::default());
+    if let Some(r) = world.get_mut::<Respawn>(id) {
+        r.delay_sec = t.respawn_seconds;
+    }
     world.insert(id, InstanceAt::default());
     Some(id)
 }
