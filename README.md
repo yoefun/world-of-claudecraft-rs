@@ -1,23 +1,24 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.14.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.15.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.14.0`** is pinned to upstream **`0.31.0`**
+**Rewrite `1.15.0`** is pinned to upstream **`0.31.0`**
 (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`gear-more`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.14.0 (gear-more)
+## What works in 1.15.0 (gear-more)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
 - Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; Eastbrook Crypt + Mirefen Barrow + 3-room delve
 - Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), vendor buyback, repair, trainers, hearth, combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
+- Hub reputation (Watch / Circle / Ferry / Highwatch); Friendly vendor discounts and gated Watch Signet; **C** sheet lists standing
 - Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
 - Client panels: talents / bank / mail / market / bags (equip·use·sell); **character sheet** (C: extra slots, quality, MH/OH enchant, AP/armor/SP); **minimap** + **world map** (M)
@@ -25,7 +26,7 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.14.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.15.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -36,8 +37,8 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 | `woc-version` | Embeds rewrite + upstream pin constants |
 | `woc-content` | Data tables (classes, items, mobs, NPCs, quests) |
 | `woc-protocol` | Intents, snapshots, events, `WorldHost`, WS msgs |
-| `woc-sim` | Deterministic game core (no Bevy) |
-| `woc-manufacturing` | Standalone manufacturing/professions prototype (v1) |
+| `woc-sim` | Deterministic game core (no Bevy); live professions ECS |
+| `woc-manufacturing` | Typed professions oracle (not on the sim tick loop) |
 | `woc-client` | Bevy offline + online host |
 | `woc-server` | HTTP + WebSocket sim host |
 | `woc-update` | Pack, delta, and apply signed client updates ([runbook](docs/client-update.md)) |
@@ -100,7 +101,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.14.0` / `gear-more`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.15.0` / `gear-more` (after `1.14.0` / `reputation`). Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 
@@ -109,13 +110,16 @@ Online play persists characters (enter injects save; disconnect autosaves) and r
 MIT — see [`LICENSE`](LICENSE). Upstream project is also MIT.
 
 
-## Manufacturing prototype
+## Manufacturing
 
-Standalone deterministic professions crate (`woc-manufacturing`): gathering, forging, skinning, leatherworking, tailoring, jewelcrafting, enchanting, engineering, and alchemy.
+Live path is `woc-sim` professions (ECS): gathering, blacksmithing, skinning, leatherworking, tailoring, jewelcrafting, enchanting, engineering, and alchemy. Content lives in `woc-content`; denials are `ProfessionDeny` ids.
+
+`woc-manufacturing` remains the typed oracle crate and is not wired into `Sim::tick_all`.
 
 - Design: `docs/superpowers/specs/2026-08-13-manufacturing-system-design.md`
-- Plan: `docs/superpowers/plans/2026-08-13-manufacturing-system.md`
+- ECS wiring: `docs/superpowers/specs/2026-08-13-manufacturing-ecs-design.md`
 
 ```sh
+cargo test -p woc-sim --lib professions
 cargo test -p woc-manufacturing
 ```

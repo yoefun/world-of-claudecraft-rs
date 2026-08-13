@@ -1,9 +1,9 @@
 //! Typed sparse-column world. Entity ids are monotonic and never reused.
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Escort, Health, Hearth, Home,
-    Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit,
-    Threat, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Escort, GatherNodeState, Health,
+    Hearth, Home, Identity, InstanceAt, LootPile, LootTable, Motion, Owner, ProfessionCast,
+    Progress, QuestLog, Reputation, Respawn, Skinnable, Spirit, Threat, Transform,
 };
 use crate::ecs::SparseSet;
 use woc_protocol::EntityId;
@@ -35,6 +35,10 @@ pub struct World {
     pub instance_at: SparseSet<InstanceAt>,
     pub durable: SparseSet<Durable>,
     pub hearth: SparseSet<Hearth>,
+    pub profession_cast: SparseSet<ProfessionCast>,
+    pub gather_node_state: SparseSet<GatherNodeState>,
+    pub skinnable: SparseSet<Skinnable>,
+    pub reputation: SparseSet<Reputation>,
 }
 
 impl World {
@@ -165,5 +169,9 @@ impl World {
         self.instance_at.remove(id);
         self.durable.remove(id);
         self.hearth.remove(id);
+        self.profession_cast.remove(id);
+        self.gather_node_state.remove(id);
+        self.skinnable.remove(id);
+        self.reputation.remove(id);
     }
 }

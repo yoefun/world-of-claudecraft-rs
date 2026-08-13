@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.14.0` / `gear-more`.  
+**Current rewrite:** `1.15.0` / `gear-more`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; gear-more shipped as `1.14.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`.
 
 ## Gear more (`gear-more`) — done
 
@@ -14,6 +14,18 @@
 | Loot quality | done | Stack quality; `max(catalog, roll)` after drop list |
 | Client sheet | done | Extra lines; unequip `0-=[]';` |
 | Protocol | done | Rev 8; additive extra slots / `off_hand_enchant` / `quality` |
+
+## Reputation (`reputation`) — done
+
+Design: [`../superpowers/specs/2026-08-13-reputation-design.md`](../superpowers/specs/2026-08-13-reputation-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Faction table + standing ladder | done | Watch / Circle / Ferry / Highwatch; Neutral 0 |
+| Quest + kill grants | done | Party-shared on kills; `Reputation` column |
+| Vendor discount / gates | done | Friendly 5%…Exalted 20%; Unfriendly refuse; `watch_signet` |
+| Snapshot + persist | done | Additive `reputation` on rev **8**; completion JSON |
+| Client sheet | done | **C** lists standing |
 
 ## Gear slots (`gear-slots`) — done
 
@@ -164,7 +176,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.14.0` / gear-more (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.15.0` / gear-more (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

@@ -1,5 +1,6 @@
 //! Zone 3 (Thornpeak Heights) quest definitions.
 
+use crate::factions::RepAward;
 use crate::quests::{QuestDef, QuestObjective, QuestRepeat, QuestReward};
 
 pub static ZONE3_QUESTS: &[QuestDef] = &[
@@ -21,6 +22,7 @@ pub static ZONE3_QUESTS: &[QuestDef] = &[
             copper: 90,
             item_id: Some("travelers_ration"),
             choices: &[],
+            reputation: Some(RepAward::new("highwatch", 250)),
         },
     },
     QuestDef {
@@ -41,6 +43,7 @@ pub static ZONE3_QUESTS: &[QuestDef] = &[
             copper: 85,
             item_id: Some("deepfen_draught"),
             choices: &[],
+            reputation: Some(RepAward::new("highwatch", 200)),
         },
     },
     QuestDef {
@@ -61,6 +64,7 @@ pub static ZONE3_QUESTS: &[QuestDef] = &[
             copper: 110,
             item_id: Some("veteran_helm"),
             choices: &[],
+            reputation: Some(RepAward::new("highwatch", 350)),
         },
     },
 ];

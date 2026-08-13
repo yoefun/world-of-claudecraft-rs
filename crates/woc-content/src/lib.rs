@@ -6,6 +6,8 @@ pub mod ability_effects;
 pub mod classes;
 pub mod delves;
 pub mod dungeons;
+pub mod enchants;
+pub mod factions;
 pub mod gather_nodes;
 pub mod graveyards;
 pub mod items;
@@ -22,6 +24,7 @@ pub mod quests;
 pub mod quests_zone2;
 pub mod quests_zone3;
 pub mod recipes;
+pub mod stations;
 pub mod talents;
 pub mod world_spatial;
 pub mod zone1;
@@ -36,12 +39,21 @@ pub use classes::{
 };
 pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
+pub use enchants::{
+    disenchant_yield, profession_enchant, EnchantReagent, ProfessionEnchantDef, PROFESSION_ENCHANTS,
+};
+pub use factions::{
+    clamp_reputation, discounted_price, faction, standing_at, standing_from_value, standing_next,
+    vendor_discount_pct, FactionDef, RepAward, Standing, EXALTED_AT, FACTIONS,
+    FACTION_EASTBROOK_WATCH, FACTION_EASTFEN_CIRCLE, FACTION_HIGHWATCH, FACTION_MIREFEN_FERRY,
+    FRIENDLY_AT, HONORED_AT, STANDING_CAP, STANDING_FLOOR,
+};
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{
-    can_dual_wield, can_equip, class_armor_cap, enchant, item, quality_mult, ArmorClass,
-    EnchantDef, EquipDeny, ItemDef, ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS,
-    ITEMS,
+    base_of, can_dual_wield, can_equip, class_armor_cap, enchant, fine_substitute_for, item,
+    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny, ItemDef,
+    ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
 };
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
@@ -51,13 +63,18 @@ pub use npcs::{npc, NpcDef, NpcService, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
 pub use pets::{pet, pet_for_class, PetDef, PETS};
-pub use professions::{profession, ProfessionDef, ProfessionKind, PROFESSIONS};
+pub use professions::{
+    gathering_tool_item, mob_is_skinnable, profession, ProfessionDef, ProfessionKind, PROFESSIONS,
+};
 pub use quests::{
     quest, QuestDef, QuestObjective, QuestRepeat, QuestReward, DAILY_PERIOD_TICKS, QUESTS,
 };
 pub use quests_zone2::ZONE2_QUESTS;
 pub use quests_zone3::ZONE3_QUESTS;
-pub use recipes::{recipe, recipes_for_profession, RecipeDef, RecipeReagent, RECIPES};
+pub use recipes::{
+    craft_fee, recipe, recipes_for_profession, RecipeDef, RecipeReagent, CRAFT_BATCH_MAX, RECIPES,
+};
+pub use stations::{in_station_range, station, StationDef, STATIONS, STATION_RADIUS};
 pub use talents::{
     format_talent_effect, points_spent_below_tier, talent, talent_tier_unlocked, TalentDef,
     POINTS_PER_TIER, TALENTS,
@@ -542,11 +559,89 @@ mod tests {
         let wren = npc("herbalist_wren").unwrap();
         assert!(wren.trains_profession("herbalism"));
         assert!(wren.trains_profession("alchemy"));
+        assert!(wren.trains_profession("enchanting"));
         assert!(!wren.is_vendor());
 
         assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
+        assert_eq!(
+            npc("trader_wilkes").unwrap().faction,
+            Some("eastbrook_watch")
+        );
+        assert!(npc("trader_wilkes")
+            .unwrap()
+            .vendor_stock
+            .iter()
+            .any(|o| o.item_id == "watch_signet" && o.min_standing == crate::Standing::Friendly));
+    }
+
+    #[test]
+    fn factions_and_reputation_tables_are_consistent() {
+        use crate::{faction, FACTIONS};
+
+        assert_eq!(FACTIONS.len(), 4);
+        for n in NPCS.iter() {
+            if let Some(id) = n.faction {
+                assert!(faction(id).is_some(), "{} unknown faction {id}", n.id);
+            }
+            for offer in n.vendor_stock {
+                assert!(
+                    ITEMS.iter().any(|i| i.id == offer.item_id),
+                    "vendor {} missing gated item {}",
+                    n.id,
+                    offer.item_id
+                );
+            }
+        }
+        for q in QUESTS.iter() {
+            if let Some(rep) = q.reward.reputation {
+                assert!(
+                    faction(rep.faction_id).is_some(),
+                    "quest {} unknown faction {}",
+                    q.id,
+                    rep.faction_id
+                );
+                assert!(rep.amount > 0, "quest {} reputation must be positive", q.id);
+            }
+        }
+        for m in MOBS.iter() {
+            if let Some(rep) = m.kill_reputation {
+                assert!(
+                    faction(rep.faction_id).is_some(),
+                    "mob {} unknown faction {}",
+                    m.id,
+                    rep.faction_id
+                );
+                assert!(
+                    rep.amount > 0,
+                    "mob {} kill reputation must be positive",
+                    m.id
+                );
+            }
+        }
+        assert_eq!(
+            quest("report_to_alden")
+                .unwrap()
+                .reward
+                .reputation
+                .unwrap()
+                .amount,
+            150
+        );
+        assert_eq!(
+            quest("wolves_at_the_gate")
+                .unwrap()
+                .reward
+                .reputation
+                .unwrap()
+                .faction_id,
+            "eastbrook_watch"
+        );
+        assert_eq!(
+            item("watch_signet").unwrap().equip_slot,
+            Some(ItemEquipSlot::Finger)
+        );
     }
 
     #[test]
@@ -936,6 +1031,15 @@ mod tests {
         assert!(profession("alchemy").is_some());
         assert!(profession("mining").is_some());
         assert!(profession("blacksmithing").is_some());
+        assert!(profession("skinning").is_some());
+        assert!(profession("leatherworking").is_some());
+        assert!(profession("tailoring").is_some());
+        assert!(profession("jewelcrafting").is_some());
+        assert!(profession("enchanting").is_some());
+        assert!(profession("engineering").is_some());
+        assert_eq!(PROFESSIONS.len(), 10);
+        assert_eq!(profession("mining").unwrap().max_skill, 100);
+        assert_eq!(profession("blacksmithing").unwrap().max_skill, 125);
     }
 
     #[test]
@@ -965,6 +1069,7 @@ mod tests {
                 node.zone_id
             );
             assert!(node.count >= 1);
+            assert!(item(node.tool_item_id).is_some());
         }
         assert!(gather_node("eastbrook_meadow_silverleaf").is_some());
         assert!(gather_nodes_for_zone("eastbrook").count() >= 3);
@@ -1026,5 +1131,76 @@ mod tests {
         assert!(recipe("smelt_copper_bar").is_some());
         assert!(recipe("copper_shortsword").is_some());
         assert!(recipes_for_profession("blacksmithing").count() >= 2);
+        assert!(recipe("copper_shortsword").unwrap().station == Some("forge"));
+        assert!(recipe("tigerseye_band").is_some());
+        assert!(recipe("copper_grenade").is_some());
+        assert!(recipe("linen_trousers").is_some());
+        assert!(recipe("light_leather_jerkin").is_some());
+    }
+
+    #[test]
+    fn recipe_input_value_exceeds_output_vendor_sell() {
+        for recipe in RECIPES {
+            let input: u32 = recipe
+                .reagents
+                .iter()
+                .map(|r| reagent_unit_value(item(r.item_id).expect(r.item_id)) * r.count)
+                .sum();
+            let output = item(recipe.product_item_id)
+                .expect(recipe.product_item_id)
+                .vendor_sell
+                * recipe.product_count;
+            assert!(
+                input > output,
+                "{} input {input} must exceed output {output}",
+                recipe.id
+            );
+            if let Some(station_id) = recipe.station {
+                assert!(
+                    station(station_id).is_some(),
+                    "missing station {station_id}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn vendors_never_stock_gathered_mats() {
+        for n in NPCS.iter() {
+            for offer in n.vendor_stock {
+                assert!(
+                    !item_is_gathered(offer.item_id),
+                    "{} stocks gathered {}",
+                    n.id,
+                    offer.item_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn gathered_buy_is_four_times_sell() {
+        for def in ITEMS.iter().filter(|d| item_is_gathered(d.id)) {
+            assert_eq!(
+                def.vendor_buy,
+                def.vendor_sell * 4,
+                "{} buy/sell ratio",
+                def.id
+            );
+        }
+    }
+
+    #[test]
+    fn stations_and_enchants_are_registered() {
+        assert_eq!(STATIONS.len(), 6);
+        assert!(in_station_range(0.0, 0.0, "forge"));
+        assert!(!in_station_range(50.0, 50.0, "forge"));
+        assert_eq!(PROFESSION_ENCHANTS.len(), 3);
+        assert!(profession_enchant("weapon_minor_might").is_some());
+        assert!(enchant("weapon_minor_might").is_some());
+        assert_eq!(
+            disenchant_yield("copper_shortsword")[0].item_id,
+            "arcane_dust"
+        );
     }
 }

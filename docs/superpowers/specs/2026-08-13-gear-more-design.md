@@ -1,7 +1,7 @@
-# Gear-more design — `1.14.0` / `gear-more`
+# Gear-more design — `1.15.0` / `gear-more`
 
 **Status:** Implemented.  
-**Baseline:** rewrite `1.13.0` / `gear-slots` on `develop`.  
+**Baseline:** rewrite `1.14.0` / `reputation` on `develop` (after `1.13.0` / `gear-slots`).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `gear-more`.
 
@@ -35,8 +35,8 @@ Finish the leftover paper-doll / dual-wield / enchant / loot-quality slice that 
 
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
-| **1.13.0** | `gear-slots` | Dual-wield WR, Finger2, catalog quality, MH enchant (shipped) |
-| **1.14.0** | `gear-more` | Extra slots, Hunter DW, OH enchant on sheet, loot quality rolls |
+| **1.14.0** | `reputation` | Hub factions (shipped) |
+| **1.15.0** | `gear-more` | Extra slots, Hunter DW, OH enchant on sheet, loot quality rolls |
 
 `PROTOCOL_REV` stays **8**. New fields `#[serde(default)]`. Equipment stays on `Bags`. Tick fingerprint unchanged. Upstream pin stays **0.31.0**.
 
@@ -133,7 +133,7 @@ Rev **8**. Additive `EquipSlot` variants + snapshot/DTO fields for new slots, `o
 3. Second whetstone with dual-wield weapons sets OH enchant; C-sheet Off line shows `[Coarse Sharpening]`; AP includes +6.
 4. Forced `rng` sequence can produce Uncommon `work_gloves` on a Common catalog row; persist roundtrip keeps stack quality.
 5. `PROTOCOL_REV == 8`. Tick fingerprint `15038642330132466611`.
-6. Footer `1.14.0`.
+6. Footer `1.15.0`.
 
 ## 7. Out of scope
 

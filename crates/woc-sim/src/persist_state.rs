@@ -45,6 +45,7 @@ pub struct PlayerPersistentState {
     pub hearth_z: f32,
     pub hearth_ready_tick: u64,
     pub stance_id: String,
+    pub reputation: HashMap<String, i32>,
 }
 
 impl PlayerPersistentState {
@@ -80,6 +81,7 @@ impl PlayerPersistentState {
             && self.professions.is_empty()
             && self.completed_deeds.is_empty()
             && self.honor == 0
+            && self.reputation.is_empty()
             && !self.pvp_flagged
     }
 }
@@ -185,6 +187,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
             .get::<ClassKit>(player_id)
             .and_then(|k| k.stance_id.clone())
             .unwrap_or_default(),
+        reputation: world
+            .get::<crate::ecs::components::Reputation>(player_id)
+            .map(|r| r.values.clone())
+            .unwrap_or_default(),
     })
 }
 
@@ -203,6 +209,9 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         p.talent_points = state.talent_points;
         p.talents = state.talents.clone();
         p.professions = state.professions.clone();
+    }
+    if let Some(rep) = world.get_mut::<crate::ecs::components::Reputation>(player_id) {
+        *rep = crate::reputation::from_saved(state.reputation.clone());
     }
     if let Some(q) = world.get_mut::<QuestLog>(player_id) {
         q.quest_log = state.quests.clone();
@@ -398,6 +407,7 @@ mod tests {
             hearth_z: EASTBROOK.player_spawn_z,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Default::default(),
         };
         assert!(state.is_virgin());
         let mut world = World::new();
@@ -430,6 +440,9 @@ mod tests {
             p.talent_points = 2;
             p.talents.insert("mage_arcane_power".into(), 2);
             p.completed_deeds.insert("eastfen_mire_terror".into());
+        }
+        if let Some(rep) = world.get_mut::<crate::ecs::components::Reputation>(1) {
+            rep.values.insert("eastbrook_watch".into(), 500);
         }
         if let Some(bank) = world.get_mut::<Bank>(1) {
             bank.bank_copper = 30;
@@ -506,6 +519,7 @@ mod tests {
         assert!(restored.inventory.iter().flatten().any(|s| {
             s.item_id == "padded_shoulders" && s.quality == Some(woc_content::ItemQuality::Rare)
         }));
+        assert_eq!(restored.reputation.get("eastbrook_watch"), Some(&500));
         assert!(!restored.is_virgin());
     }
 

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Rewrite crate / product version (semver).
-pub const REWRITE_VERSION: &str = "1.14.0";
+pub const REWRITE_VERSION: &str = "1.15.0";
 
 /// Upstream TypeScript World of ClaudeCraft version this rewrite tracks.
 pub const UPSTREAM_VERSION: &str = "0.31.0";

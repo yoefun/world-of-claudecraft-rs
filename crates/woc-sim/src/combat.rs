@@ -1372,7 +1372,9 @@ pub fn spawn_mob_loot(
     }
     if dropped.is_empty() {
         let id = world.next_id();
-        return crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
+        let loot_id = crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
+        crate::ecs::spawn::maybe_mark_skinnable(world, loot_id, tid.id);
+        return loot_id;
     }
     let mut first = 0;
     for (i, item_id) in dropped.into_iter().enumerate() {
@@ -1386,6 +1388,7 @@ pub fn spawn_mob_loot(
             first = id;
         }
     }
+    crate::ecs::spawn::maybe_mark_skinnable(world, first, tid.id);
     first
 }
 

@@ -2,6 +2,7 @@
 
 use std::sync::LazyLock;
 
+use crate::factions::RepAward;
 use crate::quests_zone2::ZONE2_QUESTS;
 use crate::quests_zone3::ZONE3_QUESTS;
 
@@ -48,6 +49,7 @@ pub struct QuestReward {
     pub copper: u32,
     pub item_id: Option<&'static str>,
     pub choices: &'static [&'static str],
+    pub reputation: Option<RepAward>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +87,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 25,
             item_id: Some("eastbrook_greaves"),
             choices: &[],
+            reputation: Some(RepAward::new("eastbrook_watch", 250)),
         },
     },
     QuestDef {
@@ -105,6 +108,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 20,
             item_id: None,
             choices: &[],
+            reputation: Some(RepAward::new("eastbrook_watch", 200)),
         },
     },
     QuestDef {
@@ -124,6 +128,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 5,
             item_id: Some("baked_bread"),
             choices: &[],
+            reputation: Some(RepAward::new("eastbrook_watch", 150)),
         },
     },
     QuestDef {
@@ -145,6 +150,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 8,
             item_id: None,
             choices: &[],
+            reputation: Some(RepAward::new("eastbrook_watch", 100)),
         },
     },
     QuestDef {
@@ -165,6 +171,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 15,
             item_id: None,
             choices: &[],
+            reputation: Some(RepAward::new("eastbrook_watch", 75)),
         },
     },
     QuestDef {
@@ -187,6 +194,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 20,
             item_id: None,
             choices: &[],
+            reputation: Some(RepAward::new("eastbrook_watch", 150)),
         },
     },
     QuestDef {
@@ -206,6 +214,7 @@ pub static ZONE1_QUESTS: &[QuestDef] = &[
             copper: 10,
             item_id: None,
             choices: &["travelers_ration", "spring_water", "baked_bread"],
+            reputation: Some(RepAward::new("eastbrook_watch", 75)),
         },
     },
 ];

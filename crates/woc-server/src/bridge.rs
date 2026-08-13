@@ -3,7 +3,7 @@
 use woc_content::ItemQuality;
 use woc_persist::{
     Character, CharacterSave, EquipmentDto, InvStackDto, MailDto, MarketListingDto,
-    ProfessionSkillDto, QuestProgressDto, RealmEconomy, TalentRankDto,
+    ProfessionSkillDto, QuestProgressDto, RealmEconomy, ReputationDto, TalentRankDto,
 };
 use woc_sim::ecs::components::{
     Equipment, EquipmentQualities, EquipmentWear, InvStack, QuestProgress,
@@ -49,6 +49,11 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
         hearth_z: character.hearth_z,
         hearth_ready_tick: character.hearth_ready_tick,
         stance_id: character.stance_id.clone(),
+        reputation: character
+            .reputation
+            .iter()
+            .map(|r| (r.faction_id.clone(), r.value))
+            .collect(),
     }
 }
 
@@ -95,6 +100,14 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
         hearth_z: state.hearth_z,
         hearth_ready_tick: state.hearth_ready_tick,
         stance_id: state.stance_id.clone(),
+        reputation: state
+            .reputation
+            .iter()
+            .map(|(id, value)| ReputationDto {
+                faction_id: id.clone(),
+                value: *value,
+            })
+            .collect(),
     }
 }
 

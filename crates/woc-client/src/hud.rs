@@ -230,16 +230,25 @@ pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
         .map(|npc| npc.can_repair)
         .unwrap_or(false)
     {
-        parts.push("[R] Repair");
+        parts.push("[R] Repair".into());
     }
-    parts.push("[H] Hearthstone");
+    parts.push("[H] Hearthstone".into());
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.discount_pct > 0)
+        .unwrap_or(false)
+    {
+        let pct = snap.open_npc.as_ref().map(|n| n.discount_pct).unwrap_or(0);
+        parts.push(format!("[{pct}% off]"));
+    }
     if snap
         .open_npc
         .as_ref()
         .map(|npc| !npc.train_professions.is_empty())
         .unwrap_or(false)
     {
-        parts.push("[T] Train");
+        parts.push("[T] Train".into());
     }
     parts.join("   ")
 }
@@ -302,6 +311,36 @@ fn weapon_label(
         }
     }
     label
+}
+
+fn standing_display(standing: &str) -> &str {
+    match standing {
+        "hated" => "Hated",
+        "hostile" => "Hostile",
+        "unfriendly" => "Unfriendly",
+        "neutral" => "Neutral",
+        "friendly" => "Friendly",
+        "honored" => "Honored",
+        "revered" => "Revered",
+        "exalted" => "Exalted",
+        other => other,
+    }
+}
+
+fn reputation_block(snap: &TickSnapshot) -> String {
+    if snap.reputation.is_empty() {
+        return "Reputation: —".into();
+    }
+    let mut lines = vec!["Reputation:".to_string()];
+    for row in &snap.reputation {
+        lines.push(format!(
+            "  {}  {} ({})",
+            row.name,
+            standing_display(&row.standing),
+            row.value
+        ));
+    }
+    lines.join("\n")
 }
 
 fn talent_panel_text(snap: &TickSnapshot) -> String {
@@ -861,7 +900,7 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\n  Shoulder: {}\n  Back: {}\n  Wrist: {}\n  Hands: {}\n  Waist: {}\n  Trinket: {}\n  Trinket2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip  [0-=[]';] Extra slots",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\n  Shoulder: {}\n  Back: {}\n  Wrist: {}\n  Hands: {}\n  Waist: {}\n  Trinket: {}\n  Trinket2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n{}\n[1-9] Unequip  [0-=[]';] Extra slots",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
@@ -901,6 +940,7 @@ pub(crate) fn update_hud(
             snap.attack_power,
             snap.armor,
             snap.spell_power,
+            reputation_block(snap),
         );
     }
 
@@ -1336,11 +1376,27 @@ mod tests {
             repair_cost: 12,
             can_bind: false,
             buyback: vec![],
+            discount_pct: 0,
         });
 
         let text = npc_session_help(&snap);
 
         assert!(text.contains("[R] Repair"));
+    }
+
+    #[test]
+    fn reputation_block_lists_standing() {
+        let mut snap = TickSnapshot::default();
+        snap.reputation.push(woc_protocol::ReputationSnapshot {
+            faction_id: "eastbrook_watch".into(),
+            name: "Eastbrook Watch".into(),
+            value: 500,
+            standing: "friendly".into(),
+        });
+        let text = reputation_block(&snap);
+        assert!(text.contains("Eastbrook Watch"));
+        assert!(text.contains("Friendly"));
+        assert!(text.contains("500"));
     }
 
     #[test]

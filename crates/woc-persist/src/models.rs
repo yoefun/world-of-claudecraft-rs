@@ -46,6 +46,8 @@ pub struct Character {
     pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
+    #[serde(default)]
+    pub reputation: Vec<ReputationDto>,
 }
 
 /// Fields updated on save (position / progression / bags).
@@ -87,6 +89,8 @@ pub struct CharacterSave {
     pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
+    #[serde(default)]
+    pub reputation: Vec<ReputationDto>,
 }
 
 impl Default for CharacterSave {
@@ -114,6 +118,7 @@ impl Default for CharacterSave {
             hearth_z: default_hearth_z(),
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Vec::new(),
         }
     }
 }
@@ -153,6 +158,8 @@ pub(crate) struct CharacterCompletionDto {
     pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
+    #[serde(default)]
+    pub reputation: Vec<ReputationDto>,
 }
 
 impl From<&CharacterSave> for CharacterCompletionDto {
@@ -173,6 +180,7 @@ impl From<&CharacterSave> for CharacterCompletionDto {
             hearth_z: save.hearth_z,
             hearth_ready_tick: save.hearth_ready_tick,
             stance_id: save.stance_id.clone(),
+            reputation: save.reputation.clone(),
         }
     }
 }
@@ -180,7 +188,7 @@ impl From<&CharacterSave> for CharacterCompletionDto {
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum StoredCompletionDto {
-    Current(CharacterCompletionDto),
+    Current(Box<CharacterCompletionDto>),
     Legacy(Vec<QuestProgressDto>),
 }
 
@@ -209,6 +217,7 @@ impl Character {
             hearth_z: self.hearth_z,
             hearth_ready_tick: self.hearth_ready_tick,
             stance_id: self.stance_id.clone(),
+            reputation: self.reputation.clone(),
         }
     }
 
@@ -235,6 +244,7 @@ impl Character {
         self.hearth_z = save.hearth_z;
         self.hearth_ready_tick = save.hearth_ready_tick;
         self.stance_id = save.stance_id;
+        self.reputation = save.reputation;
     }
 }
 
@@ -276,6 +286,12 @@ pub struct TalentRankDto {
 pub struct ProfessionSkillDto {
     pub id: String,
     pub skill: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReputationDto {
+    pub faction_id: String,
+    pub value: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -433,7 +449,7 @@ pub(crate) fn completion_to_json(save: &CharacterSave) -> Result<String, serde_j
 
 pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, serde_json::Error> {
     serde_json::from_str::<StoredCompletionDto>(s).map(|stored| match stored {
-        StoredCompletionDto::Current(state) => state,
+        StoredCompletionDto::Current(state) => *state,
         StoredCompletionDto::Legacy(quests) => CharacterCompletionDto {
             quests,
             zone_id: default_zone_id(),
@@ -450,6 +466,7 @@ pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, se
             hearth_z: default_hearth_z(),
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Vec::new(),
         },
     })
 }
@@ -490,6 +507,7 @@ mod tests {
         assert_eq!(character.hearth_z, 4.0);
         assert_eq!(character.hearth_ready_tick, 0);
         assert!(character.stance_id.is_empty());
+        assert!(character.reputation.is_empty());
     }
 
     #[test]
@@ -519,6 +537,7 @@ mod tests {
         assert_eq!(save.hearth_z, 4.0);
         assert_eq!(save.hearth_ready_tick, 0);
         assert!(save.stance_id.is_empty());
+        assert!(save.reputation.is_empty());
     }
 
     #[test]
@@ -550,6 +569,7 @@ mod tests {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            reputation: Vec::new(),
         };
         let save = CharacterSave {
             zone_id: "eastfen".into(),
@@ -576,6 +596,10 @@ mod tests {
             hearth_x: 12.0,
             hearth_z: 34.0,
             hearth_ready_tick: 77,
+            reputation: vec![ReputationDto {
+                faction_id: "eastbrook_watch".into(),
+                value: 500,
+            }],
             ..Default::default()
         };
 
@@ -603,6 +627,7 @@ mod tests {
         assert_eq!(state.hearth_x, 2.0);
         assert_eq!(state.hearth_z, 4.0);
         assert_eq!(state.hearth_ready_tick, 0);
+        assert!(state.reputation.is_empty());
     }
 
     #[test]
