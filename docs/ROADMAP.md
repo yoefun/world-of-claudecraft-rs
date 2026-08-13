@@ -57,7 +57,7 @@ Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then F
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-parcel-bank-design.md`](superpowers/specs/2026-08-13-parcel-bank-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-parcel-bank.md`](superpowers/plans/2026-08-13-parcel-bank.md)
 
-Bank deposit/withdraw and mail attach/collect still mint a new stack (full durability, no enchant). The client can collect mail but never send, and bank **G** only deposits junk. This program keeps HUD **K**/**I** (no banker NPC) and makes warehouse + parcels instance-correct and offline-capable. Protocol rev stays **8**. Rewrite target **1.14.0** / `parcel-bank`.
+Bank and mail preserve item instances (durability, enchant, slot identity) through deposit, withdraw, attach, collect, and AH listing. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the selected bag slot, not junk-only. Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. HUD **K**/**I** stay ungated (no banker NPC). Protocol rev **8**.
 
 ## Client version gate (current)
 

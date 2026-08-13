@@ -282,3 +282,24 @@ fn quests_to_dto(quests: &[QuestProgress]) -> Vec<QuestProgressDto> {
         })
         .collect()
 }
+
+pub fn apply_mailbox_directory(sim: &mut Sim, names: &[(String, uuid::Uuid)]) {
+    for (name, id) in names {
+        sim.directory.register(name, id.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn directory_lookup_after_apply() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let id = Uuid::nil();
+        apply_mailbox_directory(&mut sim, &[("Ada".into(), id)]);
+        let key = id.to_string();
+        assert_eq!(sim.directory.lookup("ada"), Some(key.as_str()));
+    }
+}

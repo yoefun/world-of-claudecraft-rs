@@ -17,7 +17,8 @@ use woc_version::{
 };
 
 use crate::bridge::{
-    apply_economy_to_sim, character_to_state, export_economy_from_sim, state_to_save,
+    apply_economy_to_sim, apply_mailbox_directory, character_to_state, export_economy_from_sim,
+    state_to_save,
 };
 use crate::AppState;
 
@@ -58,6 +59,10 @@ async fn build_shared(persist: woc_persist::Persist) -> Arc<Shared> {
     match persist.load_economy().await {
         Ok(eco) => apply_economy_to_sim(&mut sim, &eco),
         Err(e) => tracing::warn!("failed to load realm economy: {e}"),
+    }
+    match persist.list_mailbox_directory().await {
+        Ok(names) => apply_mailbox_directory(&mut sim, &names),
+        Err(e) => tracing::warn!("failed to load mailbox directory: {e}"),
     }
     let (notice_tx, _) = broadcast::channel(64);
     Arc::new(Shared {
