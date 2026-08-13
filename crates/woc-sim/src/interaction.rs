@@ -2,7 +2,7 @@
 
 use crate::ecs::components::AuraInstance;
 use crate::ecs::components::{
-    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
+    dist2d, Bags, Bank, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentWear, Health,
     Hearth, Identity, InvStack, Progress, Transform,
 };
 use crate::ecs::World;
@@ -217,6 +217,19 @@ pub fn repair_cost(world: &World, player_id: EntityId) -> u32 {
         }
         let current = stack.durability.unwrap_or(def.max_durability);
         cost = cost.saturating_add(def.max_durability.saturating_sub(current));
+    }
+
+    if let Some(bank) = world.get::<Bank>(player_id) {
+        for stack in bank.bank.iter().flatten() {
+            let Some(def) = item(&stack.item_id) else {
+                continue;
+            };
+            if def.max_durability == 0 {
+                continue;
+            }
+            let current = stack.durability.unwrap_or(def.max_durability);
+            cost = cost.saturating_add(def.max_durability.saturating_sub(current));
+        }
     }
 
     cost
@@ -636,6 +649,16 @@ fn repair_all(
             }
         }
         for stack in bags.inventory.iter_mut().flatten() {
+            let Some(def) = item(&stack.item_id) else {
+                continue;
+            };
+            if def.max_durability > 0 {
+                stack.durability = Some(def.max_durability);
+            }
+        }
+    }
+    if let Some(bank) = world.get_mut::<Bank>(player_id) {
+        for stack in bank.bank.iter_mut().flatten() {
             let Some(def) = item(&stack.item_id) else {
                 continue;
             };

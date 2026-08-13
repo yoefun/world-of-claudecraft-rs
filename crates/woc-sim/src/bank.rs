@@ -2,20 +2,11 @@
 
 use crate::ecs::components::{Bags, Bank, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, remove_item};
+use crate::inventory::{put_stack, take_from_slot};
 use crate::types::BANK_SLOTS;
 use woc_protocol::{EntityId, SimEvent};
 
-pub fn deposit(
-    world: &mut World,
-    player_id: EntityId,
-    bag_slot: u8,
-    count: u32,
-    events: &mut Vec<SimEvent>,
-) -> bool {
-    if world.get::<Bags>(player_id).is_none() {
-        return false;
-    }
+fn ensure_bank(world: &mut World, player_id: EntityId) {
     if let Some(bank) = world.get_mut::<Bank>(player_id) {
         if bank.bank.len() < BANK_SLOTS {
             bank.bank.resize(BANK_SLOTS, None);
@@ -29,30 +20,33 @@ pub fn deposit(
             },
         );
     }
-    let slot = bag_slot as usize;
-    let stack = world
-        .get::<Bags>(player_id)
-        .and_then(|b| b.inventory.get(slot))
-        .and_then(|s| s.clone());
-    let Some(stack) = stack else {
+}
+
+pub fn deposit(
+    world: &mut World,
+    player_id: EntityId,
+    bag_slot: u8,
+    count: u32,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    ensure_bank(world, player_id);
+    let Some(taken) = world.get_mut::<Bags>(player_id).and_then(|b| {
+        take_from_slot(&mut b.inventory, bag_slot as usize, count)
+    }) else {
         events.push(SimEvent::Toast {
             message: "Empty bag slot.".into(),
         });
         return false;
     };
-    let take = count.min(stack.count).max(1);
-    if let Some(bags) = world.get_mut::<Bags>(player_id) {
-        if !remove_item(&mut bags.inventory, &stack.item_id, take) {
-            return false;
-        }
-    }
+    let item_id = taken.item_id.clone();
+    let n = taken.count;
     let bank_full = match world.get_mut::<Bank>(player_id) {
-        Some(bank) => !grant_into(&mut bank.bank, &stack.item_id, take),
+        Some(bank) => put_stack(&mut bank.bank, taken.clone()).is_err(),
         None => true,
     };
     if bank_full {
         if let Some(bags) = world.get_mut::<Bags>(player_id) {
-            let _ = grant_into(&mut bags.inventory, &stack.item_id, take);
+            let _ = put_stack(&mut bags.inventory, taken);
         }
         events.push(SimEvent::Toast {
             message: "Bank is full.".into(),
@@ -61,8 +55,8 @@ pub fn deposit(
     }
     events.push(SimEvent::ItemLost {
         player: player_id,
-        item_id: stack.item_id,
-        count: take,
+        item_id,
+        count: n,
     });
     true
 }
@@ -77,30 +71,23 @@ pub fn withdraw(
     if world.get::<Bags>(player_id).is_none() {
         return false;
     }
-    let slot = bank_slot as usize;
-    let stack = world
-        .get::<Bank>(player_id)
-        .and_then(|b| b.bank.get(slot))
-        .and_then(|s| s.clone());
-    let Some(stack) = stack else {
+    let Some(taken) = world.get_mut::<Bank>(player_id).and_then(|b| {
+        take_from_slot(&mut b.bank, bank_slot as usize, count)
+    }) else {
         events.push(SimEvent::Toast {
             message: "Empty bank slot.".into(),
         });
         return false;
     };
-    let take = count.min(stack.count).max(1);
-    if let Some(bank) = world.get_mut::<Bank>(player_id) {
-        if !remove_item(&mut bank.bank, &stack.item_id, take) {
-            return false;
-        }
-    }
+    let item_id = taken.item_id.clone();
+    let n = taken.count;
     let bags_full = match world.get_mut::<Bags>(player_id) {
-        Some(bags) => !grant_into(&mut bags.inventory, &stack.item_id, take),
+        Some(bags) => put_stack(&mut bags.inventory, taken.clone()).is_err(),
         None => true,
     };
     if bags_full {
         if let Some(bank) = world.get_mut::<Bank>(player_id) {
-            let _ = grant_into(&mut bank.bank, &stack.item_id, take);
+            let _ = put_stack(&mut bank.bank, taken);
         }
         events.push(SimEvent::Toast {
             message: "Bags are full.".into(),
@@ -109,8 +96,8 @@ pub fn withdraw(
     }
     events.push(SimEvent::ItemGained {
         player: player_id,
-        item_id: stack.item_id,
-        count: take,
+        item_id,
+        count: n,
     });
     true
 }
@@ -187,6 +174,40 @@ mod tests {
     use crate::ecs::components::{Bags, Bank, Progress};
     use crate::inventory::grant_into;
     use woc_content::PlayerClass;
+
+    #[test]
+    fn deposit_preserves_worn_enchanted_sword() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            let _ = grant_into(&mut bags.inventory, "worn_sword", 1);
+        }
+        let slot = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|x| x.item_id == "worn_sword"))
+            .unwrap();
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            if let Some(st) = bags.inventory[slot].as_mut() {
+                st.durability = Some(12);
+                st.enchant_id = Some("coarse_sharpening".into());
+            }
+        }
+        let mut events = Vec::new();
+        assert!(deposit(&mut world, 1, slot as u8, 1, &mut events));
+        let stored = world
+            .get::<Bank>(1)
+            .unwrap()
+            .bank
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "worn_sword")
+            .unwrap();
+        assert_eq!(stored.durability, Some(12));
+        assert_eq!(stored.enchant_id.as_deref(), Some("coarse_sharpening"));
+    }
 
     #[test]
     fn deposit_and_withdraw_round_trip() {

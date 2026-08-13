@@ -1135,7 +1135,8 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, Health, LootPile, Owner, QuestLog, QuestState, Threat, Transform,
+        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Owner, QuestLog,
+        QuestState, Threat, Transform,
     };
     use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
@@ -1599,6 +1600,32 @@ mod tests {
         let wear = &sim.world.get::<Bags>(sim.player_id).unwrap().equipment_wear;
         assert_eq!(wear.main_hand, Some(40));
         assert_eq!(wear.chest, Some(30));
+    }
+
+    #[test]
+    fn repair_cost_includes_banked_gear() {
+        let mut world = World::new();
+        spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_wear = EquipmentWear::full_for_equipment(&bags.equipment);
+            for stack in bags.inventory.iter_mut().flatten() {
+                if let Some(def) = woc_content::item(&stack.item_id) {
+                    if def.max_durability > 0 {
+                        stack.durability = Some(def.max_durability);
+                    }
+                }
+            }
+        }
+        if let Some(bank) = world.get_mut::<Bank>(1) {
+            let empty = bank.bank.iter().position(|s| s.is_none()).unwrap();
+            bank.bank[empty] = Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(0),
+                enchant_id: None,
+            });
+        }
+        assert_eq!(crate::interaction::repair_cost(&world, 1), 40);
     }
 
     #[test]
