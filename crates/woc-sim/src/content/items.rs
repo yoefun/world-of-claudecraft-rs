@@ -1,7 +1,7 @@
 use crate::item::{EquipSlot, ItemDef, ItemId, Quality};
 
 pub const ITEM_DEFS: &[ItemDef] = &[
-    ItemDef { id: ItemId::CopperOre, quality: Quality::Common, slot: EquipSlot::None, sell_value: 5, buy_value: 19, stackable: true, gathered: true },
+    ItemDef { id: ItemId::CopperOre, quality: Quality::Common, slot: EquipSlot::None, sell_value: 5, buy_value: 20, stackable: true, gathered: true },
     ItemDef { id: ItemId::FineCopperOre, quality: Quality::Uncommon, slot: EquipSlot::None, sell_value: 12, buy_value: 48, stackable: true, gathered: true },
     ItemDef { id: ItemId::CoarseStone, quality: Quality::Common, slot: EquipSlot::None, sell_value: 2, buy_value: 8, stackable: true, gathered: true },
     ItemDef { id: ItemId::Silverleaf, quality: Quality::Common, slot: EquipSlot::None, sell_value: 5, buy_value: 20, stackable: true, gathered: true },
