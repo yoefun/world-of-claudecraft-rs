@@ -323,7 +323,6 @@ mod tests {
     /// into `Progress`, `zone_id` into `Identity`, position into `Transform`,
     /// `durable_id` into `Durable` — so this is the remapping regression net.
     #[test]
-    #[test]
     fn round_trip_preserves_progression() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Mage, 10.0, 20.0);
