@@ -1026,6 +1026,7 @@ fn service_name(service: NpcService) -> &'static str {
         NpcService::ClassTrainer => "class_trainer",
         NpcService::Innkeeper => "innkeeper",
         NpcService::QuestGiver => "quest_giver",
+        NpcService::RidingTrainer => "riding_trainer",
     }
 }
 

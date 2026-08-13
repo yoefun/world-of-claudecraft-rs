@@ -563,6 +563,39 @@ mod tests {
         assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
+        assert!(npc("stable_master_ross").unwrap().is_riding_trainer());
+    }
+
+    #[test]
+    fn stable_master_ross_roster() {
+        let ross = npc("stable_master_ross").expect("ross");
+        assert!(ross.is_riding_trainer());
+        assert!(ross.is_vendor());
+        assert!(!ross.is_profession_trainer());
+        assert!(ross.trains.is_empty());
+        let stock: Vec<_> = ross.vendor_stock.iter().map(|o| o.item_id).collect();
+        assert!(stock.contains(&"brown_pony"));
+        assert!(stock.contains(&"swift_bay_steed"));
+        assert!(stock.contains(&"tawny_gryphon"));
+        assert!(EASTBROOK.npcs.iter().any(|s| {
+            s.npc_id == "stable_master_ross"
+                && (s.x - 4.0).abs() < 1e-6
+                && (s.z - 9.0).abs() < 1e-6
+        }));
+    }
+
+    #[test]
+    fn riding_trainers_stock_mounts() {
+        for n in NPCS.iter() {
+            if n.services.contains(&NpcService::RidingTrainer) {
+                assert!(n.is_vendor(), "{} riding trainer must vendor", n.id);
+                assert!(!n.vendor_stock.is_empty(), "{} empty stock", n.id);
+                for offer in n.vendor_stock {
+                    let it = item(offer.item_id).unwrap();
+                    assert_eq!(it.kind, ItemKind::Mount, "{} stocks non-mount", n.id);
+                }
+            }
+        }
     }
 
     #[test]

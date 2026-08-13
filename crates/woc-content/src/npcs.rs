@@ -19,6 +19,7 @@ pub enum NpcService {
     ProfessionTrainer,
     ClassTrainer,
     Innkeeper,
+    RidingTrainer,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +55,10 @@ impl NpcDef {
 
     pub fn is_innkeeper(&self) -> bool {
         self.services.contains(&NpcService::Innkeeper)
+    }
+
+    pub fn is_riding_trainer(&self) -> bool {
+        self.services.contains(&NpcService::RidingTrainer)
     }
 
     pub fn trains_profession(&self, id: &str) -> bool {
@@ -186,6 +191,27 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         greeting: "Rest the night. I'll keep the hearth.",
         services: &[NpcService::Innkeeper],
         vendor_stock: &[],
+        trains: &[],
+    },
+    NpcDef {
+        id: "stable_master_ross",
+        name: "Stable Master Ross",
+        greeting: "A horse knows the road better than most maps.",
+        services: &[NpcService::RidingTrainer, NpcService::Vendor],
+        vendor_stock: &[
+            VendorOffer {
+                item_id: "brown_pony",
+                count: 1,
+            },
+            VendorOffer {
+                item_id: "swift_bay_steed",
+                count: 1,
+            },
+            VendorOffer {
+                item_id: "tawny_gryphon",
+                count: 1,
+            },
+        ],
         trains: &[],
     },
 ];
