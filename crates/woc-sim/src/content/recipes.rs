@@ -219,6 +219,44 @@ pub const RECIPES: &[RecipeDef] = &[
         item_level_budget: 8,
         station: Some(StationType::JewelersBench),
     },
+    RecipeDef {
+        id: RecipeId::MinorHealingPotion,
+        profession: ProfessionId::Alchemy,
+        result: ItemId::MinorHealingPotion,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::Silverleaf,
+                count: 2,
+            },
+            Reagent {
+                item: ItemId::EmptyVial,
+                count: 1,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 1,
+        station: Some(StationType::Apothecary),
+    },
+    RecipeDef {
+        id: RecipeId::ElixirOfMinorStrength,
+        profession: ProfessionId::Alchemy,
+        result: ItemId::ElixirOfMinorStrength,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::Earthroot,
+                count: 2,
+            },
+            Reagent {
+                item: ItemId::EmptyVial,
+                count: 1,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 1,
+        station: Some(StationType::Apothecary),
+    },
 ];
 
 pub fn recipe_by_id(id: RecipeId) -> Option<&'static RecipeDef> {
@@ -318,6 +356,25 @@ mod tests {
 
     fn jewelers_bench_pos() -> Vec2 {
         Vec2 { x: 15.0, z: 5.0 }
+    }
+
+    fn apothecary_pos() -> Vec2 {
+        Vec2 { x: 7.0, z: 660.0 }
+    }
+
+    fn inv_with_healing_potion_reagents() -> Inventory {
+        let mut inv = Inventory::with_capacity(8);
+        inv.try_add(ItemStack {
+            item: ItemId::Silverleaf,
+            count: 2,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::EmptyVial,
+            count: 1,
+        })
+        .unwrap();
+        inv
     }
 
     fn inv_with_copper_ore() -> Inventory {
@@ -629,6 +686,60 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, DenyReason::StationRequired);
+    }
+
+    #[test]
+    fn potions_require_apothecary() {
+        let inv = inv_with_healing_potion_reagents();
+        let gold = Gold { copper: 100 };
+        let err = evaluate_craft_admission(
+            RecipeId::MinorHealingPotion,
+            1,
+            forge_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err, DenyReason::StationRequired);
+    }
+
+    #[test]
+    fn healing_potion_crafts_at_highwatch_apothecary() {
+        let mut inv = inv_with_healing_potion_reagents();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::MinorHealingPotion,
+            1,
+            apothecary_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::MinorHealingPotion,
+            1,
+            apothecary_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::MinorHealingPotion), 1);
+        assert_eq!(inv.count(ItemId::Silverleaf), 0);
+        assert_eq!(inv.count(ItemId::EmptyVial), 0);
+        assert_eq!(skills.get(ProfessionId::Alchemy), 2);
     }
 
     #[test]
