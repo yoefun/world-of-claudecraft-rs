@@ -554,9 +554,14 @@ pub(crate) fn party_frames_text(snap: &TickSnapshot) -> String {
             continue;
         }
         let afk = if m.online { "" } else { " AFK" };
+        let group = if snap.party_kind == "raid" {
+            format!("G{} ", m.raid_group + 1)
+        } else {
+            String::new()
+        };
         lines.push(format!(
-            "{} {} {:.0}/{:.0}{}",
-            m.class_id, m.name, m.hp, m.hp_max, afk
+            "{}{} {} {:.0}/{:.0}{}",
+            group, m.class_id, m.name, m.hp, m.hp_max, afk
         ));
     }
     lines.join("\n")
@@ -1522,6 +1527,27 @@ mod tests {
         let panel = party_panel_text(&snap);
         assert!(panel.contains("*"));
         assert!(panel.contains("[X] Leave"));
+    }
+
+    #[test]
+    fn raid_frames_group_two_on_second_column() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.party_kind = "raid".into();
+        snap.party_members = (1..=6)
+            .map(|id| woc_protocol::PartyMemberSnapshot {
+                id,
+                name: format!("P{id}"),
+                class_id: "warrior".into(),
+                hp: 10.0,
+                hp_max: 10.0,
+                online: true,
+                raid_group: if id <= 5 { 0 } else { 1 },
+            })
+            .collect();
+        let text = party_frames_text(&snap);
+        assert!(text.contains("G2"));
+        assert!(text.contains("P6"));
     }
 
     #[test]

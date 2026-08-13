@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.15.0 — 2026-08-13
+
+### Added
+
+- **1.15.0 `raid`:** Convert a full 5-man party into a 10-player raid of two groups.
+- Leader **Equals** converts party → raid (`Converted to a raid.`); convert back when size ≤ 5 (`Too many members to convert to a party.` at 6+).
+- `MAX_RAID_SIZE` **10**; `MAX_REALM_PLAYERS` **10**.
+- `raid` chat channel (error `You are not in a raid.` when not in a raid).
+- Client frames prefix other members with **G1** / **G2** (`raid_group + 1`). Local player still omitted.
+
 ## 1.14.0 — 2026-08-13
 
 ### Added

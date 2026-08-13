@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.14.0` / `party-depth`.  
+**Current rewrite:** `1.15.0` / `raid`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`. Party depth shipped as `1.14.0`. Raid is planned as `1.15.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`. Party depth shipped as `1.14.0`. Raid shipped as `1.15.0`.
 
 ## Party depth (`party-depth`) — done
 
@@ -20,14 +20,14 @@ Plan: [`../superpowers/plans/2026-08-13-party-raid.md`](../superpowers/plans/202
 | Ready check | done | 300 ticks; parked do not block early complete |
 | Protocol rev 9 | done | New WS verbs + additive-looking snapshot fields with a rev bump |
 
-## Raid (`raid`) — planned `1.15.0`
+## Raid (`raid`) — done
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Convert 5-man → raid | planned | Leader **Equals**; two groups of 5 |
-| Realm cap 10 | planned | `MAX_REALM_PLAYERS` 8 → 10 |
-| Raid chat | planned | `raid` channel; notices still realm-broadcast |
-| Raid frames | planned | `G1` / `G2` prefixes |
+| Convert 5-man → raid | done | Leader **Equals**; two groups of 5 |
+| Realm cap 10 | done | `MAX_REALM_PLAYERS` 8 → 10 |
+| Raid chat | done | `raid` channel; notices still realm-broadcast |
+| Raid frames | done | `G1` / `G2` prefixes |
 | 10-man encounter content | n/a | Explicit non-goal |
 
 ## Gear slots (`gear-slots`) — done
@@ -179,7 +179,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.14.0` / party-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.15.0` / raid (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
