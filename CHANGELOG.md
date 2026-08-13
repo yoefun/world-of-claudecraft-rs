@@ -9,7 +9,7 @@
 - Guild chat and officer chat (`/o`) with member-only fan-out.
 - MOTD (officer+; max 240 chars).
 - Persist `RealmEconomy.guilds` across realm restart.
-- Client **J** panel: compose guild name + target invite (**V**).
+- Client **J** panel: compose guild name / chat / `/motd` / `/o`; `/invite` `/kick` `/officer` `/member` `/transfer` by name; Ctrl+letter verbs; Esc closes.
 - Protocol rev **9** (snapshot `guild` / `guild_invite`).
 
 ## 1.15.0 — 2026-08-13

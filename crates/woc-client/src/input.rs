@@ -388,6 +388,7 @@ pub(crate) fn handle_interact_keys(
         ui.show_bank = false;
         ui.show_mail = false;
         ui.show_market = false;
+        return;
     }
     if keys.just_pressed(KeyCode::KeyU) && !ui.show_guild {
         ui.show_market = !ui.show_market;
@@ -955,6 +956,59 @@ pub(crate) fn handle_interact_keys(
     }
 }
 
+fn guild_enter_msg(compose: &str, snap: &TickSnapshot) -> WsClientMsg {
+    if snap.guild_invite.is_some() {
+        return WsClientMsg::GuildAccept;
+    }
+    if snap.guild.is_none() {
+        return WsClientMsg::GuildCreate {
+            name: compose.trim().to_string(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/motd ") {
+        return WsClientMsg::GuildSetMotd {
+            text: rest.to_string(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/o ") {
+        return WsClientMsg::Chat {
+            channel: "officer".into(),
+            text: rest.to_string(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/invite ") {
+        return WsClientMsg::GuildInvite {
+            name: rest.trim().to_string(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/kick ") {
+        return WsClientMsg::GuildKick {
+            name: rest.trim().to_string(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/officer ") {
+        return WsClientMsg::GuildSetRank {
+            name: rest.trim().to_string(),
+            rank: "officer".into(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/member ") {
+        return WsClientMsg::GuildSetRank {
+            name: rest.trim().to_string(),
+            rank: "member".into(),
+        };
+    }
+    if let Some(rest) = compose.strip_prefix("/transfer ") {
+        return WsClientMsg::GuildTransferLeader {
+            name: rest.trim().to_string(),
+        };
+    }
+    WsClientMsg::Chat {
+        channel: "guild".into(),
+        text: compose.to_string(),
+    }
+}
+
 fn targeted_player_name(snap: &TickSnapshot) -> Option<String> {
     let tid = snap.target_id?;
     let entity = snap.entities.iter().find(|e| e.id == tid)?;
@@ -966,31 +1020,11 @@ fn targeted_player_name(snap: &TickSnapshot) -> Option<String> {
 }
 
 /// Guild panel keys: Ctrl+letter runs a verb, everything else composes text.
-/// `J` is not a compose key — it still toggles the panel shut.
+/// `J` opens the panel when closed and types while it is open; Esc closes.
 fn handle_guild_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui: &mut UiFlags) {
     if keys.just_pressed(KeyCode::Enter) {
         let compose = ui.guild_compose.clone();
-        let msg = if host.snapshot.guild_invite.is_some() {
-            WsClientMsg::GuildAccept
-        } else if host.snapshot.guild.is_none() {
-            WsClientMsg::GuildCreate {
-                name: compose.trim().to_string(),
-            }
-        } else if let Some(rest) = compose.strip_prefix("/motd ") {
-            WsClientMsg::GuildSetMotd {
-                text: rest.to_string(),
-            }
-        } else if let Some(rest) = compose.strip_prefix("/o ") {
-            WsClientMsg::Chat {
-                channel: "officer".into(),
-                text: rest.to_string(),
-            }
-        } else {
-            WsClientMsg::Chat {
-                channel: "guild".into(),
-                text: compose,
-            }
-        };
+        let msg = guild_enter_msg(&compose, &host.snapshot);
         host.guild_msg(msg);
         ui.guild_compose.clear();
         return;
@@ -1417,6 +1451,50 @@ mod tests {
         ] {
             assert!(GUILD_COMPOSE_KEYS.contains(&key), "{key:?} must type");
         }
+    }
+
+    #[test]
+    fn guild_enter_slash_commands_do_not_need_a_target() {
+        let mut snap = TickSnapshot::default();
+        snap.guild = Some(woc_protocol::GuildSnapshot {
+            id: 1,
+            name: "Vale Watch".into(),
+            rank: "leader".into(),
+            ..Default::default()
+        });
+        assert!(matches!(
+            guild_enter_msg("/invite Bob", &snap),
+            WsClientMsg::GuildInvite { name } if name == "Bob"
+        ));
+        assert!(matches!(
+            guild_enter_msg("/kick Bob", &snap),
+            WsClientMsg::GuildKick { name } if name == "Bob"
+        ));
+        assert!(matches!(
+            guild_enter_msg("/officer Bob", &snap),
+            WsClientMsg::GuildSetRank { name, rank } if name == "Bob" && rank == "officer"
+        ));
+        assert!(matches!(
+            guild_enter_msg("/member Bob", &snap),
+            WsClientMsg::GuildSetRank { name, rank } if name == "Bob" && rank == "member"
+        ));
+        assert!(matches!(
+            guild_enter_msg("/transfer Bob", &snap),
+            WsClientMsg::GuildTransferLeader { name } if name == "Bob"
+        ));
+        assert!(matches!(
+            guild_enter_msg("hello", &snap),
+            WsClientMsg::Chat { channel, text } if channel == "guild" && text == "hello"
+        ));
+    }
+
+    #[test]
+    fn guild_enter_create_trims_name_when_not_in_guild() {
+        let snap = TickSnapshot::default();
+        assert!(matches!(
+            guild_enter_msg("  Vale Watch  ", &snap),
+            WsClientMsg::GuildCreate { name } if name == "Vale Watch"
+        ));
     }
 
     #[test]

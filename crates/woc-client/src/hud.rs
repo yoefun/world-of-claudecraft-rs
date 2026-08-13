@@ -600,14 +600,11 @@ fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
             lines.push(format!("{star}{}  {}  {}", m.name, m.rank, m.level));
         }
         lines.push("Type to chat · /o officer · /motd text · Enter send".into());
-        lines.push("Ctrl+V invite target · Ctrl+Q leave".into());
+        lines.push("/invite /kick /officer /member /transfer Name · Ctrl+Q leave".into());
         if g.rank == "leader" {
-            lines.push(
-                "Ctrl+P officer · Ctrl+O member · Ctrl+T transfer · Ctrl+D disband · Ctrl+K kick"
-                    .into(),
-            );
+            lines.push("Ctrl+D disband · Ctrl+V/K/P/O/T if a player is targeted".into());
         } else if g.rank == "officer" {
-            lines.push("Ctrl+V invite · Ctrl+K kick".into());
+            lines.push("/invite /kick Name · Ctrl+V/K if a player is targeted".into());
         }
     } else if snap.guild_invite.is_none() {
         lines.push("Type a name, Enter to found a guild (3-24 letters).".into());
