@@ -329,7 +329,9 @@ pub fn step_player_motion(player: &mut Entity, intent: &PlayerIntent) -> Option<
             player.on_ground = false;
             player.jumping = false;
             player.vy = 0.0;
-            player.y = player.y.max(ground_height(player.x, player.z, WORLD_SEED) + 1.5);
+            player.y = player
+                .y
+                .max(ground_height(player.x, player.z, WORLD_SEED) + 1.5);
             player.fall_start_y = player.y;
         } else {
             // Drop out of flight into a fall / land.
@@ -471,7 +473,10 @@ mod tests {
         for _ in 0..10 {
             let _ = step_player_motion(&mut player, &up);
         }
-        assert!(player.y > start_y + 2.0, "flight ascend should gain altitude");
+        assert!(
+            player.y > start_y + 2.0,
+            "flight ascend should gain altitude"
+        );
     }
 
     #[test]

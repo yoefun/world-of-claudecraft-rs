@@ -69,7 +69,8 @@ fn setup_world(
     mut ambient: ResMut<AmbientLight>,
     mut atmo: ResMut<ActiveAtmosphere>,
     mut images: ResMut<Assets<Image>>,
-    name: Res<CharName>,    class: Res<SelectedClass>,
+    name: Res<CharName>,
+    class: Res<SelectedClass>,
     play_mode: Res<PlayMode>,
     session: Res<crate::AuthSession>,
 ) {
@@ -305,7 +306,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · N talents · K bank · I mail · M map · U market · RMB look · Esc",
+                        "LMB attack · 1–5 abilities · T pet · E interact · B bags · L quests · C sheet · N talents (1–3 spend) · K bank · I mail · M map · U market · RMB look · Esc",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
@@ -612,6 +613,16 @@ fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
             SimEvent::NpcDialog { text, .. } => {
                 host.recent_toasts.push((text.clone(), 3.0));
             }
+            SimEvent::TalentLearned {
+                talent_id, rank, ..
+            } => {
+                host.recent_toasts
+                    .push((format!("Talent learned: {talent_id} rank {rank}"), 2.5));
+            }
+            SimEvent::TalentRespec { .. } => {
+                host.recent_toasts
+                    .push(("Talents reset — points refunded.".into(), 2.5));
+            }
             _ => {}
         }
     }
@@ -850,7 +861,10 @@ pub(crate) fn sync_visuals(
                 tf.rotation = Quat::from_euler(EulerRot::YXZ, e.yaw, pitch, 0.0);
                 tf.scale = Vec3::ONE;
                 *visibility = Visibility::Visible;
-            } else if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Player) {
+            } else if matches!(
+                e.kind,
+                EntityKind::Mob | EntityKind::Npc | EntityKind::Player
+            ) {
                 // Corpse pose: tip onto the side; keep clickable for loot.
                 tf.translation = Vec3::new(e.x, e.y + 0.15, e.z);
                 tf.rotation = death_root_rotation(e.yaw);

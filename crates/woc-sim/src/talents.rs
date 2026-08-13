@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::entity::Entity;
 use crate::stats::recalc_player_stats;
-use woc_content::talent;
+use woc_content::{talent, talent_tier_unlocked};
 use woc_protocol::{EntityId, SimEvent};
 
 /// Damage multiplier from learned talents (1.0 = none).
@@ -18,6 +18,14 @@ pub fn damage_multiplier(player: &Entity) -> f32 {
         }
     }
     mult
+}
+
+fn player_rank_pairs(player: &Entity) -> Vec<(String, u32)> {
+    player
+        .talents
+        .iter()
+        .map(|(id, rank)| (id.clone(), *rank))
+        .collect()
 }
 
 pub fn learn(
@@ -45,6 +53,16 @@ pub fn learn(
     if player.talent_points == 0 {
         events.push(SimEvent::Toast {
             message: "No talent points.".into(),
+        });
+        return false;
+    }
+    let ranks = player_rank_pairs(player);
+    if !talent_tier_unlocked(class, &ranks, def) {
+        events.push(SimEvent::Toast {
+            message: format!(
+                "Tier {} locked — spend more points in lower tiers first.",
+                def.tier
+            ),
         });
         return false;
     }
@@ -99,5 +117,24 @@ mod tests {
         assert!(respec(&mut entities, 1, &mut events));
         assert_eq!(entities[0].talent_points, 1);
         assert!((damage_multiplier(&entities[0]) - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn tier_two_blocked_until_five_tier_one_points() {
+        let mut entities = vec![create_player(1, "Ada", PlayerClass::Warrior, 0.0, 0.0)];
+        entities[0].talent_points = 6;
+        let mut events = Vec::new();
+
+        assert!(
+            !learn(&mut entities, 1, "warrior_vitality", &mut events),
+            "tier 2 should be locked with no tier-1 spend"
+        );
+        assert!(events.iter().any(|e| matches!(e, SimEvent::Toast { .. })));
+
+        for _ in 0..5 {
+            assert!(learn(&mut entities, 1, "warrior_cruelty", &mut events));
+        }
+        assert!(learn(&mut entities, 1, "warrior_vitality", &mut events));
+        assert_eq!(entities[0].talents.get("warrior_vitality"), Some(&1));
     }
 }
