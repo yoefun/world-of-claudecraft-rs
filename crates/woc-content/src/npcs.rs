@@ -74,7 +74,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         id: "trader_wilkes",
         name: "Trader Wilkes",
         greeting: "Fresh rations and a fair price, traveler.",
-        services: &[NpcService::QuestGiver, NpcService::Vendor],
+        services: &[NpcService::QuestGiver, NpcService::Vendor, NpcService::ProfessionTrainer],
         vendor_stock: &[
             VendorOffer {
                 item_id: "travelers_ration",
@@ -88,8 +88,16 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
                 item_id: "spring_water",
                 count: 40,
             },
+            VendorOffer {
+                item_id: "spool_of_thread",
+                count: 20,
+            },
+            VendorOffer {
+                item_id: "linen_cloth",
+                count: 20,
+            },
         ],
-        trains: &[],
+        trains: &["skinning", "leatherworking", "tailoring", "jewelcrafting"],
     },
     NpcDef {
         id: "town_crier",
@@ -141,8 +149,28 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
                 item_id: "minor_wizard_oil",
                 count: 20,
             },
+            VendorOffer {
+                item_id: "copper_pick",
+                count: 5,
+            },
+            VendorOffer {
+                item_id: "skinning_knife",
+                count: 5,
+            },
+            VendorOffer {
+                item_id: "smithing_flux",
+                count: 20,
+            },
+            VendorOffer {
+                item_id: "copper_sickle",
+                count: 5,
+            },
+            VendorOffer {
+                item_id: "empty_vial",
+                count: 20,
+            },
         ],
-        trains: &["mining", "blacksmithing"],
+        trains: &["mining", "blacksmithing", "engineering"],
     },
     NpcDef {
         id: "herbalist_wren",
@@ -150,7 +178,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         greeting: "The vale still grows, if you know where to kneel.",
         services: &[NpcService::ProfessionTrainer],
         vendor_stock: &[],
-        trains: &["herbalism", "alchemy"],
+        trains: &["herbalism", "alchemy", "enchanting"],
     },
     NpcDef {
         id: "innkeeper_mara",

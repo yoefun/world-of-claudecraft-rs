@@ -55,6 +55,36 @@ pub enum EquipSlot {
     Finger2,
 }
 
+/// Stable profession denial id. Sim never emits English copy for these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfessionDeny {
+    OutOfRange,
+    NodeNotReady,
+    MissingTool,
+    ToolTierTooLow,
+    InventoryFull,
+    UnknownNode,
+    Busy,
+    CorpseGone,
+    NothingToSkin,
+    AlreadySkinned,
+    MissingKnife,
+    UnknownRecipe,
+    MissingReagents,
+    InsufficientGold,
+    StationRequired,
+    InvalidCount,
+    UnknownEnchant,
+    WrongSlot,
+    AlreadyEnchanted,
+    SameEnchant,
+    NotInstanced,
+    Dead,
+    NotPlayer,
+    UnknownProfession,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InteractAction {
@@ -143,6 +173,21 @@ pub enum InteractAction {
     /// Craft a recipe by content id.
     Craft {
         recipe_id: String,
+    },
+    /// Skin a loot pile that still has a hide.
+    Skin {
+        corpse_id: EntityId,
+    },
+    /// Disenchant the gear in a bag slot.
+    Disenchant {
+        bag_slot: u8,
+    },
+    /// Apply an enchant to gear in a bag slot.
+    ApplyEnchant {
+        bag_slot: u8,
+        enchant_id: String,
+        #[serde(default)]
+        confirm: bool,
     },
     /// Send mail (copper and/or one bag stack) to a player name.
     MailSend {
@@ -763,6 +808,25 @@ pub enum SimEvent {
         item_id: String,
         count: u32,
     },
+    ProfessionDenied {
+        player: EntityId,
+        reason: ProfessionDeny,
+    },
+    Skinned {
+        player: EntityId,
+        corpse_id: EntityId,
+        item_id: String,
+        count: u32,
+    },
+    Disenchanted {
+        player: EntityId,
+        item_id: String,
+    },
+    EnchantApplied {
+        player: EntityId,
+        item_id: String,
+        enchant_id: String,
+    },
     MarketListed {
         player: EntityId,
         listing_id: u32,
@@ -1165,6 +1229,10 @@ mod tests {
                 remaining: 8.0,
                 stacks: 1,
             },
+            SimEvent::ProfessionDenied {
+                player: 9,
+                reason: ProfessionDeny::MissingTool,
+            },
         ];
         for e in events {
             let v = serde_json::to_value(&e).unwrap();
@@ -1272,6 +1340,13 @@ mod tests {
             InteractAction::RespecTalents,
             InteractAction::Craft {
                 recipe_id: "minor_healing_salve".into(),
+            },
+            InteractAction::Skin { corpse_id: 9 },
+            InteractAction::Disenchant { bag_slot: 2 },
+            InteractAction::ApplyEnchant {
+                bag_slot: 2,
+                enchant_id: "weapon_minor_might".into(),
+                confirm: true,
             },
             InteractAction::MailSend {
                 to_name: "Bob".into(),

@@ -3,16 +3,17 @@
 use std::collections::HashMap;
 
 use crate::ecs::components::{
-    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, Health, Hearth, Home,
-    Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress, QuestLog, Respawn, Spirit,
-    Threat, Transform,
+    Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, GatherNodeState,
+    Health, Hearth, Home, Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress,
+    QuestLog, Respawn, Skinnable, Spirit, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::grant_into;
 use crate::types::{player_hp, BACKPACK_SLOTS, BANK_SLOTS};
 use crate::world::{ground_height, WORLD_SEED};
 use woc_content::{
-    class_def, known_abilities_at_level, mob, npc, PetDef, PlayerClass, ResourceType, EASTBROOK,
+    class_def, known_abilities_at_level, mob, mob_is_skinnable, npc, PetDef, PlayerClass,
+    ResourceType, EASTBROOK,
 };
 use woc_protocol::{EntityId, EntityKind};
 
@@ -340,6 +341,19 @@ pub fn create_gather_node(
             item: Some(node.item_id.to_string()),
         },
     );
+    world.insert(id, GatherNodeState { ready_tick: 0 });
     world.insert(id, InstanceAt::default());
     id
+}
+
+pub fn maybe_mark_skinnable(world: &mut World, loot_id: EntityId, template_id: &str) {
+    if mob_is_skinnable(template_id) {
+        world.insert(
+            loot_id,
+            Skinnable {
+                tier: 1,
+                skinned: false,
+            },
+        );
+    }
 }

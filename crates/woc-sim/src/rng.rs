@@ -35,6 +35,11 @@ impl Rng {
         }
         lo + (self.next_u32() % (hi - lo + 1))
     }
+
+    /// True with `percent` chance in `0..=100`. Consumes one `next_u32`.
+    pub fn chance(&mut self, percent: u8) -> bool {
+        (self.next_u32() % 100) < u32::from(percent.min(100))
+    }
 }
 
 /// Stateless hash noise for terrain — upstream `hash2(x, y, seed)` → \[0, 1\].

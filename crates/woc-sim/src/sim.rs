@@ -11,7 +11,8 @@
 //! 6. `kill_rewards` — XP/quest/deed credit, loot spawn, Need/Greed, death finalize
 //! 7. `pvp_and_market` — duel resolve + auction expiry
 //! 8. `loot_pickup` — proximity pickup for all players
-//! 9. `build_snapshot` — snapshot for primary/`snapshot_for` viewer
+//! 9. `profession_casts` — complete ready gather/craft/skin/enchant casts
+//! 10. `build_snapshot` — snapshot for primary/`snapshot_for` viewer
 
 use std::collections::{HashMap, HashSet};
 
@@ -584,7 +585,15 @@ impl Sim {
             try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
         }
 
-        // Phase 9: build_snapshot
+        // Phase 9: profession_casts
+        crate::professions::tick_profession_casts(
+            &mut self.world,
+            self.tick,
+            &mut self.rng,
+            &mut self.events,
+        );
+
+        // Phase 10: build_snapshot
         let viewer = if self.player_id != 0 {
             self.player_id
         } else {
@@ -1208,12 +1217,13 @@ mod tests {
 
     #[test]
     fn tick_phase_order_fingerprint_locked() {
-        assert_eq!(TICK_PHASES.len(), 9);
+        assert_eq!(TICK_PHASES.len(), 10);
         assert_eq!(TICK_PHASES[0], "apply_intents_motion");
         assert_eq!(TICK_PHASES[2], "pet_ai");
         assert_eq!(TICK_PHASES[6], "pvp_and_market");
-        assert_eq!(TICK_PHASES[8], "build_snapshot");
-        assert_eq!(tick_phase_fingerprint(), 15038642330132466611u64);
+        assert_eq!(TICK_PHASES[8], "profession_casts");
+        assert_eq!(TICK_PHASES[9], "build_snapshot");
+        assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
     }
 
     #[test]

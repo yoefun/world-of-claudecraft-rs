@@ -7,9 +7,11 @@
 //! | `Combat`, `Auras` | player, mob, pet |
 //! | `Home`, `Threat`, `LootTable`, `Respawn` | mob |
 //! | `LootPile` | loot |
+//! | `GatherNodeState` | gather nodes |
+//! | `Skinnable` | beast loot piles |
 //! | `Owner` | pet |
 //! | `Escort` | escort NPC (quest follower; not Owner) |
-//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth` | player |
+//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `ProfessionCast` | player |
 //!
 //! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
 
@@ -303,6 +305,7 @@ pub struct Progress {
     pub honor: u32,
     pub pvp_flagged: bool,
     pub professions: HashMap<String, u32>,
+    pub last_masterwork: Option<String>,
     pub completed_deeds: BTreeSet<String>,
 }
 
@@ -341,6 +344,46 @@ pub struct Durable {
     pub durable_id: Option<String>,
 }
 
+/// In-progress profession cast (separate from combat `CastState`).
+#[derive(Debug, Clone)]
+pub struct ProfessionCast {
+    pub kind: ProfessionCastKind,
+    pub complete_tick: u64,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProfessionCastKind {
+    Gather {
+        node_id: EntityId,
+    },
+    Skin {
+        corpse_id: EntityId,
+    },
+    Craft {
+        recipe_id: String,
+        remaining: u16,
+    },
+    Disenchant {
+        bag_slot: u8,
+    },
+    ApplyEnchant {
+        bag_slot: u8,
+        enchant_id: String,
+        confirm: bool,
+    },
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GatherNodeState {
+    pub ready_tick: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Skinnable {
+    pub tier: u8,
+    pub skinned: bool,
+}
+
 impl_component!(Identity, identity);
 impl_component!(Transform, transform);
 impl_component!(Health, health);
@@ -363,6 +406,9 @@ impl_component!(Motion, motion);
 impl_component!(Spirit, spirit);
 impl_component!(InstanceAt, instance_at);
 impl_component!(Durable, durable);
+impl_component!(ProfessionCast, profession_cast);
+impl_component!(GatherNodeState, gather_node_state);
+impl_component!(Skinnable, skinnable);
 
 /// 2D ground distance using Transform columns (replaces combat::dist2d on Entity).
 pub fn dist2d(world: &World, a: EntityId, b: EntityId) -> Option<f32> {

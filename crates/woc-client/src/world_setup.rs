@@ -649,6 +649,10 @@ fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
                 host.recent_toasts
                     .push(("Talents reset — points refunded.".into(), 2.5));
             }
+            SimEvent::ProfessionDenied { reason, .. } => {
+                host.recent_toasts
+                    .push((format!("profession_denied:{reason:?}"), 2.0));
+            }
             _ => {}
         }
     }
