@@ -193,7 +193,11 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
             let Some(pt) = world.get::<Transform>(player_id).copied() else {
                 return;
             };
-            let _ = step_toward(world, mob_id, pt.x, pt.z, MOB_SPEED);
+            let speed = MOB_SPEED * crate::combat::move_speed_mult(world, mob_id);
+            if crate::combat::is_stunned(world, mob_id) {
+                return;
+            }
+            let _ = step_toward(world, mob_id, pt.x, pt.z, speed);
         }
     } else {
         // Not in combat → return home.

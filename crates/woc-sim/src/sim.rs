@@ -1571,8 +1571,8 @@ mod tests {
         let sim = Sim::new_eastbrook("Kit", PlayerClass::Warrior);
         let snap = sim.snapshot();
         assert!(
-            snap.ability_bar.len() >= 3,
-            "warrior kit should expose ≥3 slots"
+            snap.ability_bar.len() >= 4,
+            "warrior kit should expose ≥4 slots"
         );
         assert_eq!(snap.ability_bar[0].slot, 1);
         assert_eq!(snap.ability_bar[0].ability_id, "heroic_strike");

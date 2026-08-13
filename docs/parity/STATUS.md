@@ -14,7 +14,7 @@ Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
 | Protocol/crate “stub” / “framework slice” copy | done | Shipped interact actions; crate blurbs. |
 | 1.0.0 acceptance demo doc | done | `docs/parity/DEMO.md`. |
 | Data-driven `AbilityEffect` | done | Content tables; combat dispatches on the enum. |
-| Heal / AoE / interrupt / taunt | done | Priest `flash_heal`; warrior cleave AoE + `taunt`; shaman `earth_shock` interrupt. |
+| Heal / AoE / interrupt / taunt | done | Priest `flash_heal`; paladin `holy_light` / `holy_shock`; shaman `healing_wave`; druid `rejuvenation`; warrior cleave AoE + `taunt`; shaman `earth_shock` / rogue `kick` / mage `counterspell` interrupt. |
 | Miss / crit hit table | done | 5% miss / 10% crit via sim RNG; heals do not miss. |
 | Mining + blacksmithing | done | Copper veins in Eastbrook + Eastfen; smelt bar; craft/equip `copper_shortsword`. |
 | Dungeon trash packs | done | Crypt and barrow spawn `DungeonTrashSpot` packs on enter. |
@@ -47,14 +47,14 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Sticky WS realm | done | authenticated Hello + per-player snapshots |
 | Client online mode | done | token + character_id Hello |
 | Death / spirit / graveyard | done | |
-| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT; ability bar + Tab/Esc combat UX |
+| Combat core (GCD/cast/aura/threat) | done | DoT + consumable HoT; ability bar + Tab/Esc combat UX; class-kit identity (Execute, CC, dual Holy Shock) |
 | Deeper bags / consumables | done | absolute inventory/bank slot indices |
 | Tab targeting | done | |
 | Player motion / colliders | done | |
 | Mob respawn / social aggro | done | |
 | `woc-persist` + auth API | done | R4 fields + deeds; WS load/save loop |
 | Client login / char select | done | |
-| Multi-ability kits | done | |
+| Multi-ability kits | done | 4–5 slots/class; Execute / HealOrHarm / named DoT-HoT-CC auras |
 | Talents / loadouts | done | 4/class; tier gates; numbered spend + pet key; stat + ability-mod effects |
 | Pets | done | hunter/warlock |
 | Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen + Thornpeak quests/mobs |

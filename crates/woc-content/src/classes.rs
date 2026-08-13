@@ -73,7 +73,7 @@ pub struct ClassDef {
     pub base_hp: f32,
     pub resource_max: f32,
     pub primary_ability: &'static str,
-    /// Action-bar kit (≥3 entries). Slot 1 must equal `primary_ability`.
+    /// Action-bar kit (≥4 entries). Slot 1 must equal `primary_ability`.
     pub kit: &'static [ClassKitEntry],
     pub start_weapon: &'static str,
     pub start_chest: &'static str,
@@ -101,6 +101,10 @@ const WARRIOR_KIT: &[ClassKitEntry] = &[
         slot: 4,
         ability_id: "taunt",
     },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "rend",
+    },
 ];
 
 const PALADIN_KIT: &[ClassKitEntry] = &[
@@ -115,6 +119,14 @@ const PALADIN_KIT: &[ClassKitEntry] = &[
     ClassKitEntry {
         slot: 3,
         ability_id: "holy_shock",
+    },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "holy_light",
+    },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "hammer_of_justice",
     },
 ];
 
@@ -131,6 +143,14 @@ const HUNTER_KIT: &[ClassKitEntry] = &[
         slot: 3,
         ability_id: "aimed_shot",
     },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "concussive_shot",
+    },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "multi_shot",
+    },
 ];
 
 const ROGUE_KIT: &[ClassKitEntry] = &[
@@ -145,6 +165,10 @@ const ROGUE_KIT: &[ClassKitEntry] = &[
     ClassKitEntry {
         slot: 3,
         ability_id: "cheap_shot",
+    },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "kick",
     },
 ];
 
@@ -165,6 +189,10 @@ const PRIEST_KIT: &[ClassKitEntry] = &[
         slot: 4,
         ability_id: "flash_heal",
     },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "shadow_word_pain",
+    },
 ];
 
 const SHAMAN_KIT: &[ClassKitEntry] = &[
@@ -179,6 +207,14 @@ const SHAMAN_KIT: &[ClassKitEntry] = &[
     ClassKitEntry {
         slot: 3,
         ability_id: "lava_burst",
+    },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "healing_wave",
+    },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "flame_shock",
     },
 ];
 
@@ -195,6 +231,14 @@ const MAGE_KIT: &[ClassKitEntry] = &[
         slot: 3,
         ability_id: "arcane_missiles",
     },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "frost_nova",
+    },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "counterspell",
+    },
 ];
 
 const WARLOCK_KIT: &[ClassKitEntry] = &[
@@ -210,6 +254,10 @@ const WARLOCK_KIT: &[ClassKitEntry] = &[
         slot: 3,
         ability_id: "incinerate",
     },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "immolate",
+    },
 ];
 
 const DRUID_KIT: &[ClassKitEntry] = &[
@@ -224,6 +272,14 @@ const DRUID_KIT: &[ClassKitEntry] = &[
     ClassKitEntry {
         slot: 3,
         ability_id: "starfire",
+    },
+    ClassKitEntry {
+        slot: 4,
+        ability_id: "rejuvenation",
+    },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "healing_touch",
     },
 ];
 

@@ -341,6 +341,15 @@ pub fn step_player_motion(
         .and_then(|i| i.instance_id.clone())
         .is_some();
 
+    let mut intent = *intent;
+    if crate::combat::is_stunned(world, player_id) {
+        intent.move_x = 0.0;
+        intent.move_z = 0.0;
+        intent.jump = false;
+        intent.descend = false;
+        intent.fly_toggle = false;
+    }
+
     t.yaw = intent.facing;
 
     if intent.fly_toggle && health.alive {
@@ -372,7 +381,7 @@ pub fn step_player_motion(
         RUN_SPEED * SWIM_SPEED_MULT
     } else {
         RUN_SPEED
-    };
+    } * crate::combat::move_speed_mult(world, player_id);
 
     let grounded = m.on_ground && !m.flying;
     apply_horizontal_wish(
@@ -524,5 +533,33 @@ mod tests {
         }
         assert!(world.get::<Motion>(1).unwrap().on_ground);
         assert!(hit.map(|e| e.fall_damage > 0.0).unwrap_or(false));
+    }
+
+    #[test]
+    fn stun_blocks_horizontal_wish() {
+        let mut world = player_at(0.0, 0.0);
+        let start_z = world.get::<Transform>(1).unwrap().z;
+        world.insert(
+            1,
+            crate::ecs::components::Auras {
+                auras: vec![crate::ecs::components::AuraInstance {
+                    id: "cheap_shot".into(),
+                    remaining: 2.0,
+                    stacks: 1,
+                    tick_timer: 99.0,
+                    tick_interval: 0.0,
+                    tick_damage: 0.0,
+                    tick_heal: 0.0,
+                    source: 2,
+                    stun: true,
+                    move_mult: 0.0,
+                }],
+            },
+        );
+        step_axes(&mut world, 1, 0.0, 1.0, 0.0);
+        assert!(
+            (world.get::<Transform>(1).unwrap().z - start_z).abs() < 1e-4,
+            "stunned player must not walk"
+        );
     }
 }

@@ -8,6 +8,7 @@
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
 - Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.
 - Wave 1 `combat-depth` on ECS columns: `AbilityEffect` (heal, cleave AoE, interrupt, taunt), miss/crit hit table, priest `flash_heal`, warrior `taunt`.
+- Class-kit identity: per-ability auras (no shared Rend-on-everything), Execute HP gate, Holy Shock heal-or-harm, stun/slow CC, paladin/shaman/druid heals; kits expanded to 4–5 slots.
 - Wave 2 `content-depth`: mining → blacksmithing (`copper_shortsword`); dungeon trash packs; `mirefen_barrow`; ability-mod talents (`cleave_targets_plus` / `heal_pct` / `crit_pct`).
 - Wave 3 `online-hard`: park/resume on WS close; 80 yd snapshot AOI; Postgres documented as the `DATABASE_URL` production path.
 - Rewrite version `1.0.0-pre` → `1.3.0`; parity `completion` → `online-hard`.

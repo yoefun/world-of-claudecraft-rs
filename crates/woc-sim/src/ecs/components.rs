@@ -50,6 +50,9 @@ pub struct AuraInstance {
     /// Positive = HoT healing per tick.
     pub tick_heal: f32,
     pub source: EntityId,
+    pub stun: bool,
+    /// Horizontal speed multiplier (`1.0` = unchanged).
+    pub move_mult: f32,
 }
 
 /// In-progress ability cast.
