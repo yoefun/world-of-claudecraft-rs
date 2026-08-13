@@ -33,7 +33,7 @@ pub const ITEM_DEFS: &[ItemDef] = &[
     ItemDef { id: ItemId::ElixirOfMinorStrength, quality: Quality::Common, slot: EquipSlot::None, sell_value: 14, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::RoughBlastingPowder, quality: Quality::Common, slot: EquipSlot::None, sell_value: 3, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::CopperBolt, quality: Quality::Common, slot: EquipSlot::None, sell_value: 3, buy_value: 0, stackable: true, gathered: false },
-    ItemDef { id: ItemId::CopperGrenade, quality: Quality::Common, slot: EquipSlot::None, sell_value: 10, buy_value: 0, stackable: true, gathered: false },
+    ItemDef { id: ItemId::CopperGrenade, quality: Quality::Common, slot: EquipSlot::None, sell_value: 8, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::ArcaneDust, quality: Quality::Common, slot: EquipSlot::None, sell_value: 6, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::ArcaneEssence, quality: Quality::Uncommon, slot: EquipSlot::None, sell_value: 20, buy_value: 0, stackable: true, gathered: false },
     ItemDef { id: ItemId::ArcaneShard, quality: Quality::Rare, slot: EquipSlot::None, sell_value: 80, buy_value: 0, stackable: true, gathered: false },
