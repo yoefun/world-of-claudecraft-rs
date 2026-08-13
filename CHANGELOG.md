@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `guilds`:** Create guild, invite/accept/leave with durable character id and tick TTL 1_200.
+- Ranks (leader/officer/member), kick, transfer leadership, and disband.
+- Guild chat and officer chat (`/o`) with member-only fan-out.
+- MOTD (officer+; max 240 chars).
+- Persist `RealmEconomy.guilds` across realm restart.
+- Client **J** panel: compose guild name + target invite (**V**).
+- Protocol rev **9** (snapshot `guild` / `guild_invite`).
+
 ## 1.13.0 — 2026-08-13
 
 ### Added
