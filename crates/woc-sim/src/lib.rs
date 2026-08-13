@@ -9,10 +9,12 @@ pub mod corpse;
 pub mod death;
 pub mod delves;
 pub mod entity;
+pub mod entity_motion;
 pub mod host;
 pub mod instances;
 pub mod interaction;
 pub mod inventory;
+pub mod locomotion;
 pub mod mail;
 pub mod map_view;
 pub mod market;
@@ -46,10 +48,14 @@ pub use persist_state::{
     apply_player_state, create_player_from_state, export_player_state, PlayerPersistentState,
 };
 pub use physics::{eastbrook_buildings, Aabb};
+pub use locomotion::{
+    desired_walk_pose, locomotion_time_scale, update_locomotion, LocoState, LocoTrack, WalkPose,
+    GAIT_RUN_ENTER, GAIT_RUN_EXIT, MOVE_ENTER_SPEED, MOVE_HOLD_TIME,
+};
 pub use rng::{fbm2, hash2, noise2, Rng};
 pub use sim::{Sim, MAX_REALM_PLAYERS};
 pub use visual_catalog::{
-    scene_markers, visual_key, visual_spec, zone_atmosphere, PartShape, SceneMarker,
+    scene_markers, visual_key, visual_spec, zone_atmosphere, PartRole, PartShape, SceneMarker,
     SceneMarkerKind, VisualFamily, VisualPart, VisualSpec, ZoneAtmosphere,
 };
 pub use woc_content::PlayerClass;

@@ -2,9 +2,10 @@
 
 use crate::combat::dist2d;
 use crate::entity::Entity;
+use crate::entity_motion::{step_toward, step_toward_home};
 use crate::types::{AGGRO_RANGE, LEASH_RANGE, MELEE_RANGE, MOB_SPEED};
 use crate::world::{ground_height, WORLD_SEED};
-use woc_protocol::{EntityId, EntityKind, DT};
+use woc_protocol::{EntityId, EntityKind};
 
 /// Seconds before a dead mob revives at home with full HP.
 pub const MOB_RESPAWN_SEC: f32 = 30.0;
@@ -152,35 +153,15 @@ pub fn update_mob_ai(mob_id: EntityId, player_id: EntityId, entities: &mut [Enti
 }
 
 fn move_toward(mob: &mut Entity, tx: f32, tz: f32, speed: f32) {
-    let dx = tx - mob.x;
-    let dz = tz - mob.z;
-    let d = (dx * dx + dz * dz).sqrt();
-    if d < 0.01 {
-        return;
-    }
-    let step = speed * DT;
-    let nx = mob.x + dx / d * step.min(d);
-    let nz = mob.z + dz / d * step.min(d);
-    mob.x = nx;
-    mob.z = nz;
-    mob.y = ground_height(mob.x, mob.z, WORLD_SEED);
-    mob.yaw = dx.atan2(dz);
+    let _ = step_toward(mob, tx, tz, speed);
 }
 
 fn move_toward_home(mob: &mut Entity) {
-    let dx = mob.home_x - mob.x;
-    let dz = mob.home_z - mob.z;
-    let d = (dx * dx + dz * dz).sqrt();
-    if d < 0.2 {
-        mob.x = mob.home_x;
-        mob.z = mob.home_z;
-        mob.y = ground_height(mob.x, mob.z, WORLD_SEED);
+    if step_toward_home(mob, MOB_SPEED * 0.85, 0.2) {
         // Reset after leash / idle return.
         mob.hp = mob.hp_max;
         mob.threat.clear();
-        return;
     }
-    move_toward(mob, mob.home_x, mob.home_z, MOB_SPEED * 0.85);
 }
 
 #[cfg(test)]
@@ -189,6 +170,7 @@ mod tests {
     use crate::entity::{create_mob_from_template, create_player};
     use crate::types::LEASH_RANGE;
     use woc_content::PlayerClass;
+    use woc_protocol::DT;
 
     fn wolf(id: EntityId, x: f32, z: f32) -> Entity {
         let mut m = create_mob_from_template(id, "young_wolf", x, z).expect("wolf");

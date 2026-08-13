@@ -43,6 +43,8 @@ pub struct VisualPart {
     /// Full extents (or diameter/height for capsules/spheres — see shape).
     pub size: [f32; 3],
     pub color: [f32; 3],
+    /// Animation / gait role (procedural walk cycle).
+    pub role: PartRole,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +59,23 @@ pub enum PartShape {
     Cylinder,
     /// `size = [radius, height, _]` → Cone (apex up).
     Cone,
+}
+
+/// Which limb / segment this part is for gait posing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PartRole {
+    Body,
+    Head,
+    /// Left leg (humanoid) or front-left (quad).
+    LegL,
+    /// Right leg (humanoid) or front-right (quad).
+    LegR,
+    /// Hind-left (quadruped only).
+    HindLegL,
+    /// Hind-right (quadruped only).
+    HindLegR,
+    /// Held prop / weapon / ear / wing — not gait-driven.
+    Prop,
 }
 
 /// Resolved presentation recipe for one entity.
@@ -299,6 +318,7 @@ const fn body(offset_y: f32, radius: f32, half_h: f32, c: [f32; 3]) -> VisualPar
         offset: [0.0, offset_y, 0.0],
         size: [radius, half_h, 0.0],
         color: c,
+        role: PartRole::Body,
     }
 }
 
@@ -308,6 +328,17 @@ const fn head(offset_y: f32, radius: f32, c: [f32; 3]) -> VisualPart {
         offset: [0.0, offset_y, 0.0],
         size: [radius, 0.0, 0.0],
         color: c,
+        role: PartRole::Head,
+    }
+}
+
+const fn leg(role: PartRole, offset: [f32; 3], size: [f32; 3], c: [f32; 3]) -> VisualPart {
+    VisualPart {
+        shape: PartShape::Cuboid,
+        offset,
+        size,
+        color: c,
+        role,
     }
 }
 
@@ -325,8 +356,11 @@ const PLAYER_WARRIOR: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.42, 1.15, 0.0],
             size: [0.12, 0.85, 0.12],
+            role: PartRole::Prop,
             color: rgb(0.65, 0.65, 0.70),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -344,8 +378,11 @@ const PLAYER_PALADIN: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [-0.40, 1.05, 0.05],
             size: [0.35, 0.55, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.80, 0.78, 0.55),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -363,8 +400,11 @@ const PLAYER_HUNTER: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.0, 1.15, -0.28],
             size: [0.08, 0.75, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.45, 0.32, 0.18),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -382,8 +422,11 @@ const PLAYER_ROGUE: VisualSpec = VisualSpec {
             shape: PartShape::Cone,
             offset: [0.0, 1.95, 0.0],
             size: [0.22, 0.28, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.15, 0.15, 0.18),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -401,8 +444,11 @@ const PLAYER_PRIEST: VisualSpec = VisualSpec {
             shape: PartShape::Cylinder,
             offset: [0.0, 2.15, 0.0],
             size: [0.28, 0.06, 0.0],
+            role: PartRole::Prop,
             color: rgb(1.0, 0.85, 0.40),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -420,8 +466,11 @@ const PLAYER_SHAMAN: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.38, 1.20, 0.0],
             size: [0.10, 0.90, 0.10],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.40, 0.25),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -439,8 +488,11 @@ const PLAYER_MAGE: VisualSpec = VisualSpec {
             shape: PartShape::Cone,
             offset: [0.0, 2.05, 0.0],
             size: [0.28, 0.35, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.20, 0.30, 0.65),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -458,8 +510,11 @@ const PLAYER_WARLOCK: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.35, 1.10, 0.05],
             size: [0.22, 0.28, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.35, 0.20),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -477,8 +532,11 @@ const PLAYER_DRUID: VisualSpec = VisualSpec {
             shape: PartShape::Sphere,
             offset: [0.0, 2.05, 0.0],
             size: [0.16, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.45, 0.70, 0.35),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -496,8 +554,11 @@ const NPC_QUEST: VisualSpec = VisualSpec {
             shape: PartShape::Cylinder,
             offset: [0.0, 2.10, 0.0],
             size: [0.22, 0.08, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.95, 0.80, 0.25),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -515,8 +576,11 @@ const NPC_VENDOR: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.0, 0.55, 0.35],
             size: [0.55, 0.35, 0.25],
+            role: PartRole::Prop,
             color: rgb(0.45, 0.30, 0.18),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -530,6 +594,8 @@ const NPC_TOWN: VisualSpec = VisualSpec {
     parts: parts![
         body(0.90, 0.31, 0.50, rgb(0.50, 0.55, 0.45)),
         head(1.72, 0.20, rgb(0.82, 0.68, 0.52)),
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -545,20 +611,27 @@ const MOB_WOLF: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.0, 0.35, 0.0],
             size: [0.55, 0.40, 1.05],
+            role: PartRole::Prop,
             color: rgb(0.42, 0.36, 0.30),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.0, 0.45, 0.55],
             size: [0.22, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.38, 0.32, 0.28),
         },
         VisualPart {
             shape: PartShape::Cone,
             offset: [0.0, 0.55, -0.55],
             size: [0.10, 0.35, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.35, 0.30, 0.26),
         },
+        leg(PartRole::LegL, [-0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(PartRole::LegR, [0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(PartRole::HindLegL, [-0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(PartRole::HindLegR, [0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
     ],
 };
 
@@ -574,26 +647,34 @@ const MOB_BOAR: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.0, 0.40, 0.0],
             size: [0.70, 0.50, 1.05],
+            role: PartRole::Prop,
             color: rgb(0.48, 0.32, 0.22),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.0, 0.48, 0.55],
             size: [0.26, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.42, 0.28, 0.20),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [0.18, 0.40, 0.72],
             size: [0.06, 0.06, 0.28],
+            role: PartRole::Prop,
             color: rgb(0.90, 0.88, 0.80),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [-0.18, 0.40, 0.72],
             size: [0.06, 0.06, 0.28],
+            role: PartRole::Prop,
             color: rgb(0.90, 0.88, 0.80),
         },
+        leg(PartRole::LegL, [-0.22, 0.20, 0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
+        leg(PartRole::LegR, [0.22, 0.20, 0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
+        leg(PartRole::HindLegL, [-0.22, 0.20, -0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
+        leg(PartRole::HindLegR, [0.22, 0.20, -0.28], [0.12, 0.38, 0.12], rgb(0.40, 0.28, 0.18)),
     ],
 };
 
@@ -609,30 +690,35 @@ const MOB_CRAWLER: VisualSpec = VisualSpec {
             shape: PartShape::Sphere,
             offset: [0.0, 0.28, 0.0],
             size: [0.38, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.25, 0.35, 0.22),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [0.35, 0.12, 0.25],
             size: [0.45, 0.06, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.20, 0.28, 0.18),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [-0.35, 0.12, 0.25],
             size: [0.45, 0.06, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.20, 0.28, 0.18),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [0.35, 0.12, -0.25],
             size: [0.45, 0.06, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.20, 0.28, 0.18),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [-0.35, 0.12, -0.25],
             size: [0.45, 0.06, 0.08],
+            role: PartRole::Prop,
             color: rgb(0.20, 0.28, 0.18),
         },
     ],
@@ -650,12 +736,14 @@ const MOB_TOAD: VisualSpec = VisualSpec {
             shape: PartShape::Sphere,
             offset: [0.0, 0.35, 0.0],
             size: [0.42, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.30, 0.48, 0.28),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.0, 0.48, 0.32],
             size: [0.24, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.35, 0.50, 0.30),
         },
     ],
@@ -673,12 +761,14 @@ const MOB_WISP: VisualSpec = VisualSpec {
             shape: PartShape::Sphere,
             offset: [0.0, 0.85, 0.0],
             size: [0.28, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.45, 0.85, 0.95),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.0, 0.55, 0.0],
             size: [0.16, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.70, 0.95, 1.0),
         },
     ],
@@ -711,12 +801,14 @@ const MOB_TERROR: VisualSpec = VisualSpec {
             shape: PartShape::Cone,
             offset: [0.35, 2.95, 0.0],
             size: [0.12, 0.40, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.25, 0.35),
         },
         VisualPart {
             shape: PartShape::Cone,
             offset: [-0.35, 2.95, 0.0],
             size: [0.12, 0.40, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.25, 0.35),
         },
     ],
@@ -736,12 +828,14 @@ const MOB_HARPY: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.55, 1.25, 0.0],
             size: [0.85, 0.08, 0.35],
+            role: PartRole::Prop,
             color: rgb(0.50, 0.40, 0.50),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [-0.55, 1.25, 0.0],
             size: [0.85, 0.08, 0.35],
+            role: PartRole::Prop,
             color: rgb(0.50, 0.40, 0.50),
         },
     ],
@@ -761,8 +855,11 @@ const MOB_UNDEAD: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.40, 1.20, 0.0],
             size: [0.12, 0.95, 0.12],
+            role: PartRole::Prop,
             color: rgb(0.40, 0.42, 0.38),
         },
+        leg(PartRole::LegL, [-0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
+        leg(PartRole::LegR, [0.14, 0.35, 0.0], [0.14, 0.70, 0.16], rgb(0.25, 0.22, 0.20)),
     ],
 };
 
@@ -777,7 +874,8 @@ const MOB_GENERIC: VisualSpec = VisualSpec {
         shape: PartShape::Cuboid,
         offset: [0.0, 0.35, 0.0],
         size: [0.90, 0.55, 1.30],
-        color: rgb(0.45, 0.35, 0.28),
+        role: PartRole::Prop,
+            color: rgb(0.45, 0.35, 0.28),
     }],
 };
 
@@ -793,14 +891,20 @@ const PET_WOLF: VisualSpec = VisualSpec {
             shape: PartShape::Cuboid,
             offset: [0.0, 0.30, 0.0],
             size: [0.45, 0.35, 0.90],
+            role: PartRole::Prop,
             color: rgb(0.40, 0.48, 0.55),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.0, 0.38, 0.48],
             size: [0.18, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.38, 0.45, 0.52),
         },
+        leg(PartRole::LegL, [-0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(PartRole::LegR, [0.18, 0.22, 0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(PartRole::HindLegL, [-0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
+        leg(PartRole::HindLegR, [0.18, 0.22, -0.32], [0.10, 0.40, 0.10], rgb(0.35, 0.30, 0.26)),
     ],
 };
 
@@ -818,12 +922,14 @@ const PET_IMP: VisualSpec = VisualSpec {
             shape: PartShape::Cone,
             offset: [0.12, 1.22, 0.0],
             size: [0.06, 0.18, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.20, 0.15),
         },
         VisualPart {
             shape: PartShape::Cone,
             offset: [-0.12, 1.22, 0.0],
             size: [0.06, 0.18, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.20, 0.15),
         },
     ],
@@ -840,7 +946,8 @@ const PET_GENERIC: VisualSpec = VisualSpec {
         shape: PartShape::Cuboid,
         offset: [0.0, 0.30, 0.0],
         size: [0.55, 0.40, 0.80],
-        color: rgb(0.35, 0.55, 0.65),
+        role: PartRole::Prop,
+            color: rgb(0.35, 0.55, 0.65),
     }],
 };
 
@@ -856,24 +963,28 @@ const GATHER_HERB: VisualSpec = VisualSpec {
             shape: PartShape::Cylinder,
             offset: [0.0, 0.25, 0.0],
             size: [0.08, 0.45, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.25, 0.55, 0.22),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.12, 0.55, 0.0],
             size: [0.16, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.45, 0.85, 0.40),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [-0.10, 0.48, 0.08],
             size: [0.14, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.90, 0.45),
         },
         VisualPart {
             shape: PartShape::Sphere,
             offset: [0.0, 0.62, -0.10],
             size: [0.12, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.70, 0.95, 0.55),
         },
     ],
@@ -891,12 +1002,14 @@ const LOOT_SPARK: VisualSpec = VisualSpec {
             shape: PartShape::Sphere,
             offset: [0.0, 0.30, 0.0],
             size: [0.22, 0.0, 0.0],
+            role: PartRole::Prop,
             color: rgb(0.95, 0.80, 0.25),
         },
         VisualPart {
             shape: PartShape::Cuboid,
             offset: [0.0, 0.12, 0.0],
             size: [0.35, 0.18, 0.28],
+            role: PartRole::Prop,
             color: rgb(0.55, 0.38, 0.15),
         },
     ],
@@ -970,6 +1083,24 @@ mod tests {
             let spec = visual_spec(kind, tid);
             assert!(!spec.parts.is_empty(), "empty parts for {tid:?}");
         }
+    }
+
+    #[test]
+    fn humanoid_and_quad_specs_have_gait_legs() {
+        let warrior = visual_spec(EntityKind::Player, Some("warrior"));
+        assert!(
+            warrior.parts.iter().any(|p| p.role == PartRole::LegL)
+                && warrior.parts.iter().any(|p| p.role == PartRole::LegR),
+            "humanoids need biped legs for walk cycle"
+        );
+        let wolf = visual_spec(EntityKind::Mob, Some("young_wolf"));
+        assert!(
+            wolf.parts.iter().any(|p| p.role == PartRole::HindLegL)
+                && wolf.parts.iter().any(|p| p.role == PartRole::HindLegR),
+            "wolves need hind legs for walk cycle"
+        );
+        let npc = visual_spec(EntityKind::Npc, Some("town_crier"));
+        assert!(npc.parts.iter().any(|p| p.role == PartRole::LegL));
     }
 
     #[test]

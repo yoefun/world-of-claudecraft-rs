@@ -5,8 +5,10 @@ use woc_content::npc;
 use woc_protocol::{EntityId, EntityKind, EntitySnapshot};
 use woc_sim::{
     eastbrook_buildings, scene_markers, terrain_height, visual_spec, zone_atmosphere, Aabb,
-    PartShape, SceneMarkerKind, VisualPart, VisualSpec, WORLD_SEED,
+    PartRole, PartShape, SceneMarkerKind, VisualPart, VisualSpec, WORLD_SEED,
 };
+
+use crate::anim::{GaitLimb, VisualMotion};
 
 /// Marks the root of a sim-driven entity visual (children hold mesh parts).
 #[derive(Component)]
@@ -53,6 +55,7 @@ pub(crate) fn spawn_entity_visual(
                 key: spec.key,
                 bob: spec.bob,
             },
+            VisualMotion::default(),
             Transform::default(),
             Visibility::default(),
             InheritedVisibility::default(),
@@ -98,18 +101,23 @@ fn spawn_parts(
                 part.color[2] * spec.emissive * 4.0,
             ));
         }
-        let child = commands
-            .spawn((
-                VisualPartMesh,
-                Mesh3d(mesh),
-                MeshMaterial3d(materials.add(mat)),
-                Transform::from_translation(Vec3::new(
-                    part.offset[0],
-                    part.offset[1],
-                    part.offset[2],
-                )),
-            ))
-            .id();
+        let translation = Vec3::new(part.offset[0], part.offset[1], part.offset[2]);
+        let mut entity = commands.spawn((
+            VisualPartMesh,
+            Mesh3d(mesh),
+            MeshMaterial3d(materials.add(mat)),
+            Transform::from_translation(translation),
+        ));
+        if matches!(
+            part.role,
+            PartRole::LegL | PartRole::LegR | PartRole::HindLegL | PartRole::HindLegR
+        ) {
+            entity.insert(GaitLimb {
+                role: part.role,
+                rest_translation: translation,
+            });
+        }
+        let child = entity.id();
         commands.entity(parent).add_child(child);
     }
 }
