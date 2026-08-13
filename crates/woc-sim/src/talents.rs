@@ -170,4 +170,33 @@ mod tests {
         assert!(world.get::<Progress>(1).unwrap().talents.is_empty());
         assert_eq!(world.get::<Progress>(1).unwrap().talent_points, 6);
     }
+
+    #[test]
+    fn tier_two_blocked_until_five_tier_one_points() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.talent_points = 6;
+        }
+        let mut events = Vec::new();
+
+        assert!(
+            !learn(&mut world, 1, "warrior_vitality", &mut events),
+            "tier 2 should be locked with no tier-1 spend"
+        );
+        assert!(events.iter().any(|e| matches!(e, SimEvent::Toast { .. })));
+
+        for _ in 0..5 {
+            assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
+        }
+        assert!(learn(&mut world, 1, "warrior_vitality", &mut events));
+        assert_eq!(
+            world
+                .get::<Progress>(1)
+                .unwrap()
+                .talents
+                .get("warrior_vitality"),
+            Some(&1)
+        );
+    }
 }

@@ -550,4 +550,48 @@ mod tests {
         unequip_to_bag(&mut world, 1, EquipSlot::Head, &mut events);
         assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
     }
+
+    #[test]
+    fn refuse_low_level_equip() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Noob", PlayerClass::Warrior, 0.0, 0.0);
+        assert_eq!(world.get::<Health>(1).unwrap().level, 1);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "veteran_helm", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "veteran_helm");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
+        assert_eq!(
+            count_item(&world.get::<Bags>(1).unwrap().inventory, "veteran_helm"),
+            1
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message.contains("Requires level")
+        )));
+    }
+
+    #[test]
+    fn use_item_via_interact_action() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hungry", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.hp = 5.0;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "baked_bread", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "baked_bread");
+        let mut events = Vec::new();
+        handle_interact(
+            &mut world,
+            1,
+            1,
+            InteractAction::UseItem { bag_slot: slot },
+            &mut events,
+        );
+        assert!(world.get::<Health>(1).unwrap().hp > 5.0);
+    }
 }

@@ -942,7 +942,7 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
 mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
-    use crate::ecs::components::{Bags, Bank, ClassKit, LootPile, Owner, Threat};
+    use crate::ecs::components::{Bags, Bank, ClassKit, LootPile, Owner, Threat, Transform};
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
 
     fn kind_count(sim: &Sim, kind: EntityKind) -> usize {
@@ -1377,15 +1377,223 @@ mod tests {
     }
 
     #[test]
-    fn party_invite_accept_and_chat() {
+    fn party_invite_accept_leave_and_chat_roundtrip() {
         let mut sim = Sim::new_empty_eastbrook();
         let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
         let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
-        let msgs = sim.party_invite(a, "Bob");
-        assert!(!msgs.is_empty());
-        let _ = sim.party_accept(b);
-        assert_eq!(sim.party_members(a).unwrap().len(), 2);
-        let chat = sim.chat(a, "party", "hello");
-        assert!(!chat.is_empty());
+        let outs = sim.party_invite(a, "Bob");
+        assert!(
+            outs.iter()
+                .any(|m| matches!(m, WsServerMsg::Chat { channel, .. } if channel == "system")),
+            "invite notice: {outs:?}"
+        );
+        let outs = sim.party_accept(b);
+        assert!(
+            outs.iter().any(|m| matches!(
+                m,
+                WsServerMsg::PartyUpdate { members } if members.len() == 2
+            )),
+            "party update: {outs:?}"
+        );
+        assert_eq!(sim.party_members(a), Some(vec![a, b]));
+        let snap = sim.snapshot_for_player(a);
+        assert_eq!(snap.party_id, sim.parties.party_id(a));
+        assert!(snap.party_id.is_some());
+
+        let outs = sim.chat(a, "party", "pulling");
+        assert!(matches!(
+            outs.as_slice(),
+            [WsServerMsg::Chat {
+                channel,
+                from,
+                text
+            }] if channel == "party" && from == "Alice" && text == "pulling"
+        ));
+
+        let outs = sim.party_leave(b);
+        assert!(
+            outs.iter().any(|m| matches!(
+                m,
+                WsServerMsg::PartyUpdate { members } if members.is_empty()
+            )),
+            "dissolve: {outs:?}"
+        );
+        assert!(sim.party_members(a).is_none());
+        assert!(sim.snapshot_for_player(a).party_id.is_none());
+    }
+
+    #[test]
+    fn snapshot_ability_bar_lists_class_kit() {
+        let sim = Sim::new_eastbrook("Kit", PlayerClass::Warrior);
+        let snap = sim.snapshot();
+        assert!(
+            snap.ability_bar.len() >= 3,
+            "warrior kit should expose ≥3 slots"
+        );
+        assert_eq!(snap.ability_bar[0].slot, 1);
+        assert_eq!(snap.ability_bar[0].ability_id, "heroic_strike");
+        assert!(snap.ability_bar[0].known);
+        assert_eq!(snap.ability_bar[1].ability_id, "cleave");
+        assert!(!snap.ability_bar[1].known, "cleave gated above level 1");
+        assert_eq!(snap.protocol_rev, PROTOCOL_REV);
+    }
+
+    #[test]
+    fn death_release_spirit_respawns_at_eastbrook_graveyard() {
+        let gy = woc_content::graveyard("eastbrook_graveyard").expect("eastbrook graveyard");
+        let mut sim = Sim::new_eastbrook("Deadman", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        let death_x = 22.0;
+        let death_z = -20.0;
+        place_player_at(&mut sim, death_x, death_z);
+        if let Some(h) = sim.world.get_mut::<Health>(pid) {
+            h.hp = 0.0;
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(pid) {
+            c.auto_attack = true;
+            c.target = Some(99);
+        }
+
+        let (_snap, events) = sim.tick(PlayerIntent::default());
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SimEvent::PlayerDied { player } if *player == pid)),
+            "expected PlayerDied event"
+        );
+        let snap = sim.snapshot_for_player(pid);
+        assert!(snap.is_dead, "snapshot must reflect is_dead");
+        assert!(!sim.world.get::<Health>(pid).unwrap().alive);
+        assert!(!sim.world.get::<Combat>(pid).unwrap().auto_attack);
+
+        let wolf_id = sim.world.live_ids().find(|&id| {
+            sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+        });
+        if let Some(wid) = wolf_id {
+            let hp_before = sim.world.get::<Health>(wid).unwrap().hp;
+            let intent = PlayerIntent {
+                attack: true,
+                ability: Some(AbilitySlot::Primary),
+                target_id: Some(wid),
+                ..Default::default()
+            };
+            let (_s, ev) = sim.tick(intent);
+            let hp_after = sim.world.get::<Health>(wid).unwrap().hp;
+            assert_eq!(hp_before, hp_after, "dead player must not deal damage");
+            assert!(
+                !ev.iter().any(|e| matches!(
+                    e,
+                    SimEvent::Damage { source, .. } if *source == pid
+                )),
+                "no Damage from dead player"
+            );
+        }
+
+        assert!(sim.release_spirit(pid), "release_spirit should succeed");
+        let t = sim.world.get::<Transform>(pid).unwrap();
+        let h = sim.world.get::<Health>(pid).unwrap();
+        assert!(h.alive);
+        assert!((t.x - gy.x).abs() < 1e-5, "x {} vs gy {}", t.x, gy.x);
+        assert!((t.z - gy.z).abs() < 1e-5, "z {} vs gy {}", t.z, gy.z);
+        assert!((h.hp - h.hp_max).abs() < 1e-5);
+        let snap = sim.snapshot_for_player(pid);
+        assert!(!snap.is_dead);
+    }
+
+    #[test]
+    fn same_seed_same_snapshots() {
+        let mut a = Sim::new_combat_slice("A");
+        let mut b = Sim::new_combat_slice("A");
+        let intent = PlayerIntent {
+            move_x: 0.3,
+            move_z: 1.0,
+            facing: 0.4,
+            attack: false,
+            ability: None,
+            target_id: None,
+            ..Default::default()
+        };
+        for _ in 0..60 {
+            let (sa, _) = a.tick(intent);
+            let (sb, _) = b.tick(intent);
+            assert_eq!(sa.tick, sb.tick);
+            assert_eq!(sa.entities.len(), sb.entities.len());
+            for (ea, eb) in sa.entities.iter().zip(sb.entities.iter()) {
+                assert_eq!(ea.id, eb.id);
+                assert!((ea.x - eb.x).abs() < 1e-5);
+                assert!((ea.z - eb.z).abs() < 1e-5);
+                assert!((ea.hp - eb.hp).abs() < 1e-5);
+            }
+        }
+    }
+
+    #[test]
+    fn hunter_summon_shows_pet_in_snapshot_and_dismisses() {
+        let mut sim = Sim::new_eastbrook("Hunt", PlayerClass::Hunter);
+        let pid = sim.player_id;
+        sim.interact(pid, InteractAction::SummonPet);
+        let snap = sim.snapshot();
+        let pet = snap
+            .entities
+            .iter()
+            .find(|e| e.kind == EntityKind::Pet)
+            .expect("snapshot should include pet entity");
+        assert_eq!(pet.template_id.as_deref(), Some("hunter_wolf"));
+        assert!(pet.alive);
+        sim.interact(pid, InteractAction::DismissPet);
+        let snap = sim.snapshot();
+        assert!(!snap.entities.iter().any(|e| e.kind == EntityKind::Pet));
+    }
+
+    #[test]
+    fn pet_tick_damages_player_target_via_sim() {
+        let mut sim = Sim::new_eastbrook("Hunt", PlayerClass::Hunter);
+        let pid = sim.player_id;
+        let mob_id = sim
+            .world
+            .live_ids()
+            .find(|&id| {
+                sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                    && sim.world.get::<Health>(id).map(|h| h.alive).unwrap_or(false)
+            })
+            .expect("mob");
+        let (px, pz) = {
+            let t = sim.world.get::<Transform>(pid).unwrap();
+            (t.x, t.z)
+        };
+        if let Some(t) = sim.world.get_mut::<Transform>(mob_id) {
+            t.x = px + 1.5;
+            t.z = pz;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        sim.interact(pid, InteractAction::SummonPet);
+        let pet_id = sim
+            .world
+            .live_ids()
+            .find(|&id| sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Pet))
+            .expect("pet");
+        if let Some(t) = sim.world.get_mut::<Transform>(pet_id) {
+            t.x = px + 1.5;
+            t.z = pz;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(pet_id) {
+            c.swing_timer = 0.0;
+        }
+        let hp_before = sim.world.get::<Health>(mob_id).unwrap().hp;
+        let intent = PlayerIntent {
+            attack: true,
+            target_id: Some(mob_id),
+            ..Default::default()
+        };
+        for _ in 0..40 {
+            let _ = sim.tick(intent);
+        }
+        let hp_after = sim.world.get::<Health>(mob_id).unwrap().hp;
+        assert!(
+            hp_after < hp_before,
+            "expected pet+player damage ({hp_after} < {hp_before})"
+        );
     }
 }

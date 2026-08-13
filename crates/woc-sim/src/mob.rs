@@ -214,7 +214,7 @@ fn move_toward_home(world: &mut World, mob_id: EntityId) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Combat, Health, Home, Respawn, Transform};
+    use crate::ecs::components::{Combat, Health, Home, Respawn, Threat, Transform};
     use crate::types::LEASH_RANGE;
     use woc_content::PlayerClass;
     use woc_protocol::DT;
@@ -254,22 +254,135 @@ mod tests {
     }
 
     #[test]
-    fn mob_leashes_home_when_far_from_home() {
+    fn leash_clears_target_and_returns_home_when_too_far() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 5.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
-        if let Some(h) = world.get_mut::<Home>(2) {
-            h.home_x = 0.0;
-            h.home_z = 0.0;
-        }
         if let Some(t) = world.get_mut::<Transform>(2) {
             t.x = LEASH_RANGE + 5.0;
             t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = Some(1);
+        }
+        if let Some(th) = world.get_mut::<Threat>(2) {
+            th.threat.insert(1, 10.0);
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = h.hp_max * 0.4;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert!(
+            world.get::<Combat>(2).unwrap().target.is_none(),
+            "leash drops target"
+        );
+        assert!(
+            world.get::<Threat>(2).unwrap().threat.is_empty(),
+            "leash clears threat"
+        );
+        assert!(world.get::<Transform>(2).unwrap().x < LEASH_RANGE + 5.0 - 0.01);
+    }
+
+    #[test]
+    fn lost_target_returns_home_when_player_dead() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 5.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.alive = false;
+            h.hp = 0.0;
+        }
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 4.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
         }
         if let Some(c) = world.get_mut::<Combat>(2) {
             c.target = Some(1);
         }
         update_mob_ai(&mut world, 2, 1);
         assert!(world.get::<Combat>(2).unwrap().target.is_none());
+        assert!(
+            world.get::<Transform>(2).unwrap().x < 4.0 - 0.01,
+            "should walk home after losing target"
+        );
+    }
+
+    #[test]
+    fn social_aggro_pulls_nearby_same_camp_ally() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 4.0, 0.0).unwrap();
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 2.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(t) = world.get_mut::<Transform>(3) {
+            t.x = 5.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert_eq!(
+            world.get::<Combat>(2).unwrap().target,
+            Some(1),
+            "engager acquires player"
+        );
+        assert_eq!(
+            world.get::<Combat>(3).unwrap().target,
+            Some(1),
+            "camp ally social-aggros same target"
+        );
+    }
+
+    #[test]
+    fn social_aggro_ignores_distant_camp() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 50.0, 50.0)
+            .unwrap();
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 2.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(t) = world.get_mut::<Transform>(3) {
+            t.x = 3.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert!(
+            world.get::<Combat>(3).unwrap().target.is_none(),
+            "different camp must not social-aggro"
+        );
+    }
+
+    #[test]
+    fn arrive_home_after_leash_restores_full_hp() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 100.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 0.1;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 10.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = None;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        let home = world.get::<Home>(2).unwrap();
+        let t = world.get::<Transform>(2).unwrap();
+        assert!((t.x - home.home_x).abs() < 1e-3);
+        let h = world.get::<Health>(2).unwrap();
+        assert!((h.hp - h.hp_max).abs() < 1e-3);
     }
 }

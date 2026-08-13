@@ -395,4 +395,12 @@ mod tests {
         let mates = kill_credit_share(&roster, &world, 1);
         assert!(mates.contains(&2));
     }
+
+    #[test]
+    fn accept_without_invite_errors() {
+        let world = world_with_players(2);
+        let mut roster = PartyRoster::new();
+        let effects = roster.accept(2, &world);
+        assert!(matches!(effects.as_slice(), [PartyEffect::Error { .. }]));
+    }
 }

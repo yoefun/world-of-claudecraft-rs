@@ -345,4 +345,32 @@ mod tests {
         assert_eq!(toggle_pvp(&mut world, 1), Ok(false));
         assert!(!world.get::<Progress>(1).unwrap().pvp_flagged);
     }
+
+    #[test]
+    fn killing_flagged_player_grants_honor() {
+        let mut world = players_in_range();
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.pvp_flagged = true;
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 0.0;
+            h.alive = false;
+        }
+        let mut events = vec![SimEvent::Kill {
+            killer: 1,
+            victim: 2,
+            victim_name: "Bob".into(),
+        }];
+
+        tick_pvp(&mut PvpState::default(), &mut world, &mut events);
+
+        assert_eq!(world.get::<Progress>(1).unwrap().honor, HONOR_PER_KILL);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            SimEvent::HonorGained {
+                player: 1,
+                amount: HONOR_PER_KILL
+            }
+        )));
+    }
 }

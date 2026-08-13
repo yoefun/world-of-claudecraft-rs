@@ -322,7 +322,7 @@ impl AuctionHouse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Progress};
+    use crate::ecs::components::{Bags, Durable, Progress};
     use crate::inventory::grant_into;
     use crate::mail::Mailbox;
     use woc_content::PlayerClass;
@@ -354,5 +354,34 @@ mod tests {
         assert!(ah.list_item(&mut world, 1, slot, 1, 50, 1, &mut events));
         let listing_id = ah.snapshot_public()[0].id;
         assert!(ah.buy(&mut world, &mut mail, 2, listing_id, &mut events));
+    }
+
+    #[test]
+    fn buy_mails_proceeds_when_seller_offline() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(2) {
+            d.durable_id = Some("bob".into());
+        }
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.copper = 200;
+        }
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 1,
+            seller_durable: "ada".into(),
+            seller_name: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            price: 40,
+            expires_tick: 9999,
+        });
+        ah.next_id = 2;
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
+        assert_eq!(mail.all_mails().len(), 1);
+        assert_eq!(mail.all_mails()[0].copper, 40);
     }
 }
