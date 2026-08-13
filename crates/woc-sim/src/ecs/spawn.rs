@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, GatherNodeState,
     Health, Hearth, Home, Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress,
-    QuestLog, Respawn, Riding, Skinnable, Spirit, Threat, Transform,
+    QuestLog, Reputation, Respawn, Riding, Skinnable, Spirit, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::grant_into;
@@ -170,12 +170,14 @@ pub fn create_player(
             equipment,
             equipment_wear,
             equipment_enchants: Default::default(),
+            equipment_qualities: Default::default(),
             open_vendor_npc: None,
             buyback: Vec::new(),
         },
     );
     world.insert(id, QuestLog::default());
     world.insert(id, Progress::default());
+    world.insert(id, Reputation::default());
     world.insert(
         id,
         Bank {
@@ -275,7 +277,14 @@ pub fn create_loot(
     adopt_fresh_id(world, id);
     insert_identity(world, id, EntityKind::Loot, "Loot", None, "eastbrook");
     insert_transform(world, id, x, z, 0.0);
-    world.insert(id, LootPile { copper, item });
+    world.insert(
+        id,
+        LootPile {
+            copper,
+            item,
+            quality: None,
+        },
+    );
     world.insert(id, InstanceAt::default());
     id
 }
@@ -340,6 +349,7 @@ pub fn create_gather_node(
         LootPile {
             copper: 0,
             item: Some(node.item_id.to_string()),
+            quality: None,
         },
     );
     world.insert(id, GatherNodeState { ready_tick: 0 });

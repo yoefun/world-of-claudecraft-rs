@@ -1,10 +1,13 @@
 //! Convert between `woc_persist` DTOs and `woc_sim::PlayerPersistentState`.
 
+use woc_content::ItemQuality;
 use woc_persist::{
     Character, CharacterSave, EquipmentDto, InvStackDto, MailDto, MarketListingDto,
-    ProfessionSkillDto, QuestProgressDto, RealmEconomy, TalentRankDto,
+    ProfessionSkillDto, QuestProgressDto, RealmEconomy, ReputationDto, TalentRankDto,
 };
-use woc_sim::ecs::components::{Equipment, EquipmentWear, InvStack, QuestProgress};
+use woc_sim::ecs::components::{
+    Equipment, EquipmentQualities, EquipmentWear, InvStack, QuestProgress,
+};
 use woc_sim::mail::MailItem;
 use woc_sim::market::Listing;
 use woc_sim::persist_state::{quest_state_from_str, quest_state_to_str, PlayerPersistentState};
@@ -22,6 +25,7 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
         equipment: equip_from_dto(&character.equipment),
         equipment_wear: wear_from_dto(&character.equipment),
         equipment_enchants: enchants_from_dto(&character.equipment),
+        equipment_qualities: qualities_from_dto(&character.equipment),
         quests: quests_from_dto(&character.quests),
         zone_id: character.zone_id.clone(),
         talent_points: character.talent_points,
@@ -48,6 +52,11 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
         riding_rank: character.riding_rank,
         known_mounts: character.known_mounts.iter().cloned().collect(),
         last_mount: character.last_mount.clone(),
+        reputation: character
+            .reputation
+            .iter()
+            .map(|r| (r.faction_id.clone(), r.value))
+            .collect(),
     }
 }
 
@@ -63,6 +72,7 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
             &state.equipment,
             &state.equipment_wear,
             &state.equipment_enchants,
+            &state.equipment_qualities,
         ),
         quests: quests_to_dto(&state.quests),
         zone_id: state.zone_id.clone(),
@@ -96,6 +106,14 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
         riding_rank: state.riding_rank,
         known_mounts: state.known_mounts.iter().cloned().collect(),
         last_mount: state.last_mount.clone(),
+        reputation: state
+            .reputation
+            .iter()
+            .map(|(id, value)| ReputationDto {
+                faction_id: id.clone(),
+                value: *value,
+            })
+            .collect(),
     }
 }
 
@@ -167,6 +185,14 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
     }
 }
 
+fn quality_from_dto(s: &Option<String>) -> Option<ItemQuality> {
+    s.as_deref().and_then(ItemQuality::parse)
+}
+
+fn quality_to_dto(q: Option<ItemQuality>) -> Option<String> {
+    q.map(|q| q.as_str().to_string())
+}
+
 fn inv_from_dto(slots: &[Option<InvStackDto>]) -> Vec<Option<InvStack>> {
     slots
         .iter()
@@ -176,6 +202,7 @@ fn inv_from_dto(slots: &[Option<InvStackDto>]) -> Vec<Option<InvStack>> {
                 count: st.count,
                 durability: st.durability,
                 enchant_id: st.enchant_id.clone(),
+                quality: quality_from_dto(&st.quality),
             })
         })
         .collect()
@@ -190,6 +217,7 @@ fn inv_to_dto(slots: &[Option<InvStack>]) -> Vec<Option<InvStackDto>> {
                 count: st.count,
                 durability: st.durability,
                 enchant_id: st.enchant_id.clone(),
+                quality: quality_to_dto(st.quality),
             })
         })
         .collect()
@@ -206,6 +234,13 @@ fn equip_from_dto(e: &EquipmentDto) -> Equipment {
         neck: e.neck.clone(),
         finger: e.finger.clone(),
         finger2: e.finger2.clone(),
+        shoulder: e.shoulder.clone(),
+        back: e.back.clone(),
+        wrist: e.wrist.clone(),
+        hands: e.hands.clone(),
+        waist: e.waist.clone(),
+        trinket: e.trinket.clone(),
+        trinket2: e.trinket2.clone(),
     }
 }
 
@@ -217,6 +252,11 @@ fn wear_from_dto(e: &EquipmentDto) -> EquipmentWear {
         chest: e.chest_durability,
         legs: e.legs_durability,
         feet: e.feet_durability,
+        shoulder: e.shoulder_durability,
+        back: e.back_durability,
+        wrist: e.wrist_durability,
+        hands: e.hands_durability,
+        waist: e.waist_durability,
     }
 }
 
@@ -227,10 +267,32 @@ fn enchants_from_dto(e: &EquipmentDto) -> woc_sim::ecs::components::EquipmentEnc
     }
 }
 
+fn qualities_from_dto(e: &EquipmentDto) -> EquipmentQualities {
+    EquipmentQualities {
+        main_hand: quality_from_dto(&e.main_hand_quality),
+        off_hand: quality_from_dto(&e.off_hand_quality),
+        head: quality_from_dto(&e.head_quality),
+        chest: quality_from_dto(&e.chest_quality),
+        legs: quality_from_dto(&e.legs_quality),
+        feet: quality_from_dto(&e.feet_quality),
+        neck: quality_from_dto(&e.neck_quality),
+        finger: quality_from_dto(&e.finger_quality),
+        finger2: quality_from_dto(&e.finger2_quality),
+        shoulder: quality_from_dto(&e.shoulder_quality),
+        back: quality_from_dto(&e.back_quality),
+        wrist: quality_from_dto(&e.wrist_quality),
+        hands: quality_from_dto(&e.hands_quality),
+        waist: quality_from_dto(&e.waist_quality),
+        trinket: quality_from_dto(&e.trinket_quality),
+        trinket2: quality_from_dto(&e.trinket2_quality),
+    }
+}
+
 fn equip_to_dto(
     e: &Equipment,
     wear: &EquipmentWear,
     enchants: &woc_sim::ecs::components::EquipmentEnchants,
+    qualities: &EquipmentQualities,
 ) -> EquipmentDto {
     EquipmentDto {
         main_hand: e.main_hand.clone(),
@@ -242,6 +304,13 @@ fn equip_to_dto(
         neck: e.neck.clone(),
         finger: e.finger.clone(),
         finger2: e.finger2.clone(),
+        shoulder: e.shoulder.clone(),
+        back: e.back.clone(),
+        wrist: e.wrist.clone(),
+        hands: e.hands.clone(),
+        waist: e.waist.clone(),
+        trinket: e.trinket.clone(),
+        trinket2: e.trinket2.clone(),
         main_hand_enchant: enchants.main_hand.clone(),
         off_hand_enchant: enchants.off_hand.clone(),
         main_hand_durability: wear.main_hand,
@@ -250,6 +319,27 @@ fn equip_to_dto(
         chest_durability: wear.chest,
         legs_durability: wear.legs,
         feet_durability: wear.feet,
+        shoulder_durability: wear.shoulder,
+        back_durability: wear.back,
+        wrist_durability: wear.wrist,
+        hands_durability: wear.hands,
+        waist_durability: wear.waist,
+        main_hand_quality: quality_to_dto(qualities.main_hand),
+        off_hand_quality: quality_to_dto(qualities.off_hand),
+        head_quality: quality_to_dto(qualities.head),
+        chest_quality: quality_to_dto(qualities.chest),
+        legs_quality: quality_to_dto(qualities.legs),
+        feet_quality: quality_to_dto(qualities.feet),
+        neck_quality: quality_to_dto(qualities.neck),
+        finger_quality: quality_to_dto(qualities.finger),
+        finger2_quality: quality_to_dto(qualities.finger2),
+        shoulder_quality: quality_to_dto(qualities.shoulder),
+        back_quality: quality_to_dto(qualities.back),
+        wrist_quality: quality_to_dto(qualities.wrist),
+        hands_quality: quality_to_dto(qualities.hands),
+        waist_quality: quality_to_dto(qualities.waist),
+        trinket_quality: quality_to_dto(qualities.trinket),
+        trinket2_quality: quality_to_dto(qualities.trinket2),
     }
 }
 

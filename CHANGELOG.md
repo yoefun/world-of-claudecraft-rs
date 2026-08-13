@@ -1,14 +1,32 @@
 # Changelog
 
-## 1.14.0 — 2026-08-13
+## 1.16.0 — 2026-08-13
 
 ### Added
 
-- **1.14.0 `mounts`:** Riding ranks (Apprentice L2 / Journeyman L5 / Expert L8) at Stable Master Ross; three learn-on-use mounts (Brown Pony 1.6×, Swift Bay Steed 2.0×, Tawny Gryphon flying 2.0×).
+- **1.16.0 `mounts`:** Riding ranks (Apprentice L2 / Journeyman L5 / Expert L8) at Stable Master Ross; three learn-on-use mounts (Brown Pony 1.6×, Swift Bay Steed 2.0×, Tawny Gryphon flying 2.0×).
 - **V** toggles the last known mount (requires training + learned mount); Expert gryphon replaces free travel flight.
 - Combat, death, dungeon/delve, and swim dismount; crypt refuses mounts.
 - `Riding` ECS column; `TrainRiding` interact; snapshot `mounted` / `riding_rank`; persist rank + known (load dismounted).
 - Protocol rev stays **8** (`TrainRiding`, `mounted`, `riding_rank` are additive).
+
+## 1.15.0 — 2026-08-13
+
+### Added
+
+- **1.15.0 `gear-more`:** Extra doll slots (Shoulder, Back, Wrist, Hands, Waist, Trinket + Trinket2).
+- Hunter dual-wield (with Warrior/Rogue). Worn Hatchet at Wilkes; Hunter can equip copper shortsword.
+- Off-hand weapon enchants: second oil applies to OH at full AP/SP; C-sheet Off line shows `[enchant]`.
+- Instance loot quality on Weapon/Armor piles (`max(catalog, roll)`); persist roundtrips stack quality.
+- Protocol rev stays **8** (additive extra slots, `off_hand_enchant`, per-stack `quality`).
+
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `reputation`:** four hub factions (Eastbrook Watch, Eastfen Circle, Mirefen Ferry, Highwatch) with a Neutral→Exalted ladder on a player `Reputation` column.
+- Quest turn-in and mob kills grant standing (party-shared on kills). Friendly+ vendor discounts; Unfriendly vendors refuse trade.
+- Wilkes sells `watch_signet` at Friendly Watch. Character sheet **C** lists standing. Additive on protocol rev **8**.
 
 ## 1.13.0 — 2026-08-13
 

@@ -825,7 +825,7 @@ fn remove_reagents(inv: &mut [Option<InvStack>], recipe: &RecipeDef) -> bool {
         .all(|r| remove_reagent(inv, r.item_id, r.count))
 }
 
-fn can_fit_craft(trial: &mut Vec<Option<InvStack>>, recipe: &RecipeDef) -> bool {
+fn can_fit_craft(trial: &mut [Option<InvStack>], recipe: &RecipeDef) -> bool {
     if !remove_reagents(trial, recipe) {
         return false;
     }

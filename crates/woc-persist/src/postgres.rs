@@ -334,6 +334,7 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         riding_rank: completion.riding_rank,
         known_mounts: completion.known_mounts,
         last_mount: completion.last_mount,
+        reputation: completion.reputation,
     })
 }
 
@@ -396,6 +397,7 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             })],
             bank_copper: 0,
             honor: 125,

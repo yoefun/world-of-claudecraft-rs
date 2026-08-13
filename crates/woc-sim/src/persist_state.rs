@@ -29,6 +29,7 @@ pub struct PlayerPersistentState {
     pub equipment: Equipment,
     pub equipment_wear: EquipmentWear,
     pub equipment_enchants: crate::ecs::components::EquipmentEnchants,
+    pub equipment_qualities: crate::ecs::components::EquipmentQualities,
     pub quests: Vec<QuestProgress>,
     pub zone_id: String,
     pub talent_points: u32,
@@ -47,6 +48,7 @@ pub struct PlayerPersistentState {
     pub riding_rank: u8,
     pub known_mounts: BTreeSet<String>,
     pub last_mount: String,
+    pub reputation: HashMap<String, i32>,
 }
 
 impl PlayerPersistentState {
@@ -67,13 +69,22 @@ impl PlayerPersistentState {
             && self.equipment.neck.is_none()
             && self.equipment.finger.is_none()
             && self.equipment.finger2.is_none()
+            && self.equipment.shoulder.is_none()
+            && self.equipment.back.is_none()
+            && self.equipment.wrist.is_none()
+            && self.equipment.hands.is_none()
+            && self.equipment.waist.is_none()
+            && self.equipment.trinket.is_none()
+            && self.equipment.trinket2.is_none()
             && self.equipment_wear == EquipmentWear::default()
             && self.equipment_enchants == crate::ecs::components::EquipmentEnchants::default()
+            && self.equipment_qualities == crate::ecs::components::EquipmentQualities::default()
             && self.quests.is_empty()
             && self.talents.is_empty()
             && self.professions.is_empty()
             && self.completed_deeds.is_empty()
             && self.honor == 0
+            && self.reputation.is_empty()
             && !self.pvp_flagged
             && self.riding_rank == 0
             && self.known_mounts.is_empty()
@@ -116,6 +127,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
         equipment_enchants: world
             .get::<Bags>(player_id)
             .map(|b| b.equipment_enchants.clone())
+            .unwrap_or_default(),
+        equipment_qualities: world
+            .get::<Bags>(player_id)
+            .map(|b| b.equipment_qualities.clone())
             .unwrap_or_default(),
         quests: world
             .get::<QuestLog>(player_id)
@@ -186,6 +201,10 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
             .get::<Riding>(player_id)
             .and_then(|r| r.last_id.clone())
             .unwrap_or_default(),
+        reputation: world
+            .get::<crate::ecs::components::Reputation>(player_id)
+            .map(|r| r.values.clone())
+            .unwrap_or_default(),
     })
 }
 
@@ -204,6 +223,9 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         p.talent_points = state.talent_points;
         p.talents = state.talents.clone();
         p.professions = state.professions.clone();
+    }
+    if let Some(rep) = world.get_mut::<crate::ecs::components::Reputation>(player_id) {
+        *rep = crate::reputation::from_saved(state.reputation.clone());
     }
     if let Some(q) = world.get_mut::<QuestLog>(player_id) {
         q.quest_log = state.quests.clone();
@@ -258,6 +280,7 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         bags.equipment = state.equipment.clone();
         bags.equipment_wear = state.equipment_wear.clone();
         bags.equipment_enchants = state.equipment_enchants.clone();
+        bags.equipment_qualities = state.equipment_qualities.clone();
         bags.open_vendor_npc = None;
         bags.buyback.clear();
     }
@@ -392,6 +415,7 @@ mod tests {
             equipment: Equipment::default(),
             equipment_wear: EquipmentWear::default(),
             equipment_enchants: Default::default(),
+            equipment_qualities: Default::default(),
             quests: vec![],
             zone_id: "eastbrook".into(),
             talent_points: 0,
@@ -410,6 +434,7 @@ mod tests {
             riding_rank: 0,
             known_mounts: Default::default(),
             last_mount: String::new(),
+            reputation: Default::default(),
         };
         assert!(state.is_virgin());
         let mut world = World::new();
@@ -443,6 +468,9 @@ mod tests {
             p.talents.insert("mage_arcane_power".into(), 2);
             p.completed_deeds.insert("eastfen_mire_terror".into());
         }
+        if let Some(rep) = world.get_mut::<crate::ecs::components::Reputation>(1) {
+            rep.values.insert("eastbrook_watch".into(), 500);
+        }
         if let Some(bank) = world.get_mut::<Bank>(1) {
             bank.bank_copper = 30;
         }
@@ -450,9 +478,20 @@ mod tests {
             bags.equipment.neck = Some("fang_pendant".into());
             bags.equipment.finger = Some("boar_tusk_ring".into());
             bags.equipment.finger2 = Some("boar_tusk_ring".into());
+            bags.equipment.back = Some("wool_cloak".into());
             bags.equipment_wear.main_hand = Some(17);
             bags.equipment_enchants.main_hand = Some("coarse_sharpening".into());
             bags.equipment_enchants.off_hand = Some("minor_wizard_oil".into());
+            bags.equipment_qualities.main_hand = Some(woc_content::ItemQuality::Uncommon);
+            if let Some(stack) = bags.inventory.iter_mut().find(|s| s.is_none()) {
+                *stack = Some(InvStack {
+                    item_id: "padded_shoulders".into(),
+                    count: 1,
+                    durability: Some(30),
+                    enchant_id: None,
+                    quality: Some(woc_content::ItemQuality::Rare),
+                });
+            }
         }
         if let Some(hearth) = world.get_mut::<Hearth>(1) {
             hearth.zone_id = "eastfen".into();
@@ -499,6 +538,15 @@ mod tests {
             restored.equipment_enchants.off_hand.as_deref(),
             Some("minor_wizard_oil")
         );
+        assert_eq!(restored.equipment.back.as_deref(), Some("wool_cloak"));
+        assert_eq!(
+            restored.equipment_qualities.main_hand,
+            Some(woc_content::ItemQuality::Uncommon)
+        );
+        assert!(restored.inventory.iter().flatten().any(|s| {
+            s.item_id == "padded_shoulders" && s.quality == Some(woc_content::ItemQuality::Rare)
+        }));
+        assert_eq!(restored.reputation.get("eastbrook_watch"), Some(&500));
         assert!(!restored.is_virgin());
     }
 

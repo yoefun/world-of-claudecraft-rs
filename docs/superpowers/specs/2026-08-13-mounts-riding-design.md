@@ -1,6 +1,6 @@
-# Mounts and riding design — `1.14.0` / `mounts`
+# Mounts and riding design — `1.16.0` / `mounts`
 
-**Status:** Shipped (rewrite `1.14.0` / `mounts`).  
+**Status:** Shipped (rewrite `1.16.0` / `mounts`).  
 **Baseline:** rewrite `1.13.0` / `gear-slots` on `develop` (ECS `World`; NPC services shipped).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `mounts`.
@@ -48,9 +48,9 @@ Do **not** put mount state on `Bags` equipment. Mounts are not paper-doll slots.
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
 | **1.13.0** | `gear-slots` | Dual-wield, Finger2, quality, MH enchant (shipped) |
-| **1.14.0** | `mounts` | Riding ranks, three mounts, combat dismount, gated flight |
+| **1.16.0** | `mounts` | Riding ranks, three mounts, combat dismount, gated flight |
 
-`PROTOCOL_REV` stays **8**. New fields use `#[serde(default)]`. Upstream pin stays **0.31.0**. Tick fingerprint stays `3214741777866168171`. No new named tick phase. Implementation tags `1.14.0`; this planning change does not bump `Cargo.toml` / `VERSION.toml`.
+`PROTOCOL_REV` stays **8**. New fields use `#[serde(default)]`. Upstream pin stays **0.31.0**. Tick fingerprint stays `3214741777866168171`. No new named tick phase. Implementation tags `1.16.0` (after reputation `1.14.0` and gear-more `1.15.0`).
 
 ## 5. Architecture
 
@@ -100,7 +100,7 @@ Rank 0 = untrained. Training is sequential: rank *n* requires rank *n−1*. Expe
 
 Helpers: `riding_rank(id) -> Option<&RidingRankDef>`, `riding_rank_by_n(n: u8) -> Option<&RidingRankDef>`.
 
-Classic 20/40/60 gates do not fit a 1–10 XP table. Locked gates above are the 1.14.0 numbers.
+Classic 20/40/60 gates do not fit a 1–10 XP table. Locked gates above are the 1.16.0 numbers.
 
 ### 5.2 Content: mounts
 
@@ -155,7 +155,7 @@ NpcDef {
 }
 ```
 
-Eastbrook spot: `x: 4.0`, `z: 9.0` (south-east of Innkeeper Mara at `2, 8`). No other-zone riding trainer in 1.14.0.
+Eastbrook spot: `x: 4.0`, `z: 9.0` (south-east of Innkeeper Mara at `2, 8`). No other-zone riding trainer in 1.16.0.
 
 `NpcDef` helpers: `is_riding_trainer()`. Session snapshot additive `train_riding: bool` (default false). Client shows **Train riding** when true.
 
@@ -188,7 +188,7 @@ pub struct Riding {
 }
 ```
 
-Insert on `create_player` as `Riding::default()` (rank 0, empty known). Persist `rank` + `known` + `last_id`. **Do not persist `active_id`** — login always starts dismounted (matches death/instance safety; park/resume in the same session may keep `Motion` but 1.14.0 still dismounts on export/import to avoid flying through a load). Park/resume of a live entity without persist keeps the column as-is.
+Insert on `create_player` as `Riding::default()` (rank 0, empty known). Persist `rank` + `known` + `last_id`. **Do not persist `active_id`** — login always starts dismounted (matches death/instance safety; park/resume in the same session may keep `Motion` but 1.16.0 still dismounts on export/import to avoid flying through a load). Park/resume of a live entity without persist keeps the column as-is.
 
 Module: `crates/woc-sim/src/mount.rs`. Re-export from `lib.rs`.
 
@@ -294,7 +294,7 @@ Travel Form and Ghost Wolf stay. They are worse than Journeyman mounts and remai
 7. Export/import round-trip keeps `riding_rank`, `known_mounts`, `last_mount`; old completion JSON without those keys loads as rank 0.
 8. Bevy: Ross session Train riding; **V** after learning; other players see `mounted` on the snapshot. `cargo check -p woc-client` green.
 9. `TICK_PHASES` fingerprint unchanged. `PROTOCOL_REV` remains **8**.
-10. `docs/parity/STATUS.md`, `ROADMAP.md`, `DEMO.md`, README controls, changelog, `VERSION.toml` **1.14.0** / `mounts` when the implementation wave lands.
+10. `docs/parity/STATUS.md`, `ROADMAP.md`, `DEMO.md`, README controls, changelog, `VERSION.toml` **1.16.0** / `mounts` when the implementation wave lands.
 
 ## 7. Explicit non-goals
 
@@ -317,7 +317,7 @@ Travel Form and Ghost Wolf stay. They are worse than Journeyman mounts and remai
 
 | Risk | Mitigation |
 | --- | --- |
-| Old clients still send `fly_toggle` expecting free flight | 1.14.0 min-client is the rewrite version; untrained **V** toasts instead of flying |
+| Old clients still send `fly_toggle` expecting free flight | 1.16.0 min-client is the rewrite version; untrained **V** toasts instead of flying |
 | `fly_toggle_enables_vertical_ascend` goes red | Rewrite against Expert + gryphon; keep flight kinematics tests |
 | `PlayerPersistentState { ... }` literal sites miss new fields | Default empty; update every constructor in the persist task |
 | Mount speed stacks with Travel Form 1.4 | Summoning clears those auras |
@@ -334,4 +334,4 @@ Travel Form and Ghost Wolf stay. They are worse than Journeyman mounts and remai
 6. At 8, train Expert, buy Tawny Gryphon, **V** — Space/Ctrl vertical flight. Land, enter Eastbrook Crypt — cannot remount.
 7. Relog: still know the mounts; start on foot; **V** summons last mount.
 
-When §6 is green, tag `1.14.0`.
+When §6 is green, tag `1.16.0`.

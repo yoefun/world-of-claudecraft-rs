@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship rewrite `1.14.0` / `mounts`: riding ranks at a stable master, three learnable mounts, **V** toggles the last mount, and flying is Expert + gryphon instead of free travel flight.
+**Goal:** Ship rewrite `1.16.0` / `mounts`: riding ranks at a stable master, three learnable mounts, **V** toggles the last mount, and flying is Expert + gryphon instead of free travel flight.
 
 **Architecture:** Player-only `Riding` column (`rank`, `known`, `last_id`, `active_id`). Content tables `RIDING_RANKS` / `MOUNTS`. `PlayerIntent.fly_toggle` stays on the wire; `mount::toggle_mount` runs in `apply_intents_motion` before `step_player_motion`. `Motion.flying` is set only by a flying mount. Client draws a child silhouette from `EntitySnapshot.mounted`. No `EntityKind::Mount`.
 
@@ -1108,7 +1108,7 @@ git commit -m "feat(client): riding trainer chrome and mount silhouettes"
 ### Task 12: Version, docs, demo
 
 **Files:**
-- Modify: `VERSION.toml` (`1.14.0`, `parity_target = "mounts"`)
+- Modify: `VERSION.toml` (`1.16.0`, `parity_target = "mounts"`)
 - Modify: `Cargo.toml` workspace `version`
 - Modify: `CHANGELOG.md`, `README.md`, `docs/ROADMAP.md`, `docs/parity/STATUS.md`, `docs/parity/DEMO.md`
 - Modify: spec status line to Shipped after tests pass
@@ -1129,13 +1129,13 @@ Expected: FAIL until versions match, then PASS after Step 3
 
 - [ ] **Step 3: Implement docs**
 
-`CHANGELOG.md` new `## 1.14.0` at top: riding ranks, Ross, three mounts, **V** mount toggle, Expert gryphon replaces free flight, protocol rev 8 additive.
+`CHANGELOG.md` new `## 1.16.0` at top: riding ranks, Ross, three mounts, **V** mount toggle, Expert gryphon replaces free flight, protocol rev 8 additive.
 
-`README.md` What works + controls: **V** toggle mount (requires training + known mount). Footer `WoC-rs 1.14.0`.
+`README.md` What works + controls: **V** toggle mount (requires training + known mount). Footer `WoC-rs 1.16.0`.
 
-`ROADMAP.md` add row **1.14.0** `mounts`. Point at this spec/plan.
+`ROADMAP.md` add row **1.16.0** `mounts`. Point at this spec/plan.
 
-`STATUS.md` current rewrite `1.14.0` / `mounts` table (train, learn, toggle, dismount, persist, client).
+`STATUS.md` current rewrite `1.16.0` / `mounts` table (train, learn, toggle, dismount, persist, client).
 
 `DEMO.md` add step 16: Ross train + pony + **V**; combat dismount; gryphon after Expert; crypt refuses mount. Footer version.
 
@@ -1149,7 +1149,7 @@ Expected: PASS, fingerprint `3214741777866168171`
 
 ```bash
 git add VERSION.toml Cargo.toml CHANGELOG.md README.md docs
-git commit -m "docs: ship 1.14.0 mounts and riding"
+git commit -m "docs: ship 1.16.0 mounts and riding"
 ```
 
 ---
