@@ -330,10 +330,10 @@ pub(crate) fn handle_interact_keys(
     if keys.just_pressed(KeyCode::KeyB) {
         ui.show_bags = !ui.show_bags;
     }
-    if keys.just_pressed(KeyCode::KeyL) && !ui.show_market {
+    if keys.just_pressed(KeyCode::KeyL) && !ui.show_market && !ui.show_guild {
         ui.show_quests = !ui.show_quests;
     }
-    if keys.just_pressed(KeyCode::KeyC) {
+    if keys.just_pressed(KeyCode::KeyC) && !ui.show_guild {
         ui.show_character = !ui.show_character;
         if ui.show_character {
             ui.show_bags = false;
@@ -345,7 +345,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_guild = false;
         }
     }
-    if keys.just_pressed(KeyCode::KeyN) {
+    if keys.just_pressed(KeyCode::KeyN) && !ui.show_guild {
         ui.show_talents = !ui.show_talents;
         if ui.show_talents {
             ui.show_character = false;
@@ -367,7 +367,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_map = false;
         }
     }
-    if keys.just_pressed(KeyCode::KeyM) {
+    if keys.just_pressed(KeyCode::KeyM) && !ui.show_guild {
         ui.show_map = !ui.show_map;
         if ui.show_map {
             ui.show_character = false;
@@ -384,9 +384,11 @@ pub(crate) fn handle_interact_keys(
             ui.show_character = false;
             ui.show_map = false;
             ui.show_bank = false;
+            ui.show_mail = false;
+            ui.show_market = false;
         }
     }
-    if keys.just_pressed(KeyCode::KeyU) {
+    if keys.just_pressed(KeyCode::KeyU) && !ui.show_guild {
         ui.show_market = !ui.show_market;
         if ui.show_market {
             ui.show_character = false;
@@ -672,10 +674,10 @@ pub(crate) fn handle_interact_keys(
         if keys.just_pressed(KeyCode::KeyX) && host.snapshot.guild_invite.is_some() {
             host.guild_msg(WsClientMsg::GuildDecline);
         }
-        if keys.just_pressed(KeyCode::KeyQ) {
+        if keys.just_pressed(KeyCode::KeyQ) && host.snapshot.guild.is_some() {
             host.guild_msg(WsClientMsg::GuildLeave);
         }
-        if keys.just_pressed(KeyCode::KeyV) {
+        if keys.just_pressed(KeyCode::KeyV) && host.snapshot.guild.is_some() {
             if let Some(name) = targeted_player_name(&host.snapshot) {
                 host.guild_msg(WsClientMsg::GuildInvite { name });
             }
