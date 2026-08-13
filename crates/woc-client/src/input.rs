@@ -66,6 +66,19 @@ pub(crate) fn collect_intent(
     }
     intent.move_x = mx;
     intent.move_z = mz;
+    if keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space) {
+        // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
+        intent.jump = true;
+    }
+    if keys.pressed(KeyCode::ControlLeft)
+        || keys.pressed(KeyCode::ControlRight)
+        || keys.pressed(KeyCode::KeyC)
+    {
+        intent.descend = true;
+    }
+    if keys.just_pressed(KeyCode::KeyV) {
+        intent.fly_toggle = true;
+    }
     if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
         intent.ability = Some(AbilitySlot::Primary);
     }

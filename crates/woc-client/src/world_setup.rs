@@ -819,7 +819,7 @@ pub(crate) fn sync_visuals(
             );
 
             let spec = visual_spec(e.kind, e.template_id.as_deref());
-            let (pose, _speed) = if e.alive {
+            let (pose, _speed) = if e.alive && e.on_ground && !e.flying && !e.swimming {
                 sample_gait(&mut motion, e.x, e.z, e.yaw, dt)
             } else {
                 (woc_sim::WalkPose::Idle, 0.0)
@@ -827,16 +827,27 @@ pub(crate) fn sync_visuals(
 
             let bob = if vis.bob && e.alive {
                 (bob_t * 2.4 + e.id as f32 * 0.7).sin() * 0.12
+            } else if e.alive && e.swimming {
+                (bob_t * 3.0 + e.id as f32).sin() * 0.08
+            } else if e.alive && e.flying {
+                (bob_t * 1.6 + e.id as f32 * 0.3).sin() * 0.1
             } else if e.alive && family_uses_gait(spec.family) && pose != woc_sim::WalkPose::Idle {
-                // Subtle vertical bounce while walking.
                 (motion.cycle * 2.0).sin().abs() * 0.06
             } else {
                 0.0
             };
 
             if e.alive {
+                let mut pitch = 0.0_f32;
+                if e.flying {
+                    pitch = -0.18;
+                } else if e.swimming {
+                    pitch = 0.22;
+                } else if !e.on_ground {
+                    pitch = -0.08;
+                }
                 tf.translation = Vec3::new(e.x, e.y + bob, e.z);
-                tf.rotation = Quat::from_rotation_y(e.yaw);
+                tf.rotation = Quat::from_euler(EulerRot::YXZ, e.yaw, pitch, 0.0);
                 tf.scale = Vec3::ONE;
                 *visibility = Visibility::Visible;
             } else if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Player) {

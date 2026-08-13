@@ -15,6 +15,18 @@ pub const PLAYER_SWING_SEC: f32 = 2.0;
 pub const MOB_SWING_SEC: f32 = 2.0;
 pub const MOB_SPEED: f32 = 5.5;
 
+/// Upstream-aligned vertical motion constants (player_motion.ts).
+pub const GRAVITY: f32 = 16.0;
+pub const JUMP_VELOCITY: f32 = 6.0;
+pub const AIR_CONTROL_ACCEL: f32 = 20.0;
+pub const COYOTE_TIME: f32 = 0.15;
+pub const FALL_SAFE_DISTANCE: f32 = 12.0;
+pub const SWIM_SPEED_MULT: f32 = 0.65;
+pub const FLY_SPEED_MULT: f32 = 1.15;
+pub const FLY_VERTICAL_SPEED: f32 = 5.5;
+/// Ground this far under the water line = deep water (upstream PLAYER_SWIM_DEPTH).
+pub const PLAYER_SWIM_DEPTH: f32 = 1.4;
+
 /// Classic-inspired tiny XP table for levels 1..10.
 pub fn xp_to_next(level: u32) -> u32 {
     match level {

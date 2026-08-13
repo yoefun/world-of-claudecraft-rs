@@ -21,6 +21,8 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
 - Client panels: talents / bank / mail / market; **minimap** + **world map** (M)
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
+- Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
+- Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
 - Version footer: `WoC-rs 1.0.0-pre · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; Postgres optional)

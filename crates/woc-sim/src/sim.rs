@@ -338,12 +338,29 @@ impl Sim {
             if !self.entities[pi].alive {
                 continue;
             }
-            step_player_motion(
-                &mut self.entities[pi],
-                intent.move_x,
-                intent.move_z,
-                intent.facing,
-            );
+            let effect = step_player_motion(&mut self.entities[pi], &intent);
+            if intent.fly_toggle {
+                let flying = self.entities[pi].flying;
+                self.events.push(woc_protocol::SimEvent::Toast {
+                    message: if flying {
+                        "Travel flight engaged (Space up · Ctrl/C down · V land).".into()
+                    } else {
+                        "Travel flight disengaged.".into()
+                    },
+                });
+            }
+            if let Some(effect) = effect {
+                if effect.fall_damage > 0.0 {
+                    let p = &mut self.entities[pi];
+                    p.hp = (p.hp - effect.fall_damage).max(0.0);
+                    self.events.push(woc_protocol::SimEvent::Toast {
+                        message: format!("Falling deals {} damage.", effect.fall_damage as i32),
+                    });
+                    if p.hp <= 0.0 {
+                        crate::death::on_player_death_check(&mut self.entities, &mut self.events);
+                    }
+                }
+            }
             if let Some(tid) = intent.target_id {
                 self.entities[pi].target = Some(tid);
             }
@@ -596,6 +613,9 @@ impl Sim {
                 resource_max: e.resource_max,
                 alive: e.alive,
                 template_id: e.template_id.clone(),
+                on_ground: e.on_ground,
+                flying: e.flying,
+                swimming: crate::player_motion::is_swimming(e),
             })
             .collect();
 
@@ -1024,6 +1044,7 @@ mod tests {
             attack: true,
             ability: Some(AbilitySlot::Primary),
             target_id: Some(wolf_id),
+            ..Default::default()
         };
 
         let mut saw_kill = false;
@@ -1146,6 +1167,7 @@ mod tests {
             attack: false,
             ability: None,
             target_id: None,
+            ..Default::default()
         };
         for _ in 0..60 {
             let (sa, _) = a.tick(intent);
