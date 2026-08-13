@@ -4,6 +4,11 @@
 
 ### Added
 
+- Procedural character / creature visual catalog (`woc-sim::visual_catalog`): class-, template-, and role-keyed mesh recipes (players, NPCs, mobs, pets, loot).
+- Bevy scene loading: Eastbrook building meshes from physics AABBs, hub beacons, zone-gate portal arches, campfire props; biome-tinted terrain bands + zone sky/ambient on travel.
+- Character create: rotating 3D class preview silhouette behind the UI panel.
+- In-world scene load for NPCs/mobs/herbs: nameplates, quest/vendor overhead markers, target ground ring, idle bob; gather nodes spawned into the realm with herb visuals.
+- Enter-world toast summarizing NPC / foe / herb counts; visual spawn/despawn lifecycle for corpses, loot, and pets.
 - Bevy **minimap** (top-right disc: zone label, coords, terrain, hubs/portals/quests/mobs/allies, facing arrow).
 - Bevy **world map** window (**M**, Esc closes): current zone band terrain, POI legend, player arrow.
 - Pure `woc-sim::map_view` projection + terrain paint (upstream +X-left / +Z-up canvas convention) with unit tests.
@@ -11,7 +16,11 @@
 ### Changed
 
 - Mail panel keybind **M → I** (inbox) so **M** matches upstream World Map.
-- Clippy `too_many_arguments` allows on `Mailbox::send` / `AuctionHouse::list_item` for current nightly.
+
+### Fixed
+
+- Clippy `too_many_arguments` on mail send / market list (nightly).
+- Gather nodes are not auto-looted on proximity (Interact / Gather only).
 
 ## 1.0.0-pre — 2026-07-28
 

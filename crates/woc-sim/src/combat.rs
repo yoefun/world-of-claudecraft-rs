@@ -373,6 +373,11 @@ pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mu
             *i != pi
                 && e.kind == EntityKind::Loot
                 && e.alive
+                // Profession gather nodes are harvested via Interact, not auto-loot.
+                && e.template_id
+                    .as_deref()
+                    .and_then(woc_content::gather_node)
+                    .is_none()
                 && dist2d(&entities[pi], e) < crate::types::LOOT_RANGE
         })
         .map(|(_, e)| e.id)

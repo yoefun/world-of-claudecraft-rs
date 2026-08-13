@@ -8,8 +8,10 @@ mod input;
 mod login;
 mod map;
 mod menu_ui;
+mod nameplates;
 mod online;
 mod title;
+mod visuals;
 mod world_setup;
 
 use bevy::prelude::*;
@@ -47,9 +49,9 @@ fn main() {
             char_select::plugin,
             world_setup::plugin,
             hud::plugin,
+            nameplates::plugin,
             map::plugin,
-        ))
-        .add_systems(
+        ))        .add_systems(
             Update,
             (
                 input::grab_cursor,

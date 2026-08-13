@@ -32,6 +32,7 @@ pub mod stats;
 pub mod talents;
 pub mod targeting;
 pub mod types;
+pub mod visual_catalog;
 pub mod world;
 pub mod worldboss;
 pub mod zones;
@@ -44,8 +45,13 @@ pub use map_view::{
 pub use persist_state::{
     apply_player_state, create_player_from_state, export_player_state, PlayerPersistentState,
 };
+pub use physics::{eastbrook_buildings, Aabb};
 pub use rng::{fbm2, hash2, noise2, Rng};
 pub use sim::{Sim, MAX_REALM_PLAYERS};
+pub use visual_catalog::{
+    scene_markers, visual_key, visual_spec, zone_atmosphere, PartShape, SceneMarker,
+    SceneMarkerKind, VisualFamily, VisualPart, VisualSpec, ZoneAtmosphere,
+};
 pub use woc_content::PlayerClass;
 pub use world::{
     ground_height, terrain_height, terrain_steepness, water_bodies, water_level, water_level_at,
