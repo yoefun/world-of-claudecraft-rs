@@ -31,6 +31,11 @@ fn finalize_player_death(player: &mut Entity, events: &mut Vec<SimEvent>) {
     player.auto_attack = false;
     player.target = None;
     player.swing_timer = 0.0;
+    player.flying = false;
+    player.vx = 0.0;
+    player.vz = 0.0;
+    player.vy = 0.0;
+    player.on_ground = true;
     let id = player.id;
     events.push(SimEvent::PlayerDied { player: id });
     events.push(SimEvent::Toast {

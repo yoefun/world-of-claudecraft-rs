@@ -3,7 +3,6 @@
 use crate::combat::{deal_damage, dist2d, face_toward};
 use crate::entity::Entity;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
-use crate::world::{ground_height, WORLD_SEED};
 use woc_content::{pet_for_class, PetDef, PlayerClass};
 use woc_protocol::{EntityId, EntityKind, SimEvent, DT};
 
@@ -206,17 +205,7 @@ fn tick_one_pet(pet_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimE
 }
 
 fn move_toward(pet: &mut Entity, tx: f32, tz: f32, speed: f32) {
-    let dx = tx - pet.x;
-    let dz = tz - pet.z;
-    let d = (dx * dx + dz * dz).sqrt();
-    if d < 0.01 {
-        return;
-    }
-    let step = speed * DT;
-    pet.x += dx / d * step.min(d);
-    pet.z += dz / d * step.min(d);
-    pet.y = ground_height(pet.x, pet.z, WORLD_SEED);
-    pet.yaw = dx.atan2(dz);
+    let _ = crate::entity_motion::step_toward(pet, tx, tz, speed);
 }
 
 /// True when `class` can summon.

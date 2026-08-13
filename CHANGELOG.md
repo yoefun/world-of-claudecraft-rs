@@ -12,10 +12,17 @@
 - Bevy **minimap** (top-right disc: zone label, coords, terrain, hubs/portals/quests/mobs/allies, facing arrow).
 - Bevy **world map** window (**M**, Esc closes): current zone band terrain, POI legend, player arrow.
 - Pure `woc-sim::map_view` projection + terrain paint (upstream +X-left / +Z-up canvas convention) with unit tests.
+- Upstream-aligned locomotion hysteresis (`woc-sim::locomotion`) + procedural walk/run limb swing for players, NPCs, wolves, and boars.
+- Soft visual remove fade when entities leave the snapshot (loot pickup, pet dismiss, disconnect); tipped corpse pose for dead actors.
+- Shared climb-aware `entity_motion::step_toward` used by mob chase/leash and pet follow.
+- Player vertical motion: jump (Space) with coyote window, gravity/landing, fall damage; lake swim tread + shore hop; travel flight toggle (V) with Space/Ctrl vertical.
+- Protocol rev **4**: intent `jump` / `descend` / `fly_toggle`; snapshot `on_ground` / `flying` / `swimming` (serde defaults keep older peers working).
 
 ### Changed
 
 - Mail panel keybind **M → I** (inbox) so **M** matches upstream World Map.
+- Visual catalog parts carry a `PartRole` (body/head/legs/prop) so the client can drive a gait cycle.
+- `step_player_motion` now takes full `PlayerIntent` and returns optional fall-damage effects.
 
 ### Fixed
 

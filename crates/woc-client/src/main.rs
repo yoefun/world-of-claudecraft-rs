@@ -1,6 +1,7 @@
 //! Bevy host for the framework slice (offline sim embed + online WS).
 
 mod api;
+mod anim;
 mod char_create;
 mod char_select;
 mod hud;

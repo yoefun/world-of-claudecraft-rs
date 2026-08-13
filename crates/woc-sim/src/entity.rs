@@ -144,6 +144,20 @@ pub struct Entity {
     pub durable_id: Option<String>,
     /// Completed deed ids (one-shot honor awards).
     pub completed_deeds: BTreeSet<String>,
+    /// Horizontal air / swim velocity (x).
+    pub vx: f32,
+    /// Horizontal air / swim velocity (z).
+    pub vz: f32,
+    /// Vertical velocity (jump / fall / fly).
+    pub vy: f32,
+    /// True while feet are on walkable support (or treading water).
+    pub on_ground: bool,
+    /// True for the duration of a deliberate jump arc.
+    pub jumping: bool,
+    /// Highest Y reached during the current airborne/fall segment.
+    pub fall_start_y: f32,
+    /// Travel flight (no gravity; Space/Ctrl for vertical).
+    pub flying: bool,
 }
 
 impl Entity {
@@ -216,6 +230,13 @@ impl Entity {
             delve_room: None,
             durable_id: None,
             completed_deeds: BTreeSet::new(),
+            vx: 0.0,
+            vz: 0.0,
+            vy: 0.0,
+            on_ground: true,
+            jumping: false,
+            fall_start_y: y,
+            flying: false,
         }
     }
 }

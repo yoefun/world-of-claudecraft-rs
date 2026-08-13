@@ -12,6 +12,10 @@ use woc_sim::{
 };
 use woc_version::footer;
 
+use crate::anim::{
+    apply_limb_gait, death_root_rotation, family_uses_gait, sample_gait, GaitLimb, VisualMotion,
+    REMOVE_FADE_SEC,
+};
 use crate::char_create::{CharName, SelectedClass};
 use crate::hud::{
     ChromePanelKind, HudActionBarText, HudBagText, HudCastFill, HudCastPanel, HudCastText,
@@ -26,6 +30,7 @@ use crate::visuals::{
     sync_zone_atmosphere, ActiveAtmosphere, SceneProp, SimVisual, TargetRing, VisualPartMesh,
 };
 use crate::{AppState, GameHost, NetStatus, PlayMode};
+use woc_sim::visual_spec;
 
 #[derive(Component)]
 struct TerrainMarker;
@@ -668,7 +673,7 @@ pub(crate) fn sim_fixed_step(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    visuals: Query<(Entity, &SimVisual)>,
+    mut visuals: Query<(Entity, &SimVisual, &mut VisualMotion)>,
 ) {
     if host.is_online() {
         apply_online_messages(&mut host);
@@ -701,8 +706,9 @@ pub(crate) fn sim_fixed_step(
         }
     }
 
-    let known: HashSet<EntityId> = visuals.iter().map(|(_, v)| v.id).collect();
+    let known: HashSet<EntityId> = visuals.iter().map(|(_, v, _)| v.id).collect();
     let snap_ids: HashSet<EntityId> = host.snapshot.entities.iter().map(|e| e.id).collect();
+    let dt = time.delta_secs();
 
     // Spawn any snapshot entity we don't yet have a visual for (including corpses / loot / herbs).
     for e in &host.snapshot.entities {
@@ -717,11 +723,26 @@ pub(crate) fn sim_fixed_step(
         }
     }
 
-    // Despawn visuals for entities that left the snapshot (picked loot, dismissed pets, …).
-    for (entity, vis) in &visuals {
-        if !snap_ids.contains(&vis.id) {
-            commands.entity(entity).despawn();
+    // Soft-remove visuals that left the snapshot (picked loot, dismissed pets, disconnects).
+    let mut despawn = Vec::new();
+    for (entity, vis, mut motion) in &mut visuals {
+        if snap_ids.contains(&vis.id) {
+            // Re-appeared or still present — cancel any in-flight fade.
+            motion.remove_timer = None;
+            continue;
         }
+        if motion.remove_timer.is_none() {
+            motion.remove_timer = Some(REMOVE_FADE_SEC);
+        }
+        if let Some(timer) = motion.remove_timer.as_mut() {
+            *timer -= dt;
+            if *timer <= 0.0 {
+                despawn.push(entity);
+            }
+        }
+    }
+    for entity in despawn {
+        commands.entity(entity).despawn();
     }
 }
 
@@ -731,11 +752,38 @@ pub(crate) fn sync_visuals(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut visuals: Query<(Entity, &mut SimVisual, &mut Transform, Option<&Children>)>,
+    mut visuals: Query<(
+        Entity,
+        &mut SimVisual,
+        &mut VisualMotion,
+        &mut Transform,
+        &mut Visibility,
+        Option<&Children>,
+    )>,
+    mut limbs: Query<
+        (&GaitLimb, &mut Transform),
+        (Without<SimVisual>, Without<FollowCam>, Without<TargetRing>),
+    >,
     part_mats: Query<&MeshMaterial3d<StandardMaterial>, With<VisualPartMesh>>,
-    mut cam: Query<&mut Transform, (With<FollowCam>, Without<SimVisual>, Without<TargetRing>)>,
+    mut cam: Query<
+        &mut Transform,
+        (
+            With<FollowCam>,
+            Without<SimVisual>,
+            Without<TargetRing>,
+            Without<GaitLimb>,
+        ),
+    >,
     ring_q: Query<Entity, With<TargetRing>>,
-    mut ring_tf: Query<(&mut Transform, &mut Visibility), (With<TargetRing>, Without<SimVisual>)>,
+    mut ring_tf: Query<
+        (&mut Transform, &mut Visibility),
+        (
+            With<TargetRing>,
+            Without<SimVisual>,
+            Without<FollowCam>,
+            Without<GaitLimb>,
+        ),
+    >,
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<AmbientLight>,
     mut atmo: ResMut<ActiveAtmosphere>,
@@ -748,8 +796,17 @@ pub(crate) fn sync_visuals(
     );
 
     let bob_t = time.elapsed_secs();
+    let dt = time.delta_secs();
     let player = host.player_snap().map(|p| (p.x, p.y, p.z));
-    for (entity, mut vis, mut tf, children) in &mut visuals {
+    for (entity, mut vis, mut motion, mut tf, mut visibility, children) in &mut visuals {
+        // Fade-out scale while pending removal (entity already gone from snapshot).
+        if let Some(timer) = motion.remove_timer {
+            let t = (timer / REMOVE_FADE_SEC).clamp(0.0, 1.0);
+            tf.scale = Vec3::splat(t);
+            *visibility = Visibility::Visible;
+            continue;
+        }
+
         if let Some(e) = host.snapshot.entities.iter().find(|ent| ent.id == vis.id) {
             visuals::respawn_parts_if_needed(
                 &mut commands,
@@ -761,18 +818,73 @@ pub(crate) fn sync_visuals(
                 children,
             );
 
+            let spec = visual_spec(e.kind, e.template_id.as_deref());
+            let (pose, _speed) = if e.alive && e.on_ground && !e.flying && !e.swimming {
+                sample_gait(&mut motion, e.x, e.z, e.yaw, dt)
+            } else {
+                (woc_sim::WalkPose::Idle, 0.0)
+            };
+
             let bob = if vis.bob && e.alive {
                 (bob_t * 2.4 + e.id as f32 * 0.7).sin() * 0.12
+            } else if e.alive && e.swimming {
+                (bob_t * 3.0 + e.id as f32).sin() * 0.08
+            } else if e.alive && e.flying {
+                (bob_t * 1.6 + e.id as f32 * 0.3).sin() * 0.1
+            } else if e.alive && family_uses_gait(spec.family) && pose != woc_sim::WalkPose::Idle {
+                (motion.cycle * 2.0).sin().abs() * 0.06
             } else {
                 0.0
             };
 
-            if e.alive || e.kind == EntityKind::Mob || e.kind == EntityKind::Npc {
+            if e.alive {
+                let mut pitch = 0.0_f32;
+                if e.flying {
+                    pitch = -0.18;
+                } else if e.swimming {
+                    pitch = 0.22;
+                } else if !e.on_ground {
+                    pitch = -0.08;
+                }
                 tf.translation = Vec3::new(e.x, e.y + bob, e.z);
-                tf.rotation = Quat::from_rotation_y(e.yaw);
+                tf.rotation = Quat::from_euler(EulerRot::YXZ, e.yaw, pitch, 0.0);
                 tf.scale = Vec3::ONE;
+                *visibility = Visibility::Visible;
+            } else if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Player) {
+                // Corpse pose: tip onto the side; keep clickable for loot.
+                tf.translation = Vec3::new(e.x, e.y + 0.15, e.z);
+                tf.rotation = death_root_rotation(e.yaw);
+                tf.scale = Vec3::ONE;
+                *visibility = Visibility::Visible;
             } else {
+                *visibility = Visibility::Hidden;
                 tf.scale = Vec3::ZERO;
+            }
+
+            if e.alive && family_uses_gait(spec.family) {
+                if let Some(children) = children {
+                    for child in children.iter() {
+                        if let Ok((limb, mut limb_tf)) = limbs.get_mut(child) {
+                            apply_limb_gait(
+                                limb.role,
+                                limb.rest_translation,
+                                pose,
+                                motion.cycle,
+                                &mut limb_tf,
+                            );
+                        }
+                    }
+                }
+            } else if !e.alive {
+                // Reset limbs when dead so the tipped root looks clean.
+                if let Some(children) = children {
+                    for child in children.iter() {
+                        if let Ok((limb, mut limb_tf)) = limbs.get_mut(child) {
+                            limb_tf.translation = limb.rest_translation;
+                            limb_tf.rotation = Quat::IDENTITY;
+                        }
+                    }
+                }
             }
 
             if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Loot) {

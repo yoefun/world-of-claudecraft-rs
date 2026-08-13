@@ -7,7 +7,7 @@ pub type EntityId = u32;
 
 /// Protocol revision for snapshot / WS envelopes (0.1 was implicit rev 1).
 /// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
-pub const PROTOCOL_REV: u32 = 3;
+pub const PROTOCOL_REV: u32 = 4;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -191,6 +191,15 @@ pub struct PlayerIntent {
     pub ability: Option<AbilitySlot>,
     /// Selected target (mob or none).
     pub target_id: Option<EntityId>,
+    /// Jump / swim-hop / fly-ascend (Space).
+    #[serde(default)]
+    pub jump: bool,
+    /// Swim dive / fly descend (Ctrl / C).
+    #[serde(default)]
+    pub descend: bool,
+    /// Toggle travel flight (V just pressed).
+    #[serde(default)]
+    pub fly_toggle: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,6 +220,19 @@ pub struct EntitySnapshot {
     pub alive: bool,
     #[serde(default)]
     pub template_id: Option<String>,
+    /// Feet planted on walkable support (default true for older peers).
+    #[serde(default = "default_true")]
+    pub on_ground: bool,
+    /// Travel-flight mode (no gravity).
+    #[serde(default)]
+    pub flying: bool,
+    /// Treading / submerged in a lake body.
+    #[serde(default)]
+    pub swimming: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
