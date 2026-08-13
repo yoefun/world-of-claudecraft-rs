@@ -709,11 +709,13 @@ pub(crate) fn handle_interact_keys(
             Some(6)
         } else if keys.just_pressed(KeyCode::Digit8) || keys.just_pressed(KeyCode::Numpad8) {
             Some(7)
+        } else if keys.just_pressed(KeyCode::Digit9) || keys.just_pressed(KeyCode::Numpad9) {
+            Some(8)
         } else {
             None
         };
         if let Some(idx) = equip_idx {
-            const SLOTS: [EquipSlot; 8] = [
+            const SLOTS: [EquipSlot; 9] = [
                 EquipSlot::MainHand,
                 EquipSlot::OffHand,
                 EquipSlot::Head,
@@ -722,6 +724,7 @@ pub(crate) fn handle_interact_keys(
                 EquipSlot::Feet,
                 EquipSlot::Neck,
                 EquipSlot::Finger,
+                EquipSlot::Finger2,
             ];
             let equip_slot = SLOTS[idx];
             host.interact(player_id, InteractAction::Unequip { equip_slot });
@@ -1010,12 +1013,14 @@ mod tests {
             item_id: "baked_bread".into(),
             count: 2,
             durability: None,
+            enchant_id: None,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
             item_id: "wolf_fang".into(),
             count: 3,
             durability: None,
+            enchant_id: None,
         });
 
         assert_eq!(
