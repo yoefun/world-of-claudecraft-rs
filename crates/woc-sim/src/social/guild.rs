@@ -757,6 +757,71 @@ impl GuildRoster {
         }
         self.guilds.insert(guild_id, guild);
     }
+
+    pub fn snapshot_for(
+        &self,
+        player_id: EntityId,
+        world: &World,
+    ) -> Option<woc_protocol::GuildSnapshot> {
+        let key = Self::member_key(world, player_id);
+        let gid = self.guild_id_of(&key)?;
+        let g = self.guild(gid)?;
+        let viewer_rank = g
+            .members
+            .iter()
+            .find(|m| m.durable_id == key)
+            .map(|m| m.rank.as_str().to_string())?;
+        let mut members = g.members.clone();
+        members.sort_by(|a, b| {
+            rank_order(a.rank)
+                .cmp(&rank_order(b.rank))
+                .then(a.name.cmp(&b.name))
+        });
+        Some(woc_protocol::GuildSnapshot {
+            id: g.id,
+            name: g.name.clone(),
+            rank: viewer_rank,
+            motd: g.motd.clone(),
+            motd_set_by: g.motd_set_by.clone(),
+            members: members
+                .into_iter()
+                .map(|m| woc_protocol::GuildMemberSnapshot {
+                    name: m.name,
+                    class_id: m.class_id,
+                    level: m.level,
+                    rank: m.rank.as_str().to_string(),
+                    online: durable_online(world, &m.durable_id),
+                })
+                .collect(),
+        })
+    }
+
+    pub fn invite_snapshot_for(
+        &self,
+        player_id: EntityId,
+        world: &World,
+    ) -> Option<woc_protocol::GuildInviteSnapshot> {
+        let key = Self::member_key(world, player_id);
+        self.pending.get(&key).map(|p| woc_protocol::GuildInviteSnapshot {
+            from_name: p.from_name.clone(),
+            guild_name: p.guild_name.clone(),
+        })
+    }
+}
+
+fn rank_order(r: GuildRank) -> u8 {
+    match r {
+        GuildRank::Leader => 0,
+        GuildRank::Officer => 1,
+        GuildRank::Member => 2,
+    }
+}
+
+fn durable_online(world: &World, durable: &str) -> bool {
+    world
+        .ids::<ClassKit>()
+        .into_iter()
+        .any(|id| GuildRoster::member_key(world, id) == durable)
 }
 
 fn live_member(world: &World, id: EntityId, rank: GuildRank) -> GuildMember {

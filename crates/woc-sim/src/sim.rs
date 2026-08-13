@@ -890,6 +890,8 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
+            guild: self.guilds.snapshot_for(player_id, world),
+            guild_invite: self.guilds.invite_snapshot_for(player_id, world),
         }
     }
 
