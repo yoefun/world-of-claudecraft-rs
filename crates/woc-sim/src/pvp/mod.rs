@@ -338,6 +338,40 @@ mod tests {
     }
 
     #[test]
+    fn duel_death_restores_loser_without_death_state() {
+        let mut world = players_in_range();
+        let mut pvp = PvpState::default();
+        let mut events = Vec::new();
+        challenge_duel(&mut pvp, &world, 1, 2).unwrap();
+        accept_duel(&mut pvp, &world, 2, 1, &mut events).unwrap();
+        events.clear();
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 0.0;
+            h.alive = false;
+        }
+        if let Some(s) = world.get_mut::<Spirit>(2) {
+            s.corpse_x = Some(2.0);
+            s.corpse_z = Some(0.0);
+        }
+
+        tick_pvp(&mut pvp, &mut world, &mut events);
+
+        let loser = world.get::<Health>(2).unwrap();
+        assert!(loser.alive);
+        assert_eq!(loser.hp, loser.hp_max);
+        let spirit = world.get::<Spirit>(2).unwrap();
+        assert_eq!(spirit.corpse_x, None);
+        assert_eq!(spirit.corpse_z, None);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            SimEvent::DuelEnded {
+                winner: 1,
+                loser: 2
+            }
+        )));
+    }
+
+    #[test]
     fn toggle_pvp_flips_flag() {
         let mut world = players_in_range();
         assert_eq!(toggle_pvp(&mut world, 1), Ok(true));
