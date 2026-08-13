@@ -8,6 +8,7 @@ pub mod context;
 pub mod corpse;
 pub mod death;
 pub mod delves;
+pub mod ecs;
 pub mod entity;
 pub mod entity_motion;
 pub mod host;
