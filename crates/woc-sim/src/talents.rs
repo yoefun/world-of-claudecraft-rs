@@ -148,10 +148,10 @@ mod tests {
             p.talent_points = 1;
         }
         let mut events = Vec::new();
-        assert!(learn(&mut world, 1, "warrior_vitality", &mut events));
+        assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
         assert_eq!(world.get::<Progress>(1).unwrap().talent_points, 0);
         assert_eq!(
-            world.get::<Progress>(1).unwrap().talents.get("warrior_vitality"),
+            world.get::<Progress>(1).unwrap().talents.get("warrior_cruelty"),
             Some(&1)
         );
     }
@@ -164,9 +164,10 @@ mod tests {
             p.talent_points = 6;
         }
         let mut events = Vec::new();
-        assert!(learn(&mut world, 1, "warrior_vitality", &mut events));
+        assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
+        assert!(learn(&mut world, 1, "warrior_cruelty", &mut events));
         assert!(respec(&mut world, 1, &mut events));
         assert!(world.get::<Progress>(1).unwrap().talents.is_empty());
-        assert!(world.get::<Progress>(1).unwrap().talent_points >= 1);
+        assert_eq!(world.get::<Progress>(1).unwrap().talent_points, 6);
     }
 }

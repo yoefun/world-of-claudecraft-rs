@@ -335,6 +335,9 @@ mod tests {
         if let Some(bags) = world.get_mut::<Bags>(1) {
             assert!(grant_into(&mut bags.inventory, "silverleaf", 1));
         }
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
         if let Some(p) = world.get_mut::<Progress>(2) {
             p.copper = 500;
         }

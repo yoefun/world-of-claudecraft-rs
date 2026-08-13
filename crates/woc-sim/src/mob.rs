@@ -227,11 +227,16 @@ mod tests {
             h.alive = false;
             h.hp = 0.0;
         }
+        // First tick arms the full respawn timer.
+        tick_mob_respawns(&mut world, DT);
+        assert!(!world.get::<Health>(2).unwrap().alive);
+        assert!(
+            world.get::<Respawn>(2).unwrap().respawn_timer > MOB_RESPAWN_SEC - 1.0
+        );
+        // Force expiry.
         if let Some(r) = world.get_mut::<Respawn>(2) {
             r.respawn_timer = DT;
         }
-        tick_mob_respawns(&mut world, DT);
-        assert!(!world.get::<Health>(2).unwrap().alive);
         tick_mob_respawns(&mut world, DT);
         assert!(world.get::<Health>(2).unwrap().alive);
         assert!(world.get::<Health>(2).unwrap().hp > 0.0);
@@ -249,23 +254,17 @@ mod tests {
     }
 
     #[test]
-    fn mob_leashes_home_when_player_far() {
+    fn mob_leashes_home_when_far_from_home() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(
-            &mut world,
-            1,
-            "Hero",
-            PlayerClass::Warrior,
-            LEASH_RANGE + 5.0,
-            0.0,
-        );
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 5.0, 0.0);
         crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
-        if let Some(t) = world.get_mut::<Transform>(2) {
-            t.x = 3.0;
-        }
         if let Some(h) = world.get_mut::<Home>(2) {
             h.home_x = 0.0;
             h.home_z = 0.0;
+        }
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = LEASH_RANGE + 5.0;
+            t.z = 0.0;
         }
         if let Some(c) = world.get_mut::<Combat>(2) {
             c.target = Some(1);

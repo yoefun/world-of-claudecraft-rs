@@ -297,8 +297,15 @@ mod tests {
     #[test]
     fn interact_gather_resolves_node_entity_template() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Herbalist", PlayerClass::Druid, 0.0, 0.0);
         let node = woc_content::gather_node("eastbrook_meadow_silverleaf").unwrap();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Herbalist",
+            PlayerClass::Druid,
+            node.x,
+            node.z,
+        );
         crate::ecs::spawn::create_gather_node(&mut world, 2, node);
         let mut events = Vec::new();
         assert!(handle_interact(

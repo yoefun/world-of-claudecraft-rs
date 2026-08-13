@@ -36,7 +36,10 @@ pub struct World {
 
 impl World {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            next_id: 1,
+            ..Self::default()
+        }
     }
 
     pub fn spawn(&mut self) -> EntityId {

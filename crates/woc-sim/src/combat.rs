@@ -916,6 +916,10 @@ mod tests {
     #[test]
     fn slot2_blocked_when_ability_unknown() {
         let mut world = player_and_mob();
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
         assert_eq!(world.get::<Health>(1).unwrap().level, 1);
         let start_hp = world.get::<Health>(2).unwrap().hp;
         let mut events = Vec::new();
