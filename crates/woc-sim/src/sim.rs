@@ -952,13 +952,6 @@ mod tests {
     }
 
     #[test]
-    fn no_fat_entity_struct() {
-        // Compile-time: Entity live-state is gone. This test exists so a revert
-        // reintroducing crate::entity::Entity as Sim storage fails review, not CI.
-        let _ = std::mem::size_of::<crate::ecs::World>();
-    }
-
-    #[test]
     fn catalog_sparsity_by_kind() {
         let sim = Sim::new_eastbrook("Sparse", woc_content::PlayerClass::Warrior);
         for id in sim.world.live_ids() {

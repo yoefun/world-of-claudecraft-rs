@@ -1,6 +1,24 @@
 //! Deterministic World of ClaudeCraft sim (framework slice).
 //!
 //! Host-agnostic: no Bevy, no networking, no wall clock.
+//!
+//! # The fat `Entity` is gone
+//!
+//! Actor state lives in the typed sparse columns of [`ecs::World`], never in a
+//! single blob struct. Reintroducing `woc_sim::entity::Entity` breaks the
+//! following doctest, which passes only while that path does not resolve:
+//!
+//! ```compile_fail
+//! let _ = std::mem::size_of::<woc_sim::entity::Entity>();
+//! ```
+//!
+//! A `compile_fail` doctest passes on *any* compile error, so this companion
+//! proves the crate path resolves and the harness is really compiling code —
+//! without it, a renamed crate would make the guard above pass vacuously.
+//!
+//! ```
+//! let _ = std::mem::size_of::<woc_sim::ecs::components::Identity>();
+//! ```
 
 pub mod bank;
 pub mod combat;
