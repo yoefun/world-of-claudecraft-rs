@@ -41,6 +41,7 @@ pub const TICK_PHASES: &[&str] = &[
     "kill_rewards",
     "pvp_and_market",
     "loot_pickup",
+    "profession_casts",
     "build_snapshot",
 ];
 

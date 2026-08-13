@@ -213,6 +213,9 @@ impl WorldHost for Sim {
                     InteractAction::TrainProfession { .. }
                         | InteractAction::Gather { .. }
                         | InteractAction::Craft { .. }
+                        | InteractAction::Skin { .. }
+                        | InteractAction::Disenchant { .. }
+                        | InteractAction::ApplyEnchant { .. }
                 ) =>
             {
                 let _ = professions::handle_interact(
@@ -220,6 +223,8 @@ impl WorldHost for Sim {
                     player_id,
                     target_id,
                     other,
+                    self.tick,
+                    &mut self.rng,
                     &mut self.events,
                 );
             }

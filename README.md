@@ -36,8 +36,8 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 | `woc-version` | Embeds rewrite + upstream pin constants |
 | `woc-content` | Data tables (classes, items, mobs, NPCs, quests) |
 | `woc-protocol` | Intents, snapshots, events, `WorldHost`, WS msgs |
-| `woc-sim` | Deterministic game core (no Bevy) |
-| `woc-manufacturing` | Standalone manufacturing/professions prototype (v1) |
+| `woc-sim` | Deterministic game core (no Bevy); live professions ECS |
+| `woc-manufacturing` | Typed professions oracle (not on the sim tick loop) |
 | `woc-client` | Bevy offline + online host |
 | `woc-server` | HTTP + WebSocket sim host |
 | `woc-update` | Pack, delta, and apply signed client updates ([runbook](docs/client-update.md)) |
@@ -109,13 +109,16 @@ Online play persists characters (enter injects save; disconnect autosaves) and r
 MIT — see [`LICENSE`](LICENSE). Upstream project is also MIT.
 
 
-## Manufacturing prototype
+## Manufacturing
 
-Standalone deterministic professions crate (`woc-manufacturing`): gathering, forging, skinning, leatherworking, tailoring, jewelcrafting, enchanting, engineering, and alchemy.
+Live path is `woc-sim` professions (ECS): gathering, blacksmithing, skinning, leatherworking, tailoring, jewelcrafting, enchanting, engineering, and alchemy. Content lives in `woc-content`; denials are `ProfessionDeny` ids.
+
+`woc-manufacturing` remains the typed oracle crate and is not wired into `Sim::tick_all`.
 
 - Design: `docs/superpowers/specs/2026-08-13-manufacturing-system-design.md`
-- Plan: `docs/superpowers/plans/2026-08-13-manufacturing-system.md`
+- ECS wiring: `docs/superpowers/specs/2026-08-13-manufacturing-ecs-design.md`
 
 ```sh
+cargo test -p woc-sim --lib professions
 cargo test -p woc-manufacturing
 ```

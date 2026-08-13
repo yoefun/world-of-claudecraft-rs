@@ -29,6 +29,8 @@ pub enum ItemEquipSlot {
     Feet,
     Neck,
     Finger,
+    /// Reserved for future bracers; v1 ships no wrist gear.
+    Wrist,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +96,27 @@ pub static ENCHANTS: &[EnchantDef] = &[
         attack_power: 0.0,
         stamina: 0.0,
         spell_power: 6.0,
+    },
+    EnchantDef {
+        id: "weapon_minor_might",
+        name: "Weapon Minor Might",
+        attack_power: 2.0,
+        stamina: 0.0,
+        spell_power: 0.0,
+    },
+    EnchantDef {
+        id: "chest_minor_stamina",
+        name: "Chest Minor Stamina",
+        attack_power: 0.0,
+        stamina: 3.0,
+        spell_power: 0.0,
+    },
+    EnchantDef {
+        id: "bracer_minor_health",
+        name: "Bracer Minor Health",
+        attack_power: 0.0,
+        stamina: 2.0,
+        spell_power: 0.0,
     },
 ];
 
@@ -390,13 +413,36 @@ const fn consumable(
 }
 
 const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell: u32) -> ItemDef {
+    valued_misc(id, name, kind, vendor_sell, 0, 20)
+}
+
+const fn gathered(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
+    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 20)
+}
+
+const fn vendor_mat(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
+    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 20)
+}
+
+const fn tool(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
+    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 1)
+}
+
+const fn valued_misc(
+    id: &'static str,
+    name: &'static str,
+    kind: ItemKind,
+    vendor_sell: u32,
+    vendor_buy: u32,
+    stack_size: u32,
+) -> ItemDef {
     ItemDef {
         id,
         name,
         kind,
-        stack_size: 20,
+        stack_size,
         max_durability: 0,
-        vendor_buy: 0,
+        vendor_buy,
         vendor_sell,
         attack_power: 0.0,
         armor: 0.0,
@@ -548,28 +594,116 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         ),
         ItemQuality::Uncommon,
     ),
-    // Profession reagents (herbalism gather yields).
-    misc("silverleaf", "Silverleaf", ItemKind::Junk, 1),
-    misc("peacebloom", "Peacebloom", ItemKind::Junk, 1),
-    misc("briarroot", "Briarroot", ItemKind::Junk, 2),
+    // Profession reagents (herbalism / mining / skinning yields).
+    gathered("silverleaf", "Silverleaf", 5),
+    gathered("fine_silverleaf", "Fine Silverleaf", 12),
+    gathered("peacebloom", "Peacebloom", 5),
+    gathered("briarroot", "Briarroot", 6),
+    gathered("earthroot", "Earthroot", 6),
+    gathered("fine_earthroot", "Fine Earthroot", 14),
+    gathered("copper_ore", "Copper Ore", 5),
+    gathered("fine_copper_ore", "Fine Copper Ore", 12),
+    gathered("coarse_stone", "Coarse Stone", 2),
+    gathered("light_leather", "Light Leather", 8),
+    gathered("fine_light_leather", "Fine Light Leather", 18),
     // Alchemy craft products.
     consumable("minor_healing_salve", "Minor Healing Salve", 8, 2, 55.0),
     consumable("briar_tonic", "Briar Tonic", 10, 3, 35.0),
-    // Mining / blacksmithing.
-    misc("copper_ore", "Copper Ore", ItemKind::Junk, 1),
-    misc("copper_bar", "Copper Bar", ItemKind::Junk, 2),
+    consumable("minor_healing_potion", "Minor Healing Potion", 0, 12, 80.0),
+    consumable("elixir_of_minor_strength", "Elixir of Minor Strength", 0, 14, 0.0),
+    // Mining / blacksmithing / manufacturing products.
+    misc("copper_bar", "Copper Bar", ItemKind::Junk, 8),
+    vendor_mat("smithing_flux", "Smithing Flux", 4),
+    tool("copper_pick", "Copper Pick", 20),
+    tool("copper_sickle", "Copper Sickle", 20),
+    tool("skinning_knife", "Skinning Knife", 15),
     with_quality(
         weapon(
             "copper_shortsword",
             "Copper Shortsword",
             48,
-            12,
+            28,
             11.0,
             WeaponStyle::OneHand,
             WAR_PAL_ROGUE,
         ),
         ItemQuality::Uncommon,
     ),
+    armor(
+        "copper_chain_vest",
+        "Copper Chain Vest",
+        ItemEquipSlot::Chest,
+        0,
+        40,
+        22.0,
+        1,
+        ArmorClass::Mail,
+    ),
+    misc("cured_light_leather", "Cured Light Leather", ItemKind::Junk, 10),
+    armor(
+        "light_leather_jerkin",
+        "Light Leather Jerkin",
+        ItemEquipSlot::Chest,
+        0,
+        36,
+        12.0,
+        1,
+        ArmorClass::Leather,
+    ),
+    armor(
+        "light_leather_belt",
+        "Light Leather Belt",
+        ItemEquipSlot::Legs,
+        0,
+        16,
+        6.0,
+        1,
+        ArmorClass::Leather,
+    ),
+    vendor_mat("spool_of_thread", "Spool of Thread", 3),
+    vendor_mat("empty_vial", "Empty Vial", 2),
+    vendor_mat("linen_cloth", "Linen Cloth", 4),
+    misc("bolt_of_linen", "Bolt of Linen", ItemKind::Junk, 6),
+    armor(
+        "linen_trousers",
+        "Linen Trousers",
+        ItemEquipSlot::Legs,
+        0,
+        40,
+        8.0,
+        1,
+        ArmorClass::Cloth,
+    ),
+    armor(
+        "linen_vestments",
+        "Linen Vestments",
+        ItemEquipSlot::Chest,
+        0,
+        50,
+        10.0,
+        1,
+        ArmorClass::Cloth,
+    ),
+    misc("tigerseye", "Tigerseye", ItemKind::Junk, 15),
+    misc("copper_setting", "Copper Setting", ItemKind::Junk, 6),
+    jewelry(
+        "tigerseye_band",
+        "Tigerseye Band",
+        ItemEquipSlot::Finger,
+        0,
+        18,
+        1.0,
+        0.0,
+        0.0,
+        1,
+        &[],
+    ),
+    misc("rough_blasting_powder", "Rough Blasting Powder", ItemKind::Junk, 3),
+    misc("copper_bolt", "Copper Bolt", ItemKind::Junk, 3),
+    misc("copper_grenade", "Copper Grenade", ItemKind::Junk, 8),
+    misc("arcane_dust", "Arcane Dust", ItemKind::Junk, 6),
+    misc("arcane_essence", "Arcane Essence", ItemKind::Junk, 20),
+    misc("arcane_shard", "Arcane Shard", ItemKind::Junk, 80),
     with_quality(
         jewelry(
             "fang_pendant",
@@ -628,6 +762,52 @@ pub static ITEMS: LazyLock<&'static [ItemDef]> = LazyLock::new(|| {
 
 pub fn item(id: &str) -> Option<&'static ItemDef> {
     ITEMS.iter().find(|i| i.id == id)
+}
+
+pub fn reagent_unit_value(def: &ItemDef) -> u32 {
+    if def.vendor_buy > 0 {
+        def.vendor_buy
+    } else {
+        def.vendor_sell
+    }
+}
+
+pub fn item_is_gathered(id: &str) -> bool {
+    matches!(
+        id,
+        "copper_ore"
+            | "fine_copper_ore"
+            | "coarse_stone"
+            | "silverleaf"
+            | "fine_silverleaf"
+            | "peacebloom"
+            | "briarroot"
+            | "earthroot"
+            | "fine_earthroot"
+            | "light_leather"
+            | "fine_light_leather"
+    )
+}
+
+/// Fine materials substitute downward for the matching base reagent.
+pub fn fine_substitute_for(base_item_id: &str) -> Option<&'static str> {
+    match base_item_id {
+        "copper_ore" => Some("fine_copper_ore"),
+        "silverleaf" => Some("fine_silverleaf"),
+        "earthroot" => Some("fine_earthroot"),
+        "light_leather" => Some("fine_light_leather"),
+        _ => None,
+    }
+}
+
+pub fn base_of(item_id: &str) -> &str {
+    match item_id {
+        "fine_copper_ore" => "copper_ore",
+        "fine_silverleaf" => "silverleaf",
+        "fine_earthroot" => "earthroot",
+        "fine_light_leather" => "light_leather",
+        other => other,
+    }
 }
 
 #[cfg(test)]

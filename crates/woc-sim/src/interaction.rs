@@ -32,6 +32,7 @@ fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
         ItemEquipSlot::Feet => EquipSlot::Feet,
         ItemEquipSlot::Neck => EquipSlot::Neck,
         ItemEquipSlot::Finger => EquipSlot::Finger,
+        ItemEquipSlot::Wrist => EquipSlot::Finger,
     }
 }
 
