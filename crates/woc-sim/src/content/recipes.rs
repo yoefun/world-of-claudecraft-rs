@@ -257,6 +257,55 @@ pub const RECIPES: &[RecipeDef] = &[
         item_level_budget: 1,
         station: Some(StationType::Apothecary),
     },
+    RecipeDef {
+        id: RecipeId::RoughBlastingPowder,
+        profession: ProfessionId::Engineering,
+        result: ItemId::RoughBlastingPowder,
+        result_count: 1,
+        reagents: &[Reagent {
+            item: ItemId::CoarseStone,
+            count: 2,
+        }],
+        skill_req: 0,
+        item_level_budget: 1,
+        station: None,
+    },
+    RecipeDef {
+        id: RecipeId::CopperBolt,
+        profession: ProfessionId::Engineering,
+        result: ItemId::CopperBolt,
+        result_count: 2,
+        reagents: &[Reagent {
+            item: ItemId::CopperBar,
+            count: 1,
+        }],
+        skill_req: 0,
+        item_level_budget: 2,
+        station: Some(StationType::Toolworks),
+    },
+    RecipeDef {
+        id: RecipeId::CopperGrenade,
+        profession: ProfessionId::Engineering,
+        result: ItemId::CopperGrenade,
+        result_count: 2,
+        reagents: &[
+            Reagent {
+                item: ItemId::CopperBar,
+                count: 1,
+            },
+            Reagent {
+                item: ItemId::RoughBlastingPowder,
+                count: 2,
+            },
+            Reagent {
+                item: ItemId::CopperBolt,
+                count: 1,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 6,
+        station: Some(StationType::Toolworks),
+    },
 ];
 
 pub fn recipe_by_id(id: RecipeId) -> Option<&'static RecipeDef> {
@@ -360,6 +409,40 @@ mod tests {
 
     fn apothecary_pos() -> Vec2 {
         Vec2 { x: 7.0, z: 660.0 }
+    }
+
+    fn toolworks_pos() -> Vec2 {
+        Vec2 { x: 30.0, z: 10.0 }
+    }
+
+    fn inv_with_coarse_stone() -> Inventory {
+        let mut inv = Inventory::with_capacity(4);
+        inv.try_add(ItemStack {
+            item: ItemId::CoarseStone,
+            count: 2,
+        })
+        .unwrap();
+        inv
+    }
+
+    fn inv_with_grenade_reagents() -> Inventory {
+        let mut inv = Inventory::with_capacity(8);
+        inv.try_add(ItemStack {
+            item: ItemId::CopperBar,
+            count: 1,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::RoughBlastingPowder,
+            count: 2,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::CopperBolt,
+            count: 1,
+        })
+        .unwrap();
+        inv
     }
 
     fn inv_with_healing_potion_reagents() -> Inventory {
@@ -740,6 +823,95 @@ mod tests {
         assert_eq!(inv.count(ItemId::Silverleaf), 0);
         assert_eq!(inv.count(ItemId::EmptyVial), 0);
         assert_eq!(skills.get(ProfessionId::Alchemy), 2);
+    }
+
+    #[test]
+    fn blasting_powder_is_field_craftable() {
+        let mut inv = inv_with_coarse_stone();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::RoughBlastingPowder,
+            1,
+            field_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::RoughBlastingPowder,
+            1,
+            field_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::RoughBlastingPowder), 1);
+        assert_eq!(inv.count(ItemId::CoarseStone), 0);
+        assert_eq!(skills.get(ProfessionId::Engineering), 2);
+    }
+
+    #[test]
+    fn grenade_requires_toolworks_and_consumes_bolts() {
+        let inv = inv_with_grenade_reagents();
+        let gold = Gold { copper: 100 };
+        let err = evaluate_craft_admission(
+            RecipeId::CopperGrenade,
+            1,
+            forge_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err, DenyReason::StationRequired);
+
+        let mut inv = inv_with_grenade_reagents();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::CopperGrenade,
+            1,
+            toolworks_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::CopperGrenade,
+            1,
+            toolworks_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::CopperGrenade), 2);
+        assert_eq!(inv.count(ItemId::CopperBar), 0);
+        assert_eq!(inv.count(ItemId::RoughBlastingPowder), 0);
+        assert_eq!(inv.count(ItemId::CopperBolt), 0);
+        assert_eq!(skills.get(ProfessionId::Engineering), 2);
     }
 
     #[test]
