@@ -1,8 +1,24 @@
 # Parity status
 
 **Current rewrite:** `1.13.0` / `gear-slots`.  
+**Next:** `1.14.0` / `parcel-bank` (planned) — [`../superpowers/specs/2026-08-13-parcel-bank-design.md`](../superpowers/specs/2026-08-13-parcel-bank-design.md).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+
+## Parcel and bank (`parcel-bank`) — planned
+
+Design: [`../superpowers/specs/2026-08-13-parcel-bank-design.md`](../superpowers/specs/2026-08-13-parcel-bank-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-parcel-bank.md`](../superpowers/plans/2026-08-13-parcel-bank.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Slot-accurate stack moves | planned | `take_from_slot` / `put_stack`; keep wear + enchant |
+| Bank any non-quest stack | planned | Client **G** is junk-only today |
+| Repair includes warehouse | planned | `repair_cost` sums `Bank.bank` |
+| Offline parcels | planned | `CharacterDirectory` on `Sim`; realm-boot load |
+| Client send / numbered collect / return | planned | **S**/**Y**/**1–9**/**X**; compose field |
+| Postage / inbox cap / expiry | planned | 1c, 20, 24h ticks; system mail uncapped |
+| AH instance fields | planned | Listing durability/enchant on persist |
 
 ## Gear slots (`gear-slots`) — done
 

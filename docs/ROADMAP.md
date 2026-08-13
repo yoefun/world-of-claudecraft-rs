@@ -20,7 +20,8 @@
 | **1.10.0** (shipped) | `quest-depth` | Abandon, party share, daily reset, explore/escort objectives, choice rewards |
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
-| **1.13.0** (this branch) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
+| **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
+| **1.14.0** (this branch) | `parcel-bank` | Instance-preserving bank/mail, offline parcels, client send |
 
 ## Completion program (closed)
 
@@ -50,6 +51,13 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-slots.md`](superpowers/plans/2026-08-13-gear-slots.md)
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
+
+## Parcel and bank (planned as `1.14.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-parcel-bank-design.md`](superpowers/specs/2026-08-13-parcel-bank-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-parcel-bank.md`](superpowers/plans/2026-08-13-parcel-bank.md)
+
+Bank deposit/withdraw and mail attach/collect still mint a new stack (full durability, no enchant). The client can collect mail but never send, and bank **G** only deposits junk. This program keeps HUD **K**/**I** (no banker NPC) and makes warehouse + parcels instance-correct and offline-capable. Protocol rev stays **8**. Rewrite target **1.14.0** / `parcel-bank`.
 
 ## Client version gate (current)
 
