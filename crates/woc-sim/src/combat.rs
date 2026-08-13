@@ -1375,6 +1375,28 @@ pub fn spawn_mob_loot(
     first
 }
 
+pub fn tick_loot_expiry(
+    world: &mut World,
+    tick: u64,
+    rules: &mut crate::social::LootRules,
+    events: &mut Vec<SimEvent>,
+) {
+    let ids = world.ids::<LootPile>();
+    for id in ids {
+        let Some(pile) = world.get::<LootPile>(id) else {
+            continue;
+        };
+        if pile.expires_tick == 0 || tick < pile.expires_tick {
+            continue;
+        }
+        rules.drop_pending(id);
+        world.despawn(id);
+        events.push(SimEvent::Toast {
+            message: "Loot expired.".into(),
+        });
+    }
+}
+
 pub fn try_pickup_loot(
     player_id: EntityId,
     world: &mut World,
@@ -3303,5 +3325,31 @@ mod tests {
             .filter_map(|id| world.get::<LootPile>(id).and_then(|p| p.item.clone()))
             .collect();
         assert_eq!(items, vec!["crypt_cleaver".to_string()]);
+    }
+
+    #[test]
+    fn kill_loot_expires_after_ttl() {
+        let mut world = World::new();
+        let lid = crate::ecs::spawn::create_loot_ex(
+            &mut world, 9, 0.0, 0.0, 3, Some("wolf_fang".into()), 1, 10, "eastbrook",
+        );
+        tick_loot_expiry(&mut world, 9, &mut crate::social::LootRules::default(), &mut Vec::new());
+        assert!(world.get::<LootPile>(lid).is_some());
+        tick_loot_expiry(&mut world, 10, &mut crate::social::LootRules::default(), &mut Vec::new());
+        assert!(world.get::<LootPile>(lid).is_none());
+    }
+
+    #[test]
+    fn gather_nodes_do_not_expire() {
+        let mut world = World::new();
+        crate::zones::spawn_gather_nodes(&mut world);
+        let ids: Vec<_> = world.ids::<LootPile>();
+        assert!(!ids.is_empty());
+        tick_loot_expiry(&mut world, 100_000, &mut crate::social::LootRules::default(), &mut Vec::new());
+        for id in ids {
+            if world.get::<Identity>(id).and_then(|i| i.template_id.as_deref()).and_then(woc_content::gather_node).is_some() {
+                assert!(world.get::<LootPile>(id).is_some());
+            }
+        }
     }
 }

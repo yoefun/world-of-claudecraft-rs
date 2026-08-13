@@ -17,8 +17,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::combat::{
-    collect_pending_mob_kills, grant_xp, spawn_mob_loot, tick_auras, try_pickup_loot,
-    update_mob_combat, update_player_combat,
+    collect_pending_mob_kills, grant_xp, spawn_mob_loot, tick_auras, tick_loot_expiry,
+    try_pickup_loot, update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
 use crate::ecs::components::{
@@ -589,6 +589,12 @@ impl Sim {
             .tick_expire(self.tick, &mut self.world, &mut self.mail);
 
         // Phase 8: loot_pickup
+        tick_loot_expiry(
+            &mut self.world,
+            self.tick,
+            &mut self.loot_rules,
+            &mut self.events,
+        );
         for &pid in &player_ids {
             try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
         }

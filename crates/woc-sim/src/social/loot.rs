@@ -71,6 +71,10 @@ impl LootRules {
         self.pending.iter().any(|p| p.loot_id == loot_id)
     }
 
+    pub fn drop_pending(&mut self, loot_id: EntityId) {
+        self.pending.retain(|p| p.loot_id != loot_id);
+    }
+
     /// Snapshot pending rolls relevant to `player` (eligible only).
     pub fn snapshot_for(&self, player: EntityId) -> Vec<PendingLootSnapshot> {
         self.pending
@@ -114,6 +118,9 @@ impl LootRules {
         let copper = pile.copper;
         let count = pile.count;
         if item_id.is_empty() && copper == 0 {
+            return;
+        }
+        if woc_content::item(&item_id).map(|d| d.kind) == Some(woc_content::ItemKind::Quest) {
             return;
         }
         let eligible = eligible_near_loot(parties, world, killer, loot_id);
@@ -345,6 +352,23 @@ mod tests {
         let snap = rules.snapshot_for(1);
         assert_eq!(snap.len(), 1);
         assert!(!snap[0].rolled);
+    }
+
+    #[test]
+    fn quest_item_skips_need_greed() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_loot(&mut world, 50, 0.5, 0.0, 4, Some("boar_tusk".into()));
+        let mut roster = PartyRoster::new();
+        roster.invite(1, "B", &world);
+        roster.accept(2, &world);
+        assert!(roster.set_loot_mode(1, LootMode::NeedGreed));
+        let mut rules = LootRules::default();
+        let mut events = Vec::new();
+        rules.maybe_start_party_roll(&roster, &world, 1, 50, &mut events);
+        assert!(rules.pending.is_empty());
+        assert!(!rules.is_pending(50));
     }
 
     #[test]
