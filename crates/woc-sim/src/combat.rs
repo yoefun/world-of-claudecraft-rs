@@ -14,7 +14,7 @@ use crate::types::{
 };
 use woc_content::{
     ability, aura_for_ability, class_ability_for_slot, item, mob, AbilityDef, AbilityEffect,
-    ResourceType,
+    ItemKind, ItemQuality, ResourceType,
 };
 use woc_protocol::{AbilitySlot, EntityId, EntityKind, EquipSlot, SimEvent, DT};
 
@@ -551,6 +551,13 @@ fn equipment_item_id(equipment: &Equipment, slot: EquipSlot) -> Option<&str> {
         EquipSlot::Neck => equipment.neck.as_deref(),
         EquipSlot::Finger => equipment.finger.as_deref(),
         EquipSlot::Finger2 => equipment.finger2.as_deref(),
+        EquipSlot::Shoulder => equipment.shoulder.as_deref(),
+        EquipSlot::Back => equipment.back.as_deref(),
+        EquipSlot::Wrist => equipment.wrist.as_deref(),
+        EquipSlot::Hands => equipment.hands.as_deref(),
+        EquipSlot::Waist => equipment.waist.as_deref(),
+        EquipSlot::Trinket => equipment.trinket.as_deref(),
+        EquipSlot::Trinket2 => equipment.trinket2.as_deref(),
     }
 }
 
@@ -562,7 +569,16 @@ fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> Option<
         EquipSlot::Chest => Some(&mut wear.chest),
         EquipSlot::Legs => Some(&mut wear.legs),
         EquipSlot::Feet => Some(&mut wear.feet),
-        EquipSlot::Neck | EquipSlot::Finger | EquipSlot::Finger2 => None,
+        EquipSlot::Shoulder => Some(&mut wear.shoulder),
+        EquipSlot::Back => Some(&mut wear.back),
+        EquipSlot::Wrist => Some(&mut wear.wrist),
+        EquipSlot::Hands => Some(&mut wear.hands),
+        EquipSlot::Waist => Some(&mut wear.waist),
+        EquipSlot::Neck
+        | EquipSlot::Finger
+        | EquipSlot::Finger2
+        | EquipSlot::Trinket
+        | EquipSlot::Trinket2 => None,
     }
 }
 
@@ -613,6 +629,11 @@ pub fn wear_player_armor(world: &mut World, player_id: EntityId, events: &mut Ve
         EquipSlot::Chest,
         EquipSlot::Legs,
         EquipSlot::Feet,
+        EquipSlot::Shoulder,
+        EquipSlot::Back,
+        EquipSlot::Wrist,
+        EquipSlot::Hands,
+        EquipSlot::Waist,
         EquipSlot::OffHand,
     ] {
         decrement_wear(world, player_id, slot, events);
@@ -1305,6 +1326,31 @@ pub fn grant_xp(world: &mut World, player_id: EntityId, amount: u32, events: &mu
     crate::quests::grant_xp_world(world, player_id, amount, events);
 }
 
+pub fn loot_quality_from_roll(r: f32, catalog: ItemQuality) -> ItemQuality {
+    let rolled = if r < 0.05 {
+        ItemQuality::Poor
+    } else if r < 0.70 {
+        ItemQuality::Common
+    } else if r < 0.92 {
+        ItemQuality::Uncommon
+    } else {
+        ItemQuality::Rare
+    };
+    catalog.max(rolled)
+}
+
+pub fn roll_loot_quality(rng: &mut Rng, catalog: ItemQuality) -> ItemQuality {
+    loot_quality_from_roll(rng.next_f32(), catalog)
+}
+
+fn loot_pile_quality(rng: &mut Rng, item_id: &str) -> Option<ItemQuality> {
+    let def = item(item_id)?;
+    if !matches!(def.kind, ItemKind::Weapon | ItemKind::Armor) {
+        return None;
+    }
+    Some(roll_loot_quality(rng, def.quality))
+}
+
 pub fn spawn_mob_loot(
     world: &mut World,
     rng: &mut Rng,
@@ -1334,7 +1380,10 @@ pub fn spawn_mob_loot(
     for (i, item_id) in dropped.into_iter().enumerate() {
         let id = world.next_id();
         let c = if i == 0 { copper } else { 0 };
-        crate::ecs::spawn::create_loot(world, id, x + i as f32 * 0.4, z, c, Some(item_id));
+        crate::ecs::spawn::create_loot(world, id, x + i as f32 * 0.4, z, c, Some(item_id.clone()));
+        if let Some(pile) = world.get_mut::<LootPile>(id) {
+            pile.quality = loot_pile_quality(rng, &item_id);
+        }
         if i == 0 {
             first = id;
         }
@@ -1512,6 +1561,19 @@ fn grant_loot_pile(
                 message: "Inventory full.".into(),
             });
             return false;
+        }
+        if let Some(q) = pile.quality {
+            if let Some(bags) = world.get_mut::<Bags>(player_id) {
+                if let Some(stack) = bags
+                    .inventory
+                    .iter_mut()
+                    .rev()
+                    .flatten()
+                    .find(|s| s.item_id == *it && s.quality.is_none())
+                {
+                    stack.quality = Some(q);
+                }
+            }
         }
         crate::quests::on_inventory_changed(world, player_id, events);
     }
@@ -3246,5 +3308,35 @@ mod tests {
             .filter_map(|id| world.get::<LootPile>(id).and_then(|p| p.item.clone()))
             .collect();
         assert_eq!(items, vec!["crypt_cleaver".to_string()]);
+    }
+
+    #[test]
+    fn loot_quality_roll_never_downgrades_and_can_upgrade() {
+        assert_eq!(
+            loot_quality_from_roll(0.01, ItemQuality::Rare),
+            ItemQuality::Rare
+        );
+        assert_eq!(
+            loot_quality_from_roll(0.80, ItemQuality::Common),
+            ItemQuality::Uncommon
+        );
+        assert_eq!(
+            loot_quality_from_roll(0.50, ItemQuality::Common),
+            ItemQuality::Common
+        );
+    }
+
+    #[test]
+    fn gear_loot_pile_carries_rolled_quality() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        spawn_mob_loot(&mut world, &mut rng, Some("crypt_warden"), 1.0, 1.0);
+        let pile = world
+            .ids::<LootPile>()
+            .into_iter()
+            .find_map(|id| world.get::<LootPile>(id).cloned())
+            .expect("cleaver pile");
+        assert_eq!(pile.item.as_deref(), Some("crypt_cleaver"));
+        assert_eq!(pile.quality, Some(ItemQuality::Rare));
     }
 }

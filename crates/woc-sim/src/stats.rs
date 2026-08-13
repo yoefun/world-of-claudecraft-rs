@@ -2,13 +2,16 @@
 
 use std::collections::HashMap;
 
-use crate::ecs::components::{Bags, ClassKit, Combat, Equipment, EquipmentWear, Health, Progress};
+use crate::ecs::components::{
+    Bags, ClassKit, Combat, Equipment, EquipmentQualities, EquipmentWear, Health, Progress,
+};
 use crate::ecs::World;
-use woc_content::{class_def, enchant, item, quality_mult, talent};
+use woc_content::{class_def, enchant, item, quality_mult, talent, ItemQuality};
 use woc_protocol::EntityId;
 
 fn add_gear_stats(
     item_id: &str,
+    instance_quality: Option<ItemQuality>,
     ap: &mut f32,
     armor: &mut f32,
     sta: &mut f32,
@@ -16,7 +19,7 @@ fn add_gear_stats(
     weapon_fraction: f32,
 ) {
     if let Some(it) = item(item_id) {
-        let q = quality_mult(it.quality);
+        let q = quality_mult(instance_quality.unwrap_or(it.quality));
         *ap += it.attack_power * q * weapon_fraction;
         *armor += it.armor * q;
         *sta += it.stamina * q;
@@ -54,16 +57,26 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
         return;
     };
     let def = class_def(class);
-    let (equipment, wear, mh_enchant) = world
+    let (equipment, wear, qualities, mh_enchant, oh_enchant) = world
         .get::<Bags>(player_id)
         .map(|b| {
             (
                 b.equipment.clone(),
                 b.equipment_wear.clone(),
+                b.equipment_qualities.clone(),
                 b.equipment_enchants.main_hand.clone(),
+                b.equipment_enchants.off_hand.clone(),
             )
         })
-        .unwrap_or_else(|| (Equipment::default(), EquipmentWear::default(), None));
+        .unwrap_or_else(|| {
+            (
+                Equipment::default(),
+                EquipmentWear::default(),
+                EquipmentQualities::default(),
+                None,
+                None,
+            )
+        });
     let talents = world
         .get::<Progress>(player_id)
         .map(|p| p.talents.clone())
@@ -77,46 +90,212 @@ pub fn recalc_player_stats(world: &mut World, player_id: EntityId) {
 
     if !slot_broken(wear.main_hand) {
         if let Some(ref wid) = equipment.main_hand {
-            add_gear_stats(wid, &mut ap, &mut armor, &mut sta, &mut sp, 1.0);
+            add_gear_stats(
+                wid,
+                qualities.main_hand,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                1.0,
+            );
         }
     }
     if !slot_broken(wear.off_hand) {
         if let Some(ref oid) = equipment.off_hand {
-            add_gear_stats(oid, &mut ap, &mut armor, &mut sta, &mut sp, 0.25);
+            add_gear_stats(
+                oid,
+                qualities.off_hand,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.25,
+            );
         }
     }
     if !slot_broken(wear.head) {
         if let Some(ref hid) = equipment.head {
-            add_gear_stats(hid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+            add_gear_stats(
+                hid,
+                qualities.head,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
         }
     }
     if !slot_broken(wear.chest) {
         if let Some(ref cid) = equipment.chest {
-            add_gear_stats(cid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+            add_gear_stats(
+                cid,
+                qualities.chest,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
         }
     }
     if !slot_broken(wear.legs) {
         if let Some(ref lid) = equipment.legs {
-            add_gear_stats(lid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+            add_gear_stats(
+                lid,
+                qualities.legs,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
         }
     }
     if !slot_broken(wear.feet) {
         if let Some(ref fid) = equipment.feet {
-            add_gear_stats(fid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+            add_gear_stats(
+                fid,
+                qualities.feet,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
+        }
+    }
+    if !slot_broken(wear.shoulder) {
+        if let Some(ref sid) = equipment.shoulder {
+            add_gear_stats(
+                sid,
+                qualities.shoulder,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
+        }
+    }
+    if !slot_broken(wear.back) {
+        if let Some(ref bid) = equipment.back {
+            add_gear_stats(
+                bid,
+                qualities.back,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
+        }
+    }
+    if !slot_broken(wear.wrist) {
+        if let Some(ref wid) = equipment.wrist {
+            add_gear_stats(
+                wid,
+                qualities.wrist,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
+        }
+    }
+    if !slot_broken(wear.hands) {
+        if let Some(ref hid) = equipment.hands {
+            add_gear_stats(
+                hid,
+                qualities.hands,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
+        }
+    }
+    if !slot_broken(wear.waist) {
+        if let Some(ref wid) = equipment.waist {
+            add_gear_stats(
+                wid,
+                qualities.waist,
+                &mut ap,
+                &mut armor,
+                &mut sta,
+                &mut sp,
+                0.0,
+            );
         }
     }
     // Jewelry: no durability wear columns; always apply when equipped.
     if let Some(ref nid) = equipment.neck {
-        add_gear_stats(nid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        add_gear_stats(
+            nid,
+            qualities.neck,
+            &mut ap,
+            &mut armor,
+            &mut sta,
+            &mut sp,
+            0.0,
+        );
     }
     if let Some(ref rid) = equipment.finger {
-        add_gear_stats(rid, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        add_gear_stats(
+            rid,
+            qualities.finger,
+            &mut ap,
+            &mut armor,
+            &mut sta,
+            &mut sp,
+            0.0,
+        );
     }
     if let Some(ref r2) = equipment.finger2 {
-        add_gear_stats(r2, &mut ap, &mut armor, &mut sta, &mut sp, 0.0);
+        add_gear_stats(
+            r2,
+            qualities.finger2,
+            &mut ap,
+            &mut armor,
+            &mut sta,
+            &mut sp,
+            0.0,
+        );
+    }
+    if let Some(ref tid) = equipment.trinket {
+        add_gear_stats(
+            tid,
+            qualities.trinket,
+            &mut ap,
+            &mut armor,
+            &mut sta,
+            &mut sp,
+            0.0,
+        );
+    }
+    if let Some(ref t2) = equipment.trinket2 {
+        add_gear_stats(
+            t2,
+            qualities.trinket2,
+            &mut ap,
+            &mut armor,
+            &mut sta,
+            &mut sp,
+            0.0,
+        );
     }
     if !slot_broken(wear.main_hand) {
         if let Some(ench) = mh_enchant.as_deref().and_then(enchant) {
+            ap += ench.attack_power;
+            sta += ench.stamina;
+            sp += ench.spell_power;
+        }
+    }
+    if !slot_broken(wear.off_hand) {
+        if let Some(ench) = oh_enchant.as_deref().and_then(enchant) {
             ap += ench.attack_power;
             sta += ench.stamina;
             sp += ench.spell_power;
@@ -255,6 +434,79 @@ mod tests {
         assert!(
             (broken - broken_no_enchant).abs() < 0.01,
             "broken MH must not receive enchant AP"
+        );
+    }
+
+    #[test]
+    fn off_hand_enchant_adds_full_attack_power() {
+        use crate::ecs::components::Combat;
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.off_hand = Some("worn_sword".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let base = world.get::<Combat>(1).unwrap().attack_damage;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_enchants.off_hand = Some("coarse_sharpening".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let enchanted = world.get::<Combat>(1).unwrap().attack_damage;
+        assert!(
+            (enchanted - base - 6.0).abs() < 0.01,
+            "expected +6 AP from OH enchant at full value, got base {base} with {enchanted}"
+        );
+    }
+
+    #[test]
+    fn cloak_and_pebble_add_armor_and_stamina() {
+        use crate::ecs::components::{Combat, Health};
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        recalc_player_stats(&mut world, 1);
+        let base_armor = world.get::<Combat>(1).unwrap().armor;
+        let base_hp = world.get::<Health>(1).unwrap().hp_max;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.back = Some("wool_cloak".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let with_cloak = world.get::<Combat>(1).unwrap().armor;
+        assert!(
+            (with_cloak - base_armor - 3.3).abs() < 0.01,
+            "cloak armor 3 * uncommon 1.1, got base {base_armor} with {with_cloak}"
+        );
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.back = None;
+            bags.equipment.trinket = Some("lucky_pebble".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let with_pebble = world.get::<Health>(1).unwrap().hp_max;
+        assert!(
+            (with_pebble - base_hp - 4.0).abs() < 0.01,
+            "pebble sta 2 * 2 HP, got base {base_hp} with {with_pebble}"
+        );
+    }
+
+    #[test]
+    fn instance_quality_overrides_catalog() {
+        use crate::ecs::components::Combat;
+        use woc_content::ItemQuality;
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        recalc_player_stats(&mut world, 1);
+        let common = world.get::<Combat>(1).unwrap().attack_damage;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_qualities.main_hand = Some(ItemQuality::Rare);
+        }
+        recalc_player_stats(&mut world, 1);
+        let rare = world.get::<Combat>(1).unwrap().attack_damage;
+        // worn_sword AP 8: rare 9.6 vs common 8.0 = +1.6
+        assert!(
+            (rare - common - 1.6).abs() < 0.01,
+            "expected rare instance quality +1.6 AP, got common {common} rare {rare}"
         );
     }
 

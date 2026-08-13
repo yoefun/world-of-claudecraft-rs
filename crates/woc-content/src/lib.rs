@@ -127,7 +127,7 @@ mod tests {
                         assert!(it.armor_class.is_none(), "{}", it.id);
                     } else if matches!(
                         it.equip_slot,
-                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger)
+                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger | ItemEquipSlot::Trinket)
                     ) {
                         assert!(style.is_none(), "{}", it.id);
                         assert!(it.armor_class.is_none(), "{}", it.id);
@@ -1156,7 +1156,10 @@ mod tests {
                 recipe.id
             );
             if let Some(station_id) = recipe.station {
-                assert!(station(station_id).is_some(), "missing station {station_id}");
+                assert!(
+                    station(station_id).is_some(),
+                    "missing station {station_id}"
+                );
             }
         }
     }
@@ -1195,6 +1198,9 @@ mod tests {
         assert_eq!(PROFESSION_ENCHANTS.len(), 3);
         assert!(profession_enchant("weapon_minor_might").is_some());
         assert!(enchant("weapon_minor_might").is_some());
-        assert_eq!(disenchant_yield("copper_shortsword")[0].item_id, "arcane_dust");
+        assert_eq!(
+            disenchant_yield("copper_shortsword")[0].item_id,
+            "arcane_dust"
+        );
     }
 }

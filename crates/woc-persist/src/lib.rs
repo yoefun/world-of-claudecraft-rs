@@ -211,6 +211,7 @@ mod serialize_tests {
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
         assert!(eq.off_hand_enchant.is_none());
+        assert!(eq.back.is_none());
     }
 
     #[test]
@@ -221,6 +222,7 @@ mod serialize_tests {
                 count: 3,
                 durability: None,
                 enchant_id: None,
+                quality: None,
             }),
             None,
         ];

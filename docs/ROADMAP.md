@@ -21,7 +21,8 @@
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
 | **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
-| **1.14.0** (this branch) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
+| **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
+| **1.15.0** (this branch) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
 
 ## Completion program (closed)
 
@@ -57,6 +58,13 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-slots.md`](superpowers/plans/2026-08-13-gear-slots.md)
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
+
+## Gear more (shipped as `1.15.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-more-design.md`](superpowers/specs/2026-08-13-gear-more-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
+
+Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
 
 ## Client version gate (current)
 

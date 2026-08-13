@@ -29,8 +29,12 @@ pub enum ItemEquipSlot {
     Feet,
     Neck,
     Finger,
-    /// Reserved for future bracers; v1 ships no wrist gear.
+    Shoulder,
+    Back,
     Wrist,
+    Hands,
+    Waist,
+    Trinket,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,7 +55,7 @@ pub enum WeaponStyle {
     Shield,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemQuality {
     Poor,
@@ -69,8 +73,32 @@ pub fn quality_mult(q: ItemQuality) -> f32 {
     }
 }
 
+impl ItemQuality {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Poor => "poor",
+            Self::Common => "common",
+            Self::Uncommon => "uncommon",
+            Self::Rare => "rare",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "poor" => Some(Self::Poor),
+            "common" => Some(Self::Common),
+            "uncommon" => Some(Self::Uncommon),
+            "rare" => Some(Self::Rare),
+            _ => None,
+        }
+    }
+}
+
 pub fn can_dual_wield(class: PlayerClass) -> bool {
-    matches!(class, PlayerClass::Warrior | PlayerClass::Rogue)
+    matches!(
+        class,
+        PlayerClass::Warrior | PlayerClass::Rogue | PlayerClass::Hunter
+    )
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -213,10 +241,12 @@ const CASTERS: &[PlayerClass] = &[
     PlayerClass::Druid,
 ];
 const WAR_PAL: &[PlayerClass] = &[PlayerClass::Warrior, PlayerClass::Paladin];
-const WAR_PAL_ROGUE: &[PlayerClass] = &[
+const WAR_HUN: &[PlayerClass] = &[PlayerClass::Warrior, PlayerClass::Hunter];
+const WAR_PAL_ROGUE_HUN: &[PlayerClass] = &[
     PlayerClass::Warrior,
     PlayerClass::Paladin,
     PlayerClass::Rogue,
+    PlayerClass::Hunter,
 ];
 const WAR_PAL_SHA: &[PlayerClass] = &[
     PlayerClass::Warrior,
@@ -417,15 +447,36 @@ const fn misc(id: &'static str, name: &'static str, kind: ItemKind, vendor_sell:
 }
 
 const fn gathered(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
-    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 20)
+    valued_misc(
+        id,
+        name,
+        ItemKind::Junk,
+        vendor_sell,
+        vendor_sell.saturating_mul(4),
+        20,
+    )
 }
 
 const fn vendor_mat(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
-    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 20)
+    valued_misc(
+        id,
+        name,
+        ItemKind::Junk,
+        vendor_sell,
+        vendor_sell.saturating_mul(4),
+        20,
+    )
 }
 
 const fn tool(id: &'static str, name: &'static str, vendor_sell: u32) -> ItemDef {
-    valued_misc(id, name, ItemKind::Junk, vendor_sell, vendor_sell.saturating_mul(4), 1)
+    valued_misc(
+        id,
+        name,
+        ItemKind::Junk,
+        vendor_sell,
+        vendor_sell.saturating_mul(4),
+        1,
+    )
 }
 
 const fn valued_misc(
@@ -493,6 +544,15 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         7.0,
         WeaponStyle::Ranged,
         HUNTER,
+    ),
+    weapon(
+        "worn_hatchet",
+        "Worn Hatchet",
+        18,
+        5,
+        7.0,
+        WeaponStyle::OneHand,
+        WAR_HUN,
     ),
     weapon(
         "worn_dagger",
@@ -563,6 +623,74 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         ArmorClass::Cloth,
     ),
     shield("wooden_buckler", "Wooden Buckler", 16, 4, 8.0, WAR_PAL_SHA),
+    armor(
+        "padded_shoulders",
+        "Padded Shoulders",
+        ItemEquipSlot::Shoulder,
+        14,
+        4,
+        4.0,
+        1,
+        ArmorClass::Cloth,
+    ),
+    with_quality(
+        armor(
+            "wool_cloak",
+            "Wool Cloak",
+            ItemEquipSlot::Back,
+            22,
+            6,
+            3.0,
+            1,
+            ArmorClass::Cloth,
+        ),
+        ItemQuality::Uncommon,
+    ),
+    armor(
+        "frayed_cuffs",
+        "Frayed Cuffs",
+        ItemEquipSlot::Wrist,
+        8,
+        2,
+        2.0,
+        1,
+        ArmorClass::Cloth,
+    ),
+    with_quality(
+        armor(
+            "work_gloves",
+            "Work Gloves",
+            ItemEquipSlot::Hands,
+            18,
+            5,
+            3.0,
+            1,
+            ArmorClass::Leather,
+        ),
+        ItemQuality::Uncommon,
+    ),
+    armor(
+        "frayed_belt",
+        "Frayed Belt",
+        ItemEquipSlot::Waist,
+        8,
+        2,
+        2.0,
+        1,
+        ArmorClass::Cloth,
+    ),
+    jewelry(
+        "lucky_pebble",
+        "Lucky Pebble",
+        ItemEquipSlot::Trinket,
+        12,
+        3,
+        2.0,
+        0.0,
+        0.0,
+        1,
+        &[],
+    ),
     with_quality(
         armor(
             "veteran_helm",
@@ -610,7 +738,13 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
     consumable("minor_healing_salve", "Minor Healing Salve", 8, 2, 55.0),
     consumable("briar_tonic", "Briar Tonic", 10, 3, 35.0),
     consumable("minor_healing_potion", "Minor Healing Potion", 0, 12, 80.0),
-    consumable("elixir_of_minor_strength", "Elixir of Minor Strength", 0, 14, 0.0),
+    consumable(
+        "elixir_of_minor_strength",
+        "Elixir of Minor Strength",
+        0,
+        14,
+        0.0,
+    ),
     // Mining / blacksmithing / manufacturing products.
     misc("copper_bar", "Copper Bar", ItemKind::Junk, 8),
     vendor_mat("smithing_flux", "Smithing Flux", 4),
@@ -625,7 +759,7 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
             28,
             11.0,
             WeaponStyle::OneHand,
-            WAR_PAL_ROGUE,
+            WAR_PAL_ROGUE_HUN,
         ),
         ItemQuality::Uncommon,
     ),
@@ -639,7 +773,12 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         1,
         ArmorClass::Mail,
     ),
-    misc("cured_light_leather", "Cured Light Leather", ItemKind::Junk, 10),
+    misc(
+        "cured_light_leather",
+        "Cured Light Leather",
+        ItemKind::Junk,
+        10,
+    ),
     armor(
         "light_leather_jerkin",
         "Light Leather Jerkin",
@@ -698,7 +837,12 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
         1,
         &[],
     ),
-    misc("rough_blasting_powder", "Rough Blasting Powder", ItemKind::Junk, 3),
+    misc(
+        "rough_blasting_powder",
+        "Rough Blasting Powder",
+        ItemKind::Junk,
+        3,
+    ),
     misc("copper_bolt", "Copper Bolt", ItemKind::Junk, 3),
     misc("copper_grenade", "Copper Grenade", ItemKind::Junk, 8),
     misc("arcane_dust", "Arcane Dust", ItemKind::Junk, 6),
@@ -867,8 +1011,28 @@ mod tests {
     fn dual_wield_classes() {
         assert!(can_dual_wield(PlayerClass::Warrior));
         assert!(can_dual_wield(PlayerClass::Rogue));
+        assert!(can_dual_wield(PlayerClass::Hunter));
         assert!(!can_dual_wield(PlayerClass::Mage));
-        assert!(!can_dual_wield(PlayerClass::Hunter));
+        assert!(!can_dual_wield(PlayerClass::Shaman));
+    }
+
+    #[test]
+    fn extra_slots_and_hatchet_exist() {
+        assert_eq!(
+            item("wool_cloak").unwrap().equip_slot,
+            Some(ItemEquipSlot::Back)
+        );
+        assert_eq!(
+            item("lucky_pebble").unwrap().equip_slot,
+            Some(ItemEquipSlot::Trinket)
+        );
+        let hatchet = item("worn_hatchet").unwrap();
+        assert_eq!(hatchet.weapon_style, Some(WeaponStyle::OneHand));
+        assert_eq!(can_equip(hatchet, PlayerClass::Hunter, 1), Ok(()));
+        assert_eq!(
+            can_equip(item("copper_shortsword").unwrap(), PlayerClass::Hunter, 1),
+            Ok(())
+        );
     }
 
     #[test]

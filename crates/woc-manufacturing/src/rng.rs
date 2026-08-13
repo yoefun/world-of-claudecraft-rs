@@ -12,6 +12,7 @@ pub struct ScriptedRng {
 }
 
 impl ScriptedRng {
+    #[allow(clippy::unnecessary_to_owned)]
     pub fn from_seq(seq: &[u32]) -> Self {
         Self {
             seq: seq.to_vec().into_iter(),

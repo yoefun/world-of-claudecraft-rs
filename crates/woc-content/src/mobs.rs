@@ -39,6 +39,11 @@ const SCARRED_WOLF_LOOT: &[LootEntry] = &[
         chance: 0.12,
         count: 1,
     },
+    LootEntry {
+        item_id: "work_gloves",
+        chance: 0.08,
+        count: 1,
+    },
 ];
 
 const YOUNG_BOAR_LOOT: &[LootEntry] = &[
