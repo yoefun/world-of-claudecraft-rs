@@ -1149,7 +1149,8 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, Health, LootPile, Owner, QuestLog, QuestState, Threat, Transform,
+        Bags, Bank, ClassKit, Health, Home, LootPile, Owner, QuestLog, QuestState, Threat,
+        Transform,
     };
     use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
@@ -2277,6 +2278,10 @@ mod tests {
             t.x = px + 1.5;
             t.z = pz;
             t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(h) = sim.world.get_mut::<Home>(mob_id) {
+            h.home_x = px + 1.5;
+            h.home_z = pz;
         }
         sim.interact(pid, InteractAction::SummonPet);
         let pet_id = sim
