@@ -74,6 +74,7 @@ pub(crate) enum ChromePanelKind {
     Bank,
     Mail,
     Market,
+    Guild,
 }
 
 #[derive(Component)]
@@ -92,6 +93,8 @@ pub(crate) struct UiFlags {
     pub(crate) show_mail: bool,
     pub(crate) show_market: bool,
     pub(crate) show_map: bool,
+    pub(crate) show_guild: bool,
+    pub(crate) guild_compose: String,
 }
 
 #[derive(Resource, Default)]
@@ -109,6 +112,8 @@ pub(crate) fn plugin(app: &mut App) {
         show_mail: false,
         show_market: false,
         show_map: false,
+        show_guild: false,
+        guild_compose: String::new(),
     })
     .init_resource::<VendorUiCache>();
 }
@@ -522,6 +527,36 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
     lines.join("\n")
 }
 
+fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
+    let mut lines = vec!["Guild  [J]".into()];
+    if let Some(inv) = &snap.guild_invite {
+        lines.push(format!(
+            "{} invited you to <{}>. Enter accept · X decline",
+            inv.from_name, inv.guild_name
+        ));
+    }
+    if let Some(g) = &snap.guild {
+        lines.push(format!("<{}>  you: {}", g.name, g.rank));
+        if !g.motd.is_empty() {
+            lines.push(format!("MOTD ({}) {}", g.motd_set_by, g.motd));
+        }
+        for m in &g.members {
+            let star = if m.online { "*" } else { " " };
+            lines.push(format!("{star}{}  {}  {}", m.name, m.rank, m.level));
+        }
+        lines.push("Enter chat · /o officer · /motd · V invite target · Q leave".into());
+        if g.rank == "leader" {
+            lines.push("P officer · O member · T transfer · D disband · K kick".into());
+        } else if g.rank == "officer" {
+            lines.push("V invite · K kick".into());
+        }
+    } else if snap.guild_invite.is_none() {
+        lines.push("Type a name, Enter to found a guild (3-24 letters).".into());
+    }
+    lines.push(format!("> {compose}_"));
+    lines.join("\n")
+}
+
 pub(crate) fn update_chrome_panels(
     host: Res<GameHost>,
     ui: Res<UiFlags>,
@@ -534,6 +569,7 @@ pub(crate) fn update_chrome_panels(
             ChromePanelKind::Bank => ui.show_bank,
             ChromePanelKind::Mail => ui.show_mail,
             ChromePanelKind::Market => ui.show_market,
+            ChromePanelKind::Guild => ui.show_guild,
         };
         *visibility = if shown {
             Visibility::Visible
@@ -547,6 +583,7 @@ pub(crate) fn update_chrome_panels(
             ChromePanelKind::Bank => bank_panel_text(&host.snapshot),
             ChromePanelKind::Mail => mail_panel_text(&host.snapshot),
             ChromePanelKind::Market => market_panel_text(&host.snapshot),
+            ChromePanelKind::Guild => guild_panel_text(&host.snapshot, &ui.guild_compose),
         };
     }
 }

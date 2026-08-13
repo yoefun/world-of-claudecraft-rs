@@ -424,6 +424,25 @@ fn setup_world(
                             TextColor(Color::srgb(0.82, 0.96, 0.8)),
                         ));
                     });
+                    row.spawn((
+                        HudChromePanel(ChromePanelKind::Guild),
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(300.0),
+                            padding: UiRect::all(Val::Px(12.0)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.1, 0.06, 0.12, 0.92)),
+                    ))
+                    .with_children(|panel| {
+                        panel.spawn((
+                            HudChromeText(ChromePanelKind::Guild),
+                            Text::new(""),
+                            TextFont::from_font_size(15.0),
+                            TextColor(Color::srgb(0.92, 0.82, 0.98)),
+                        ));
+                    });
                 });
 
             // Vendor panel (visible when open_vendor is Some)

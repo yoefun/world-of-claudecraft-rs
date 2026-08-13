@@ -7,7 +7,7 @@ use woc_content::talents::talents_for_class;
 use woc_content::{can_equip, item, ItemKind, PlayerClass};
 use woc_protocol::{
     AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, QuestLogEntry,
-    TickSnapshot,
+    TickSnapshot, WsClientMsg,
 };
 use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
@@ -117,22 +117,24 @@ pub(crate) fn collect_intent(
     if keys.pressed(KeyCode::KeyS) {
         mz -= 1.0;
     }
-    if keys.pressed(KeyCode::KeyA) {
-        mx -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyD) {
-        mx += 1.0;
+    if !ui.show_guild {
+        if keys.pressed(KeyCode::KeyA) {
+            mx -= 1.0;
+        }
+        if keys.pressed(KeyCode::KeyD) {
+            mx += 1.0;
+        }
     }
     intent.move_x = mx;
     intent.move_z = mz;
-    if keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space) {
+    if !ui.show_guild && (keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space)) {
         // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
         intent.jump = true;
     }
     if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
         intent.descend = true;
     }
-    if keys.just_pressed(KeyCode::KeyV) && !ui.show_bags {
+    if keys.just_pressed(KeyCode::KeyV) && !ui.show_bags && !ui.show_guild {
         intent.fly_toggle = true;
     }
     // Digit keys: talents, loot rolls, bank withdraw, or abilities.
@@ -142,6 +144,7 @@ pub(crate) fn collect_intent(
         .is_some();
     if !ui.show_talents
         && !ui.show_bank
+        && !ui.show_guild
         && !loot_rolling
         && !ui.show_bags
         && !ui.show_character
@@ -339,6 +342,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_mail = false;
             ui.show_market = false;
             ui.show_map = false;
+            ui.show_guild = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyN) {
@@ -348,14 +352,15 @@ pub(crate) fn handle_interact_keys(
             ui.show_map = false;
         }
     }
-    if keys.just_pressed(KeyCode::KeyK) {
+    if keys.just_pressed(KeyCode::KeyK) && !ui.show_guild {
         ui.show_bank = !ui.show_bank;
         if ui.show_bank {
             ui.show_character = false;
             ui.show_map = false;
+            ui.show_guild = false;
         }
     }
-    if keys.just_pressed(KeyCode::KeyI) {
+    if keys.just_pressed(KeyCode::KeyI) && !ui.show_guild {
         ui.show_mail = !ui.show_mail;
         if ui.show_mail {
             ui.show_character = false;
@@ -370,6 +375,15 @@ pub(crate) fn handle_interact_keys(
             ui.show_bank = false;
             ui.show_mail = false;
             ui.show_market = false;
+            ui.show_guild = false;
+        }
+    }
+    if !ui.show_bank && keys.just_pressed(KeyCode::KeyJ) {
+        ui.show_guild = !ui.show_guild;
+        if ui.show_guild {
+            ui.show_character = false;
+            ui.show_map = false;
+            ui.show_bank = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyU) {
@@ -447,8 +461,8 @@ pub(crate) fn handle_interact_keys(
         }
     }
 
-    // Pet toggle (hunter/warlock): T — when mail panel is closed so P stays mail-collect.
-    if !ui.show_mail && keys.just_pressed(KeyCode::KeyT) {
+    // Pet toggle (hunter/warlock): T — when mail/guild panels are closed so P stays mail-collect.
+    if !ui.show_mail && !ui.show_guild && keys.just_pressed(KeyCode::KeyT) {
         if local_pet_alive(&host.snapshot) {
             host.interact(player_id, InteractAction::DismissPet);
             host.recent_toasts.push(("Dismissing pet…".into(), 1.5));
@@ -562,7 +576,7 @@ pub(crate) fn handle_interact_keys(
         host.recent_toasts
             .push((format!("Withdrawing {amount}c from vault."), 2.0));
     }
-    if ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+    if ui.show_mail && !ui.show_guild && keys.just_pressed(KeyCode::KeyP) {
         if let Some(mail) = host.snapshot.mail.first() {
             let mail_id = mail.id;
             host.interact(player_id, InteractAction::MailCollect { mail_id });
@@ -572,7 +586,7 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
         }
     }
-    if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+    if ui.show_market && !ui.show_guild && keys.just_pressed(KeyCode::KeyO) {
         if let Some(listing) = host
             .snapshot
             .market
@@ -625,6 +639,84 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.recent_toasts
                 .push(("You have no listings.".into(), 2.0));
+        }
+    }
+
+    if ui.show_guild {
+        if keys.just_pressed(KeyCode::Enter) {
+            let compose = ui.guild_compose.clone();
+            let msg = if host.snapshot.guild_invite.is_some() {
+                WsClientMsg::GuildAccept
+            } else if host.snapshot.guild.is_none() {
+                WsClientMsg::GuildCreate {
+                    name: compose.trim().to_string(),
+                }
+            } else if let Some(rest) = compose.strip_prefix("/motd ") {
+                WsClientMsg::GuildSetMotd {
+                    text: rest.to_string(),
+                }
+            } else if let Some(rest) = compose.strip_prefix("/o ") {
+                WsClientMsg::Chat {
+                    channel: "officer".into(),
+                    text: rest.to_string(),
+                }
+            } else {
+                WsClientMsg::Chat {
+                    channel: "guild".into(),
+                    text: compose,
+                }
+            };
+            host.guild_msg(msg);
+            ui.guild_compose.clear();
+        }
+        if keys.just_pressed(KeyCode::KeyX) && host.snapshot.guild_invite.is_some() {
+            host.guild_msg(WsClientMsg::GuildDecline);
+        }
+        if keys.just_pressed(KeyCode::KeyQ) {
+            host.guild_msg(WsClientMsg::GuildLeave);
+        }
+        if keys.just_pressed(KeyCode::KeyV) {
+            if let Some(name) = targeted_player_name(&host.snapshot) {
+                host.guild_msg(WsClientMsg::GuildInvite { name });
+            }
+        }
+        if let Some(g) = host.snapshot.guild.as_ref() {
+            let rank = g.rank.clone();
+            if let Some(name) = targeted_player_name(&host.snapshot) {
+                if keys.just_pressed(KeyCode::KeyK) && (rank == "leader" || rank == "officer") {
+                    host.guild_msg(WsClientMsg::GuildKick { name: name.clone() });
+                }
+                if rank == "leader" {
+                    if keys.just_pressed(KeyCode::KeyP) {
+                        host.guild_msg(WsClientMsg::GuildSetRank {
+                            name: name.clone(),
+                            rank: "officer".into(),
+                        });
+                    }
+                    if keys.just_pressed(KeyCode::KeyO) {
+                        host.guild_msg(WsClientMsg::GuildSetRank {
+                            name: name.clone(),
+                            rank: "member".into(),
+                        });
+                    }
+                    if keys.just_pressed(KeyCode::KeyT) {
+                        host.guild_msg(WsClientMsg::GuildTransferLeader { name });
+                    }
+                }
+            }
+            if rank == "leader" && keys.just_pressed(KeyCode::KeyD) {
+                host.guild_msg(WsClientMsg::GuildDisband);
+            }
+        }
+        if keys.just_pressed(KeyCode::Backspace) {
+            ui.guild_compose.pop();
+        }
+        for key in guild_compose_keys() {
+            if keys.just_pressed(key) {
+                if let Some(ch) = guild_compose_char_from_key(key) {
+                    ui.guild_compose.push(ch);
+                }
+            }
         }
     }
 
@@ -903,6 +995,63 @@ pub(crate) fn handle_interact_keys(
         for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
             host.interact(nid, action);
         }
+    }
+}
+
+fn targeted_player_name(snap: &TickSnapshot) -> Option<String> {
+    let tid = snap.target_id?;
+    let entity = snap.entities.iter().find(|e| e.id == tid)?;
+    if entity.kind == EntityKind::Player && entity.id != snap.player_id {
+        Some(entity.name.clone())
+    } else {
+        None
+    }
+}
+
+fn guild_compose_keys() -> [KeyCode; 18] {
+    [
+        KeyCode::KeyA,
+        KeyCode::KeyB,
+        KeyCode::KeyC,
+        KeyCode::KeyE,
+        KeyCode::KeyF,
+        KeyCode::KeyG,
+        KeyCode::KeyH,
+        KeyCode::KeyI,
+        KeyCode::KeyL,
+        KeyCode::KeyM,
+        KeyCode::KeyN,
+        KeyCode::KeyR,
+        KeyCode::KeyS,
+        KeyCode::KeyU,
+        KeyCode::KeyW,
+        KeyCode::KeyY,
+        KeyCode::KeyZ,
+        KeyCode::Space,
+    ]
+}
+
+fn guild_compose_char_from_key(key: KeyCode) -> Option<char> {
+    match key {
+        KeyCode::KeyA => Some('a'),
+        KeyCode::KeyB => Some('b'),
+        KeyCode::KeyC => Some('c'),
+        KeyCode::KeyE => Some('e'),
+        KeyCode::KeyF => Some('f'),
+        KeyCode::KeyG => Some('g'),
+        KeyCode::KeyH => Some('h'),
+        KeyCode::KeyI => Some('i'),
+        KeyCode::KeyL => Some('l'),
+        KeyCode::KeyM => Some('m'),
+        KeyCode::KeyN => Some('n'),
+        KeyCode::KeyR => Some('r'),
+        KeyCode::KeyS => Some('s'),
+        KeyCode::KeyU => Some('u'),
+        KeyCode::KeyW => Some('w'),
+        KeyCode::KeyY => Some('y'),
+        KeyCode::KeyZ => Some('z'),
+        KeyCode::Space => Some(' '),
+        _ => None,
     }
 }
 
