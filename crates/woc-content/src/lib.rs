@@ -199,6 +199,27 @@ mod tests {
     }
 
     #[test]
+    fn every_quest_giver_and_turn_in_npc_is_marked_quest_giver() {
+        for q in QUESTS.iter() {
+            let giver = npc(q.giver_npc).unwrap_or_else(|| panic!("missing giver {}", q.giver_npc));
+            assert!(
+                giver.is_quest_giver,
+                "quest {} giver {} must have is_quest_giver",
+                q.id, q.giver_npc
+            );
+            let turn_in = q.turn_in_npc.unwrap_or(q.giver_npc);
+            if turn_in != q.giver_npc {
+                let npc_def = npc(turn_in).unwrap_or_else(|| panic!("missing turn-in {turn_in}"));
+                assert!(
+                    npc_def.is_quest_giver,
+                    "quest {} turn-in {} must have is_quest_giver",
+                    q.id, turn_in
+                );
+            }
+        }
+    }
+
+    #[test]
     fn every_quest_requires_exists_and_is_acyclic() {
         for q in QUESTS.iter() {
             let Some(req) = q.requires else {

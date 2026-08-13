@@ -4,7 +4,9 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
-use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, QuestLogEntry, TickSnapshot};
+use woc_protocol::{
+    AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, QuestLogEntry, TickSnapshot,
+};
 use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
@@ -680,9 +682,9 @@ pub(crate) fn handle_interact_keys(
 
 #[cfg(test)]
 mod tests {
+    use super::quest_interact_actions;
     use super::*;
     use woc_protocol::{InvSlotSnapshot, QuestLogEntry, TalentRankSnapshot, TickSnapshot};
-    use super::quest_interact_actions;
 
     #[test]
     fn e_on_crier_accepts_report_only() {

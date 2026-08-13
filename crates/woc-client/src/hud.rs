@@ -1050,8 +1050,8 @@ mod tests {
 
     #[test]
     fn quest_log_line_uses_name_and_counts() {
-        use woc_protocol::QuestLogEntry;
         use super::format_quest_log_line;
+        use woc_protocol::QuestLogEntry;
 
         let line = format_quest_log_line(&QuestLogEntry {
             quest_id: "wolves_at_the_gate".into(),

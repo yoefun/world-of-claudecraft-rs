@@ -55,7 +55,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         id: "town_crier",
         name: "Town Crier",
         greeting: "Hear ye! Eastbrook stands, and the Vale endures.",
-        is_quest_giver: false,
+        is_quest_giver: true,
         is_vendor: false,
         vendor_stock: &[],
     },

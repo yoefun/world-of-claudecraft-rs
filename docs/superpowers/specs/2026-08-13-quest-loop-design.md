@@ -165,7 +165,7 @@ A World convenience wrapper may build `QuestLogEntry`s from the `QuestLog` colum
 
 ### 5.6 Client
 
-**E** on the nearest in-range NPC (after loot/corpse): `Talk`, then `TurnInQuest` for every `offers.turn_in`, then `AcceptQuest` for every `offers.accept`. One key can turn in a ready quest and pick up the next chain step. No Alden special case.
+**E** on the nearest in-range NPC (after loot/corpse): `Talk`, then `TurnInQuest` for every `offers.turn_in`, then `AcceptQuest` for every `offers.accept`. Offers are computed from the **pre-interaction** snapshot, so one **E** cannot turn in a quest that becomes ready during the same `Talk` and immediately accept the next chained quest — those take two **E** presses (turn-in first, then accept on the next). No Alden special case.
 
 **L** log: `Name [state] — objective label current/required; …` using `quest(&id)` from content. Tracker (log closed): same line for the first `active` or `ready` entry. Unknown ids fall back to the raw id.
 
@@ -224,7 +224,7 @@ Client: pure functions `format_quest_log_line` and a small interact-offer unit t
 
 ## 10. Success demo (human)
 
-1. Eastbrook: **E** Town Crier → accept Report to Alden → **E** Captain Alden (talk credits + turn in) → **E** Alden accepts Wolves → kill 3 young wolves → tracker `3/3` and “Ready to turn in” → **E** Alden completes → **E** accepts Boar Tusks.
+1. Eastbrook: **E** Town Crier → accept Report to Alden → **E** Captain Alden (talk) → **E** turn-in → **E** accept Wolves → kill 3 young wolves → tracker `3/3` and “Ready to turn in” → **E** turn-in → **E** accept Boar Tusks.
 2. Collect 2 tusks (loot or grant) → ready → **E** turn in; tusks leave the bag.
 3. Travel Eastfen: **E** Scout Darian for Report to Selene; locked cull quests do not yellow-ping until the breadcrumb is complete.
 4. Relog: completed and active rows restore.

@@ -22,14 +22,14 @@ use crate::combat::{
 use crate::context::SimContext;
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Health, Identity, InstanceAt, LootTable, Motion, Owner,
-    Progress, QuestLog, QuestState, Transform,
+    Progress, Transform,
 };
 use crate::ecs::World;
 use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
 use crate::player_motion::step_player_motion;
-use crate::quests::on_mob_killed;
+use crate::quests::{on_mob_killed, quest_log_entries};
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
@@ -39,8 +39,8 @@ use crate::zones::populate_all_overworld;
 use woc_content::{ability, class_def, PlayerClass, EASTBROOK};
 use woc_protocol::{
     AbilityBarSlot, AuraSnapshot, CastSnapshot, EntityId, EntityKind, EntitySnapshot,
-    EquipmentSnapshot, InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress,
-    QuestLogEntry, SimEvent, TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
+    EquipmentSnapshot, InteractAction, InvSlotSnapshot, PlayerIntent, PlayerProgress, SimEvent,
+    TickSnapshot, WsServerMsg, DT, PROTOCOL_REV,
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
@@ -651,24 +651,7 @@ impl Sim {
             })
             .unwrap_or_default();
 
-        let quest_log = world
-            .get::<QuestLog>(player_id)
-            .map(|q| {
-                q.quest_log
-                    .iter()
-                    .map(|quest| QuestLogEntry {
-                        quest_id: quest.quest_id.clone(),
-                        state: match quest.state {
-                            QuestState::Active => "active",
-                            QuestState::Ready => "ready",
-                            QuestState::Completed => "completed",
-                        }
-                        .to_string(),
-                        counts: quest.counts.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let quest_log = quest_log_entries(world, player_id);
 
         let open_vendor = vendor_snapshot(world, player_id);
 
@@ -1081,7 +1064,9 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
 mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
-    use crate::ecs::components::{Bags, Bank, ClassKit, LootPile, Owner, Threat, Transform};
+    use crate::ecs::components::{
+        Bags, Bank, ClassKit, LootPile, Owner, QuestLog, QuestState, Threat, Transform,
+    };
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
 
     fn kind_count(sim: &Sim, kind: EntityKind) -> usize {

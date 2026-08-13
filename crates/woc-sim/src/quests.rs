@@ -413,6 +413,9 @@ pub fn turn_in_quest(
     turner_template_id: &str,
     events: &mut Vec<SimEvent>,
 ) -> bool {
+    let Some(def) = quest(quest_id) else {
+        return false;
+    };
     let ready = world.get::<QuestLog>(player_id).and_then(|log| {
         log.quest_log
             .iter()
@@ -422,9 +425,6 @@ pub fn turn_in_quest(
         events.push(SimEvent::Toast {
             message: "Nothing to turn in.".into(),
         });
-        return false;
-    };
-    let Some(def) = quest(quest_id) else {
         return false;
     };
     if turner_template_id != turn_in_npc_id(def) {
@@ -632,6 +632,78 @@ mod tests {
     }
 
     #[test]
+    fn accept_rejects_already_active_or_completed() {
+        let mut sim = Sim::new_eastbrook("Qdup", PlayerClass::Warrior);
+        place_at_template(&mut sim, "town_crier");
+        let crier = find_template(&sim, "town_crier");
+        sim.interact(
+            crier,
+            InteractAction::AcceptQuest {
+                quest_id: "report_to_alden".into(),
+            },
+        );
+        let mut events = Vec::new();
+        assert!(
+            !accept_quest(
+                &mut sim.world,
+                sim.player_id,
+                "report_to_alden",
+                "town_crier",
+                &mut events,
+            ),
+            "re-accept while active must fail"
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "You have already accepted this quest."
+        )));
+
+        if let Some(log) = sim.world.get_mut::<QuestLog>(sim.player_id) {
+            if let Some(qp) = log
+                .quest_log
+                .iter_mut()
+                .find(|q| q.quest_id == "report_to_alden")
+            {
+                qp.state = QuestState::Completed;
+            }
+        }
+        events.clear();
+        assert!(
+            !accept_quest(
+                &mut sim.world,
+                sim.player_id,
+                "report_to_alden",
+                "town_crier",
+                &mut events,
+            ),
+            "re-accept while completed must fail"
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "You have already completed this quest."
+        )));
+    }
+
+    #[test]
+    fn turn_in_unknown_quest_id_is_silent() {
+        let mut sim = Sim::new_eastbrook("Qunk", PlayerClass::Warrior);
+        place_at_template(&mut sim, "captain_alden");
+        let mut events = Vec::new();
+        assert!(!turn_in_quest(
+            &mut sim.world,
+            sim.player_id,
+            "not_a_real_quest",
+            "captain_alden",
+            &mut events,
+        ));
+        assert!(
+            events.is_empty(),
+            "unknown quest id must not toast: {:?}",
+            events
+        );
+    }
+
+    #[test]
     fn turn_in_rejects_wrong_npc() {
         let mut sim = Sim::new_eastbrook("Qwrong", PlayerClass::Warrior);
         if let Some(log) = sim.world.get_mut::<QuestLog>(sim.player_id) {
@@ -665,12 +737,7 @@ mod tests {
             });
         }
         let mut events = Vec::new();
-        on_talked_to(
-            &mut sim.world,
-            sim.player_id,
-            "captain_alden",
-            &mut events,
-        );
+        on_talked_to(&mut sim.world, sim.player_id, "captain_alden", &mut events);
         assert!(events.iter().any(|e| matches!(
             e,
             SimEvent::Toast { message } if message == "Ready to turn in: Report to Alden"

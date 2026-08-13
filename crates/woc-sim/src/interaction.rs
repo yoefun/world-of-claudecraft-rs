@@ -6,7 +6,9 @@ use crate::ecs::components::{Bags, Health, Identity, Progress};
 use crate::ecs::World;
 use crate::inventory::{grant_into, remove_item};
 use crate::inventory::{grant_item, take_item};
-use crate::quests::{accept_quest, npc_quest_offers, on_talked_to, quest_log_entries, turn_in_quest};
+use crate::quests::{
+    accept_quest, npc_quest_offers, on_talked_to, quest_log_entries, turn_in_quest,
+};
 use crate::stats::recalc_player_stats;
 use crate::types::INTERACT_RANGE;
 use woc_content::{item, npc, ItemEquipSlot, ItemKind};
@@ -87,13 +89,11 @@ pub fn handle_interact(
     match action {
         InteractAction::Talk => talk(world, player_id, target_id, events),
         InteractAction::AcceptQuest { quest_id } => {
-            let template = world
-                .get::<Identity>(target_id)
-                .and_then(|i| i.template_id.clone());
-            if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Npc) {
-                return;
-            }
-            let Some(tid) = template.as_deref() else {
+            let template_id = match world.get::<Identity>(target_id) {
+                Some(i) if i.kind == EntityKind::Npc => i.template_id.clone(),
+                _ => return,
+            };
+            let Some(tid) = template_id.as_deref() else {
                 return;
             };
             if accept_quest(world, player_id, &quest_id, tid, events) {
