@@ -86,6 +86,20 @@ pub enum GuildEffect {
     },
 }
 
+/// Routed guild command / chat delivery (host expands to live players).
+#[derive(Debug, Clone)]
+pub enum GuildDelivery {
+    To {
+        player: EntityId,
+        msg: woc_protocol::WsServerMsg,
+    },
+    Guild {
+        guild_id: u32,
+        officer_only: bool,
+        msg: woc_protocol::WsServerMsg,
+    },
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct GuildRoster {
     next_id: u32,
@@ -154,6 +168,26 @@ impl GuildRoster {
         let mut v: Vec<_> = self.guilds.values().cloned().collect();
         v.sort_by_key(|g| g.id);
         v
+    }
+
+    pub fn clear(&mut self) {
+        self.guilds.clear();
+        self.membership.clear();
+        self.pending.clear();
+        self.next_id = 1;
+    }
+
+    pub fn load_guilds(&mut self, guilds: Vec<Guild>, next_id: u32) {
+        self.clear();
+        let mut max_id = 0u32;
+        for g in guilds {
+            max_id = max_id.max(g.id);
+            for m in &g.members {
+                self.membership.insert(m.durable_id.clone(), g.id);
+            }
+            self.guilds.insert(g.id, g);
+        }
+        self.next_id = next_id.max(max_id.saturating_add(1)).max(1);
     }
 
     pub fn create(&mut self, actor: EntityId, raw_name: &str, world: &World) -> Vec<GuildEffect> {

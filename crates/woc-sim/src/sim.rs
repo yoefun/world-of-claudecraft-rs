@@ -35,7 +35,7 @@ use crate::quests::{
 };
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
-use crate::social::guild::GuildRoster;
+use crate::social::guild::{GuildDelivery, GuildEffect, GuildRank, GuildRoster};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
 use crate::world::WORLD_SEED;
@@ -287,6 +287,177 @@ impl Sim {
             channel,
             text,
         ))
+    }
+
+    /// Guild / officer chat routed for live recipient expansion.
+    pub fn guild_chat(
+        &mut self,
+        player_id: EntityId,
+        channel: &str,
+        text: &str,
+    ) -> Vec<GuildDelivery> {
+        handle_chat(
+            &self.parties,
+            &self.guilds,
+            &self.world,
+            player_id,
+            channel,
+            text,
+        )
+        .into_iter()
+        .map(|e| match e {
+            ChatEffect::Error { message } => GuildDelivery::To {
+                player: player_id,
+                msg: WsServerMsg::Chat {
+                    channel: "system".into(),
+                    from: "Guild".into(),
+                    text: message,
+                },
+            },
+            ChatEffect::Message {
+                channel,
+                from,
+                text,
+            } => {
+                let key = GuildRoster::member_key(&self.world, player_id);
+                let guild_id = self.guilds.guild_id_of(&key).expect("guild chat member");
+                let officer_only = channel == "officer";
+                GuildDelivery::Guild {
+                    guild_id,
+                    officer_only,
+                    msg: WsServerMsg::Chat {
+                        channel,
+                        from,
+                        text,
+                    },
+                }
+            }
+        })
+        .collect()
+    }
+
+    pub fn guild_create(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.create(player_id, name, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_invite(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds
+                .invite(player_id, name, self.tick, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_accept(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.accept(player_id, self.tick, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_decline(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.decline(player_id, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_leave(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.leave(player_id, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_kick(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.kick(player_id, name, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_set_rank(
+        &mut self,
+        player_id: EntityId,
+        name: &str,
+        rank: &str,
+    ) -> Vec<GuildDelivery> {
+        let parsed = GuildRank::parse(rank).filter(|r| *r != GuildRank::Leader);
+        if parsed.is_none() {
+            let message = if rank == "leader" {
+                "Use a guild transfer to hand over leadership."
+            } else {
+                "Unknown rank."
+            };
+            return vec![GuildDelivery::To {
+                player: player_id,
+                msg: WsServerMsg::Chat {
+                    channel: "system".into(),
+                    from: "Guild".into(),
+                    text: message.into(),
+                },
+            }];
+        }
+        map_guild_effects(
+            self.guilds
+                .set_rank(player_id, name, parsed.unwrap(), &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_transfer_leader(
+        &mut self,
+        player_id: EntityId,
+        name: &str,
+    ) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.transfer_leader(player_id, name, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_disband(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.disband(player_id, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_set_motd(&mut self, player_id: EntityId, text: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.set_motd(player_id, text, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn live_guild_recipients(&self, guild_id: u32, officer_only: bool) -> Vec<EntityId> {
+        let Some(g) = self.guilds.guild(guild_id) else {
+            return Vec::new();
+        };
+        g.members
+            .iter()
+            .filter(|m| {
+                if officer_only {
+                    matches!(m.rank, GuildRank::Leader | GuildRank::Officer)
+                } else {
+                    true
+                }
+            })
+            .filter_map(|m| live_id_for_durable(&self.world, &m.durable_id))
+            .collect()
     }
 
     /// Current party member list for `player_id`, if any.
@@ -1077,6 +1248,60 @@ fn map_chat_effects(effects: Vec<ChatEffect>) -> Vec<WsServerMsg> {
                 channel: "system".into(),
                 from: "Chat".into(),
                 text: message,
+            },
+        })
+        .collect()
+}
+
+fn live_id_for_durable(world: &World, durable: &str) -> Option<EntityId> {
+    world
+        .ids::<ClassKit>()
+        .into_iter()
+        .find(|&id| GuildRoster::member_key(world, id) == durable)
+}
+
+fn map_guild_effects(
+    effects: Vec<GuildEffect>,
+    guilds: &GuildRoster,
+    world: &World,
+) -> Vec<GuildDelivery> {
+    let _ = (guilds, world);
+    effects
+        .into_iter()
+        .map(|e| match e {
+            GuildEffect::Error { to, message } | GuildEffect::Notice { to, message } => {
+                GuildDelivery::To {
+                    player: to,
+                    msg: WsServerMsg::Chat {
+                        channel: "system".into(),
+                        from: "Guild".into(),
+                        text: message,
+                    },
+                }
+            }
+            GuildEffect::GuildNotice { guild_id, message } => GuildDelivery::Guild {
+                guild_id,
+                officer_only: false,
+                msg: WsServerMsg::Chat {
+                    channel: "system".into(),
+                    from: "Guild".into(),
+                    text: message,
+                },
+            },
+            GuildEffect::Chat {
+                guild_id,
+                channel,
+                from,
+                text,
+                officer_only,
+            } => GuildDelivery::Guild {
+                guild_id,
+                officer_only,
+                msg: WsServerMsg::Chat {
+                    channel,
+                    from,
+                    text,
+                },
             },
         })
         .collect()
@@ -2423,5 +2648,46 @@ mod tests {
         );
         assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_claw")));
         assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_focus")));
+    }
+
+    #[test]
+    fn guild_create_invite_survives_export_import() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let _ = sim.guild_create(a, "Vale Watch");
+        let _ = sim.guild_invite(a, "Bob");
+        let _ = sim.guild_accept(b);
+        assert!(sim.snapshot_for_player(a).guild.as_ref().unwrap().members.len() == 2);
+        let dumped = sim.guilds.all_guilds();
+        let next = sim.guilds.next_id();
+        let mut sim2 = Sim::new_empty_eastbrook();
+        let a2 = sim2.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b2 = sim2.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        sim2.guilds.load_guilds(dumped, next);
+        assert!(sim2.snapshot_for_player(a2).guild.is_some());
+        assert_eq!(
+            sim2.snapshot_for_player(b2).guild.as_ref().unwrap().name,
+            "Vale Watch"
+        );
+    }
+
+    #[test]
+    fn park_does_not_leave_guild() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(a) {
+            d.durable_id = Some("char-alice".into());
+        }
+        let _ = sim.guild_create(a, "Vale Watch");
+        sim.park_player(a);
+        assert!(sim.world.contains(a), "park must keep the entity");
+        assert!(sim.guilds.guild_id_of("char-alice").is_some());
+        let resumed = sim.resume_player("char-alice").expect("resume parked");
+        assert_eq!(resumed, a);
+        assert_eq!(
+            sim.snapshot_for_player(a).guild.as_ref().unwrap().name,
+            "Vale Watch"
+        );
     }
 }

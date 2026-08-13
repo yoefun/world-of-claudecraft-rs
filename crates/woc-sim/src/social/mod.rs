@@ -6,6 +6,6 @@ pub mod loot;
 pub mod party;
 
 pub use chat::{handle_chat, ChatEffect};
-pub use guild::{GuildEffect, GuildRank, GuildRoster};
+pub use guild::{GuildDelivery, GuildEffect, GuildRank, GuildRoster};
 pub use loot::{LootMode, LootRules, RollChoice};
 pub use party::{kill_credit_share, PartyEffect, PartyRoster, MAX_PARTY_SIZE, MIN_PARTY_SIZE};
