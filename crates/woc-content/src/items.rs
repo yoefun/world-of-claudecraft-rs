@@ -15,6 +15,7 @@ pub enum ItemKind {
     Consumable,
     Junk,
     Quest,
+    Mount,
 }
 
 /// Which equipment slot an item occupies when equipped.
@@ -466,6 +467,35 @@ const fn enchant_oil(id: &'static str, name: &'static str, enchant_id: &'static 
     def
 }
 
+const fn mount_item(
+    id: &'static str,
+    name: &'static str,
+    vendor_buy: u32,
+    vendor_sell: u32,
+) -> ItemDef {
+    ItemDef {
+        id,
+        name,
+        kind: ItemKind::Mount,
+        stack_size: 1,
+        max_durability: 0,
+        vendor_buy,
+        vendor_sell,
+        attack_power: 0.0,
+        armor: 0.0,
+        equip_slot: None,
+        level_req: 1,
+        heal_hp: 0.0,
+        armor_class: None,
+        weapon_style: None,
+        allowed_classes: &[],
+        stamina: 0.0,
+        spell_power: 0.0,
+        quality: ItemQuality::Common,
+        enchant_id: None,
+    }
+}
+
 pub static ZONE1_ITEMS: &[ItemDef] = &[
     weapon(
         "worn_sword",
@@ -750,6 +780,9 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
     ),
     enchant_oil("coarse_whetstone", "Coarse Whetstone", "coarse_sharpening"),
     enchant_oil("minor_wizard_oil", "Minor Wizard Oil", "minor_wizard_oil"),
+    mount_item("brown_pony", "Brown Pony", 25, 5),
+    mount_item("swift_bay_steed", "Swift Bay Steed", 150, 30),
+    mount_item("tawny_gryphon", "Tawny Gryphon", 300, 60),
 ];
 
 /// Zone1 + zone2 item definitions.

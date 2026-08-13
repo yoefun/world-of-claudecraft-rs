@@ -14,6 +14,7 @@ pub mod items_zone2;
 pub mod mobs;
 pub mod mobs_zone2;
 pub mod mobs_zone3;
+pub mod mounts;
 pub mod npcs;
 pub mod npcs_zone2;
 pub mod npcs_zone3;
@@ -52,6 +53,10 @@ pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
 pub use mobs_zone3::ZONE3_MOBS;
+pub use mounts::{
+    mount, mount_by_item, riding_rank, riding_rank_by_n, MountDef, MountKind, RidingRankDef,
+    MOUNTS, RIDING_RANKS,
+};
 pub use npcs::{npc, NpcDef, NpcService, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
@@ -1112,5 +1117,40 @@ mod tests {
         assert!(profession_enchant("weapon_minor_might").is_some());
         assert!(enchant("weapon_minor_might").is_some());
         assert_eq!(disenchant_yield("copper_shortsword")[0].item_id, "arcane_dust");
+    }
+
+    #[test]
+    fn riding_ranks_locked() {
+        assert_eq!(RIDING_RANKS.len(), 3);
+        let a = riding_rank("apprentice").expect("apprentice");
+        assert_eq!(a.rank, 1);
+        assert_eq!(a.level_req, 2);
+        assert_eq!(a.copper, 10);
+        assert!((a.ground_speed_mult - 1.6).abs() < 1e-6);
+        assert_eq!(riding_rank_by_n(3).unwrap().id, "expert");
+        assert!(riding_rank_by_n(0).is_none());
+    }
+
+    #[test]
+    fn mount_table_matches_items() {
+        assert_eq!(MOUNTS.len(), 3);
+        for def in MOUNTS.iter() {
+            let it = item(def.item_id).unwrap_or_else(|| panic!("missing {}", def.item_id));
+            assert_eq!(it.kind, ItemKind::Mount, "{}", def.id);
+            assert_eq!(it.stack_size, 1);
+            assert_eq!(it.max_durability, 0);
+            assert!(it.equip_slot.is_none());
+            assert_eq!(mount_by_item(def.item_id).map(|m| m.id), Some(def.id));
+        }
+        let pony = mount("brown_pony").unwrap();
+        assert_eq!(pony.riding_rank, 1);
+        assert!(matches!(pony.kind, MountKind::Ground));
+        assert!((pony.speed_mult - 1.6).abs() < 1e-6);
+        let gryphon = mount("tawny_gryphon").unwrap();
+        assert!(matches!(gryphon.kind, MountKind::Flying));
+        assert_eq!(gryphon.riding_rank, 3);
+        assert_eq!(item("brown_pony").unwrap().vendor_buy, 25);
+        assert_eq!(item("swift_bay_steed").unwrap().vendor_buy, 150);
+        assert_eq!(item("tawny_gryphon").unwrap().vendor_buy, 300);
     }
 }
