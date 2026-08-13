@@ -6718,6 +6718,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "woc-manufacturing"
+version = "1.12.0"
+
+[[package]]
 name = "woc-persist"
 version = "1.12.0"
 dependencies = [

@@ -37,6 +37,7 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 | `woc-content` | Data tables (classes, items, mobs, NPCs, quests) |
 | `woc-protocol` | Intents, snapshots, events, `WorldHost`, WS msgs |
 | `woc-sim` | Deterministic game core (no Bevy) |
+| `woc-manufacturing` | Standalone manufacturing/professions prototype (v1) |
 | `woc-client` | Bevy offline + online host |
 | `woc-server` | HTTP + WebSocket sim host |
 | `woc-update` | Pack, delta, and apply signed client updates ([runbook](docs/client-update.md)) |
@@ -106,3 +107,15 @@ Online play persists characters (enter injects save; disconnect autosaves) and r
 ## License
 
 MIT — see [`LICENSE`](LICENSE). Upstream project is also MIT.
+
+
+## Manufacturing prototype
+
+Standalone deterministic professions crate (`woc-manufacturing`): gathering, forging, skinning, leatherworking, tailoring, jewelcrafting, enchanting, engineering, and alchemy.
+
+- Design: `docs/superpowers/specs/2026-08-13-manufacturing-system-design.md`
+- Plan: `docs/superpowers/plans/2026-08-13-manufacturing-system.md`
+
+```sh
+cargo test -p woc-manufacturing
+```

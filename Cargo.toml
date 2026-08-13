@@ -5,6 +5,7 @@ members = [
     "crates/woc-protocol",
     "crates/woc-content",
     "crates/woc-sim",
+    "crates/woc-manufacturing",
     "crates/woc-persist",
     "crates/woc-server",
     "crates/woc-client",
@@ -34,6 +35,7 @@ woc-version = { path = "crates/woc-version" }
 woc-protocol = { path = "crates/woc-protocol" }
 woc-content = { path = "crates/woc-content" }
 woc-sim = { path = "crates/woc-sim" }
+woc-manufacturing = { path = "crates/woc-manufacturing" }
 woc-persist = { path = "crates/woc-persist" }
 woc-update = { path = "crates/woc-update" }
 serde = { version = "1", features = ["derive"] }
