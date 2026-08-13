@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Planned
+
+- **1.9.0 `gear-depth`:** class/armor equip rules, two-hand occupancy, Neck/Finger, stamina + spell power, independent loot rolls, character-sheet stats. Design: `docs/superpowers/specs/2026-08-13-gear-depth-design.md`. Plan: `docs/superpowers/plans/2026-08-13-gear-depth.md`.
+
 ## 1.8.0 — 2026-08-13
 
 ### Added

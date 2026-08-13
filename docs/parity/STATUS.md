@@ -1,8 +1,23 @@
 # Parity status
 
 **Current rewrite:** `1.8.0` / `class-forms`.  
+**Next:** `1.9.0` / `gear-depth` — [`../superpowers/specs/2026-08-13-gear-depth-design.md`](../superpowers/specs/2026-08-13-gear-depth-design.md).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.
+
+## Gear depth (`gear-depth`) — planned
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `can_equip` class / armor cap | planned | Cloth→Plate; weapon `allowed_classes` |
+| Two-hand / ranged occupancy | planned | Clears off-hand into bags |
+| Jewelry | planned | Neck + one Finger; additive protocol rev 7 |
+| Stamina / spell power | planned | `sta * 2` HP; SP on heal + `SpellDamage` |
+| Independent loot rolls | planned | One pile per successful `LootEntry` (no `break`) |
+| Upgrade ladder | planned | Pendant, ring, `crypt_cleaver`, `fen_staff`, `hag_focus` |
+| Client sheet / numbered bags | planned | Snapshot AP/Armor/SP; keys 1–9 / 1–8 |
+| Durability / repair | n/a | NPC-services draft |
+| Quality / enchants / sockets | n/a | Manufacturing draft / non-goal |
 
 ## Client version gate (`client-compat`)
 

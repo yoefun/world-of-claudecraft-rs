@@ -16,6 +16,7 @@
 | **1.6.0** (shipped) | `class-engine` | Combo, stealth, absorb, interrupt lockout, Charge/Blink/Life Tap, hunter mana |
 | **1.7.0** (shipped) | `class-identity` | Rogue stealth+combo, priest shield, warrior Charge, mage Blink, hunter Aspect |
 | **1.8.0** (this branch) | `class-forms` | Warrior stances, shaman/druid forms, paladin aura/seal, warlock Fear |
+| **1.9.0** (planned) | `gear-depth` | Class/armor equip rules, jewelry, stamina/spell power, gear drops |
 
 ## Completion program (closed)
 
@@ -31,6 +32,13 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 **Max-parallel schedule:** [`docs/superpowers/plans/2026-08-13-parallel-post-completion.md`](superpowers/plans/2026-08-13-parallel-post-completion.md)
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
+
+## Gear depth (planned)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-depth-design.md`](superpowers/specs/2026-08-13-gear-depth-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-depth.md`](superpowers/plans/2026-08-13-gear-depth.md)
+
+Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Durability/repair and crafted quality stay out of this program.
 
 ## Client version gate (current)
 
