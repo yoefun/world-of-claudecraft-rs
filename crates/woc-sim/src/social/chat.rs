@@ -34,11 +34,6 @@ pub fn handle_chat(
             message: "Chat message is empty.".into(),
         }];
     }
-    if trimmed.len() > GUILD_MESSAGE_MAX {
-        return vec![ChatEffect::Error {
-            message: "Chat message is too long.".into(),
-        }];
-    }
     let Some(from) = world
         .get::<ClassKit>(speaker)
         .and_then(|_| world.get::<Identity>(speaker).map(|i| i.name.clone()))
@@ -74,6 +69,11 @@ pub fn handle_chat(
                     message: "You are not in a guild.".into(),
                 }];
             }
+            if trimmed.len() > GUILD_MESSAGE_MAX {
+                return vec![ChatEffect::Error {
+                    message: "Chat message is too long.".into(),
+                }];
+            }
             vec![ChatEffect::Message {
                 channel: "guild".into(),
                 from,
@@ -94,6 +94,11 @@ pub fn handle_chat(
                         message: "Only officers and the Guild Master can use officer chat.".into(),
                     }];
                 }
+            }
+            if trimmed.len() > GUILD_MESSAGE_MAX {
+                return vec![ChatEffect::Error {
+                    message: "Chat message is too long.".into(),
+                }];
             }
             vec![ChatEffect::Message {
                 channel: "officer".into(),
@@ -183,6 +188,23 @@ mod tests {
             effects,
             vec![ChatEffect::Error {
                 message: "You are not in a guild.".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn guild_channel_rejects_long_message() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
+        let parties = PartyRoster::new();
+        let mut guilds = GuildRoster::new();
+        let _ = guilds.create(1, "Vale Watch", &world);
+        let long = "x".repeat(201);
+        let effects = handle_chat(&parties, &guilds, &world, 1, "guild", &long);
+        assert_eq!(
+            effects,
+            vec![ChatEffect::Error {
+                message: "Chat message is too long.".into(),
             }]
         );
     }
