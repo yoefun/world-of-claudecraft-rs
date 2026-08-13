@@ -488,6 +488,14 @@ impl PartyRoster {
 /// Party members within `range` yards of the killer share kill credit / XP.
 pub const PARTY_CREDIT_RANGE: f32 = 40.0;
 
+/// Classic-era group XP: bonus tenths 10/15/20/25/30 for n=1..=5, then split by n (clamped 1..=10).
+pub fn group_xp(mob_xp: u32, n: usize) -> u32 {
+    let n = n.clamp(1, 10);
+    let bonus_n = n.min(5);
+    let bonus_tenths: u64 = 10 + 5 * (bonus_n as u64 - 1); // 10,15,20,25,30
+    (mob_xp as u64 * bonus_tenths / (10 * n as u64)) as u32
+}
+
 /// Other party members near the killer share kill credit.
 pub fn kill_credit_share(roster: &PartyRoster, world: &World, killer: EntityId) -> Vec<EntityId> {
     let Some(killer_t) = world.get::<Transform>(killer) else {
@@ -723,5 +731,16 @@ mod tests {
         let _ = roster.ready_respond(1, true, &world, &[1, 2]);
         let effects = roster.ready_respond(2, true, &world, &[1, 2]);
         assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Everyone is ready.")));
+    }
+
+    #[test]
+    fn group_xp_classic_table() {
+        assert_eq!(group_xp(100, 1), 100);
+        assert_eq!(group_xp(100, 2), 75);
+        assert_eq!(group_xp(100, 3), 66);
+        assert_eq!(group_xp(100, 4), 62);
+        assert_eq!(group_xp(100, 5), 60);
+        assert_eq!(group_xp(100, 10), 30);
+        assert_eq!(group_xp(50, 2), 37); // 50 * 15 / 20
     }
 }

@@ -526,9 +526,10 @@ impl Sim {
                     recipients.push(mate);
                 }
             }
+            let share = crate::social::party::group_xp(reward.xp, recipients.len());
             for rid in recipients {
                 if self.world.get::<Identity>(rid).map(|i| i.kind) == Some(EntityKind::Player) {
-                    grant_xp(&mut self.world, rid, reward.xp, &mut self.events);
+                    grant_xp(&mut self.world, rid, share, &mut self.events);
                     if let Some(ref tid) = reward.template_id {
                         on_mob_killed(&mut self.world, rid, tid, &mut self.events);
                         crate::worldboss::on_boss_killed(
