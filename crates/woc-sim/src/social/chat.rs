@@ -1,8 +1,9 @@
 //! Say and party chat routing.
 
-use crate::entity::Entity;
+use crate::ecs::components::{ClassKit, Identity};
+use crate::ecs::World;
 use crate::social::party::PartyRoster;
-use woc_protocol::{EntityId, EntityKind};
+use woc_protocol::EntityId;
 
 /// Chat delivery payload (host maps to `WsServerMsg::Chat`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +21,7 @@ pub enum ChatEffect {
 /// Handle a chat request. Channels: `say` (realm-wide scaffold), `party` (party only).
 pub fn handle_chat(
     roster: &PartyRoster,
-    entities: &[Entity],
+    world: &World,
     speaker: EntityId,
     channel: &str,
     text: &str,
@@ -31,10 +32,9 @@ pub fn handle_chat(
             message: "Chat message is empty.".into(),
         }];
     }
-    let Some(from) = entities
-        .iter()
-        .find(|e| e.id == speaker && e.kind == EntityKind::Player)
-        .map(|e| e.name.clone())
+    let Some(from) = world
+        .get::<ClassKit>(speaker)
+        .and_then(|_| world.get::<Identity>(speaker).map(|i| i.name.clone()))
     else {
         return vec![ChatEffect::Error {
             message: "You are not in the realm.".into(),
@@ -69,25 +69,27 @@ pub fn handle_chat(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ecs::spawn::world_from_entities;
     use crate::entity::create_player;
     use crate::social::party::PartyRoster;
     use woc_content::PlayerClass;
 
-    fn duo() -> (PartyRoster, Vec<Entity>) {
+    fn duo() -> (PartyRoster, World) {
         let entities = vec![
             create_player(1, "Alice", PlayerClass::Warrior, 0.0, 0.0),
             create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0),
         ];
+        let world = world_from_entities(&entities);
         let mut roster = PartyRoster::new();
-        roster.invite(1, "Bob", &entities);
-        roster.accept(2, &entities);
-        (roster, entities)
+        roster.invite(1, "Bob", &world);
+        roster.accept(2, &world);
+        (roster, world)
     }
 
     #[test]
     fn say_emits_chat_message() {
-        let (roster, entities) = duo();
-        let effects = handle_chat(&roster, &entities, 1, "say", "hello");
+        let (roster, world) = duo();
+        let effects = handle_chat(&roster, &world, 1, "say", "hello");
         assert_eq!(
             effects,
             vec![ChatEffect::Message {
@@ -101,15 +103,16 @@ mod tests {
     #[test]
     fn party_channel_requires_membership() {
         let entities = vec![create_player(1, "Solo", PlayerClass::Warrior, 0.0, 0.0)];
+        let world = world_from_entities(&entities);
         let roster = PartyRoster::new();
-        let effects = handle_chat(&roster, &entities, 1, "party", "psst");
+        let effects = handle_chat(&roster, &world, 1, "party", "psst");
         assert!(matches!(effects.as_slice(), [ChatEffect::Error { .. }]));
     }
 
     #[test]
     fn party_channel_emits_when_grouped() {
-        let (roster, entities) = duo();
-        let effects = handle_chat(&roster, &entities, 2, "party", "ready");
+        let (roster, world) = duo();
+        let effects = handle_chat(&roster, &world, 2, "party", "ready");
         assert_eq!(
             effects,
             vec![ChatEffect::Message {
@@ -122,8 +125,8 @@ mod tests {
 
     #[test]
     fn empty_text_rejected() {
-        let (roster, entities) = duo();
-        let effects = handle_chat(&roster, &entities, 1, "say", "   ");
+        let (roster, world) = duo();
+        let effects = handle_chat(&roster, &world, 1, "say", "   ");
         assert!(matches!(effects.as_slice(), [ChatEffect::Error { .. }]));
     }
 }

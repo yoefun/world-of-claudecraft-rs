@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use crate::entity::{grant_into, Entity};
+use crate::ecs::components::{Bags, Identity, LootPile, Progress};
+use crate::ecs::World;
+use crate::entity::grant_into;
 use crate::rng::Rng;
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
@@ -87,7 +89,7 @@ impl LootRules {
         player: EntityId,
         choice: RollChoice,
         rng: &mut Rng,
-        entities: &mut [Entity],
+        world: &mut World,
         events: &mut Vec<SimEvent>,
     ) -> bool {
         let Some(idx) = self.pending.iter().position(|p| p.loot_id == loot_id) else {
@@ -118,38 +120,41 @@ impl LootRules {
         self.pending[idx].rolls.insert(player, (choice, roll));
 
         if self.pending[idx].rolls.len() >= self.pending[idx].eligible.len() {
-            self.resolve(idx, entities, events);
+            self.resolve(idx, world, events);
         }
         true
     }
 
-    fn resolve(&mut self, idx: usize, entities: &mut [Entity], events: &mut Vec<SimEvent>) {
+    fn resolve(&mut self, idx: usize, world: &mut World, events: &mut Vec<SimEvent>) {
         let pending = self.pending.remove(idx);
         let winner = pick_winner(&pending);
         let Some(winner) = winner else {
-            // All passed — despawn loot.
-            if let Some(loot) = entities.iter_mut().find(|e| e.id == pending.loot_id) {
-                loot.alive = false;
-            }
+            consume_loot(world, pending.loot_id);
             return;
         };
-        if let Some(player) = entities.iter_mut().find(|e| e.id == winner) {
-            if !pending.item_id.is_empty() {
-                let _ = grant_into(&mut player.inventory, &pending.item_id, 1);
+        if !pending.item_id.is_empty() {
+            if let Some(bags) = world.get_mut::<Bags>(winner) {
+                let _ = grant_into(&mut bags.inventory, &pending.item_id, 1);
             }
-            player.copper = player.copper.saturating_add(pending.copper);
         }
-        if let Some(loot) = entities.iter_mut().find(|e| e.id == pending.loot_id) {
-            loot.alive = false;
-            loot.loot_item = None;
-            loot.loot_copper = 0;
+        if let Some(progress) = world.get_mut::<Progress>(winner) {
+            progress.copper = progress.copper.saturating_add(pending.copper);
         }
+        consume_loot(world, pending.loot_id);
         events.push(SimEvent::LootAwarded {
             loot_id: pending.loot_id,
             winner,
             item_id: pending.item_id,
         });
     }
+}
+
+fn consume_loot(world: &mut World, loot_id: EntityId) {
+    if let Some(pile) = world.get_mut::<LootPile>(loot_id) {
+        pile.copper = 0;
+        pile.item = None;
+    }
+    world.despawn(loot_id);
 }
 
 fn pick_winner(pending: &PendingLoot) -> Option<EntityId> {
@@ -173,14 +178,18 @@ fn pick_winner(pending: &PendingLoot) -> Option<EntityId> {
 }
 
 /// FFA: first eligible party member in range may pick up (handled by caller).
-pub fn is_loot_entity(e: &Entity) -> bool {
-    e.kind == EntityKind::Loot && e.alive
+pub fn is_loot_entity(world: &World, id: EntityId) -> bool {
+    world
+        .get::<Identity>(id)
+        .is_some_and(|i| i.kind == EntityKind::Loot)
+        && world.contains(id)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::create_player;
+    use crate::ecs::spawn::world_from_entities;
+    use crate::entity::{create_player, Entity};
     use crate::rng::Rng;
     use woc_content::PlayerClass;
     use woc_protocol::EntityKind;
@@ -196,6 +205,7 @@ mod tests {
         ];
         entities[2].alive = true;
         entities[2].loot_item = Some("wolf_fang".into());
+        let mut world = world_from_entities(&entities);
         let mut rng = Rng::new(1);
         let mut events = Vec::new();
         assert!(rules.roll(
@@ -203,7 +213,7 @@ mod tests {
             1,
             RollChoice::Greed,
             &mut rng,
-            &mut entities,
+            &mut world,
             &mut events
         ));
         assert!(rules.roll(
@@ -211,12 +221,12 @@ mod tests {
             2,
             RollChoice::Need,
             &mut rng,
-            &mut entities,
+            &mut world,
             &mut events
         ));
         assert!(events
             .iter()
             .any(|e| matches!(e, SimEvent::LootAwarded { winner: 2, .. })));
-        assert!(!entities[2].alive);
+        assert!(!world.contains(99));
     }
 }

@@ -1,8 +1,10 @@
 //! Auction house listings, keyed by durable seller id with offline mail settlement.
 
-use crate::entity::{grant_into, remove_item, Entity};
+use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
+use crate::ecs::World;
+use crate::entity::{grant_into, remove_item};
 use crate::mail::Mailbox;
-use woc_protocol::{EntityId, EntityKind, MarketListingSnapshot, SimEvent};
+use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
 /// Listing duration in ticks (~1 hour at 20 Hz).
 pub const LISTING_TTL_TICKS: u64 = 20 * 60 * 60;
@@ -67,7 +69,7 @@ impl AuctionHouse {
     #[allow(clippy::too_many_arguments)]
     pub fn list_item(
         &mut self,
-        entities: &mut [Entity],
+        world: &mut World,
         seller: EntityId,
         bag_slot: u8,
         count: u32,
@@ -81,34 +83,52 @@ impl AuctionHouse {
             });
             return false;
         }
-        let Some(player) = entities.iter_mut().find(|e| e.id == seller) else {
+        if world.get::<ClassKit>(seller).is_none() {
             return false;
-        };
-        if player.copper < LISTING_FEE {
+        }
+        let copper = world
+            .get::<Progress>(seller)
+            .map(|p| p.copper)
+            .unwrap_or(0);
+        if copper < LISTING_FEE {
             events.push(SimEvent::Toast {
                 message: "Cannot afford listing fee.".into(),
             });
             return false;
         }
-        let Some(Some(stack)) = player.inventory.get(bag_slot as usize).cloned() else {
+        let stack = world
+            .get::<Bags>(seller)
+            .and_then(|b| b.inventory.get(bag_slot as usize))
+            .and_then(|s| s.clone());
+        let Some(stack) = stack else {
             events.push(SimEvent::Toast {
                 message: "Empty bag slot.".into(),
             });
             return false;
         };
         let take = count.min(stack.count).max(1);
-        if !remove_item(&mut player.inventory, &stack.item_id, take) {
+        if let Some(bags) = world.get_mut::<Bags>(seller) {
+            if !remove_item(&mut bags.inventory, &stack.item_id, take) {
+                return false;
+            }
+        } else {
             return false;
         }
-        player.copper -= LISTING_FEE;
-        let seller_durable = Mailbox::mailbox_key(player);
+        if let Some(progress) = world.get_mut::<Progress>(seller) {
+            progress.copper -= LISTING_FEE;
+        }
+        let seller_durable = Mailbox::mailbox_key(world, seller);
+        let seller_name = world
+            .get::<Identity>(seller)
+            .map(|i| i.name.clone())
+            .unwrap_or_default();
         let listing_id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
         self.listings.push(Listing {
             id: listing_id,
             seller_id: seller,
             seller_durable,
-            seller_name: player.name.clone(),
+            seller_name,
             item_id: stack.item_id,
             count: take,
             price,
@@ -123,7 +143,7 @@ impl AuctionHouse {
 
     pub fn buy(
         &mut self,
-        entities: &mut [Entity],
+        world: &mut World,
         mail: &mut Mailbox,
         buyer: EntityId,
         listing_id: u32,
@@ -136,41 +156,49 @@ impl AuctionHouse {
             return false;
         };
         let listing = self.listings[idx].clone();
-        let buyer_durable = entities
-            .iter()
-            .find(|e| e.id == buyer)
-            .map(Mailbox::mailbox_key)
-            .unwrap_or_default();
+        let buyer_durable = Mailbox::mailbox_key(world, buyer);
         if listing.seller_durable == buyer_durable || listing.seller_id == buyer {
             events.push(SimEvent::Toast {
                 message: "Cannot buy your own listing.".into(),
             });
             return false;
         }
-        let Some(buyer_e) = entities.iter_mut().find(|e| e.id == buyer) else {
+        if world.get::<ClassKit>(buyer).is_none() {
             return false;
-        };
-        if buyer_e.copper < listing.price {
+        }
+        let buyer_copper = world
+            .get::<Progress>(buyer)
+            .map(|p| p.copper)
+            .unwrap_or(0);
+        if buyer_copper < listing.price {
             events.push(SimEvent::Toast {
                 message: "Not enough copper.".into(),
             });
             return false;
         }
-        if !grant_into(&mut buyer_e.inventory, &listing.item_id, listing.count) {
-            events.push(SimEvent::Toast {
-                message: "Bags are full.".into(),
-            });
+        if let Some(bags) = world.get_mut::<Bags>(buyer) {
+            if !grant_into(&mut bags.inventory, &listing.item_id, listing.count) {
+                events.push(SimEvent::Toast {
+                    message: "Bags are full.".into(),
+                });
+                return false;
+            }
+        } else {
             return false;
         }
-        buyer_e.copper -= listing.price;
+        if let Some(progress) = world.get_mut::<Progress>(buyer) {
+            progress.copper -= listing.price;
+        }
         let seller_name = listing.seller_name.clone();
-        // Credit seller online, otherwise mail proceeds.
-        if let Some(seller) = entities.iter_mut().find(|e| {
-            e.kind == EntityKind::Player
-                && (e.durable_id.as_deref() == Some(listing.seller_durable.as_str())
-                    || e.id == listing.seller_id)
-        }) {
-            seller.copper = seller.copper.saturating_add(listing.price);
+        let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
+            world.get::<Durable>(id).and_then(|d| d.durable_id.as_deref())
+                == Some(listing.seller_durable.as_str())
+                || id == listing.seller_id
+        });
+        if let Some(seller) = seller_online {
+            if let Some(progress) = world.get_mut::<Progress>(seller) {
+                progress.copper = progress.copper.saturating_add(listing.price);
+            }
         } else {
             mail.deliver_system(
                 &listing.seller_durable,
@@ -197,16 +225,13 @@ impl AuctionHouse {
 
     pub fn cancel(
         &mut self,
-        entities: &mut [Entity],
+        world: &mut World,
         mail: &mut Mailbox,
         seller: EntityId,
         listing_id: u32,
         events: &mut Vec<SimEvent>,
     ) -> bool {
-        let seller_key = entities
-            .iter()
-            .find(|e| e.id == seller)
-            .map(Mailbox::mailbox_key);
+        let seller_key = Some(Mailbox::mailbox_key(world, seller));
         let Some(idx) = self.listings.iter().position(|l| l.id == listing_id) else {
             return false;
         };
@@ -218,8 +243,13 @@ impl AuctionHouse {
             return false;
         }
         let listing = self.listings.remove(idx);
-        if let Some(player) = entities.iter_mut().find(|e| e.id == seller) {
-            if !grant_into(&mut player.inventory, &listing.item_id, listing.count) {
+        if world.get::<ClassKit>(seller).is_some() {
+            let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
+                grant_into(&mut bags.inventory, &listing.item_id, listing.count)
+            } else {
+                false
+            };
+            if !returned {
                 mail.deliver_system(
                     &listing.seller_durable,
                     "Auction House",
@@ -245,16 +275,22 @@ impl AuctionHouse {
         true
     }
 
-    pub fn tick_expire(&mut self, now_tick: u64, entities: &mut [Entity], mail: &mut Mailbox) {
+    pub fn tick_expire(&mut self, now_tick: u64, world: &mut World, mail: &mut Mailbox) {
         let mut keep = Vec::new();
         for listing in self.listings.drain(..) {
             if listing.expires_tick <= now_tick {
-                if let Some(seller) = entities.iter_mut().find(|e| {
-                    e.kind == EntityKind::Player
-                        && (e.durable_id.as_deref() == Some(listing.seller_durable.as_str())
-                            || e.id == listing.seller_id)
-                }) {
-                    if !grant_into(&mut seller.inventory, &listing.item_id, listing.count) {
+                let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
+                    world.get::<Durable>(id).and_then(|d| d.durable_id.as_deref())
+                        == Some(listing.seller_durable.as_str())
+                        || id == listing.seller_id
+                });
+                if let Some(seller) = seller_online {
+                    let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
+                        grant_into(&mut bags.inventory, &listing.item_id, listing.count)
+                    } else {
+                        false
+                    };
+                    if !returned {
                         mail.deliver_system(
                             &listing.seller_durable,
                             "Auction House",
@@ -285,6 +321,7 @@ impl AuctionHouse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ecs::spawn::{apply_world_to_entities, world_from_entities};
     use crate::entity::create_player;
     use woc_content::PlayerClass;
 
@@ -299,7 +336,10 @@ mod tests {
         entities[0].copper = 50;
         entities[1].copper = 200;
         assert!(grant_into(&mut entities[0].inventory, "silverleaf", 1));
-        let slot = entities[0]
+        let mut world = world_from_entities(&entities);
+        let slot = world
+            .get::<Bags>(1)
+            .unwrap()
             .inventory
             .iter()
             .position(|s| {
@@ -311,10 +351,11 @@ mod tests {
         let mut ah = AuctionHouse::new();
         let mut mail = Mailbox::new();
         let mut events = Vec::new();
-        assert!(ah.list_item(&mut entities, 1, slot, 1, 40, 0, &mut events));
+        assert!(ah.list_item(&mut world, 1, slot, 1, 40, 0, &mut events));
         assert_eq!(ah.listings.len(), 1);
         let id = ah.listings[0].id;
-        assert!(ah.buy(&mut entities, &mut mail, 2, id, &mut events));
+        assert!(ah.buy(&mut world, &mut mail, 2, id, &mut events));
+        apply_world_to_entities(&world, &mut entities);
         assert!(ah.listings.is_empty());
         assert_eq!(entities[1].copper, 160);
         assert!(entities[0].copper >= 40);
@@ -325,6 +366,7 @@ mod tests {
         let mut entities = vec![create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0)];
         entities[0].durable_id = Some("bob".into());
         entities[0].copper = 200;
+        let mut world = world_from_entities(&entities);
         let mut ah = AuctionHouse::new();
         ah.listings.push(Listing {
             id: 1,
@@ -339,7 +381,7 @@ mod tests {
         ah.next_id = 2;
         let mut mail = Mailbox::new();
         let mut events = Vec::new();
-        assert!(ah.buy(&mut entities, &mut mail, 2, 1, &mut events));
+        assert!(ah.buy(&mut world, &mut mail, 2, 1, &mut events));
         assert_eq!(mail.all_mails().len(), 1);
         assert_eq!(mail.all_mails()[0].copper, 40);
     }

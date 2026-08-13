@@ -221,8 +221,9 @@ mod tests {
             create_player(2, "B", PlayerClass::Mage, 1.0, 0.0),
         ];
         let mut parties = PartyRoster::new();
-        let _ = parties.invite(1, "B", &entities);
-        let _ = parties.accept(2, &entities);
+        let world = crate::ecs::spawn::world_from_entities(&entities);
+        let _ = parties.invite(1, "B", &world);
+        let _ = parties.accept(2, &world);
         let mut next_id = 3;
         let mut events = Vec::new();
         assert!(enter_dungeon(

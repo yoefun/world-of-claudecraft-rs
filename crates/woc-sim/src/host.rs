@@ -81,8 +81,9 @@ impl WorldHost for Sim {
                 bag_slot,
                 count,
             } => {
+                self.rebuild_world();
                 let _ = self.mail.send(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     &to_name,
                     copper,
@@ -90,19 +91,23 @@ impl WorldHost for Sim {
                     count,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::MailCollect { mail_id } => {
+                self.rebuild_world();
                 let _ = self
                     .mail
-                    .collect(&mut self.entities, player_id, mail_id, &mut self.events);
+                    .collect(&mut self.world, player_id, mail_id, &mut self.events);
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::MarketList {
                 bag_slot,
                 count,
                 price,
             } => {
+                self.rebuild_world();
                 let _ = self.market.list_item(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     bag_slot,
                     count,
@@ -110,34 +115,47 @@ impl WorldHost for Sim {
                     self.tick,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::MarketBuy { listing_id } => {
+                self.rebuild_world();
                 let _ = self.market.buy(
-                    &mut self.entities,
+                    &mut self.world,
                     &mut self.mail,
                     player_id,
                     listing_id,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::MarketCancel { listing_id } => {
+                self.rebuild_world();
                 let _ = self.market.cancel(
-                    &mut self.entities,
+                    &mut self.world,
                     &mut self.mail,
                     player_id,
                     listing_id,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::DuelChallenge => {
-                let _ = challenge_duel(&mut self.pvp, &self.entities, player_id, target_id);
+                self.rebuild_world();
+                let _ = challenge_duel(&mut self.pvp, &self.world, player_id, target_id);
             }
             InteractAction::DuelAccept => {
-                let _ =
-                    accept_pending_duel(&mut self.pvp, &self.entities, player_id, &mut self.events);
+                self.rebuild_world();
+                let _ = accept_pending_duel(
+                    &mut self.pvp,
+                    &self.world,
+                    player_id,
+                    &mut self.events,
+                );
             }
             InteractAction::TogglePvp => {
-                let _ = toggle_pvp(&mut self.entities, player_id);
+                self.rebuild_world();
+                let _ = toggle_pvp(&mut self.world, player_id);
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             InteractAction::EnterPortal { zone_id } => {
                 let _ = enter_portal(&mut self.entities, player_id, &zone_id, &mut self.events);
@@ -180,34 +198,13 @@ impl WorldHost for Sim {
                 let _ = leave_instance(&mut self.entities, player_id, &mut self.events);
             }
             InteractAction::LootNeed { loot_id } => {
-                let _ = self.loot_rules.roll(
-                    loot_id,
-                    player_id,
-                    RollChoice::Need,
-                    &mut self.rng,
-                    &mut self.entities,
-                    &mut self.events,
-                );
+                self.roll_loot(loot_id, player_id, RollChoice::Need);
             }
             InteractAction::LootGreed { loot_id } => {
-                let _ = self.loot_rules.roll(
-                    loot_id,
-                    player_id,
-                    RollChoice::Greed,
-                    &mut self.rng,
-                    &mut self.entities,
-                    &mut self.events,
-                );
+                self.roll_loot(loot_id, player_id, RollChoice::Greed);
             }
             InteractAction::LootPass { loot_id } => {
-                let _ = self.loot_rules.roll(
-                    loot_id,
-                    player_id,
-                    RollChoice::Pass,
-                    &mut self.rng,
-                    &mut self.entities,
-                    &mut self.events,
-                );
+                self.roll_loot(loot_id, player_id, RollChoice::Pass);
             }
             InteractAction::SetLootMode { mode } => {
                 if let Some(m) = LootMode::parse(&mode) {
@@ -222,12 +219,14 @@ impl WorldHost for Sim {
                         | InteractAction::Craft { .. }
                 ) =>
             {
+                self.rebuild_world();
                 let _ = professions::handle_interact(
-                    &mut self.entities,
+                    &mut self.world,
                     player_id,
                     other,
                     &mut self.events,
                 );
+                crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
             }
             other => {
                 self.rebuild_world();
@@ -249,5 +248,27 @@ impl WorldHost for Sim {
 
     fn snapshot_for(&self, player_id: EntityId) -> TickSnapshot {
         self.snapshot_for_player(player_id)
+    }
+}
+
+impl Sim {
+    fn roll_loot(&mut self, loot_id: EntityId, player_id: EntityId, choice: RollChoice) {
+        self.rebuild_world();
+        let _ = self.loot_rules.roll(
+            loot_id,
+            player_id,
+            choice,
+            &mut self.rng,
+            &mut self.world,
+            &mut self.events,
+        );
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
+        if !self.world.contains(loot_id) {
+            if let Some(loot) = self.entities.iter_mut().find(|e| e.id == loot_id) {
+                loot.alive = false;
+                loot.loot_item = None;
+                loot.loot_copper = 0;
+            }
+        }
     }
 }

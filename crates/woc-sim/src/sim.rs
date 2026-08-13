@@ -226,8 +226,8 @@ impl Sim {
         &self,
         player_id: EntityId,
     ) -> Option<crate::persist_state::PlayerPersistentState> {
-        let player = self.entity_ref(player_id)?;
-        crate::persist_state::export_player_state(player)
+        let world = crate::ecs::spawn::world_from_entities(&self.entities);
+        crate::persist_state::export_player_state(&world, player_id)
     }
 
     /// Remove a player from the realm (disconnect). Does not recreate Eastbrook.
@@ -257,12 +257,16 @@ impl Sim {
 
     /// Party invite by target player name.
     pub fn party_invite(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
-        map_party_effects(self.parties.invite(player_id, name, &self.entities))
+        self.rebuild_world();
+        let effects = self.parties.invite(player_id, name, &self.world);
+        map_party_effects(effects)
     }
 
     /// Accept a pending party invite.
     pub fn party_accept(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
-        map_party_effects(self.parties.accept(player_id, &self.entities))
+        self.rebuild_world();
+        let effects = self.parties.accept(player_id, &self.world);
+        map_party_effects(effects)
     }
 
     /// Leave the current party (dissolves when size drops below 2).
@@ -272,9 +276,10 @@ impl Sim {
 
     /// Say / party chat.
     pub fn chat(&mut self, player_id: EntityId, channel: &str, text: &str) -> Vec<WsServerMsg> {
+        self.rebuild_world();
         map_chat_effects(handle_chat(
             &self.parties,
-            &self.entities,
+            &self.world,
             player_id,
             channel,
             text,
@@ -523,7 +528,7 @@ impl Sim {
         let rewards = collect_pending_mob_kills(&self.events, &self.entities);
         for reward in rewards {
             let mut recipients = vec![reward.killer];
-            for mate in kill_credit_share(&self.parties, &self.entities, reward.killer) {
+            for mate in kill_credit_share(&self.parties, &self.world, reward.killer) {
                 if !recipients.contains(&mate) {
                     recipients.push(mate);
                 }
@@ -567,9 +572,10 @@ impl Sim {
         crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
 
         // PvP duel resolve + honor (does not add a locked tick phase).
-        crate::pvp::tick_pvp(&mut self.pvp, &mut self.entities, &mut self.events);
+        crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
-            .tick_expire(self.tick, &mut self.entities, &mut self.mail);
+            .tick_expire(self.tick, &mut self.world, &mut self.mail);
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
         // Sync entity-only pvp/market writes before World-based loot pickup.
         self.rebuild_world();
 
@@ -801,7 +807,10 @@ impl Sim {
                         .collect()
                 })
                 .unwrap_or_default(),
-            mail: self.mail.snapshot_for_entity(player_id, &self.entities),
+            mail: {
+                let world = crate::ecs::spawn::world_from_entities(&self.entities);
+                self.mail.snapshot_for_entity(player_id, &world)
+            },
             market: self.market.snapshot_public(),
             honor: player.map(|p| p.honor).unwrap_or(0),
             pvp_flagged: player.map(|p| p.pvp_flagged).unwrap_or(false),
@@ -1133,10 +1142,10 @@ mod tests {
         sim.rebuild_world();
 
         let mut duel_events = Vec::new();
-        crate::pvp::challenge_duel(&mut sim.pvp, &sim.entities, winner, loser).unwrap();
+        crate::pvp::challenge_duel(&mut sim.pvp, &sim.world, winner, loser).unwrap();
         crate::pvp::accept_duel(
             &mut sim.pvp,
-            &sim.entities,
+            &sim.world,
             loser,
             winner,
             &mut duel_events,

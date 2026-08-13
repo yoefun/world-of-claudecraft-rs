@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use crate::entity::Entity;
+use crate::ecs::components::{ClassKit, Health, Identity, InstanceAt, Transform};
+use crate::ecs::World;
 use woc_protocol::{EntityId, EntityKind};
 
 /// Hard cap on party membership (inclusive).
@@ -94,14 +95,14 @@ impl PartyRoster {
         &mut self,
         inviter: EntityId,
         invitee_name: &str,
-        entities: &[Entity],
+        world: &World,
     ) -> Vec<PartyEffect> {
-        if !player_exists(entities, inviter) {
+        if !player_exists(world, inviter) {
             return vec![PartyEffect::Error {
                 message: "You are not in the realm.".into(),
             }];
         }
-        let Some(invitee) = find_player_by_name(entities, invitee_name) else {
+        let Some(invitee) = find_player_by_name(world, invitee_name) else {
             return vec![PartyEffect::Error {
                 message: format!("No player named '{invitee_name}'."),
             }];
@@ -126,14 +127,14 @@ impl PartyRoster {
             }
         }
         self.pending.insert(invitee, inviter);
-        let inviter_name = player_name(entities, inviter).unwrap_or_else(|| "Someone".into());
+        let inviter_name = player_name(world, inviter).unwrap_or_else(|| "Someone".into());
         vec![PartyEffect::Notice {
             message: format!("{inviter_name} invited {invitee_name} to a party."),
         }]
     }
 
-    pub fn accept(&mut self, invitee: EntityId, entities: &[Entity]) -> Vec<PartyEffect> {
-        if !player_exists(entities, invitee) {
+    pub fn accept(&mut self, invitee: EntityId, world: &World) -> Vec<PartyEffect> {
+        if !player_exists(world, invitee) {
             return vec![PartyEffect::Error {
                 message: "You are not in the realm.".into(),
             }];
@@ -143,7 +144,7 @@ impl PartyRoster {
                 message: "You have no pending party invite.".into(),
             }];
         };
-        if !player_exists(entities, inviter) {
+        if !player_exists(world, inviter) {
             return vec![PartyEffect::Error {
                 message: "The inviter is no longer online.".into(),
             }];
@@ -245,64 +246,72 @@ pub const PARTY_CREDIT_RANGE: f32 = 40.0;
 /// Other party members near the killer share kill credit.
 pub fn kill_credit_share(
     roster: &PartyRoster,
-    entities: &[Entity],
+    world: &World,
     killer: EntityId,
 ) -> Vec<EntityId> {
-    let Some(killer_e) = entities
-        .iter()
-        .find(|e| e.id == killer && e.kind == EntityKind::Player)
-    else {
+    let Some(killer_t) = world.get::<Transform>(killer) else {
         return Vec::new();
     };
+    if world.get::<ClassKit>(killer).is_none() {
+        return Vec::new();
+    }
+    let killer_inst = world
+        .get::<InstanceAt>(killer)
+        .and_then(|i| i.instance_id.clone());
     roster
         .members_of(killer)
         .map(|m| {
             m.into_iter()
                 .filter(|id| *id != killer)
                 .filter(|id| {
-                    entities
-                        .iter()
-                        .find(|e| e.id == *id && e.kind == EntityKind::Player && e.alive)
-                        .map(|mate| {
-                            let dx = mate.x - killer_e.x;
-                            let dz = mate.z - killer_e.z;
+                    world.get::<ClassKit>(*id).is_some()
+                        && world
+                            .get::<Health>(*id)
+                            .map(|h| h.alive)
+                            .unwrap_or(false)
+                        && world.get::<Transform>(*id).map(|mate| {
+                            let dx = mate.x - killer_t.x;
+                            let dz = mate.z - killer_t.z;
                             (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
-                                && mate.instance_id == killer_e.instance_id
-                        })
-                        .unwrap_or(false)
+                                && world
+                                    .get::<InstanceAt>(*id)
+                                    .and_then(|i| i.instance_id.clone())
+                                    == killer_inst
+                        }).unwrap_or(false)
                 })
                 .collect()
         })
         .unwrap_or_default()
 }
 
-fn player_exists(entities: &[Entity], id: EntityId) -> bool {
-    entities
-        .iter()
-        .any(|e| e.id == id && e.kind == EntityKind::Player)
+fn player_exists(world: &World, id: EntityId) -> bool {
+    world.get::<ClassKit>(id).is_some()
 }
 
-fn find_player_by_name(entities: &[Entity], name: &str) -> Option<EntityId> {
-    entities
-        .iter()
-        .find(|e| e.kind == EntityKind::Player && e.name == name)
-        .map(|e| e.id)
+fn find_player_by_name(world: &World, name: &str) -> Option<EntityId> {
+    for id in world.ids::<ClassKit>() {
+        if world
+            .get::<Identity>(id)
+            .is_some_and(|i| i.kind == EntityKind::Player && i.name == name)
+        {
+            return Some(id);
+        }
+    }
+    None
 }
 
-fn player_name(entities: &[Entity], id: EntityId) -> Option<String> {
-    entities
-        .iter()
-        .find(|e| e.id == id && e.kind == EntityKind::Player)
-        .map(|e| e.name.clone())
+fn player_name(world: &World, id: EntityId) -> Option<String> {
+    world.get::<Identity>(id).map(|i| i.name.clone())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ecs::spawn::world_from_entities;
     use crate::entity::create_player;
     use woc_content::PlayerClass;
 
-    fn players() -> Vec<Entity> {
+    fn players() -> Vec<crate::entity::Entity> {
         vec![
             create_player(1, "Alice", PlayerClass::Warrior, 0.0, 0.0),
             create_player(2, "Bob", PlayerClass::Mage, 1.0, 0.0),
@@ -313,20 +322,23 @@ mod tests {
         ]
     }
 
-    fn form_party(roster: &mut PartyRoster, entities: &[Entity], a: EntityId, b: EntityId) {
-        let name = entities
-            .iter()
-            .find(|e| e.id == b)
-            .map(|e| e.name.clone())
+    fn world_from(entities: &[crate::entity::Entity]) -> World {
+        world_from_entities(entities)
+    }
+
+    fn form_party(roster: &mut PartyRoster, world: &World, a: EntityId, b: EntityId) {
+        let name = world
+            .get::<Identity>(b)
+            .map(|i| i.name.clone())
             .unwrap();
-        let effects = roster.invite(a, &name, entities);
+        let effects = roster.invite(a, &name, world);
         assert!(
             effects
                 .iter()
                 .any(|e| matches!(e, PartyEffect::Notice { .. })),
             "invite should notify: {effects:?}"
         );
-        let effects = roster.accept(b, entities);
+        let effects = roster.accept(b, world);
         assert!(
             effects
                 .iter()
@@ -338,8 +350,9 @@ mod tests {
     #[test]
     fn invite_accept_forms_party_of_two() {
         let entities = players();
+        let world = world_from(&entities);
         let mut roster = PartyRoster::new();
-        form_party(&mut roster, &entities, 1, 2);
+        form_party(&mut roster, &world, 1, 2);
         let members = roster.members_of(1).expect("alice in party");
         assert_eq!(members, vec![1, 2]);
         assert_eq!(roster.party_id(1), roster.party_id(2));
@@ -349,16 +362,18 @@ mod tests {
     #[test]
     fn invite_unknown_name_errors() {
         let entities = players();
+        let world = world_from(&entities);
         let mut roster = PartyRoster::new();
-        let effects = roster.invite(1, "Nobody", &entities);
+        let effects = roster.invite(1, "Nobody", &world);
         assert!(matches!(effects.as_slice(), [PartyEffect::Error { .. }]));
     }
 
     #[test]
     fn leave_dissolves_pair() {
         let entities = players();
+        let world = world_from(&entities);
         let mut roster = PartyRoster::new();
-        form_party(&mut roster, &entities, 1, 2);
+        form_party(&mut roster, &world, 1, 2);
         let effects = roster.leave(2);
         assert!(
             effects
@@ -373,17 +388,17 @@ mod tests {
     #[test]
     fn party_grows_to_five_then_rejects_sixth() {
         let entities = players();
+        let world = world_from(&entities);
         let mut roster = PartyRoster::new();
-        form_party(&mut roster, &entities, 1, 2);
+        form_party(&mut roster, &world, 1, 2);
         for invitee in [3u32, 4, 5] {
-            let name = entities
-                .iter()
-                .find(|e| e.id == invitee)
+            let name = world
+                .get::<Identity>(invitee)
                 .unwrap()
                 .name
                 .clone();
-            roster.invite(1, &name, &entities);
-            let effects = roster.accept(invitee, &entities);
+            roster.invite(1, &name, &world);
+            let effects = roster.accept(invitee, &world);
             assert!(
                 effects
                     .iter()
@@ -392,7 +407,7 @@ mod tests {
             );
         }
         assert_eq!(roster.members_of(1).unwrap().len(), MAX_PARTY_SIZE);
-        let effects = roster.invite(1, "Frank", &entities);
+        let effects = roster.invite(1, "Frank", &world);
         assert!(
             effects
                 .iter()
@@ -405,18 +420,20 @@ mod tests {
     #[test]
     fn kill_credit_share_lists_party_mates() {
         let entities = players();
+        let world = world_from(&entities);
         let mut roster = PartyRoster::new();
-        form_party(&mut roster, &entities, 1, 2);
-        let share = kill_credit_share(&roster, &entities, 1);
+        form_party(&mut roster, &world, 1, 2);
+        let share = kill_credit_share(&roster, &world, 1);
         assert_eq!(share, vec![2]);
-        assert!(kill_credit_share(&roster, &entities, 99).is_empty());
+        assert!(kill_credit_share(&roster, &world, 99).is_empty());
     }
 
     #[test]
     fn accept_without_invite_errors() {
         let entities = players();
+        let world = world_from(&entities);
         let mut roster = PartyRoster::new();
-        let effects = roster.accept(2, &entities);
+        let effects = roster.accept(2, &world);
         assert!(matches!(effects.as_slice(), [PartyEffect::Error { .. }]));
     }
 }

@@ -5,6 +5,10 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::ecs::components::{
+    Bags, Bank, ClassKit, Durable, Health, Identity, Progress, QuestLog, Transform,
+};
+use crate::ecs::World;
 use crate::entity::{
     create_player, refresh_known_abilities, Entity, Equipment, InvStack, QuestProgress, QuestState,
 };
@@ -58,29 +62,70 @@ impl PlayerPersistentState {
     }
 }
 
-/// Export durable fields from a live player entity.
-pub fn export_player_state(player: &Entity) -> Option<PlayerPersistentState> {
-    if player.kind != woc_protocol::EntityKind::Player {
+/// Export durable fields from a live player in the sparse-column world.
+pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerPersistentState> {
+    if world.get::<ClassKit>(player_id).is_none() {
         return None;
     }
     Some(PlayerPersistentState {
-        durable_id: player.durable_id.clone(),
-        level: player.level,
-        xp: player.xp,
-        copper: player.copper,
-        pos_x: player.x,
-        pos_z: player.z,
-        inventory: player.inventory.clone(),
-        equipment: player.equipment.clone(),
-        quests: player.quest_log.clone(),
-        zone_id: player.zone_id.clone(),
-        talent_points: player.talent_points,
-        talents: player.talents.clone(),
-        bank: player.bank.clone(),
-        honor: player.honor,
-        professions: player.professions.clone(),
-        pvp_flagged: player.pvp_flagged,
-        completed_deeds: player.completed_deeds.clone(),
+        durable_id: world
+            .get::<Durable>(player_id)
+            .and_then(|d| d.durable_id.clone()),
+        level: world
+            .get::<Health>(player_id)
+            .map(|h| h.level)
+            .unwrap_or(1),
+        xp: world.get::<Progress>(player_id).map(|p| p.xp).unwrap_or(0),
+        copper: world
+            .get::<Progress>(player_id)
+            .map(|p| p.copper)
+            .unwrap_or(0),
+        pos_x: world.get::<Transform>(player_id).map(|t| t.x).unwrap_or(0.0),
+        pos_z: world.get::<Transform>(player_id).map(|t| t.z).unwrap_or(0.0),
+        inventory: world
+            .get::<Bags>(player_id)
+            .map(|b| b.inventory.clone())
+            .unwrap_or_default(),
+        equipment: world
+            .get::<Bags>(player_id)
+            .map(|b| b.equipment.clone())
+            .unwrap_or_default(),
+        quests: world
+            .get::<QuestLog>(player_id)
+            .map(|q| q.quest_log.clone())
+            .unwrap_or_default(),
+        zone_id: world
+            .get::<Identity>(player_id)
+            .map(|i| i.zone_id.clone())
+            .unwrap_or_default(),
+        talent_points: world
+            .get::<Progress>(player_id)
+            .map(|p| p.talent_points)
+            .unwrap_or(0),
+        talents: world
+            .get::<Progress>(player_id)
+            .map(|p| p.talents.clone())
+            .unwrap_or_default(),
+        bank: world
+            .get::<Bank>(player_id)
+            .map(|b| b.bank.clone())
+            .unwrap_or_default(),
+        honor: world
+            .get::<Progress>(player_id)
+            .map(|p| p.honor)
+            .unwrap_or(0),
+        professions: world
+            .get::<Progress>(player_id)
+            .map(|p| p.professions.clone())
+            .unwrap_or_default(),
+        pvp_flagged: world
+            .get::<Progress>(player_id)
+            .map(|p| p.pvp_flagged)
+            .unwrap_or(false),
+        completed_deeds: world
+            .get::<Progress>(player_id)
+            .map(|p| p.completed_deeds.clone())
+            .unwrap_or_default(),
     })
 }
 
@@ -251,7 +296,8 @@ mod tests {
         base.talents.insert("mage_arcane_power".into(), 2);
         base.completed_deeds.insert("eastfen_mire_terror".into());
         base.zone_id = "eastfen".into();
-        let exported = export_player_state(&base).unwrap();
+        let world = crate::ecs::spawn::world_from_entities(&[base]);
+        let exported = export_player_state(&world, 1).unwrap();
         assert!(!exported.is_virgin());
         let restored = create_player_from_state(9, "Ada", PlayerClass::Mage, &exported);
         assert_eq!(restored.level, 5);
