@@ -107,6 +107,7 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             item_count: m.item_count,
             durability: m.durability,
             enchant_id: m.enchant_id.clone(),
+            bound: m.bound,
         })
         .collect();
     sim.mail.load_mails(mails, economy.next_mail_id);
@@ -123,7 +124,12 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             count: l.count,
             durability: l.durability,
             enchant_id: l.enchant_id.clone(),
+            bound: l.bound,
             price: l.price,
+            start_bid: l.start_bid,
+            current_bid: l.current_bid,
+            bidder_durable: l.bidder_durable.clone(),
+            bidder_name: l.bidder_name.clone(),
             expires_tick: l.expires_tick,
         })
         .collect();
@@ -146,6 +152,7 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 item_count: m.item_count,
                 durability: m.durability,
                 enchant_id: m.enchant_id,
+                bound: m.bound,
             })
             .collect(),
         market: sim
@@ -162,6 +169,11 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 expires_tick: l.expires_tick,
                 durability: l.durability,
                 enchant_id: l.enchant_id.clone(),
+                bound: l.bound,
+                start_bid: l.start_bid,
+                current_bid: l.current_bid,
+                bidder_durable: l.bidder_durable.clone(),
+                bidder_name: l.bidder_name.clone(),
             })
             .collect(),
         next_mail_id: sim.mail.next_id(),
@@ -178,6 +190,7 @@ fn inv_from_dto(slots: &[Option<InvStackDto>]) -> Vec<Option<InvStack>> {
                 count: st.count,
                 durability: st.durability,
                 enchant_id: st.enchant_id.clone(),
+                bound: st.bound,
             })
         })
         .collect()
@@ -192,6 +205,7 @@ fn inv_to_dto(slots: &[Option<InvStack>]) -> Vec<Option<InvStackDto>> {
                 count: st.count,
                 durability: st.durability,
                 enchant_id: st.enchant_id.clone(),
+                bound: st.bound,
             })
         })
         .collect()

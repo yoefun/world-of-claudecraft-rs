@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.15.0 — 2026-08-13
+
+### Added
+
+- **1.15.0 `economy-depth`:** Auction bids, 12/24/48 hour listings, client search/pagination, soulbound, banker and mailbox NPCs.
+- Bid copper is held; outbid mail returns it. Expire with a bid mails `"Auction won"` and sale proceeds. Buyout still instant.
+- Weapons/armor bind on equip; quest items bind on pickup. Bound stacks cannot list or mail.
+- Eastbrook Banker Holme and Eastbrook Post gate **K** / **I** actions. Protocol rev stays **8**.
+
 ## 1.14.0 — 2026-08-13
 
 ### Added

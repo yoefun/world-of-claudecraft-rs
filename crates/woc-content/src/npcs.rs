@@ -20,6 +20,8 @@ pub enum NpcService {
     ClassTrainer,
     Innkeeper,
     Auctioneer,
+    Banker,
+    Mailbox,
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +63,14 @@ impl NpcDef {
         self.services.contains(&NpcService::Auctioneer)
     }
 
+    pub fn is_banker(&self) -> bool {
+        self.services.contains(&NpcService::Banker)
+    }
+
+    pub fn is_mailbox(&self) -> bool {
+        self.services.contains(&NpcService::Mailbox)
+    }
+
     pub fn trains_profession(&self, id: &str) -> bool {
         self.trains.contains(&id)
     }
@@ -79,7 +89,11 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         id: "trader_wilkes",
         name: "Trader Wilkes",
         greeting: "Fresh rations and a fair price, traveler.",
-        services: &[NpcService::QuestGiver, NpcService::Vendor, NpcService::ProfessionTrainer],
+        services: &[
+            NpcService::QuestGiver,
+            NpcService::Vendor,
+            NpcService::ProfessionTrainer,
+        ],
         vendor_stock: &[
             VendorOffer {
                 item_id: "travelers_ration",
@@ -198,6 +212,22 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         name: "Auctioneer Lise",
         greeting: "List it. The house takes its cut.",
         services: &[NpcService::Auctioneer],
+        vendor_stock: &[],
+        trains: &[],
+    },
+    NpcDef {
+        id: "banker_holme",
+        name: "Banker Holme",
+        greeting: "Your coin is safer with me.",
+        services: &[NpcService::Banker],
+        vendor_stock: &[],
+        trains: &[],
+    },
+    NpcDef {
+        id: "mailbox_post",
+        name: "Eastbrook Post",
+        greeting: "Leave it. We'll see it through.",
+        services: &[NpcService::Mailbox],
         vendor_stock: &[],
         trains: &[],
     },

@@ -20,6 +20,7 @@ pub fn take_from_slot(inv: &mut [Option<InvStack>], slot: u8, count: u32) -> Opt
         count: take,
         durability: stack.durability,
         enchant_id: stack.enchant_id.clone(),
+        bound: stack.bound,
     };
     stack.count -= take;
     if stack.count > 0 {
@@ -47,6 +48,7 @@ pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
             if stack.item_id == incoming.item_id
                 && stack.durability == incoming.durability
                 && stack.enchant_id == incoming.enchant_id
+                && stack.bound == incoming.bound
                 && stack.count < max_stack
             {
                 let space = max_stack - stack.count;
@@ -69,6 +71,7 @@ pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
             count: add,
             durability: incoming.durability,
             enchant_id: incoming.enchant_id.clone(),
+            bound: incoming.bound,
         });
         remaining -= add;
     }
@@ -123,7 +126,10 @@ pub fn grant_item(
     let Some(bags) = world.get_mut::<Bags>(player_id) else {
         return Err("no player");
     };
-    if !grant_into(&mut bags.inventory, item_id, count) {
+    if !grant_stack(
+        &mut bags.inventory,
+        InvStack::new(item_id, count).with_loot_bind(),
+    ) {
         return Err("inventory full");
     }
     events.push(SimEvent::ItemGained {
@@ -165,7 +171,7 @@ pub fn player_item_count(world: &World, player_id: EntityId, item_id: &str) -> u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::InvStack;
+    use crate::ecs::components::{Bags, InvStack};
 
     fn empty_bags() -> [Option<InvStack>; 4] {
         [None, None, None, None]
@@ -179,12 +185,14 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         inv[1] = Some(InvStack {
             item_id: "silverleaf".into(),
             count: 2,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         let taken = take_from_slot(&mut inv, 1, 1).unwrap();
         assert_eq!(taken.count, 1);
@@ -200,11 +208,50 @@ mod tests {
             count: 1,
             durability: Some(7),
             enchant_id: Some("coarse_sharpening".into()),
+            bound: false,
         };
         assert!(grant_stack(&mut inv, worn.clone()));
         assert_eq!(inv[0], Some(worn));
         assert!(grant_into(&mut inv, "worn_sword", 1));
         assert_eq!(inv[1].as_ref().unwrap().durability, Some(40));
         assert!(inv[1].as_ref().unwrap().enchant_id.is_none());
+    }
+
+    #[test]
+    fn grant_item_binds_on_pickup_quest_items() {
+        let mut world = crate::ecs::World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Ada",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        let mut events = Vec::new();
+        assert!(grant_item(&mut world, 1, "boar_tusk", 1, &mut events).is_ok());
+        let stack = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "boar_tusk")
+            .unwrap();
+        assert!(stack.bound);
+        assert!(grant_into(
+            &mut world.get_mut::<Bags>(1).unwrap().inventory,
+            "silverleaf",
+            1
+        ));
+        let leaf = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "silverleaf")
+            .unwrap();
+        assert!(!leaf.bound);
     }
 }

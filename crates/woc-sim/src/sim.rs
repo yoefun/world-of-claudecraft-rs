@@ -659,6 +659,7 @@ impl Sim {
                             count: st.count,
                             durability: st.durability,
                             enchant_id: st.enchant_id.clone(),
+                            bound: st.bound,
                         })
                     })
                     .collect()
@@ -828,6 +829,7 @@ impl Sim {
                                 count: st.count,
                                 durability: st.durability,
                                 enchant_id: st.enchant_id.clone(),
+                                bound: st.bound,
                             })
                         })
                         .collect()

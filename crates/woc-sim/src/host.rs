@@ -18,39 +18,77 @@ use woc_protocol::{
     EntityId, EntityKind, InteractAction, PlayerIntent, SimEvent, TickSnapshot, WorldHost,
 };
 
+fn require_npc_service(
+    world: &crate::ecs::World,
+    player_id: EntityId,
+    events: &mut Vec<SimEvent>,
+    ok: impl Fn(&woc_content::NpcDef) -> bool,
+    toast: &str,
+) -> bool {
+    let Some(npc_id) = world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) else {
+        events.push(SimEvent::Toast {
+            message: toast.into(),
+        });
+        return false;
+    };
+    let is_ok = world
+        .get::<Identity>(npc_id)
+        .filter(|i| i.kind == EntityKind::Npc)
+        .and_then(|i| i.template_id.as_deref())
+        .and_then(npc)
+        .is_some_and(&ok);
+    let in_range = dist2d(world, player_id, npc_id)
+        .map(|d| d <= INTERACT_RANGE)
+        .unwrap_or(false);
+    if !is_ok || !in_range {
+        events.push(SimEvent::Toast {
+            message: toast.into(),
+        });
+        return false;
+    }
+    true
+}
+
 fn require_auctioneer(
     world: &crate::ecs::World,
     player_id: EntityId,
     events: &mut Vec<SimEvent>,
 ) -> bool {
-    let Some(npc_id) = world.get::<Bags>(player_id).and_then(|b| b.open_vendor_npc) else {
-        events.push(SimEvent::Toast {
-            message: "Talk to an auctioneer first.".into(),
-        });
-        return false;
-    };
-    let is_auctioneer = world
-        .get::<Identity>(npc_id)
-        .and_then(|i| {
-            (i.kind == EntityKind::Npc).then(|| {
-                i.template_id
-                    .as_deref()
-                    .and_then(npc)
-                    .map(|d| d.is_auctioneer())
-            })
-        })
-        .flatten()
-        .unwrap_or(false);
-    let in_range = dist2d(world, player_id, npc_id)
-        .map(|d| d <= INTERACT_RANGE)
-        .unwrap_or(false);
-    if !is_auctioneer || !in_range {
-        events.push(SimEvent::Toast {
-            message: "Talk to an auctioneer first.".into(),
-        });
-        return false;
-    }
-    true
+    require_npc_service(
+        world,
+        player_id,
+        events,
+        |d| d.is_auctioneer(),
+        "Talk to an auctioneer first.",
+    )
+}
+
+fn require_banker(
+    world: &crate::ecs::World,
+    player_id: EntityId,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    require_npc_service(
+        world,
+        player_id,
+        events,
+        |d| d.is_banker(),
+        "Talk to a banker first.",
+    )
+}
+
+fn require_mailbox(
+    world: &crate::ecs::World,
+    player_id: EntityId,
+    events: &mut Vec<SimEvent>,
+) -> bool {
+    require_npc_service(
+        world,
+        player_id,
+        events,
+        |d| d.is_mailbox(),
+        "Talk to a mailbox first.",
+    )
 }
 
 impl WorldHost for Sim {
@@ -100,28 +138,38 @@ impl WorldHost for Sim {
                 let _ = talents::respec(&mut self.world, player_id, &mut self.events);
             }
             InteractAction::BankDeposit { bag_slot, count } => {
-                let _ = bank::deposit(
-                    &mut self.world,
-                    player_id,
-                    bag_slot,
-                    count,
-                    &mut self.events,
-                );
+                if require_banker(&self.world, player_id, &mut self.events) {
+                    let _ = bank::deposit(
+                        &mut self.world,
+                        player_id,
+                        bag_slot,
+                        count,
+                        &mut self.events,
+                    );
+                }
             }
             InteractAction::BankWithdraw { bank_slot, count } => {
-                let _ = bank::withdraw(
-                    &mut self.world,
-                    player_id,
-                    bank_slot,
-                    count,
-                    &mut self.events,
-                );
+                if require_banker(&self.world, player_id, &mut self.events) {
+                    let _ = bank::withdraw(
+                        &mut self.world,
+                        player_id,
+                        bank_slot,
+                        count,
+                        &mut self.events,
+                    );
+                }
             }
             InteractAction::BankDepositCopper { amount } => {
-                let _ = bank::deposit_copper(&mut self.world, player_id, amount, &mut self.events);
+                if require_banker(&self.world, player_id, &mut self.events) {
+                    let _ =
+                        bank::deposit_copper(&mut self.world, player_id, amount, &mut self.events);
+                }
             }
             InteractAction::BankWithdrawCopper { amount } => {
-                let _ = bank::withdraw_copper(&mut self.world, player_id, amount, &mut self.events);
+                if require_banker(&self.world, player_id, &mut self.events) {
+                    let _ =
+                        bank::withdraw_copper(&mut self.world, player_id, amount, &mut self.events);
+                }
             }
             InteractAction::MailSend {
                 to_name,
@@ -129,33 +177,41 @@ impl WorldHost for Sim {
                 bag_slot,
                 count,
             } => {
-                let _ = self.mail.send(
-                    &mut self.world,
-                    player_id,
-                    &to_name,
-                    copper,
-                    bag_slot,
-                    count,
-                    &mut self.events,
-                );
+                if require_mailbox(&self.world, player_id, &mut self.events) {
+                    let _ = self.mail.send(
+                        &mut self.world,
+                        player_id,
+                        &to_name,
+                        copper,
+                        bag_slot,
+                        count,
+                        &mut self.events,
+                    );
+                }
             }
             InteractAction::MailCollect { mail_id } => {
-                let _ = self
-                    .mail
-                    .collect(&mut self.world, player_id, mail_id, &mut self.events);
+                if require_mailbox(&self.world, player_id, &mut self.events) {
+                    let _ =
+                        self.mail
+                            .collect(&mut self.world, player_id, mail_id, &mut self.events);
+                }
             }
             InteractAction::MarketList {
                 bag_slot,
                 count,
                 price,
+                start_bid,
+                duration_hours,
             } => {
                 if require_auctioneer(&self.world, player_id, &mut self.events) {
-                    let _ = self.market.list_item(
+                    let _ = self.market.list_item_ex(
                         &mut self.world,
                         player_id,
                         bag_slot,
                         count,
                         price,
+                        start_bid,
+                        duration_hours,
                         self.tick,
                         &mut self.events,
                     );
@@ -168,6 +224,18 @@ impl WorldHost for Sim {
                         &mut self.mail,
                         player_id,
                         listing_id,
+                        &mut self.events,
+                    );
+                }
+            }
+            InteractAction::MarketBid { listing_id, amount } => {
+                if require_auctioneer(&self.world, player_id, &mut self.events) {
+                    let _ = self.market.bid(
+                        &mut self.world,
+                        &mut self.mail,
+                        player_id,
+                        listing_id,
+                        amount,
                         &mut self.events,
                     );
                 }

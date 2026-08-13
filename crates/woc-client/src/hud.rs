@@ -92,6 +92,29 @@ pub(crate) struct UiFlags {
     pub(crate) show_mail: bool,
     pub(crate) show_market: bool,
     pub(crate) show_map: bool,
+    pub(crate) market_filter: String,
+    pub(crate) market_page: usize,
+    pub(crate) market_duration_hours: u32,
+    pub(crate) market_searching: bool,
+}
+
+impl Default for UiFlags {
+    fn default() -> Self {
+        Self {
+            show_bags: false,
+            show_quests: false,
+            show_character: false,
+            show_talents: false,
+            show_bank: false,
+            show_mail: false,
+            show_market: false,
+            show_map: false,
+            market_filter: String::new(),
+            market_page: 0,
+            market_duration_hours: 12,
+            market_searching: false,
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -100,17 +123,8 @@ pub(crate) struct VendorUiCache {
 }
 
 pub(crate) fn plugin(app: &mut App) {
-    app.insert_resource(UiFlags {
-        show_bags: false,
-        show_quests: false,
-        show_character: false,
-        show_talents: false,
-        show_bank: false,
-        show_mail: false,
-        show_market: false,
-        show_map: false,
-    })
-    .init_resource::<VendorUiCache>();
+    app.insert_resource(UiFlags::default())
+        .init_resource::<VendorUiCache>();
 }
 
 fn npc_session_stock(snap: &TickSnapshot) -> Vec<VendorOfferSnapshot> {
@@ -187,7 +201,7 @@ pub(crate) fn first_consumable_bag_stack(snap: &TickSnapshot) -> Option<(u8, Str
 pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String, u32)> {
     snap.inventory.iter().find_map(|stack| {
         let def = item(&stack.item_id)?;
-        if matches!(def.kind, ItemKind::Quest) {
+        if matches!(def.kind, ItemKind::Quest) || stack.bound {
             return None;
         }
         let price = def.vendor_sell.max(1).saturating_mul(5);
@@ -198,6 +212,55 @@ pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, 
             price,
         ))
     })
+}
+
+pub(crate) const MARKET_PAGE_SIZE: usize = 8;
+
+pub(crate) fn filtered_market<'a>(
+    snap: &'a TickSnapshot,
+    filter: &str,
+) -> Vec<&'a woc_protocol::MarketListingSnapshot> {
+    let needle = filter.trim().to_ascii_lowercase();
+    snap.market
+        .iter()
+        .filter(|listing| {
+            if needle.is_empty() {
+                return true;
+            }
+            let id = listing.item_id.to_ascii_lowercase();
+            let name = item(&listing.item_id)
+                .map(|d| d.name.to_ascii_lowercase())
+                .unwrap_or_default();
+            id.contains(&needle) || name.contains(&needle)
+        })
+        .collect()
+}
+
+pub(crate) fn listing_min_bid(listing: &woc_protocol::MarketListingSnapshot) -> Option<u32> {
+    if listing.start_bid == 0 && listing.current_bid == 0 {
+        return None;
+    }
+    if listing.bidder.is_none() {
+        return Some(listing.start_bid.max(1));
+    }
+    Some(
+        listing
+            .current_bid
+            .saturating_add((listing.current_bid / 20).max(1)),
+    )
+}
+
+pub(crate) fn cycle_duration_hours(hours: u32, next: bool) -> u32 {
+    match (hours, next) {
+        (12, true) | (0, true) => 24,
+        (24, true) => 48,
+        (48, true) => 12,
+        (12, false) | (0, false) => 48,
+        (24, false) => 12,
+        (48, false) => 24,
+        (_, true) => 24,
+        (_, false) => 12,
+    }
 }
 
 fn zone_name(snap: &TickSnapshot) -> &str {
@@ -247,6 +310,22 @@ pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
         .unwrap_or(false)
     {
         parts.push("[U] Auction");
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_bank)
+        .unwrap_or(false)
+    {
+        parts.push("[K] Bank");
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_mail)
+        .unwrap_or(false)
+    {
+        parts.push("[I] Mail");
     }
     parts.join("   ")
 }
@@ -497,7 +576,21 @@ fn mail_panel_text(snap: &TickSnapshot) -> String {
     lines.join("\n")
 }
 
-fn market_panel_text(snap: &TickSnapshot) -> String {
+fn market_panel_text(snap: &TickSnapshot, ui: &UiFlags) -> String {
+    let filtered = filtered_market(snap, &ui.market_filter);
+    let pages = filtered.len().div_ceil(MARKET_PAGE_SIZE).max(1);
+    let page = ui.market_page.min(pages.saturating_sub(1));
+    let start = page * MARKET_PAGE_SIZE;
+    let page_rows = filtered
+        .get(start..filtered.len().min(start + MARKET_PAGE_SIZE))
+        .unwrap_or(&[]);
+    let search = if ui.market_searching {
+        format!("Search> {}_", ui.market_filter)
+    } else if ui.market_filter.is_empty() {
+        "Filter: (all)   [/] search".into()
+    } else {
+        format!("Filter: {}   [/] search  [Esc] clear", ui.market_filter)
+    };
     let mut lines = vec![
         "Market [U]".to_string(),
         format!(
@@ -506,23 +599,38 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
             snap.progress.copper,
             snap.honor
         ),
+        format!(
+            "{search}   page {}/{}   duration {}h",
+            page + 1,
+            pages,
+            ui.market_duration_hours
+        ),
     ];
-    if snap.market.is_empty() {
+    if page_rows.is_empty() {
         lines.push("  (no listings)".into());
     } else {
-        lines.extend(snap.market.iter().map(listing_line));
+        lines.extend(page_rows.iter().copied().map(listing_line));
     }
     match first_listable_bag_stack(snap) {
         Some((_, _, item_id, price)) => {
             let name = item(&item_id)
                 .map(|d| d.name.to_string())
                 .unwrap_or(item_id);
-            lines.push(format!("[L] List 1×{name} for {price}c (+5c fee)"));
+            let fee = match ui.market_duration_hours {
+                24 => 10,
+                48 => 20,
+                _ => 5,
+            };
+            let start_bid = (price / 2).max(1);
+            lines.push(format!(
+                "[L] List 1×{name} bid {start_bid}c buyout {price}c (+{fee}c {}h fee)",
+                ui.market_duration_hours
+            ));
         }
         None => lines.push("[L] List first non-quest bag stack (none)".into()),
     }
-    lines.push("[O] Buy first affordable listing (not yours)".into());
-    lines.push("[X] Cancel your first listing".into());
+    lines.push("[O] Buyout first affordable   [B] Bid first filtered".into());
+    lines.push("[X] Cancel   [,][.] duration   [[][]] page".into());
     lines.join("\n")
 }
 
@@ -543,9 +651,17 @@ fn listing_line(listing: &woc_protocol::MarketListingSnapshot) -> String {
             extra.push_str(&format!(" [{}]", edef.name));
         }
     }
+    let bid_bit = if listing.start_bid == 0 && listing.current_bid == 0 {
+        String::new()
+    } else if listing.current_bid > 0 {
+        let who = listing.bidder.as_deref().unwrap_or("?");
+        format!(" bid {}c ({who})", listing.current_bid)
+    } else {
+        format!(" start {}c", listing.start_bid)
+    };
     format!(
-        "  #{} {}×{name}{extra} — {}c ({}){mine}",
-        listing.id, listing.count, listing.price, listing.seller
+        "  #{} {}×{name}{extra} — buyout {}c{} ({}){mine}",
+        listing.id, listing.count, listing.price, bid_bit, listing.seller
     )
 }
 
@@ -573,7 +689,7 @@ pub(crate) fn update_chrome_panels(
             ChromePanelKind::Talents => talent_panel_text(&host.snapshot),
             ChromePanelKind::Bank => bank_panel_text(&host.snapshot),
             ChromePanelKind::Mail => mail_panel_text(&host.snapshot),
-            ChromePanelKind::Market => market_panel_text(&host.snapshot),
+            ChromePanelKind::Market => market_panel_text(&host.snapshot, &ui),
         };
     }
 }
@@ -1236,6 +1352,7 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
@@ -1243,6 +1360,7 @@ mod tests {
             count: 4,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1253,6 +1371,7 @@ mod tests {
             item_count: 2,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         snap.market.push(MarketListingSnapshot {
             id: 11,
@@ -1264,6 +1383,10 @@ mod tests {
             durability: None,
             enchant_id: None,
             expires_tick: 0,
+            start_bid: 0,
+            current_bid: 0,
+            bidder: None,
+            bound: false,
         });
         snap
     }
@@ -1306,13 +1429,15 @@ mod tests {
 
     #[test]
     fn market_panel_formats_listings_wallet_and_buy_help() {
-        let text = market_panel_text(&chrome_snapshot());
+        let text = market_panel_text(&chrome_snapshot(), &UiFlags::default());
 
         assert!(text.contains("Copper: 75"));
-        assert!(text.contains("#11 5×Peacebloom — 30c (Grace)"));
-        assert!(text.contains("[O] Buy first affordable listing"));
+        assert!(text.contains("#11 5×Peacebloom — buyout 30c (Grace)"));
+        assert!(text.contains("[O] Buyout first affordable"));
         assert!(text.contains("[L] List"));
         assert!(text.contains("[X] Cancel"));
+        assert!(text.contains("[B] Bid"));
+        assert!(text.contains("duration 12h"));
     }
 
     #[test]
@@ -1324,6 +1449,7 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
@@ -1331,10 +1457,60 @@ mod tests {
             count: 1,
             durability: Some(7),
             enchant_id: Some("coarse_sharpening".into()),
+            bound: false,
         });
         let listed = first_listable_bag_stack(&snap).unwrap();
         assert_eq!(listed.0, 1);
         assert_eq!(listed.2, "worn_sword");
+    }
+
+    #[test]
+    fn first_listable_bag_stack_skips_bound() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
+            item_id: "silverleaf".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            bound: true,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "wolf_fang".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            bound: false,
+        });
+        let listed = first_listable_bag_stack(&snap).unwrap();
+        assert_eq!(listed.2, "wolf_fang");
+    }
+
+    #[test]
+    fn filtered_market_pages_by_name() {
+        let mut snap = chrome_snapshot();
+        snap.market.push(MarketListingSnapshot {
+            id: 12,
+            seller: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            price: 8,
+            mine: false,
+            durability: None,
+            enchant_id: None,
+            expires_tick: 0,
+            start_bid: 4,
+            current_bid: 0,
+            bidder: None,
+            bound: false,
+        });
+        let hits = filtered_market(&snap, "peace");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].item_id, "peacebloom");
+        assert_eq!(listing_min_bid(&snap.market[1]), Some(4));
+        assert_eq!(cycle_duration_hours(12, true), 24);
+        assert_eq!(cycle_duration_hours(48, true), 12);
     }
 
     #[test]
@@ -1344,7 +1520,7 @@ mod tests {
         snap.market[0].count = 1;
         snap.market[0].durability = Some(7);
         snap.market[0].enchant_id = Some("coarse_sharpening".into());
-        let text = market_panel_text(&snap);
+        let text = market_panel_text(&snap, &UiFlags::default());
         assert!(text.contains("Worn Sword"));
         assert!(text.contains("7/40"));
         assert!(text.contains("Coarse Sharpening"));
@@ -1365,6 +1541,8 @@ mod tests {
             can_bind: false,
             buyback: vec![],
             can_auction: true,
+            can_bank: false,
+            can_mail: false,
         });
         let text = npc_session_help(&snap);
         assert!(text.contains("[U] Auction"));
@@ -1385,6 +1563,8 @@ mod tests {
             can_bind: false,
             buyback: vec![],
             can_auction: false,
+            can_bank: false,
+            can_mail: false,
         });
 
         let text = npc_session_help(&snap);

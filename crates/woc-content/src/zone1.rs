@@ -63,6 +63,16 @@ pub static EASTBROOK: ZoneLayout = ZoneLayout {
             x: 4.0,
             z: 6.0,
         },
+        NpcSpot {
+            npc_id: "banker_holme",
+            x: 6.0,
+            z: 6.0,
+        },
+        NpcSpot {
+            npc_id: "mailbox_post",
+            x: 0.0,
+            z: 8.0,
+        },
     ],
     mobs: &[
         // Wolf Run (upstream POI ~(-2, 70)).

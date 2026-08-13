@@ -45,8 +45,8 @@ pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{
     base_of, can_dual_wield, can_equip, class_armor_cap, enchant, fine_substitute_for, item,
-    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny, ItemDef,
-    ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
+    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny,
+    ItemBind, ItemDef, ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
 };
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
@@ -559,6 +559,8 @@ mod tests {
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
         assert!(npc("auctioneer_lise").unwrap().is_auctioneer());
+        assert!(npc("banker_holme").unwrap().is_banker());
+        assert!(npc("mailbox_post").unwrap().is_mailbox());
     }
 
     #[test]
@@ -572,6 +574,36 @@ mod tests {
         assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "auctioneer_lise"
             && (s.x - 4.0).abs() < f32::EPSILON
             && (s.z - 6.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn banker_and_mailbox_are_eastbrook_only_services() {
+        let holme = npc("banker_holme").expect("banker_holme");
+        assert!(holme.is_banker());
+        assert!(!holme.is_auctioneer());
+        assert!(!holme.is_vendor());
+        assert_eq!(holme.greeting, "Your coin is safer with me.");
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "banker_holme"
+            && (s.x - 6.0).abs() < f32::EPSILON
+            && (s.z - 6.0).abs() < f32::EPSILON));
+
+        let post = npc("mailbox_post").expect("mailbox_post");
+        assert!(post.is_mailbox());
+        assert!(!post.is_banker());
+        assert_eq!(post.greeting, "Leave it. We'll see it through.");
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "mailbox_post"
+            && (s.x - 0.0).abs() < f32::EPSILON
+            && (s.z - 8.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn catalog_bind_rules() {
+        use crate::ItemBind;
+        assert_eq!(item("worn_sword").unwrap().bind, ItemBind::OnEquip);
+        assert_eq!(item("recruit_tunic").unwrap().bind, ItemBind::OnEquip);
+        assert_eq!(item("boar_tusk").unwrap().bind, ItemBind::OnPickup);
+        assert_eq!(item("silverleaf").unwrap().bind, ItemBind::None);
+        assert_eq!(item("travelers_ration").unwrap().bind, ItemBind::None);
     }
 
     #[test]
@@ -1086,7 +1118,10 @@ mod tests {
                 recipe.id
             );
             if let Some(station_id) = recipe.station {
-                assert!(station(station_id).is_some(), "missing station {station_id}");
+                assert!(
+                    station(station_id).is_some(),
+                    "missing station {station_id}"
+                );
             }
         }
     }
@@ -1125,6 +1160,9 @@ mod tests {
         assert_eq!(PROFESSION_ENCHANTS.len(), 3);
         assert!(profession_enchant("weapon_minor_might").is_some());
         assert!(enchant("weapon_minor_might").is_some());
-        assert_eq!(disenchant_yield("copper_shortsword")[0].item_id, "arcane_dust");
+        assert_eq!(
+            disenchant_yield("copper_shortsword")[0].item_id,
+            "arcane_dust"
+        );
     }
 }

@@ -221,6 +221,7 @@ mod serialize_tests {
                 count: 3,
                 durability: None,
                 enchant_id: None,
+                bound: false,
             }),
             None,
         ];

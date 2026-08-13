@@ -15,6 +15,8 @@ pub struct MailDto {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -30,6 +32,16 @@ pub struct MarketListingDto {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
+    #[serde(default)]
+    pub start_bid: u32,
+    #[serde(default)]
+    pub current_bid: u32,
+    #[serde(default)]
+    pub bidder_durable: Option<String>,
+    #[serde(default)]
+    pub bidder_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -73,6 +85,7 @@ mod tests {
                 item_count: 0,
                 durability: None,
                 enchant_id: None,
+                bound: false,
             }],
             market: vec![MarketListingDto {
                 id: 2,
@@ -84,6 +97,11 @@ mod tests {
                 expires_tick: 100,
                 durability: None,
                 enchant_id: None,
+                bound: false,
+                start_bid: 0,
+                current_bid: 0,
+                bidder_durable: None,
+                bidder_name: None,
             }],
             next_mail_id: 3,
             next_listing_id: 4,
@@ -100,5 +118,8 @@ mod tests {
         .unwrap();
         assert!(eco.mail[0].durability.is_none());
         assert!(eco.market[0].enchant_id.is_none());
+        assert!(!eco.mail[0].bound);
+        assert_eq!(eco.market[0].start_bid, 0);
+        assert!(eco.market[0].bidder_durable.is_none());
     }
 }

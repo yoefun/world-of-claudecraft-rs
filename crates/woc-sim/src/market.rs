@@ -6,9 +6,11 @@ use crate::inventory::{grant_stack, take_from_slot};
 use crate::mail::Mailbox;
 use woc_protocol::{EntityId, MarketListingSnapshot, SimEvent};
 
-/// Listing duration in ticks (~1 hour at 20 Hz).
-pub const LISTING_TTL_TICKS: u64 = 20 * 60 * 60;
-/// Flat listing fee in copper.
+/// Ticks in one real-time hour at 20 Hz.
+pub const TICKS_PER_HOUR: u64 = 20 * 60 * 60;
+/// Default listing duration (12 hours) in ticks.
+pub const LISTING_TTL_TICKS: u64 = 12 * TICKS_PER_HOUR;
+/// Flat 12-hour listing fee in copper.
 pub const LISTING_FEE: u32 = 5;
 /// House cut is `price / SALE_CUT_DEN` (5% floored).
 pub const SALE_CUT_NUM: u32 = 1;
@@ -20,6 +22,38 @@ pub fn sale_cut(price: u32) -> u32 {
 
 pub fn sale_proceeds(price: u32) -> u32 {
     price.saturating_sub(sale_cut(price))
+}
+
+pub fn duration_ticks(hours: u32) -> Option<u64> {
+    match hours {
+        0 | 12 => Some(12 * TICKS_PER_HOUR),
+        24 => Some(24 * TICKS_PER_HOUR),
+        48 => Some(48 * TICKS_PER_HOUR),
+        _ => None,
+    }
+}
+
+pub fn duration_fee(hours: u32) -> Option<u32> {
+    match hours {
+        0 | 12 => Some(5),
+        24 => Some(10),
+        48 => Some(20),
+        _ => None,
+    }
+}
+
+pub fn min_next_bid(listing: &Listing) -> Option<u32> {
+    if listing.start_bid == 0 && listing.current_bid == 0 {
+        return None;
+    }
+    if listing.bidder_durable.is_none() {
+        return Some(listing.start_bid.max(1));
+    }
+    Some(
+        listing
+            .current_bid
+            .saturating_add((listing.current_bid / 20).max(1)),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,7 +68,12 @@ pub struct Listing {
     pub count: u32,
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
+    pub bound: bool,
     pub price: u32,
+    pub start_bid: u32,
+    pub current_bid: u32,
+    pub bidder_durable: Option<String>,
+    pub bidder_name: Option<String>,
     pub expires_tick: u64,
 }
 
@@ -69,17 +108,7 @@ impl AuctionHouse {
     pub fn snapshot_public(&self) -> Vec<MarketListingSnapshot> {
         self.listings
             .iter()
-            .map(|l| MarketListingSnapshot {
-                id: l.id,
-                seller: l.seller_name.clone(),
-                item_id: l.item_id.clone(),
-                count: l.count,
-                price: l.price,
-                mine: false,
-                durability: l.durability,
-                enchant_id: l.enchant_id.clone(),
-                expires_tick: l.expires_tick,
-            })
+            .map(|l| listing_snapshot(l, false))
             .collect()
     }
 
@@ -92,22 +121,11 @@ impl AuctionHouse {
                 let mine = viewer != 0
                     && (l.seller_id == viewer
                         || viewer_key.as_ref().is_some_and(|k| k == &l.seller_durable));
-                MarketListingSnapshot {
-                    id: l.id,
-                    seller: l.seller_name.clone(),
-                    item_id: l.item_id.clone(),
-                    count: l.count,
-                    price: l.price,
-                    mine,
-                    durability: l.durability,
-                    enchant_id: l.enchant_id.clone(),
-                    expires_tick: l.expires_tick,
-                }
+                listing_snapshot(l, mine)
             })
             .collect()
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn list_item(
         &mut self,
         world: &mut World,
@@ -118,17 +136,50 @@ impl AuctionHouse {
         now_tick: u64,
         events: &mut Vec<SimEvent>,
     ) -> bool {
-        if price == 0 {
+        self.list_item_ex(
+            world, seller, bag_slot, count, price, 0, 12, now_tick, events,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn list_item_ex(
+        &mut self,
+        world: &mut World,
+        seller: EntityId,
+        bag_slot: u8,
+        count: u32,
+        price: u32,
+        start_bid: u32,
+        duration_hours: u32,
+        now_tick: u64,
+        events: &mut Vec<SimEvent>,
+    ) -> bool {
+        if price == 0 && start_bid == 0 {
             events.push(SimEvent::Toast {
-                message: "Price must be positive.".into(),
+                message: "Set a starting bid or buyout.".into(),
             });
             return false;
         }
+        if price > 0 && start_bid > price {
+            events.push(SimEvent::Toast {
+                message: "Starting bid must be at most the buyout.".into(),
+            });
+            return false;
+        }
+        let Some(ttl) = duration_ticks(duration_hours) else {
+            events.push(SimEvent::Toast {
+                message: "Duration must be 12, 24, or 48 hours.".into(),
+            });
+            return false;
+        };
+        let Some(fee) = duration_fee(duration_hours) else {
+            return false;
+        };
         if world.get::<ClassKit>(seller).is_none() {
             return false;
         }
         let copper = world.get::<Progress>(seller).map(|p| p.copper).unwrap_or(0);
-        if copper < LISTING_FEE {
+        if copper < fee {
             events.push(SimEvent::Toast {
                 message: "Cannot afford listing fee.".into(),
             });
@@ -144,6 +195,12 @@ impl AuctionHouse {
             });
             return false;
         };
+        if stack.bound {
+            events.push(SimEvent::Toast {
+                message: "That item is soulbound.".into(),
+            });
+            return false;
+        }
         if woc_content::item(&stack.item_id).is_some_and(|d| d.kind == woc_content::ItemKind::Quest)
         {
             events.push(SimEvent::Toast {
@@ -160,7 +217,7 @@ impl AuctionHouse {
             return false;
         };
         if let Some(progress) = world.get_mut::<Progress>(seller) {
-            progress.copper -= LISTING_FEE;
+            progress.copper -= fee;
         }
         let seller_durable = Mailbox::mailbox_key(world, seller);
         let seller_name = world
@@ -178,8 +235,13 @@ impl AuctionHouse {
             count: taken.count,
             durability: taken.durability,
             enchant_id: taken.enchant_id,
+            bound: taken.bound,
             price,
-            expires_tick: now_tick.saturating_add(LISTING_TTL_TICKS),
+            start_bid,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
+            expires_tick: now_tick.saturating_add(ttl),
         });
         events.push(SimEvent::MarketListed {
             player: seller,
@@ -210,26 +272,33 @@ impl AuctionHouse {
             });
             return false;
         }
+        if listing.price == 0 {
+            events.push(SimEvent::Toast {
+                message: "No buyout on this listing.".into(),
+            });
+            return false;
+        }
         if world.get::<ClassKit>(buyer).is_none() {
             return false;
         }
+        let already_bid = listing
+            .bidder_durable
+            .as_ref()
+            .is_some_and(|k| k == &buyer_durable);
+        let due = if already_bid {
+            listing.price.saturating_sub(listing.current_bid)
+        } else {
+            listing.price
+        };
         let buyer_copper = world.get::<Progress>(buyer).map(|p| p.copper).unwrap_or(0);
-        if buyer_copper < listing.price {
+        if buyer_copper < due {
             events.push(SimEvent::Toast {
                 message: "Not enough copper.".into(),
             });
             return false;
         }
         let granted = if let Some(bags) = world.get_mut::<Bags>(buyer) {
-            grant_stack(
-                &mut bags.inventory,
-                InvStack {
-                    item_id: listing.item_id.clone(),
-                    count: listing.count,
-                    durability: listing.durability,
-                    enchant_id: listing.enchant_id.clone(),
-                },
-            )
+            grant_stack(&mut bags.inventory, listing_stack(&listing))
         } else {
             false
         };
@@ -240,7 +309,22 @@ impl AuctionHouse {
             return false;
         }
         if let Some(progress) = world.get_mut::<Progress>(buyer) {
-            progress.copper -= listing.price;
+            progress.copper -= due;
+        }
+        if let (Some(prev_key), Some(prev_name)) = (
+            listing.bidder_durable.as_ref(),
+            listing.bidder_name.as_ref(),
+        ) {
+            if prev_key != &buyer_durable {
+                mail.deliver_system(
+                    prev_key,
+                    "Auction House",
+                    "Outbid",
+                    listing.current_bid,
+                    None,
+                );
+                let _ = prev_name;
+            }
         }
         let seller_name = listing.seller_name.clone();
         mail.deliver_system(
@@ -260,6 +344,93 @@ impl AuctionHouse {
             listing_id,
             buyer,
             seller_name,
+        });
+        true
+    }
+
+    pub fn bid(
+        &mut self,
+        world: &mut World,
+        mail: &mut Mailbox,
+        bidder: EntityId,
+        listing_id: u32,
+        amount: u32,
+        events: &mut Vec<SimEvent>,
+    ) -> bool {
+        let Some(idx) = self.listings.iter().position(|l| l.id == listing_id) else {
+            events.push(SimEvent::Toast {
+                message: "Listing not found.".into(),
+            });
+            return false;
+        };
+        let listing = self.listings[idx].clone();
+        let bidder_durable = Mailbox::mailbox_key(world, bidder);
+        if listing.seller_durable == bidder_durable || listing.seller_id == bidder {
+            events.push(SimEvent::Toast {
+                message: "Cannot bid on your own listing.".into(),
+            });
+            return false;
+        }
+        let Some(min_bid) = min_next_bid(&listing) else {
+            events.push(SimEvent::Toast {
+                message: "This listing is buyout only.".into(),
+            });
+            return false;
+        };
+        if listing
+            .bidder_durable
+            .as_ref()
+            .is_some_and(|k| k == &bidder_durable)
+        {
+            events.push(SimEvent::Toast {
+                message: "You already hold the high bid.".into(),
+            });
+            return false;
+        }
+        if amount < min_bid {
+            events.push(SimEvent::Toast {
+                message: "Bid is too low.".into(),
+            });
+            return false;
+        }
+        if listing.price > 0 && amount >= listing.price {
+            events.push(SimEvent::Toast {
+                message: "Use buyout for that price.".into(),
+            });
+            return false;
+        }
+        if world.get::<ClassKit>(bidder).is_none() {
+            return false;
+        }
+        let copper = world.get::<Progress>(bidder).map(|p| p.copper).unwrap_or(0);
+        if copper < amount {
+            events.push(SimEvent::Toast {
+                message: "Not enough copper.".into(),
+            });
+            return false;
+        }
+        if let Some(progress) = world.get_mut::<Progress>(bidder) {
+            progress.copper -= amount;
+        }
+        if let Some(prev_key) = listing.bidder_durable.as_ref() {
+            mail.deliver_system(
+                prev_key,
+                "Auction House",
+                "Outbid",
+                listing.current_bid,
+                None,
+            );
+        }
+        let bidder_name = world
+            .get::<Identity>(bidder)
+            .map(|i| i.name.clone())
+            .unwrap_or_default();
+        let row = &mut self.listings[idx];
+        row.current_bid = amount;
+        row.bidder_durable = Some(bidder_durable);
+        row.bidder_name = Some(bidder_name);
+        events.push(SimEvent::Toast {
+            message: format!("Bid {amount}c on listing #{listing_id}."),
         });
         true
     }
@@ -287,6 +458,12 @@ impl AuctionHouse {
                 .as_ref()
                 .is_some_and(|k| k == &self.listings[idx].seller_durable);
         if !owned {
+            return false;
+        }
+        if self.listings[idx].bidder_durable.is_some() {
+            events.push(SimEvent::Toast {
+                message: "Cannot cancel after a bid.".into(),
+            });
             return false;
         }
         let listing = self.listings.remove(idx);
@@ -324,44 +501,79 @@ impl AuctionHouse {
     pub fn tick_expire(&mut self, now_tick: u64, world: &mut World, mail: &mut Mailbox) {
         let mut keep = Vec::new();
         for listing in self.listings.drain(..) {
-            if listing.expires_tick <= now_tick {
-                let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
-                    world
-                        .get::<Durable>(id)
-                        .and_then(|d| d.durable_id.as_deref())
-                        == Some(listing.seller_durable.as_str())
-                        || id == listing.seller_id
-                });
-                if let Some(seller) = seller_online {
-                    let stack = listing_stack(&listing);
-                    let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
-                        grant_stack(&mut bags.inventory, stack.clone())
-                    } else {
-                        false
-                    };
-                    if !returned {
-                        mail.deliver_system(
-                            &listing.seller_durable,
-                            "Auction House",
-                            "Listing expired",
-                            0,
-                            Some(stack),
-                        );
-                    }
+            if listing.expires_tick > now_tick {
+                keep.push(listing);
+                continue;
+            }
+            if let Some(bidder_key) = listing.bidder_durable.clone() {
+                mail.deliver_system(
+                    &bidder_key,
+                    "Auction House",
+                    "Auction won",
+                    0,
+                    Some(listing_stack(&listing)),
+                );
+                mail.deliver_system(
+                    &listing.seller_durable,
+                    "Auction House",
+                    "Auction sold",
+                    sale_proceeds(listing.current_bid),
+                    None,
+                );
+                continue;
+            }
+            let seller_online = world.ids::<ClassKit>().into_iter().find(|&id| {
+                world
+                    .get::<Durable>(id)
+                    .and_then(|d| d.durable_id.as_deref())
+                    == Some(listing.seller_durable.as_str())
+                    || id == listing.seller_id
+            });
+            if let Some(seller) = seller_online {
+                let stack = listing_stack(&listing);
+                let returned = if let Some(bags) = world.get_mut::<Bags>(seller) {
+                    grant_stack(&mut bags.inventory, stack.clone())
                 } else {
+                    false
+                };
+                if !returned {
                     mail.deliver_system(
                         &listing.seller_durable,
                         "Auction House",
                         "Listing expired",
                         0,
-                        Some(listing_stack(&listing)),
+                        Some(stack),
                     );
                 }
             } else {
-                keep.push(listing);
+                mail.deliver_system(
+                    &listing.seller_durable,
+                    "Auction House",
+                    "Listing expired",
+                    0,
+                    Some(listing_stack(&listing)),
+                );
             }
         }
         self.listings = keep;
+    }
+}
+
+fn listing_snapshot(listing: &Listing, mine: bool) -> MarketListingSnapshot {
+    MarketListingSnapshot {
+        id: listing.id,
+        seller: listing.seller_name.clone(),
+        item_id: listing.item_id.clone(),
+        count: listing.count,
+        price: listing.price,
+        mine,
+        durability: listing.durability,
+        enchant_id: listing.enchant_id.clone(),
+        expires_tick: listing.expires_tick,
+        start_bid: listing.start_bid,
+        current_bid: listing.current_bid,
+        bidder: listing.bidder_name.clone(),
+        bound: listing.bound,
     }
 }
 
@@ -371,6 +583,7 @@ fn listing_stack(listing: &Listing) -> InvStack {
         count: listing.count,
         durability: listing.durability,
         enchant_id: listing.enchant_id.clone(),
+        bound: listing.bound,
     }
 }
 
@@ -436,7 +649,12 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            bound: false,
             price: 40,
+            start_bid: 0,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
             expires_tick: 9999,
         });
         ah.next_id = 2;
@@ -463,7 +681,12 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            bound: false,
             price: 40,
+            start_bid: 0,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
             expires_tick: 9999,
         });
         ah.next_id = 2;
@@ -494,7 +717,12 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            bound: false,
             price: 40,
+            start_bid: 0,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
             expires_tick: 9999,
         });
         ah.next_id = 2;
@@ -517,12 +745,14 @@ mod tests {
                 count: 3,
                 durability: None,
                 enchant_id: None,
+                bound: false,
             });
             bags.inventory[1] = Some(InvStack {
                 item_id: "silverleaf".into(),
                 count: 2,
                 durability: None,
                 enchant_id: None,
+                bound: false,
             });
         }
         let mut ah = AuctionHouse::new();
@@ -575,6 +805,7 @@ mod tests {
                 count: 1,
                 durability: Some(7),
                 enchant_id: Some("coarse_sharpening".into()),
+                bound: false,
             });
         }
         let mut ah = AuctionHouse::new();
@@ -619,7 +850,12 @@ mod tests {
             count: 1,
             durability: None,
             enchant_id: None,
+            bound: false,
             price: 50,
+            start_bid: 0,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
             expires_tick: 9999,
         });
         ah.set_next_id(2);
@@ -650,7 +886,12 @@ mod tests {
             count: 1,
             durability: Some(7),
             enchant_id: Some("coarse_sharpening".into()),
+            bound: false,
             price: 40,
+            start_bid: 0,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
             expires_tick: 9999,
         });
         ah.set_next_id(2);
@@ -709,6 +950,8 @@ mod tests {
                 bag_slot: slot,
                 count: 1,
                 price: 12,
+                start_bid: 0,
+                duration_hours: 0,
             },
         );
         assert!(sim.market.listings.is_empty());
@@ -738,8 +981,178 @@ mod tests {
                 bag_slot: slot,
                 count: 1,
                 price: 12,
+                start_bid: 0,
+                duration_hours: 0,
             },
         );
         assert_eq!(sim.market.listings.len(), 1);
+    }
+
+    #[test]
+    fn list_refuses_soulbound_items() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.inventory[0] = Some(InvStack {
+                item_id: "silverleaf".into(),
+                count: 1,
+                durability: None,
+                enchant_id: None,
+                bound: true,
+            });
+        }
+        let mut ah = AuctionHouse::new();
+        let mut events = Vec::new();
+        assert!(!ah.list_item(&mut world, 1, 0, 1, 20, 1, &mut events));
+        assert!(ah.listings.is_empty());
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "That item is soulbound."
+        )));
+    }
+
+    #[test]
+    fn duration_tiers_set_fee_and_ttl() {
+        assert_eq!(duration_ticks(12), Some(864_000));
+        assert_eq!(duration_ticks(24), Some(1_728_000));
+        assert_eq!(duration_ticks(48), Some(3_456_000));
+        assert_eq!(duration_fee(12), Some(5));
+        assert_eq!(duration_fee(24), Some(10));
+        assert_eq!(duration_fee(48), Some(20));
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 100;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "silverleaf", 1));
+        }
+        let slot = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "silverleaf"))
+            .unwrap() as u8;
+        let mut ah = AuctionHouse::new();
+        let mut events = Vec::new();
+        assert!(!ah.list_item_ex(&mut world, 1, slot, 1, 20, 0, 7, 1, &mut events));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Duration must be 12, 24, or 48 hours."
+        )));
+        events.clear();
+        assert!(ah.list_item_ex(&mut world, 1, slot, 1, 20, 0, 24, 1, &mut events));
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, 90);
+        assert_eq!(ah.listings[0].expires_tick, 1 + 1_728_000);
+    }
+
+    #[test]
+    fn bid_outbid_and_expire_settles_winner() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 3, "Cat", PlayerClass::Rogue, 2.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(2) {
+            d.durable_id = Some("bob".into());
+        }
+        if let Some(d) = world.get_mut::<Durable>(3) {
+            d.durable_id = Some("cat".into());
+        }
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.copper = 200;
+        }
+        if let Some(p) = world.get_mut::<Progress>(3) {
+            p.copper = 200;
+        }
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 1,
+            seller_durable: "ada".into(),
+            seller_name: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            bound: false,
+            price: 80,
+            start_bid: 10,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
+            expires_tick: 50,
+        });
+        ah.set_next_id(2);
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(ah.bid(&mut world, &mut mail, 2, 1, 10, &mut events));
+        assert_eq!(world.get::<Progress>(2).unwrap().copper, 190);
+        assert!(ah.bid(&mut world, &mut mail, 3, 1, 12, &mut events));
+        assert_eq!(world.get::<Progress>(3).unwrap().copper, 188);
+        let outbid = mail
+            .all_mails()
+            .into_iter()
+            .find(|m| m.subject == "Outbid")
+            .unwrap();
+        assert_eq!(outbid.copper, 10);
+        assert_eq!(outbid.to_durable, "bob");
+        assert!(!ah.cancel(&mut world, &mut mail, 1, 1, &mut events));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Cannot cancel after a bid."
+        )));
+        ah.tick_expire(50, &mut world, &mut mail);
+        assert!(ah.listings.is_empty());
+        let won = mail
+            .all_mails()
+            .into_iter()
+            .find(|m| m.subject == "Auction won")
+            .unwrap();
+        assert_eq!(won.to_durable, "cat");
+        assert_eq!(won.item_id.as_deref(), Some("silverleaf"));
+        let sold = mail
+            .all_mails()
+            .into_iter()
+            .find(|m| m.subject == "Auction sold")
+            .unwrap();
+        assert_eq!(sold.copper, sale_proceeds(12));
+    }
+
+    #[test]
+    fn buyout_only_rejects_bids() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(2) {
+            p.copper = 200;
+        }
+        let mut ah = AuctionHouse::new();
+        ah.listings.push(Listing {
+            id: 1,
+            seller_id: 1,
+            seller_durable: "ada".into(),
+            seller_name: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            bound: false,
+            price: 40,
+            start_bid: 0,
+            current_bid: 0,
+            bidder_durable: None,
+            bidder_name: None,
+            expires_tick: 9999,
+        });
+        let mut mail = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(!ah.bid(&mut world, &mut mail, 2, 1, 10, &mut events));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "This listing is buyout only."
+        )));
     }
 }

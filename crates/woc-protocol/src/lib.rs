@@ -205,10 +205,19 @@ pub enum InteractAction {
         bag_slot: u8,
         count: u32,
         price: u32,
+        #[serde(default)]
+        start_bid: u32,
+        #[serde(default)]
+        duration_hours: u32,
     },
-    /// Buy an auction listing by id.
+    /// Buy an auction listing by id (buyout).
     MarketBuy {
         listing_id: u32,
+    },
+    /// Bid on an auction listing.
+    MarketBid {
+        listing_id: u32,
+        amount: u32,
     },
     /// Cancel own listing.
     MarketCancel {
@@ -333,6 +342,8 @@ pub struct InvSlotSnapshot {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -420,6 +431,10 @@ pub struct NpcSessionSnapshot {
     pub buyback: Vec<BuybackSnapshot>,
     #[serde(default)]
     pub can_auction: bool,
+    #[serde(default)]
+    pub can_bank: bool,
+    #[serde(default)]
+    pub can_mail: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -608,6 +623,8 @@ pub struct MailSnapshot {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -626,6 +643,14 @@ pub struct MarketListingSnapshot {
     pub enchant_id: Option<String>,
     #[serde(default)]
     pub expires_tick: u64,
+    #[serde(default)]
+    pub start_bid: u32,
+    #[serde(default)]
+    pub current_bid: u32,
+    #[serde(default)]
+    pub bidder: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -1371,8 +1396,14 @@ mod tests {
                 bag_slot: 0,
                 count: 1,
                 price: 100,
+                start_bid: 0,
+                duration_hours: 0,
             },
             InteractAction::MarketBuy { listing_id: 3 },
+            InteractAction::MarketBid {
+                listing_id: 3,
+                amount: 12,
+            },
             InteractAction::MarketCancel { listing_id: 3 },
             InteractAction::DuelChallenge,
             InteractAction::DuelAccept,
@@ -1492,6 +1523,7 @@ mod tests {
         assert!(eq.main_hand_enchant.is_none());
         let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
+        assert!(!slot.bound);
         assert_eq!(PROTOCOL_REV, 8);
     }
 
@@ -1504,6 +1536,10 @@ mod tests {
         assert!(listing.enchant_id.is_none());
         assert_eq!(listing.expires_tick, 0);
         assert!(!listing.mine);
+        assert_eq!(listing.start_bid, 0);
+        assert_eq!(listing.current_bid, 0);
+        assert!(listing.bidder.is_none());
+        assert!(!listing.bound);
 
         let mail: MailSnapshot = serde_json::from_str(
             r#"{"id":1,"from":"AH","subject":"Sold","copper":40,"item_id":null,"item_count":0}"#,
@@ -1511,11 +1547,28 @@ mod tests {
         .unwrap();
         assert!(mail.durability.is_none());
         assert!(mail.enchant_id.is_none());
+        assert!(!mail.bound);
 
         let session: NpcSessionSnapshot =
             serde_json::from_str(r#"{"npc_id":1,"npc_name":"Lise"}"#).unwrap();
         assert!(!session.can_auction);
+        assert!(!session.can_bank);
+        assert!(!session.can_mail);
         assert_eq!(PROTOCOL_REV, 8);
+
+        let list: InteractAction =
+            serde_json::from_str(r#"{"type":"market_list","bag_slot":0,"count":1,"price":12}"#)
+                .unwrap();
+        assert_eq!(
+            list,
+            InteractAction::MarketList {
+                bag_slot: 0,
+                count: 1,
+                price: 12,
+                start_bid: 0,
+                duration_hours: 0,
+            }
+        );
     }
 
     #[test]

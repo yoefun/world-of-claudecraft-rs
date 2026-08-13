@@ -146,6 +146,8 @@ fn spawn_overhead_markers(
         Trainer,
         Hearth,
         Auction,
+        Bank,
+        Mail,
     }
     let mut cues = Vec::new();
     if def.is_quest_giver() {
@@ -165,6 +167,12 @@ fn spawn_overhead_markers(
     }
     if def.is_auctioneer() {
         cues.push(Cue::Auction);
+    }
+    if def.is_banker() {
+        cues.push(Cue::Bank);
+    }
+    if def.is_mailbox() {
+        cues.push(Cue::Mail);
     }
     let total = cues.len() as f32;
     for (idx, cue) in cues.into_iter().enumerate() {
@@ -274,6 +282,38 @@ fn spawn_overhead_markers(
                     ))
                     .id();
                 commands.entity(parent).add_child(gavel);
+            }
+            Cue::Bank => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.35, 0.55, 0.85),
+                    emissive: LinearRgba::from(Color::srgb(0.08, 0.16, 0.32)),
+                    ..default()
+                });
+                let vault = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.28, 0.22, 0.22))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(vault);
+            }
+            Cue::Mail => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.82, 0.62, 0.32),
+                    emissive: LinearRgba::from(Color::srgb(0.28, 0.16, 0.04)),
+                    ..default()
+                });
+                let post = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.30, 0.16, 0.20))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(post);
             }
         }
     }

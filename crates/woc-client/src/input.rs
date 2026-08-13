@@ -13,8 +13,8 @@ use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
-    first_consumable_bag_stack, first_equippable_bag_stack, first_junk_bag_stack,
-    first_listable_bag_stack, UiFlags,
+    cycle_duration_hours, filtered_market, first_consumable_bag_stack, first_equippable_bag_stack,
+    first_junk_bag_stack, first_listable_bag_stack, listing_min_bid, UiFlags, MARKET_PAGE_SIZE,
 };
 use crate::GameHost;
 
@@ -111,17 +111,19 @@ pub(crate) fn collect_intent(
     };
     let mut mx = 0.0;
     let mut mz = 0.0;
-    if keys.pressed(KeyCode::KeyW) {
-        mz += 1.0;
-    }
-    if keys.pressed(KeyCode::KeyS) {
-        mz -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyA) {
-        mx -= 1.0;
-    }
-    if keys.pressed(KeyCode::KeyD) {
-        mx += 1.0;
+    if !ui.market_searching {
+        if keys.pressed(KeyCode::KeyW) {
+            mz += 1.0;
+        }
+        if keys.pressed(KeyCode::KeyS) {
+            mz -= 1.0;
+        }
+        if keys.pressed(KeyCode::KeyA) {
+            mx -= 1.0;
+        }
+        if keys.pressed(KeyCode::KeyD) {
+            mx += 1.0;
+        }
     }
     intent.move_x = mx;
     intent.move_z = mz;
@@ -319,12 +321,46 @@ pub(crate) fn quest_interact_actions(
     out
 }
 
+fn market_search_keys() -> impl Iterator<Item = (KeyCode, char)> {
+    [
+        (KeyCode::KeyA, 'a'),
+        (KeyCode::KeyB, 'b'),
+        (KeyCode::KeyC, 'c'),
+        (KeyCode::KeyD, 'd'),
+        (KeyCode::KeyE, 'e'),
+        (KeyCode::KeyF, 'f'),
+        (KeyCode::KeyG, 'g'),
+        (KeyCode::KeyH, 'h'),
+        (KeyCode::KeyI, 'i'),
+        (KeyCode::KeyJ, 'j'),
+        (KeyCode::KeyK, 'k'),
+        (KeyCode::KeyL, 'l'),
+        (KeyCode::KeyM, 'm'),
+        (KeyCode::KeyN, 'n'),
+        (KeyCode::KeyO, 'o'),
+        (KeyCode::KeyP, 'p'),
+        (KeyCode::KeyQ, 'q'),
+        (KeyCode::KeyR, 'r'),
+        (KeyCode::KeyS, 's'),
+        (KeyCode::KeyT, 't'),
+        (KeyCode::KeyU, 'u'),
+        (KeyCode::KeyV, 'v'),
+        (KeyCode::KeyW, 'w'),
+        (KeyCode::KeyX, 'x'),
+        (KeyCode::KeyY, 'y'),
+        (KeyCode::KeyZ, 'z'),
+        (KeyCode::Space, ' '),
+        (KeyCode::Minus, '-'),
+    ]
+    .into_iter()
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
     mut ui: ResMut<UiFlags>,
 ) {
-    if keys.just_pressed(KeyCode::KeyB) {
+    if keys.just_pressed(KeyCode::KeyB) && !ui.show_market {
         ui.show_bags = !ui.show_bags;
     }
     if keys.just_pressed(KeyCode::KeyL) && !ui.show_market {
@@ -377,6 +413,17 @@ pub(crate) fn handle_interact_keys(
         if ui.show_market {
             ui.show_character = false;
             ui.show_map = false;
+            ui.market_page = 0;
+        } else {
+            ui.market_searching = false;
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::Escape) {
+        if ui.market_searching {
+            ui.market_searching = false;
+        } else if !ui.market_filter.is_empty() {
+            ui.market_filter.clear();
+            ui.market_page = 0;
         }
     }
     if keys.just_pressed(KeyCode::Escape) && ui.show_map {
@@ -572,6 +619,38 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
         }
     }
+    if ui.show_market && ui.market_searching {
+        if keys.just_pressed(KeyCode::Backspace) {
+            ui.market_filter.pop();
+            ui.market_page = 0;
+        } else {
+            for (code, ch) in market_search_keys() {
+                if keys.just_pressed(code) {
+                    ui.market_filter.push(ch);
+                    ui.market_page = 0;
+                }
+            }
+        }
+    }
+    if ui.show_market && !ui.market_searching && keys.just_pressed(KeyCode::Slash) {
+        ui.market_searching = true;
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::BracketLeft) {
+        ui.market_page = ui.market_page.saturating_sub(1);
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::BracketRight) {
+        let pages = filtered_market(&host.snapshot, &ui.market_filter)
+            .len()
+            .div_ceil(MARKET_PAGE_SIZE)
+            .max(1);
+        ui.market_page = (ui.market_page + 1).min(pages.saturating_sub(1));
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::Comma) {
+        ui.market_duration_hours = cycle_duration_hours(ui.market_duration_hours, false);
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::Period) {
+        ui.market_duration_hours = cycle_duration_hours(ui.market_duration_hours, true);
+    }
     if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
         if let Some(listing) = host
             .snapshot
@@ -603,6 +682,8 @@ pub(crate) fn handle_interact_keys(
                     bag_slot,
                     count,
                     price,
+                    start_bid: (price / 2).max(1),
+                    duration_hours: ui.market_duration_hours,
                 },
             );
             host.recent_toasts
@@ -625,6 +706,31 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.recent_toasts
                 .push(("You have no listings.".into(), 2.0));
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::KeyB) {
+        if let Some(listing) = filtered_market(&host.snapshot, &ui.market_filter)
+            .into_iter()
+            .find(|l| {
+                !l.mine && listing_min_bid(l).is_some_and(|m| m <= host.snapshot.progress.copper)
+            })
+            .cloned()
+        {
+            let amount = listing_min_bid(&listing).unwrap_or(1);
+            host.interact(
+                player_id,
+                InteractAction::MarketBid {
+                    listing_id: listing.id,
+                    amount,
+                },
+            );
+            host.recent_toasts.push((
+                format!("Bidding {amount}c on listing #{}.", listing.id),
+                2.0,
+            ));
+        } else {
+            host.recent_toasts
+                .push(("No biddable market listings.".into(), 2.0));
         }
     }
 
@@ -908,6 +1014,24 @@ pub(crate) fn handle_interact_keys(
         ui.show_character = false;
         ui.show_map = false;
     }
+    if template_id
+        .as_deref()
+        .and_then(npc)
+        .is_some_and(|d| d.is_banker())
+    {
+        ui.show_bank = true;
+        ui.show_character = false;
+        ui.show_map = false;
+    }
+    if template_id
+        .as_deref()
+        .and_then(npc)
+        .is_some_and(|d| d.is_mailbox())
+    {
+        ui.show_mail = true;
+        ui.show_character = false;
+        ui.show_map = false;
+    }
 
     if let Some(template_id) = template_id.as_deref() {
         for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
@@ -1024,6 +1148,7 @@ mod tests {
             count: 2,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
@@ -1031,6 +1156,7 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            bound: false,
         });
 
         assert_eq!(

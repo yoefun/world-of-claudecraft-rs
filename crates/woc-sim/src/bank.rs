@@ -2,7 +2,7 @@
 
 use crate::ecs::components::{Bags, Bank, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, remove_item};
+use crate::inventory::{grant_stack, take_from_slot};
 use crate::types::BANK_SLOTS;
 use woc_protocol::{EntityId, SimEvent};
 
@@ -41,18 +41,20 @@ pub fn deposit(
         return false;
     };
     let take = count.min(stack.count).max(1);
-    if let Some(bags) = world.get_mut::<Bags>(player_id) {
-        if !remove_item(&mut bags.inventory, &stack.item_id, take) {
-            return false;
-        }
-    }
+    let Some(taken) = (if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        take_from_slot(&mut bags.inventory, bag_slot, take)
+    } else {
+        None
+    }) else {
+        return false;
+    };
     let bank_full = match world.get_mut::<Bank>(player_id) {
-        Some(bank) => !grant_into(&mut bank.bank, &stack.item_id, take),
+        Some(bank) => !grant_stack(&mut bank.bank, taken.clone()),
         None => true,
     };
     if bank_full {
         if let Some(bags) = world.get_mut::<Bags>(player_id) {
-            let _ = grant_into(&mut bags.inventory, &stack.item_id, take);
+            let _ = grant_stack(&mut bags.inventory, taken);
         }
         events.push(SimEvent::Toast {
             message: "Bank is full.".into(),
@@ -89,18 +91,20 @@ pub fn withdraw(
         return false;
     };
     let take = count.min(stack.count).max(1);
-    if let Some(bank) = world.get_mut::<Bank>(player_id) {
-        if !remove_item(&mut bank.bank, &stack.item_id, take) {
-            return false;
-        }
-    }
+    let Some(taken) = (if let Some(bank) = world.get_mut::<Bank>(player_id) {
+        take_from_slot(&mut bank.bank, bank_slot, take)
+    } else {
+        None
+    }) else {
+        return false;
+    };
     let bags_full = match world.get_mut::<Bags>(player_id) {
-        Some(bags) => !grant_into(&mut bags.inventory, &stack.item_id, take),
+        Some(bags) => !grant_stack(&mut bags.inventory, taken.clone()),
         None => true,
     };
     if bags_full {
         if let Some(bank) = world.get_mut::<Bank>(player_id) {
-            let _ = grant_into(&mut bank.bank, &stack.item_id, take);
+            let _ = grant_stack(&mut bank.bank, taken);
         }
         events.push(SimEvent::Toast {
             message: "Bags are full.".into(),
@@ -240,5 +244,115 @@ mod tests {
         assert!(withdraw_copper(&mut world, 1, 25, &mut events));
         assert_eq!(world.get::<Progress>(1).unwrap().copper, 85);
         assert_eq!(world.get::<Bank>(1).unwrap().bank_copper, 15);
+    }
+
+    #[test]
+    fn deposit_preserves_bound_flag() {
+        use crate::ecs::components::InvStack;
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.inventory[0] = Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(7),
+                enchant_id: None,
+                bound: true,
+            });
+        }
+        let mut events = Vec::new();
+        assert!(deposit(&mut world, 1, 0, 1, &mut events));
+        let stored = world
+            .get::<Bank>(1)
+            .unwrap()
+            .bank
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "worn_sword")
+            .unwrap();
+        assert!(stored.bound);
+        assert_eq!(stored.durability, Some(7));
+    }
+
+    #[test]
+    fn interact_bank_requires_banker_session() {
+        use crate::ecs::components::{Identity, Transform};
+        use woc_protocol::{EntityId, InteractAction, WorldHost};
+        let mut sim = crate::sim::Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        if let Some(bags) = sim.world.get_mut::<Bags>(pid) {
+            assert!(grant_into(&mut bags.inventory, "silverleaf", 1));
+        }
+        let slot = sim
+            .world
+            .get::<Bags>(pid)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "silverleaf"))
+            .unwrap() as u8;
+        WorldHost::interact(
+            &mut sim,
+            pid,
+            0,
+            InteractAction::BankDeposit {
+                bag_slot: slot,
+                count: 1,
+            },
+        );
+        assert!(
+            sim.world.get::<Bank>(pid).is_none()
+                || sim
+                    .world
+                    .get::<Bank>(pid)
+                    .unwrap()
+                    .bank
+                    .iter()
+                    .flatten()
+                    .next()
+                    .is_none()
+        );
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            woc_protocol::SimEvent::Toast { message } if message == "Talk to a banker first."
+        )));
+
+        let holme = sim
+            .world
+            .ids::<Identity>()
+            .into_iter()
+            .find(|&id| {
+                sim.world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some("banker_holme")
+            })
+            .expect("banker_holme");
+        let _nid: EntityId = holme;
+        if let Some(nt) = sim.world.get::<Transform>(holme).cloned() {
+            if let Some(p) = sim.world.get_mut::<Transform>(pid) {
+                p.x = nt.x;
+                p.z = nt.z;
+            }
+        }
+        WorldHost::interact(&mut sim, pid, holme, InteractAction::Talk);
+        sim.events.clear();
+        WorldHost::interact(
+            &mut sim,
+            pid,
+            holme,
+            InteractAction::BankDeposit {
+                bag_slot: slot,
+                count: 1,
+            },
+        );
+        assert!(sim
+            .world
+            .get::<Bank>(pid)
+            .unwrap()
+            .bank
+            .iter()
+            .flatten()
+            .any(|s| s.item_id == "silverleaf"));
     }
 }

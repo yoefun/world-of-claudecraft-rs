@@ -1,8 +1,22 @@
 # Parity status
 
-**Current rewrite:** `1.14.0` / `auction-depth`.  
+**Current rewrite:** `1.15.0` / `economy-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; auction depth shipped as `1.14.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; auction depth shipped as `1.14.0`; economy depth shipped as `1.15.0`.
+
+## Economy depth (`economy-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-economy-depth-design.md`](../superpowers/specs/2026-08-13-economy-depth-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Bidding | done | `MarketBid`; outbid mail; expire-win mails item + proceeds |
+| Duration 12/24/48h | done | Fees 5/10/20c; ticks 864k / 1.728M / 3.456M |
+| Search / pages | done | Client filter `/`; `[` `]` pages of 8 |
+| Soulbound | done | OnEquip gear / OnPickup quest; blocks list + mail |
+| Banker Holme | done | Eastbrook `(6, 6)`; `[B]`; `"Talk to a banker first."` |
+| Eastbrook Post | done | Eastbrook `(0, 8)`; `[M]`; `"Talk to a mailbox first."` |
+| Protocol | done | Rev 8 additive bid/bound/`can_bank`/`can_mail` |
 
 ## Auction depth (`auction-depth`) — done
 
@@ -167,7 +181,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.14.0` / auction-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.15.0` / economy-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
