@@ -340,6 +340,10 @@ pub(crate) fn handle_interact_keys(
     if ui.mail_compose && keys.just_pressed(KeyCode::Escape) {
         ui.mail_compose = false;
     }
+    if ui.show_mail && keys.just_pressed(KeyCode::Enter) {
+        ui.mail_compose = !ui.mail_compose;
+        return;
+    }
     if keys.just_pressed(KeyCode::KeyB) {
         ui.show_bags = !ui.show_bags;
     }
@@ -588,7 +592,7 @@ pub(crate) fn handle_interact_keys(
         host.recent_toasts
             .push((format!("Withdrawing {amount}c from vault."), 2.0));
     }
-    if ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+    if ui.show_mail && !ui.mail_compose && keys.just_pressed(KeyCode::KeyP) {
         if let Some(mail) = host.snapshot.mail.first() {
             let mail_id = mail.id;
             host.interact(player_id, InteractAction::MailCollect { mail_id });
@@ -598,7 +602,7 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
         }
     }
-    if ui.show_mail {
+    if ui.show_mail && !ui.mail_compose {
         let mail_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
         {
             Some(0usize)
@@ -630,7 +634,7 @@ pub(crate) fn handle_interact_keys(
             }
         }
     }
-    if ui.show_mail && keys.just_pressed(KeyCode::KeyX) {
+    if ui.show_mail && !ui.mail_compose && keys.just_pressed(KeyCode::KeyX) {
         if let Some(mail) = host.snapshot.mail.first() {
             let mail_id = mail.id;
             host.interact(player_id, InteractAction::MailReturn { mail_id });
@@ -640,7 +644,7 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
         }
     }
-    if ui.show_mail && keys.just_pressed(KeyCode::KeyS) {
+    if ui.show_mail && !ui.mail_compose && keys.just_pressed(KeyCode::KeyS) {
         let to_name = if !ui.mail_to.trim().is_empty() {
             ui.mail_to.trim().to_string()
         } else {
@@ -663,7 +667,7 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Nothing to send.".into(), 2.0));
         }
     }
-    if ui.show_mail && !ui.show_bank && keys.just_pressed(KeyCode::KeyY) {
+    if ui.show_mail && !ui.mail_compose && !ui.show_bank && keys.just_pressed(KeyCode::KeyY) {
         let to_name = if !ui.mail_to.trim().is_empty() {
             ui.mail_to.trim().to_string()
         } else {
