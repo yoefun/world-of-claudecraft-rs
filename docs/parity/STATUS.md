@@ -1,7 +1,7 @@
 # Parity status
 
-**Current rewrite:** `1.0.0-pre` / `completion` (gameplay-core shipped).  
-**Next program:** `1.0.0` / `stable` — see [`docs/ROADMAP.md`](../ROADMAP.md) and [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](../superpowers/specs/2026-08-13-post-completion-program-design.md).
+**Current rewrite:** `1.2.0` / `content-depth`.  
+**Next program:** `1.3.0` / `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md) and [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](../superpowers/specs/2026-08-13-post-completion-program-design.md).
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -16,10 +16,10 @@ Legend: `done` · `partial` · `planned` · `deferred` · `n/a`
 | Data-driven `AbilityEffect` | done | Content tables; combat dispatches on the enum. |
 | Heal / AoE / interrupt / taunt | done | Priest `flash_heal`; warrior cleave AoE + `taunt`; shaman `earth_shock` interrupt. |
 | Miss / crit hit table | done | 5% miss / 10% crit via sim RNG; heals do not miss. |
-| Mining + blacksmithing | planned | Herbalism → alchemy only. 1.2. |
-| Dungeon trash packs | planned | Crypt is a boss shell. |
-| Second dungeon or delve | planned | One crypt + one hollow. |
-| Ability-modifying talents | planned | Stat % only (3/class). |
+| Mining + blacksmithing | done | Copper veins in Eastbrook + Eastfen; smelt bar; craft/equip `copper_shortsword`. |
+| Dungeon trash packs | done | Crypt and barrow spawn `DungeonTrashSpot` packs on enter. |
+| Second dungeon or delve | done | `mirefen_barrow` (boss `barrow_hag`). |
+| Ability-modifying talents | done | 4th talent/class: cleave targets / heal% / crit%. |
 | Park / resume on reconnect | planned | Hello spawns a new entity after disconnect. 1.3. |
 | Snapshot AOI | planned | Full-zone snapshots. |
 | Postgres as documented production path | partial | Works via `DATABASE_URL`; README still memory-first. |
@@ -38,7 +38,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.0.0-pre` / completion |
+| Version / upstream pin | done | `1.2.0` / content-depth (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
@@ -55,16 +55,16 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | `woc-persist` + auth API | done | R4 fields + deeds; WS load/save loop |
 | Client login / char select | done | |
 | Multi-ability kits | done | |
-| Talents / loadouts | done | 3/class; tier gates; numbered spend + pet key; damage/hp/armor/resource effects |
+| Talents / loadouts | done | 4/class; tier gates; numbered spend + pet key; stat + ability-mod effects |
 | Pets | done | hunter/warlock |
 | Zone2 + zone3 / Mirefen | done | Eastfen + Mirefen + Thornpeak quests/mobs |
 | Party + chat | done | kill credit within 40 yd + same instance |
 | Group loot rules | done | FFA + Need/Greed; rolls start on mob loot; pending in snapshot |
-| Dungeons / instances | done | unique instance keys; party share; overworld preserved |
+| Dungeons / instances | done | unique instance keys; party share; overworld preserved; crypt/barrow trash |
 | Delves | done | eastbrook_hollow 3-room loop + reward |
 | Bank + mail | done | durable character bank + copper vault; mail keyed by character UUID |
 | Auction market | done | durable listings; list/buy/cancel from client; offline proceed/return via mail |
-| Professions gather/craft | done | herbalism → alchemy salve |
+| Professions gather/craft | done | herbalism → alchemy; mining → blacksmithing sword |
 | Duel + PvP honor | done | |
 | World boss + deeds | done | one-shot deed completion persisted |
 | Client economy/talent chrome | done | N/K/I/U panels; **M** world map + minimap |

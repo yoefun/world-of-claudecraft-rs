@@ -146,4 +146,17 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         level_req: 5,
         heal_hp: 0.0,
     },
+    ItemDef {
+        id: "hag_claw",
+        name: "Hag Claw",
+        kind: ItemKind::Junk,
+        stack_size: 20,
+        vendor_buy: 0,
+        vendor_sell: 8,
+        attack_power: 0.0,
+        armor: 0.0,
+        equip_slot: None,
+        level_req: 1,
+        heal_hp: 0.0,
+    },
 ];

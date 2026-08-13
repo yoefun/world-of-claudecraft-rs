@@ -9,7 +9,7 @@ use crate::ecs::components::{
 use crate::ecs::World;
 use crate::social::party::PartyRoster;
 use crate::zones::load_overworld_zone;
-use woc_content::{dungeon, DungeonDef};
+use woc_content::{dungeon, DungeonDef, DungeonTrashSpot};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 /// Content dungeon id embedded in `instance_id` (`{dungeon}#{seq}`).
@@ -62,6 +62,9 @@ pub fn enter_dungeon(
     if need_boss {
         let boss_id = world.next_id();
         spawn_boss_shell(world, boss_id, def, &instance_key);
+    }
+    if !instance_has_living_trash(world, &instance_key, def) {
+        spawn_trash_packs(world, def, &instance_key);
     }
 
     let spawn_y = crate::ecs::spawn::ground_at(def.entrance_x, def.entrance_z);
@@ -237,6 +240,45 @@ fn spawn_boss_shell(world: &mut World, id: EntityId, def: &DungeonDef, instance_
     );
 }
 
+fn instance_has_living_trash(world: &World, instance_key: &str, def: &DungeonDef) -> bool {
+    world.ids::<LootTable>().into_iter().any(|id| {
+        world.get::<Health>(id).is_some_and(|h| h.alive)
+            && world
+                .get::<InstanceAt>(id)
+                .and_then(|i| i.instance_id.as_deref())
+                == Some(instance_key)
+            && world
+                .get::<Identity>(id)
+                .and_then(|identity| identity.template_id.as_deref())
+                .is_some_and(|tid| def.trash.iter().any(|spot| spot.mob_id == tid))
+    })
+}
+
+fn spawn_trash_packs(world: &mut World, def: &DungeonDef, instance_key: &str) {
+    let zone_id = format!("instance:{}", dungeon_id_from_instance(instance_key));
+    for spot in def.trash {
+        spawn_trash_spot(world, spot, instance_key, &zone_id);
+    }
+}
+
+fn spawn_trash_spot(world: &mut World, spot: &DungeonTrashSpot, instance_key: &str, zone_id: &str) {
+    for i in 0..spot.count {
+        let id = world.next_id();
+        let x = spot.x + i as f32 * 1.2;
+        let Some(spawned) =
+            crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, spot.z)
+        else {
+            continue;
+        };
+        if let Some(identity) = world.get_mut::<Identity>(spawned) {
+            identity.zone_id = zone_id.to_string();
+        }
+        if let Some(inst) = world.get_mut::<InstanceAt>(spawned) {
+            inst.instance_id = Some(instance_key.to_string());
+        }
+    }
+}
+
 /// Whether two entities share interaction space (same instance or both overworld).
 pub fn same_instance_space(world: &World, a: EntityId, b: EntityId) -> bool {
     let a_inst = world
@@ -255,7 +297,7 @@ pub fn same_instance_space(world: &World, a: EntityId, b: EntityId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use woc_content::{PlayerClass, EASTBROOK};
+    use woc_content::{PlayerClass, EASTBROOK, MIREFEN};
 
     #[test]
     fn enter_preserves_overworld_and_uses_unique_instance() {
@@ -392,5 +434,118 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| matches!(event, SimEvent::InstanceLeft { player: 1 })));
+    }
+
+    fn living_instance_loot<'a>(
+        world: &'a World,
+        instance_key: &str,
+        template_id: &str,
+    ) -> Vec<EntityId> {
+        world
+            .ids::<LootTable>()
+            .into_iter()
+            .filter(|&id| {
+                world.get::<Health>(id).is_some_and(|h| h.alive)
+                    && world
+                        .get::<InstanceAt>(id)
+                        .and_then(|i| i.instance_id.as_deref())
+                        == Some(instance_key)
+                    && world
+                        .get::<Identity>(id)
+                        .and_then(|identity| identity.template_id.as_deref())
+                        == Some(template_id)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn enter_crypt_spawns_trash_and_party_credit_still_works() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
+        let mut parties = PartyRoster::new();
+        let _ = parties.invite(1, "B", &world);
+        let _ = parties.accept(2, &world);
+        let mut events = Vec::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            2,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        let key = world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.clone())
+            .unwrap();
+        let wolves = living_instance_loot(&world, &key, "young_wolf");
+        let boars = living_instance_loot(&world, &key, "young_boar");
+        let bosses = living_instance_loot(&world, &key, "crypt_warden");
+        assert!(
+            wolves.len() + boars.len() >= 2,
+            "crypt needs ≥2 living trash, got wolves={} boars={}",
+            wolves.len(),
+            boars.len()
+        );
+        assert_eq!(bosses.len(), 1);
+        assert_eq!(
+            living_instance_loot(&world, &key, "young_wolf").len()
+                + living_instance_loot(&world, &key, "young_boar").len(),
+            wolves.len() + boars.len(),
+            "joining a party must not duplicate trash packs"
+        );
+        let mates = crate::social::party::kill_credit_share(&parties, &world, 1);
+        assert!(mates.contains(&2), "party kill credit must still share");
+    }
+
+    #[test]
+    fn enter_mirefen_barrow_and_leave_returns_to_mirefen() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 3.0, 308.0);
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.level = 3;
+        }
+        let parties = PartyRoster::new();
+        let mut events = Vec::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "mirefen_barrow",
+            &mut events
+        ));
+        let key = world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.clone())
+            .unwrap();
+        assert!(key.starts_with("mirefen_barrow#"));
+        assert_eq!(
+            world.get::<Identity>(1).unwrap().zone_id,
+            "instance:mirefen_barrow"
+        );
+        assert_eq!(living_instance_loot(&world, &key, "barrow_hag").len(), 1);
+        assert!(
+            living_instance_loot(&world, &key, "fen_crawler").len()
+                + living_instance_loot(&world, &key, "mire_toad").len()
+                >= 2
+        );
+        events.clear();
+        assert!(leave_instance(&mut world, 1, &mut events));
+        assert!(world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.as_ref())
+            .is_none());
+        assert_eq!(world.get::<Identity>(1).unwrap().zone_id, "mirefen");
+        let t = world.get::<Transform>(1).unwrap();
+        assert_eq!(t.x, MIREFEN.player_spawn_x);
+        assert_eq!(t.z, MIREFEN.player_spawn_z);
+        assert!(living_instance_loot(&world, &key, "barrow_hag").is_empty());
     }
 }

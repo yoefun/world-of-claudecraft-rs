@@ -27,14 +27,24 @@ pub enum HitResult {
 }
 
 pub fn roll_hit(rng: &mut Rng) -> HitResult {
+    roll_hit_with_crit(rng, CRIT_CHANCE)
+}
+
+pub fn roll_hit_with_crit(rng: &mut Rng, crit_chance: f32) -> HitResult {
     let r = rng.next_f32();
     if r < MISS_CHANCE {
         HitResult::Miss
-    } else if r < MISS_CHANCE + CRIT_CHANCE {
+    } else if r < MISS_CHANCE + crit_chance.max(0.0) {
         HitResult::Crit
     } else {
         HitResult::Hit
     }
+}
+
+fn roll_player_hit(world: &World, rng: &mut Rng, src: EntityId) -> HitResult {
+    let crit = (CRIT_CHANCE + crate::talents::talent_bonus(world, src, "crit_pct"))
+        .clamp(0.0, 1.0 - MISS_CHANCE);
+    roll_hit_with_crit(rng, crit)
 }
 
 pub fn dist2d_pose(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
@@ -253,7 +263,7 @@ fn apply_direct_damage(
     base: f32,
     events: &mut Vec<SimEvent>,
 ) {
-    let hit = roll_hit(rng);
+    let hit = roll_player_hit(world, rng, src);
     match scale_hit(base, hit) {
         None => toast_miss(events, def.name),
         Some(amount) => {
@@ -391,7 +401,7 @@ pub fn apply_ability_effect(
             let Some(primary) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            let hit = roll_hit(rng);
+            let hit = roll_player_hit(world, rng, src);
             let Some(amount) = scale_hit(weapon, hit) else {
                 toast_miss(events, def.name);
                 return;
@@ -399,19 +409,23 @@ pub fn apply_ability_effect(
             if hit == HitResult::Crit {
                 toast_crit(events, def.name);
             }
-            for tid in aoe_targets(world, src, primary, radius, max_targets) {
+            let extra =
+                crate::talents::talent_bonus(world, src, "cleave_targets_plus").max(0.0) as u32;
+            let cap = max_targets.saturating_add(extra);
+            for tid in aoe_targets(world, src, primary, radius, cap) {
                 deal_damage(world, src, tid, amount, Some(def.name), events);
                 apply_ability_aura(world, src, tid, def.id, events);
             }
         }
         AbilityEffect::Heal { coefficient } => {
             let tid = heal_target(world, src, requested);
-            let hit = roll_hit(rng);
+            let hit = roll_player_hit(world, rng, src);
+            let heal_mult = 1.0 + crate::talents::talent_bonus(world, src, "heal_pct");
             let amount = match hit {
-                HitResult::Miss | HitResult::Hit => def.damage * coefficient,
+                HitResult::Miss | HitResult::Hit => def.damage * coefficient * heal_mult,
                 HitResult::Crit => {
                     toast_crit(events, def.name);
-                    def.damage * coefficient * CRIT_MULT
+                    def.damage * coefficient * CRIT_MULT * heal_mult
                 }
             };
             apply_heal(world, tid, amount, def.name, events);
@@ -420,7 +434,7 @@ pub fn apply_ability_effect(
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            let hit = roll_hit(rng);
+            let hit = roll_player_hit(world, rng, src);
             if let Some(amount) = scale_hit(weapon.max(1.0), hit) {
                 if hit == HitResult::Crit {
                     toast_crit(events, def.name);
@@ -1021,7 +1035,7 @@ pub fn update_player_combat(
     world.insert(player_id, combat);
     world.insert(player_id, kit);
     if let Some(tid) = hostile {
-        let hit = roll_hit(rng);
+        let hit = roll_player_hit(world, rng, player_id);
         match scale_hit(dmg, hit) {
             None => toast_miss(events, "Auto-attack"),
             Some(amount) => {
@@ -1446,6 +1460,57 @@ mod tests {
         );
         assert!(world.get::<Health>(2).unwrap().hp < hp2, "primary wolf");
         assert!(world.get::<Health>(3).unwrap().hp < hp3, "cleave splash");
+    }
+
+    #[test]
+    fn warrior_cleave_talent_hits_one_extra_target() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "W", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 1.0, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 1.2, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 4, "young_wolf", 1.4, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 5, "young_wolf", 1.6, 0.0).unwrap();
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.level = 3;
+        }
+        crate::ecs::spawn::refresh_known_abilities(&mut world, 1);
+        if let Some(p) = world.get_mut::<crate::ecs::components::Progress>(1) {
+            p.talent_points = 1;
+        }
+        let mut events = Vec::new();
+        assert!(crate::talents::learn(
+            &mut world,
+            1,
+            "warrior_improved_cleave",
+            &mut events
+        ));
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.gcd = 0.0;
+            c.auto_attack = false;
+            c.swing_timer = 99.0;
+        }
+        let start: Vec<f32> = (2..=5)
+            .map(|id| world.get::<Health>(id).unwrap().hp)
+            .collect();
+        events.clear();
+        update_player_combat(
+            1,
+            &mut world,
+            Some(AbilitySlot::Slot2),
+            &mut hit_rng(),
+            &mut events,
+        );
+        let hit_count = (2..=5)
+            .filter(|&id| world.get::<Health>(id).unwrap().hp < start[(id - 2) as usize])
+            .count();
+        assert_eq!(
+            hit_count, 4,
+            "cleave_targets_plus should raise max_targets from 3 to 4"
+        );
     }
 
     #[test]

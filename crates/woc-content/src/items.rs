@@ -212,6 +212,10 @@ pub static ZONE1_ITEMS: &[ItemDef] = &[
     // Alchemy craft products.
     consumable("minor_healing_salve", "Minor Healing Salve", 8, 2, 55.0),
     consumable("briar_tonic", "Briar Tonic", 10, 3, 35.0),
+    // Mining / blacksmithing.
+    misc("copper_ore", "Copper Ore", ItemKind::Junk, 1),
+    misc("copper_bar", "Copper Bar", ItemKind::Junk, 2),
+    weapon("copper_shortsword", "Copper Shortsword", 12, 11.0),
 ];
 
 /// Zone1 + zone2 item definitions.

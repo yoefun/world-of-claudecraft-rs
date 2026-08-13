@@ -29,6 +29,22 @@ pub fn damage_multiplier(world: &World, player_id: EntityId) -> f32 {
         .unwrap_or(1.0)
 }
 
+/// Sum of `effect_value * rank` for learned talents whose `effect` matches `key`.
+pub fn talent_bonus(world: &World, player_id: EntityId, key: &str) -> f32 {
+    world
+        .get::<Progress>(player_id)
+        .map(|p| {
+            p.talents
+                .iter()
+                .filter_map(|(id, rank)| {
+                    let def = talent(id)?;
+                    (def.effect == key).then_some(def.effect_value * (*rank as f32))
+                })
+                .sum()
+        })
+        .unwrap_or(0.0)
+}
+
 fn player_rank_pairs(world: &World, player_id: EntityId) -> Vec<(String, u32)> {
     world
         .get::<Progress>(player_id)
@@ -201,5 +217,18 @@ mod tests {
                 .get("warrior_vitality"),
             Some(&1)
         );
+    }
+
+    #[test]
+    fn talent_bonus_sums_matching_effect_ranks() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.talent_points = 1;
+        }
+        let mut events = Vec::new();
+        assert!(learn(&mut world, 1, "warrior_improved_cleave", &mut events));
+        assert_eq!(talent_bonus(&world, 1, "cleave_targets_plus"), 1.0);
+        assert_eq!(talent_bonus(&world, 1, "heal_pct"), 0.0);
     }
 }

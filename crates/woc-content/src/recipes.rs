@@ -17,7 +17,7 @@ pub struct RecipeDef {
     pub product_count: u32,
 }
 
-/// Alchemy recipes consuming Eastbrook herbs into usable salves / tonics.
+/// Alchemy and blacksmithing recipes.
 pub static RECIPES: &[RecipeDef] = &[
     RecipeDef {
         id: "minor_healing_salve",
@@ -53,6 +53,30 @@ pub static RECIPES: &[RecipeDef] = &[
             },
         ],
         product_item_id: "briar_tonic",
+        product_count: 1,
+    },
+    RecipeDef {
+        id: "smelt_copper_bar",
+        name: "Smelt Copper Bar",
+        profession_id: "blacksmithing",
+        skill_req: 1,
+        reagents: &[RecipeReagent {
+            item_id: "copper_ore",
+            count: 2,
+        }],
+        product_item_id: "copper_bar",
+        product_count: 1,
+    },
+    RecipeDef {
+        id: "copper_shortsword",
+        name: "Copper Shortsword",
+        profession_id: "blacksmithing",
+        skill_req: 1,
+        reagents: &[RecipeReagent {
+            item_id: "copper_bar",
+            count: 3,
+        }],
+        product_item_id: "copper_shortsword",
         product_count: 1,
     },
 ];

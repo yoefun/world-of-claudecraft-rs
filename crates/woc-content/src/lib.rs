@@ -35,7 +35,7 @@ pub use classes::{
     PlayerClass, ResourceType, CLASSES,
 };
 pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
-pub use dungeons::{dungeon, DungeonDef, DUNGEONS};
+pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
@@ -376,6 +376,7 @@ mod tests {
         assert!(!DUNGEONS.is_empty());
         assert!(talent("missing_talent").is_none());
         assert!(dungeon("eastbrook_crypt").is_some());
+        assert!(dungeon("mirefen_barrow").is_some());
         assert!(dungeon("missing_dungeon").is_none());
     }
 
@@ -551,6 +552,8 @@ mod tests {
         );
         assert!(profession("herbalism").is_some());
         assert!(profession("alchemy").is_some());
+        assert!(profession("mining").is_some());
+        assert!(profession("blacksmithing").is_some());
     }
 
     #[test]
@@ -583,6 +586,21 @@ mod tests {
         }
         assert!(gather_node("eastbrook_meadow_silverleaf").is_some());
         assert!(gather_nodes_for_zone("eastbrook").count() >= 3);
+        let mining_nodes = GATHER_NODES
+            .iter()
+            .filter(|n| n.profession_id == "mining")
+            .count();
+        assert!(
+            mining_nodes >= 3,
+            "expected ≥3 mining nodes, got {mining_nodes}"
+        );
+        assert!(gather_node("eastbrook_south_copper").is_some());
+        assert!(gather_nodes_for_zone("eastfen").any(|n| n.profession_id == "mining"));
+        let sword = ITEMS
+            .iter()
+            .find(|i| i.id == "copper_shortsword")
+            .expect("copper shortsword");
+        assert_eq!(sword.equip_slot, Some(ItemEquipSlot::MainHand));
     }
 
     #[test]
@@ -623,5 +641,8 @@ mod tests {
         }
         assert!(recipe("minor_healing_salve").is_some());
         assert!(recipes_for_profession("alchemy").count() >= 2);
+        assert!(recipe("smelt_copper_bar").is_some());
+        assert!(recipe("copper_shortsword").is_some());
+        assert!(recipes_for_profession("blacksmithing").count() >= 2);
     }
 }

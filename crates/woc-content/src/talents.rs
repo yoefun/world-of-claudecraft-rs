@@ -14,6 +14,9 @@ pub struct TalentDef {
     /// - `armor_pct`: total armor multiplier
     /// - `armor_flat`: flat armor points
     /// - `resource_pct`: maximum class-resource multiplier
+    /// - `cleave_targets_plus`: extra AoE max targets
+    /// - `heal_pct`: outgoing heal multiplier
+    /// - `crit_pct`: added crit chance
     ///
     /// Percentage effects contribute `effect_value * rank`; `armor_flat`
     /// contributes that many armor points per rank.
@@ -50,6 +53,15 @@ pub static TALENTS: &[TalentDef] = &[
         effect_value: 0.02,
     },
     TalentDef {
+        id: "warrior_improved_cleave",
+        name: "Improved Cleave",
+        class_id: "warrior",
+        tier: 1,
+        max_rank: 1,
+        effect: "cleave_targets_plus",
+        effect_value: 1.0,
+    },
+    TalentDef {
         id: "mage_arcane_power",
         name: "Arcane Power",
         class_id: "mage",
@@ -77,6 +89,15 @@ pub static TALENTS: &[TalentDef] = &[
         effect_value: 0.03,
     },
     TalentDef {
+        id: "mage_arcane_precision",
+        name: "Arcane Precision",
+        class_id: "mage",
+        tier: 1,
+        max_rank: 5,
+        effect: "crit_pct",
+        effect_value: 0.02,
+    },
+    TalentDef {
         id: "hunter_lethal_shots",
         name: "Lethal Shots",
         class_id: "hunter",
@@ -101,6 +122,15 @@ pub static TALENTS: &[TalentDef] = &[
         tier: 2,
         max_rank: 5,
         effect: "resource_pct",
+        effect_value: 0.02,
+    },
+    TalentDef {
+        id: "hunter_killer_instinct",
+        name: "Killer Instinct",
+        class_id: "hunter",
+        tier: 1,
+        max_rank: 5,
+        effect: "crit_pct",
         effect_value: 0.02,
     },
     TalentDef {
@@ -131,6 +161,15 @@ pub static TALENTS: &[TalentDef] = &[
         effect_value: 0.03,
     },
     TalentDef {
+        id: "warlock_ruin",
+        name: "Ruin",
+        class_id: "warlock",
+        tier: 1,
+        max_rank: 5,
+        effect: "crit_pct",
+        effect_value: 0.02,
+    },
+    TalentDef {
         id: "rogue_malice",
         name: "Malice",
         class_id: "rogue",
@@ -155,6 +194,15 @@ pub static TALENTS: &[TalentDef] = &[
         tier: 2,
         max_rank: 5,
         effect: "resource_pct",
+        effect_value: 0.02,
+    },
+    TalentDef {
+        id: "rogue_puncturing_wounds",
+        name: "Puncturing Wounds",
+        class_id: "rogue",
+        tier: 1,
+        max_rank: 5,
+        effect: "crit_pct",
         effect_value: 0.02,
     },
     TalentDef {
@@ -185,6 +233,15 @@ pub static TALENTS: &[TalentDef] = &[
         effect_value: 0.03,
     },
     TalentDef {
+        id: "priest_spiritual_healing",
+        name: "Spiritual Healing",
+        class_id: "priest",
+        tier: 1,
+        max_rank: 5,
+        effect: "heal_pct",
+        effect_value: 0.05,
+    },
+    TalentDef {
         id: "paladin_conviction",
         name: "Conviction",
         class_id: "paladin",
@@ -210,6 +267,15 @@ pub static TALENTS: &[TalentDef] = &[
         max_rank: 5,
         effect: "armor_flat",
         effect_value: 2.0,
+    },
+    TalentDef {
+        id: "paladin_healing_light",
+        name: "Healing Light",
+        class_id: "paladin",
+        tier: 1,
+        max_rank: 5,
+        effect: "heal_pct",
+        effect_value: 0.04,
     },
     TalentDef {
         id: "shaman_elemental_fury",
@@ -239,6 +305,15 @@ pub static TALENTS: &[TalentDef] = &[
         effect_value: 0.025,
     },
     TalentDef {
+        id: "shaman_elemental_precision",
+        name: "Elemental Precision",
+        class_id: "shaman",
+        tier: 1,
+        max_rank: 5,
+        effect: "crit_pct",
+        effect_value: 0.02,
+    },
+    TalentDef {
         id: "druid_naturalist",
         name: "Naturalist",
         class_id: "druid",
@@ -264,6 +339,15 @@ pub static TALENTS: &[TalentDef] = &[
         max_rank: 5,
         effect: "resource_pct",
         effect_value: 0.025,
+    },
+    TalentDef {
+        id: "druid_gift_of_nature",
+        name: "Gift of Nature",
+        class_id: "druid",
+        tier: 1,
+        max_rank: 5,
+        effect: "heal_pct",
+        effect_value: 0.04,
     },
 ];
 
@@ -313,6 +397,22 @@ pub fn format_talent_effect(def: &TalentDef, rank: u32) -> String {
                 if rank == 0 { "/rank" } else { "" }
             )
         }
+        "cleave_targets_plus" => format!(
+            "+{:.0} cleave target{}{}",
+            per * r,
+            if per * r == 1.0 { "" } else { "s" },
+            if rank == 0 { "/rank" } else { "" }
+        ),
+        "heal_pct" => format!(
+            "+{:.0}% healing{}",
+            per * r * 100.0,
+            if rank == 0 { "/rank" } else { "" }
+        ),
+        "crit_pct" => format!(
+            "+{:.0}% crit chance{}",
+            per * r * 100.0,
+            if rank == 0 { "/rank" } else { "" }
+        ),
         other => format!("{other} ×{r}"),
     }
 }
@@ -350,8 +450,8 @@ mod tests {
         for class in CLASSES {
             let talents = talents_for_class(class.id.as_str()).collect::<Vec<_>>();
             assert!(
-                talents.len() >= 2,
-                "{} needs at least two talents, got {}",
+                talents.len() >= 4,
+                "{} needs at least four talents, got {}",
                 class.name,
                 talents.len()
             );
@@ -376,6 +476,9 @@ mod tests {
             "armor_pct",
             "armor_flat",
             "resource_pct",
+            "cleave_targets_plus",
+            "heal_pct",
+            "crit_pct",
         ];
 
         for talent in TALENTS {
@@ -399,5 +502,21 @@ mod tests {
         let ranks = vec![("warrior_cruelty".into(), POINTS_PER_TIER)];
         assert!(talent_tier_unlocked("warrior", &ranks, tier2));
         assert!(format_talent_effect(tier2, 1).contains("HP"));
+    }
+
+    #[test]
+    fn every_class_has_an_ability_mod_talent() {
+        const ABILITY_MODS: &[&str] = &["cleave_targets_plus", "heal_pct", "crit_pct"];
+        for class in CLASSES {
+            let talents = talents_for_class(class.id.as_str()).collect::<Vec<_>>();
+            assert!(
+                talents.iter().any(|t| ABILITY_MODS.contains(&t.effect)),
+                "{} needs an ability-mod talent",
+                class.name
+            );
+        }
+        let cleave = talent("warrior_improved_cleave").expect("improved cleave");
+        assert_eq!(cleave.tier, 1);
+        assert!(format_talent_effect(cleave, 1).contains("cleave"));
     }
 }

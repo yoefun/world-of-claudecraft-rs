@@ -8,6 +8,8 @@
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
 - Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.
 - Wave 1 `combat-depth` on ECS columns: `AbilityEffect` (heal, cleave AoE, interrupt, taunt), miss/crit hit table, priest `flash_heal`, warrior `taunt`.
+- Wave 2 `content-depth`: mining → blacksmithing (`copper_shortsword`); dungeon trash packs; `mirefen_barrow`; ability-mod talents (`cleave_targets_plus` / `heal_pct` / `crit_pct`).
+- Rewrite version `1.0.0-pre` → `1.2.0`; parity `completion` → `content-depth`.
 - Protocol rev **6**: pending Need/Greed loot snapshot, bank copper vault, market `mine` flag; `BankDepositCopper` / `BankWithdrawCopper`.
 - Party Need/Greed is wired into mob loot spawn (eligible mates within 40 yd); pending piles skip FFA auto-pickup.
 - `LootCorpse` interact claims ground piles / corpse-adjacent loot (respects rolls).
@@ -16,7 +18,7 @@
 - Basic combat UX polish: keys **1–5** fire class kit slots; **Tab** cycles hostile targets; **Esc** clears target and stops auto-attack.
 - Protocol rev **5**: intent `clear_target`; snapshot `ability_bar` / `gcd` / `auto_attack` for the action-bar HUD.
 - Action bar shows known/locked kit abilities with CD/GCD state; aura strip on the bar; ability-hit / damage-taken combat toasts.
-- Advanced combat polish: talent **tier gates** (5 pts/tier), numbered spend (**1–3** in talent panel), effect/bonus summary on talent + character panels; **T** pet summon/dismiss for hunter/warlock; talent learn/respec toasts.
+- Advanced combat polish: talent **tier gates** (5 pts/tier), numbered spend (**1–5** in talent panel), effect/bonus summary on talent + character panels; **T** pet summon/dismiss for hunter/warlock; talent learn/respec toasts.
 - Procedural character / creature visual catalog (`woc-sim::visual_catalog`): class-, template-, and role-keyed mesh recipes (players, NPCs, mobs, pets, loot).
 - Bevy scene loading: Eastbrook building meshes from physics AABBs, hub beacons, zone-gate portal arches, campfire props; biome-tinted terrain bands + zone sky/ambient on travel.
 - Character create: rotating 3D class preview silhouette behind the UI panel.

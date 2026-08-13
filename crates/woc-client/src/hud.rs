@@ -243,7 +243,7 @@ fn talent_panel_text(snap: &TickSnapshot) -> String {
     if !any {
         lines.push("  (none for current class)".into());
     }
-    lines.push("[1–3] Learn talent   [Y/Enter] first available   [R] Respec".into());
+    lines.push("[1–5] Learn talent   [Y/Enter] first available   [R] Respec".into());
     lines.push(format!("Bonuses: {}", talent_bonus_summary(snap)));
     lines.join("\n")
 }
@@ -254,6 +254,9 @@ fn talent_bonus_summary(snap: &TickSnapshot) -> String {
     let mut armor_pct = 0.0f32;
     let mut armor_flat = 0.0f32;
     let mut resource = 0.0f32;
+    let mut crit = 0.0f32;
+    let mut heal = 0.0f32;
+    let mut cleave = 0.0f32;
     for rank in &snap.talents {
         let Some(def) = woc_content::talent(&rank.talent_id) else {
             continue;
@@ -265,10 +268,21 @@ fn talent_bonus_summary(snap: &TickSnapshot) -> String {
             "armor_pct" => armor_pct += def.effect_value * r,
             "armor_flat" => armor_flat += def.effect_value * r,
             "resource_pct" => resource += def.effect_value * r,
+            "crit_pct" => crit += def.effect_value * r,
+            "heal_pct" => heal += def.effect_value * r,
+            "cleave_targets_plus" => cleave += def.effect_value * r,
             _ => {}
         }
     }
-    if dmg == 0.0 && hp == 0.0 && armor_pct == 0.0 && armor_flat == 0.0 && resource == 0.0 {
+    if dmg == 0.0
+        && hp == 0.0
+        && armor_pct == 0.0
+        && armor_flat == 0.0
+        && resource == 0.0
+        && crit == 0.0
+        && heal == 0.0
+        && cleave == 0.0
+    {
         return "none".into();
     }
     let mut parts = Vec::new();
@@ -286,6 +300,15 @@ fn talent_bonus_summary(snap: &TickSnapshot) -> String {
     }
     if resource > 0.0 {
         parts.push(format!("+{:.0}% resource", resource * 100.0));
+    }
+    if crit > 0.0 {
+        parts.push(format!("+{:.0}% crit", crit * 100.0));
+    }
+    if heal > 0.0 {
+        parts.push(format!("+{:.0}% heal", heal * 100.0));
+    }
+    if cleave > 0.0 {
+        parts.push(format!("+{:.0} cleave", cleave));
     }
     parts.join(" · ")
 }
@@ -939,7 +962,7 @@ mod tests {
         assert!(text.contains("Zone: eastbrook"));
         assert!(text.contains("Honor: 12"));
         assert!(text.contains("herbalism 18"));
-        assert!(text.contains("[1–3] Learn"));
+        assert!(text.contains("[1–5] Learn"));
         assert!(text.contains("[R] Respec"));
         assert!(text.contains("Bonuses:"));
         assert!(text.contains("+5% dmg") || text.contains("dmg"));

@@ -310,6 +310,58 @@ mod tests {
     }
 
     #[test]
+    fn train_mine_and_craft_copper_shortsword_then_equip() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Smith", PlayerClass::Warrior, 0.0, 0.0);
+        let mut events = Vec::new();
+        train_profession(&mut world, 1, "mining", &mut events).unwrap();
+        train_profession(&mut world, 1, "blacksmithing", &mut events).unwrap();
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(crate::inventory::grant_into(
+                &mut bags.inventory,
+                "copper_ore",
+                6
+            ));
+        }
+        craft(&mut world, 1, "smelt_copper_bar", &mut events).unwrap();
+        craft(&mut world, 1, "smelt_copper_bar", &mut events).unwrap();
+        craft(&mut world, 1, "smelt_copper_bar", &mut events).unwrap();
+        craft(&mut world, 1, "copper_shortsword", &mut events).unwrap();
+        assert_eq!(
+            count_item(
+                &world.get::<Bags>(1).unwrap().inventory,
+                "copper_shortsword"
+            ),
+            1
+        );
+        let slot = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| {
+                s.as_ref()
+                    .is_some_and(|st| st.item_id == "copper_shortsword")
+            })
+            .expect("sword in bag") as u8;
+        crate::interaction::handle_interact(
+            &mut world,
+            1,
+            1,
+            InteractAction::Equip { bag_slot: slot },
+            &mut events,
+        );
+        assert_eq!(
+            world.get::<Bags>(1).unwrap().equipment.main_hand.as_deref(),
+            Some("copper_shortsword")
+        );
+        assert!(events.iter().any(|event| matches!(
+            event,
+            SimEvent::Equipped { item_id, .. } if item_id == "copper_shortsword"
+        )));
+    }
+
+    #[test]
     fn interact_gather_resolves_node_entity_template() {
         let mut world = World::new();
         let node = woc_content::gather_node("eastbrook_meadow_silverleaf").unwrap();

@@ -15,7 +15,7 @@ pub struct ProfessionDef {
     pub max_skill: u32,
 }
 
-/// Eastbrook framework professions: herbalism gathers reagents; alchemy crafts them.
+/// Gathering + crafting pairs: herbalism → alchemy, mining → blacksmithing.
 pub static PROFESSIONS: &[ProfessionDef] = &[
     ProfessionDef {
         id: "herbalism",
@@ -26,6 +26,18 @@ pub static PROFESSIONS: &[ProfessionDef] = &[
     ProfessionDef {
         id: "alchemy",
         name: "Alchemy",
+        kind: ProfessionKind::Crafting,
+        max_skill: 75,
+    },
+    ProfessionDef {
+        id: "mining",
+        name: "Mining",
+        kind: ProfessionKind::Gathering,
+        max_skill: 75,
+    },
+    ProfessionDef {
+        id: "blacksmithing",
+        name: "Blacksmithing",
         kind: ProfessionKind::Crafting,
         max_skill: 75,
     },

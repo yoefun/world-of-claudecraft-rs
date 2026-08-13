@@ -93,4 +93,19 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             count: 1,
         }],
     },
+    MobTemplate {
+        id: "barrow_hag",
+        name: "Barrow Hag",
+        level: 6,
+        hp: 320.0,
+        xp: 160,
+        copper_min: 24,
+        copper_max: 40,
+        attack_damage: 18.0,
+        loot: &[LootEntry {
+            item_id: "hag_claw",
+            chance: 1.0,
+            count: 1,
+        }],
+    },
 ];

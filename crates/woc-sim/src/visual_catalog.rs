@@ -162,7 +162,7 @@ pub fn visual_key(kind: EntityKind, template_id: Option<&str>) -> &'static str {
             "rotcap_shambler" => "mob_shambler",
             "mire_terror" => "mob_terror",
             "gale_harpy" => "mob_harpy",
-            "crypt_warden" => "mob_undead",
+            "crypt_warden" | "barrow_hag" => "mob_undead",
             _ => "mob_generic",
         },
         EntityKind::Pet => match tid {
@@ -181,6 +181,8 @@ pub fn visual_key(kind: EntityKind, template_id: Option<&str>) -> &'static str {
                 || tid.contains("briar")
             {
                 "gather_herb"
+            } else if tid.contains("copper") || tid.contains("vein") {
+                "gather_vein"
             } else {
                 "loot_spark"
             }
@@ -217,6 +219,7 @@ fn spec_for_key(key: &str) -> VisualSpec {
         "pet_generic" => PET_GENERIC,
         "loot_spark" => LOOT_SPARK,
         "gather_herb" => GATHER_HERB,
+        "gather_vein" => GATHER_VEIN,
         _ => MOB_GENERIC,
     }
 }
@@ -1180,6 +1183,38 @@ const GATHER_HERB: VisualSpec = VisualSpec {
     ],
 };
 
+const GATHER_VEIN: VisualSpec = VisualSpec {
+    key: "gather_vein",
+    family: VisualFamily::Loot,
+    y_offset: 0.0,
+    emissive: 0.12,
+    label_height: 0.95,
+    bob: false,
+    parts: parts![
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.0, 0.18, 0.0],
+            size: [0.55, 0.32, 0.42],
+            role: PartRole::Prop,
+            color: rgb(0.45, 0.32, 0.22),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.08, 0.38, 0.04],
+            size: [0.22, 0.16, 0.18],
+            role: PartRole::Prop,
+            color: rgb(0.72, 0.48, 0.22),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [-0.10, 0.34, -0.06],
+            size: [0.16, 0.14, 0.16],
+            role: PartRole::Prop,
+            color: rgb(0.80, 0.52, 0.26),
+        },
+    ],
+};
+
 const LOOT_SPARK: VisualSpec = VisualSpec {
     key: "loot_spark",
     family: VisualFamily::Loot,
@@ -1302,6 +1337,13 @@ mod tests {
         let spec = visual_spec(EntityKind::Loot, Some("eastbrook_brook_peacebloom"));
         assert_eq!(spec.key, "gather_herb");
         assert!(spec.bob);
+        assert_eq!(
+            visual_key(EntityKind::Loot, Some("eastbrook_south_copper")),
+            "gather_vein"
+        );
+        let vein = visual_spec(EntityKind::Loot, Some("eastfen_fenbridge_copper"));
+        assert_eq!(vein.key, "gather_vein");
+        assert!(!vein.bob);
     }
 
     #[test]
