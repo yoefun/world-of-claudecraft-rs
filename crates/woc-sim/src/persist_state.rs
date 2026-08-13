@@ -60,6 +60,8 @@ impl PlayerPersistentState {
             && self.equipment.chest.is_none()
             && self.equipment.legs.is_none()
             && self.equipment.feet.is_none()
+            && self.equipment.neck.is_none()
+            && self.equipment.finger.is_none()
             && self.equipment_wear == EquipmentWear::default()
             && self.quests.is_empty()
             && self.talents.is_empty()
@@ -408,6 +410,11 @@ mod tests {
         if let Some(bank) = world.get_mut::<Bank>(1) {
             bank.bank_copper = 30;
         }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.neck = Some("fang_pendant".into());
+            bags.equipment.finger = Some("boar_tusk_ring".into());
+            bags.equipment_wear.main_hand = Some(17);
+        }
         if let Some(hearth) = world.get_mut::<Hearth>(1) {
             hearth.zone_id = "eastfen".into();
             hearth.x = 12.0;
@@ -438,6 +445,9 @@ mod tests {
         assert_eq!(restored.hearth_ready_tick, 77);
         assert!((restored.pos_x - 10.0).abs() < 1e-3);
         assert!((restored.pos_z - 20.0).abs() < 1e-3);
+        assert_eq!(restored.equipment.neck.as_deref(), Some("fang_pendant"));
+        assert_eq!(restored.equipment.finger.as_deref(), Some("boar_tusk_ring"));
+        assert_eq!(restored.equipment_wear.main_hand, Some(17));
         assert!(!restored.is_virgin());
     }
 

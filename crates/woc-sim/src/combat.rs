@@ -548,17 +548,20 @@ fn equipment_item_id(equipment: &Equipment, slot: EquipSlot) -> Option<&str> {
         EquipSlot::Chest => equipment.chest.as_deref(),
         EquipSlot::Legs => equipment.legs.as_deref(),
         EquipSlot::Feet => equipment.feet.as_deref(),
+        EquipSlot::Neck => equipment.neck.as_deref(),
+        EquipSlot::Finger => equipment.finger.as_deref(),
     }
 }
 
-fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> &mut Option<u32> {
+fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> Option<&mut Option<u32>> {
     match slot {
-        EquipSlot::MainHand => &mut wear.main_hand,
-        EquipSlot::OffHand => &mut wear.off_hand,
-        EquipSlot::Head => &mut wear.head,
-        EquipSlot::Chest => &mut wear.chest,
-        EquipSlot::Legs => &mut wear.legs,
-        EquipSlot::Feet => &mut wear.feet,
+        EquipSlot::MainHand => Some(&mut wear.main_hand),
+        EquipSlot::OffHand => Some(&mut wear.off_hand),
+        EquipSlot::Head => Some(&mut wear.head),
+        EquipSlot::Chest => Some(&mut wear.chest),
+        EquipSlot::Legs => Some(&mut wear.legs),
+        EquipSlot::Feet => Some(&mut wear.feet),
+        EquipSlot::Neck | EquipSlot::Finger => None,
     }
 }
 
@@ -580,7 +583,9 @@ fn decrement_wear(
             return;
         }
 
-        let wear_slot = equipment_wear_slot_mut(&mut bags.equipment_wear, slot);
+        let Some(wear_slot) = equipment_wear_slot_mut(&mut bags.equipment_wear, slot) else {
+            return;
+        };
         let before = wear_slot.unwrap_or(def.max_durability);
         let after = before.saturating_sub(1);
         *wear_slot = Some(after);
@@ -937,8 +942,13 @@ pub fn apply_ability_effect(
         .get::<Combat>(src)
         .map(|c| c.attack_damage)
         .unwrap_or(0.0);
+    let spell = world
+        .get::<Combat>(src)
+        .map(|c| c.spell_power)
+        .unwrap_or(0.0);
     let requested = world.get::<Combat>(src).and_then(|c| c.target);
-    let weapon = def.damage + attack * 0.35;
+    let melee = def.damage + attack * 0.35;
+    let spell_hit = def.damage + attack * 0.35 + spell * 0.5;
     let rage = world
         .get::<ClassKit>(src)
         .and_then(|k| k.resource_type)
@@ -961,7 +971,7 @@ pub fn apply_ability_effect(
                 src,
                 tid,
                 def,
-                weapon * coefficient * dmg_scale,
+                melee * coefficient * dmg_scale,
                 events,
             );
         }
@@ -969,7 +979,7 @@ pub fn apply_ability_effect(
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_direct_damage(world, rng, src, tid, def, weapon * dmg_scale, events);
+            apply_direct_damage(world, rng, src, tid, def, spell_hit * dmg_scale, events);
         }
         AbilityEffect::AoeDamage {
             radius,
@@ -984,7 +994,7 @@ pub fn apply_ability_effect(
                 }
             };
             let hit = roll_player_hit(world, rng, src);
-            let Some(amount) = scale_hit(weapon * dmg_scale, hit) else {
+            let Some(amount) = scale_hit(melee * dmg_scale, hit) else {
                 toast_miss(events, def.name);
                 return;
             };
@@ -1014,7 +1024,7 @@ pub fn apply_ability_effect(
                     src,
                     tid,
                     def,
-                    weapon * coefficient * dmg_scale,
+                    spell_hit * coefficient * dmg_scale,
                     events,
                 );
             } else {
@@ -1041,7 +1051,7 @@ pub fn apply_ability_effect(
                 src,
                 tid,
                 def,
-                weapon * coefficient * dmg_scale,
+                melee * coefficient * dmg_scale,
                 events,
             );
         }
@@ -1058,7 +1068,7 @@ pub fn apply_ability_effect(
                 apply_ability_aura(world, src, tid, def.id, events);
             } else {
                 let hit = roll_player_hit(world, rng, src);
-                if let Some(amount) = scale_hit(weapon.max(1.0) * dmg_scale, hit) {
+                if let Some(amount) = scale_hit(melee.max(1.0) * dmg_scale, hit) {
                     if hit == HitResult::Crit {
                         toast_crit(events, def.name);
                     }
@@ -1083,7 +1093,7 @@ pub fn apply_ability_effect(
             events.push(SimEvent::Toast {
                 message: format!("{name} interrupts!", name = def.name),
             });
-            apply_direct_damage(world, rng, src, tid, def, weapon * dmg_scale, events);
+            apply_direct_damage(world, rng, src, tid, def, melee * dmg_scale, events);
         }
         AbilityEffect::Taunt { threat } => {
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
@@ -1104,7 +1114,7 @@ pub fn apply_ability_effect(
             let Some(tid) = requested.filter(|&t| is_living_hostile(world, src, t)) else {
                 return;
             };
-            apply_charge(world, rng, src, tid, def, weapon * dmg_scale, events);
+            apply_charge(world, rng, src, tid, def, melee * dmg_scale, events);
         }
         AbilityEffect::Blink { distance } => {
             apply_blink(world, src, distance);
@@ -1132,11 +1142,15 @@ fn apply_direct_heal(
 ) {
     let hit = roll_player_hit(world, rng, src);
     let heal_mult = 1.0 + crate::talents::talent_bonus(world, src, "heal_pct");
+    let sp = world
+        .get::<Combat>(src)
+        .map(|c| c.spell_power)
+        .unwrap_or(0.0);
     let amount = match hit {
-        HitResult::Miss | HitResult::Hit => def.damage * coefficient * heal_mult,
+        HitResult::Miss | HitResult::Hit => (def.damage + sp * 0.5) * coefficient * heal_mult,
         HitResult::Crit => {
             toast_crit(events, def.name);
-            def.damage * coefficient * CRIT_MULT * heal_mult
+            (def.damage + sp * 0.5) * coefficient * CRIT_MULT * heal_mult
         }
     };
     apply_heal(world, tid, amount, def.name, events);
@@ -1297,21 +1311,32 @@ pub fn spawn_mob_loot(
     x: f32,
     z: f32,
 ) -> EntityId {
-    let (copper, item) = if let Some(tid) = template_id.and_then(mob) {
-        let copper = rng.gen_range_u32(tid.copper_min, tid.copper_max);
-        let mut dropped = None;
-        for entry in tid.loot {
-            if rng.next_f32() < entry.chance {
-                dropped = Some(entry.item_id.to_string());
-                break;
-            }
-        }
-        (copper, dropped)
-    } else {
-        (rng.gen_range_u32(3, 8), None)
+    let Some(tid) = template_id.and_then(mob) else {
+        let copper = rng.gen_range_u32(3, 8);
+        let id = world.next_id();
+        return crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
     };
-    let id = world.next_id();
-    crate::ecs::spawn::create_loot(world, id, x, z, copper, item)
+    let copper = rng.gen_range_u32(tid.copper_min, tid.copper_max);
+    let mut dropped: Vec<String> = Vec::new();
+    for entry in tid.loot {
+        if rng.next_f32() < entry.chance {
+            dropped.push(entry.item_id.to_string());
+        }
+    }
+    if dropped.is_empty() {
+        let id = world.next_id();
+        return crate::ecs::spawn::create_loot(world, id, x, z, copper, None);
+    }
+    let mut first = 0;
+    for (i, item_id) in dropped.into_iter().enumerate() {
+        let id = world.next_id();
+        let c = if i == 0 { copper } else { 0 };
+        crate::ecs::spawn::create_loot(world, id, x + i as f32 * 0.4, z, c, Some(item_id));
+        if i == 0 {
+            first = id;
+        }
+    }
+    first
 }
 
 pub fn try_pickup_loot(
@@ -2265,6 +2290,27 @@ mod tests {
     }
 
     #[test]
+    fn spell_power_increases_priest_heal() {
+        fn heal_once(sp: f32) -> f32 {
+            let mut world = World::new();
+            let mut rng = Rng::new(1);
+            crate::ecs::spawn::create_player(&mut world, 1, "P", PlayerClass::Priest, 0.0, 0.0);
+            if let Some(h) = world.get_mut::<Health>(1) {
+                h.hp = 20.0;
+            }
+            if let Some(c) = world.get_mut::<Combat>(1) {
+                c.spell_power = sp;
+                c.target = Some(1);
+            }
+            let def = woc_content::ability("flash_heal").expect("flash_heal");
+            let mut events = Vec::new();
+            apply_ability_effect(&mut world, &mut rng, 1, def, &mut events);
+            world.get::<Health>(1).unwrap().hp
+        }
+        assert!(heal_once(10.0) > heal_once(0.0) + 4.0);
+    }
+
+    #[test]
     fn priest_heal_restores_party_member() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Priest", PlayerClass::Priest, 0.0, 0.0);
@@ -3038,7 +3084,15 @@ mod tests {
         apply_aura(&mut world, 2, fear, &mut Vec::new());
         assert!(is_stunned(&world, 2));
         let mut events = Vec::new();
-        deal_damage(&mut world, 1, 2, 10.0, Some("Shadow Bolt"), false, &mut events);
+        deal_damage(
+            &mut world,
+            1,
+            2,
+            10.0,
+            Some("Shadow Bolt"),
+            false,
+            &mut events,
+        );
         assert!(
             !is_stunned(&world, 2),
             "fear should break when the target is damaged"
@@ -3161,5 +3215,32 @@ mod tests {
         );
         toggle_form(&mut world, 1, &mut Vec::new());
         assert!((move_speed_mult(&world, 1) - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn independent_loot_can_drop_two_items() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        let _ = spawn_mob_loot(&mut world, &mut rng, Some("barrow_hag"), 0.0, 0.0);
+        let piles: Vec<_> = world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| world.get::<LootPile>(id).and_then(|p| p.item.clone()))
+            .collect();
+        assert!(piles.iter().any(|i| i == "hag_claw"));
+        assert!(piles.iter().any(|i| i == "hag_focus"));
+    }
+
+    #[test]
+    fn crypt_warden_drops_cleaver() {
+        let mut world = World::new();
+        let mut rng = Rng::new(1);
+        spawn_mob_loot(&mut world, &mut rng, Some("crypt_warden"), 1.0, 1.0);
+        let items: Vec<_> = world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| world.get::<LootPile>(id).and_then(|p| p.item.clone()))
+            .collect();
+        assert_eq!(items, vec!["crypt_cleaver".to_string()]);
     }
 }

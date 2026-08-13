@@ -50,6 +50,8 @@ pub enum EquipSlot {
     Chest,
     Legs,
     Feet,
+    Neck,
+    Finger,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -297,6 +299,10 @@ pub struct EquipmentSnapshot {
     #[serde(default)]
     pub feet: Option<String>,
     #[serde(default)]
+    pub neck: Option<String>,
+    #[serde(default)]
+    pub finger: Option<String>,
+    #[serde(default)]
     pub main_hand_durability: Option<u32>,
     #[serde(default)]
     pub off_hand_durability: Option<u32>,
@@ -508,6 +514,15 @@ pub struct TickSnapshot {
     /// Remaining absorb on the local player.
     #[serde(default)]
     pub absorb: f32,
+    /// Derived attack power from gear and stats.
+    #[serde(default)]
+    pub attack_power: f32,
+    /// Derived armor from gear and stats.
+    #[serde(default)]
+    pub armor: f32,
+    /// Derived spell power from gear and stats.
+    #[serde(default)]
+    pub spell_power: f32,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -615,6 +630,9 @@ impl Default for TickSnapshot {
             stealthed: false,
             stance_id: String::new(),
             absorb: 0.0,
+            attack_power: 0.0,
+            armor: 0.0,
+            spell_power: 0.0,
         }
     }
 }
@@ -1099,6 +1117,9 @@ mod tests {
             stealthed: true,
             stance_id: "battle".into(),
             absorb: 25.0,
+            attack_power: 0.0,
+            armor: 0.0,
+            spell_power: 0.0,
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -1354,5 +1375,44 @@ mod tests {
             }
             _ => panic!("expected Hello"),
         }
+    }
+
+    #[test]
+    fn equipment_snapshot_omitted_jewelry_defaults() {
+        let eq: EquipmentSnapshot = serde_json::from_str(
+            r#"{"main_hand":"worn_sword","off_hand":null,"chest":"recruit_tunic"}"#,
+        )
+        .unwrap();
+        assert_eq!(eq.main_hand.as_deref(), Some("worn_sword"));
+        assert!(eq.neck.is_none());
+        assert!(eq.finger.is_none());
+    }
+
+    #[test]
+    fn tick_snapshot_omitted_sheet_stats_default_zero() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0},"target_id":null,"ability_ready":false,"ability_cooldown":0.0}"#,
+        )
+        .unwrap();
+        assert_eq!(snap.attack_power, 0.0);
+        assert_eq!(snap.armor, 0.0);
+        assert_eq!(snap.spell_power, 0.0);
+        assert_eq!(snap.protocol_rev, PROTOCOL_REV);
+        assert_eq!(PROTOCOL_REV, 8);
+    }
+
+    #[test]
+    fn unequip_neck_roundtrip() {
+        let a = InteractAction::Unequip {
+            equip_slot: EquipSlot::Neck,
+        };
+        let s = serde_json::to_string(&a).unwrap();
+        let back: InteractAction = serde_json::from_str(&s).unwrap();
+        assert!(matches!(
+            back,
+            InteractAction::Unequip {
+                equip_slot: EquipSlot::Neck
+            }
+        ));
     }
 }

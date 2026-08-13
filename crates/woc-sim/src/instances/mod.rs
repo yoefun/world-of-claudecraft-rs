@@ -206,6 +206,7 @@ fn spawn_boss_shell(world: &mut World, id: EntityId, def: &DungeonDef, instance_
         Combat {
             attack_damage: def.boss_attack_damage,
             armor: 0.0,
+            spell_power: 0.0,
             swing_timer: 0.0,
             ability_cd: 0.0,
             auto_attack: false,

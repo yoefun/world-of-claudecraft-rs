@@ -57,7 +57,7 @@ impl NpcDef {
     }
 
     pub fn trains_profession(&self, id: &str) -> bool {
-        self.trains.iter().any(|p| *p == id)
+        self.trains.contains(&id)
     }
 }
 

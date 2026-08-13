@@ -1,9 +1,22 @@
 # Parity status
 
-**Current rewrite:** `1.11.0` / `npc-services`.
+**Current rewrite:** `1.12.0` / `gear-depth`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`.  
-**Shipped:** [`quest-loop`](../superpowers/specs/2026-08-13-quest-loop-design.md) · [`quest-depth design`](../superpowers/specs/2026-08-13-quest-depth-design.md)
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth shipped as `1.12.0`.
+
+## Gear depth (`gear-depth`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `can_equip` class/armor | done | Cloth→Plate caps; weapon `allowed_classes` |
+| Two-hand occupancy | done | Bow/staff/cleaver clear OH |
+| Jewelry | done | Neck + one Finger |
+| Stamina / spell power | done | `sta*2` HP; SP on heal/spell |
+| Independent loot | done | One pile per successful `LootEntry` |
+| Crypt / hag gear | done | `crypt_cleaver` / `hag_focus` |
+| Client sheet | done | AP/Armor/SP; 1–9 bags; 1–8 unequip |
+| Durability / repair | done | Shipped in `1.11.0` NPC services |
+| Quality / enchants / sockets | n/a | Manufacturing draft / non-goal |
 
 ## NPC services (`npc-services`) — done
 
@@ -129,7 +142,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.11.0` / npc-services (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.12.0` / gear-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

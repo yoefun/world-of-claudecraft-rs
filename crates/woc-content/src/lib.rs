@@ -38,7 +38,10 @@ pub use delves::{delve, DelveDef, DelveReward, DelveRoomDef, DELVES};
 pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
-pub use items::{item, ItemDef, ItemEquipSlot, ItemKind, ITEMS};
+pub use items::{
+    can_equip, class_armor_cap, item, ArmorClass, EquipDeny, ItemDef, ItemEquipSlot, ItemKind,
+    WeaponStyle, ITEMS,
+};
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
@@ -85,6 +88,40 @@ pub const KNOWN_ZONE_IDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_gear_item_has_rules() {
+        for it in ITEMS.iter() {
+            if it.equip_slot.is_none() {
+                assert!(it.armor_class.is_none());
+                assert!(it.weapon_style.is_none());
+                continue;
+            }
+            match it.kind {
+                ItemKind::Weapon => {
+                    assert!(it.weapon_style.is_some(), "{}", it.id);
+                    assert!(it.armor_class.is_none(), "{}", it.id);
+                }
+                ItemKind::Armor => {
+                    let style = it.weapon_style;
+                    if matches!(it.equip_slot, Some(ItemEquipSlot::OffHand)) {
+                        assert_eq!(style, Some(WeaponStyle::Shield), "{}", it.id);
+                        assert!(it.armor_class.is_none(), "{}", it.id);
+                    } else if matches!(
+                        it.equip_slot,
+                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger)
+                    ) {
+                        assert!(style.is_none(), "{}", it.id);
+                        assert!(it.armor_class.is_none(), "{}", it.id);
+                    } else {
+                        assert!(it.armor_class.is_some(), "{}", it.id);
+                        assert!(style.is_none(), "{}", it.id);
+                    }
+                }
+                _ => panic!("{} is equippable but not weapon/armor", it.id),
+            }
+        }
+    }
 
     #[test]
     fn every_class_start_gear_exists() {
@@ -215,7 +252,8 @@ mod tests {
             assert!(
                 giver.is_quest_giver(),
                 "quest {} giver {} must have is_quest_giver",
-                q.id, q.giver_npc
+                q.id,
+                q.giver_npc
             );
             let turn_in = q.turn_in_npc.unwrap_or(q.giver_npc);
             if turn_in != q.giver_npc {
@@ -223,7 +261,8 @@ mod tests {
                 assert!(
                     npc_def.is_quest_giver(),
                     "quest {} turn-in {} must have is_quest_giver",
-                    q.id, turn_in
+                    q.id,
+                    turn_in
                 );
             }
         }
@@ -379,6 +418,17 @@ mod tests {
                     entry.item_id
                 );
             }
+        }
+    }
+
+    #[test]
+    fn dungeon_bosses_have_mob_templates() {
+        for d in DUNGEONS {
+            assert!(
+                mob(d.boss_id).is_some(),
+                "boss {} missing MobTemplate",
+                d.boss_id
+            );
         }
     }
 

@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.12.0 — 2026-08-13
+
+### Added
+
+- **1.12.0 `gear-depth`:** `can_equip` class/armor caps (Cloth→Plate) and weapon `allowed_classes`; two-hand/ranged weapons clear off-hand into bags.
+- Jewelry slots: Neck + one Finger (additive on protocol rev **8**).
+- Stamina (`sta * 2` HP) and spell power on heals/spells; sim-authoritative secondary stats on equip.
+- Independent loot rolls: one pile per successful `LootEntry` (no early `break`).
+- Upgrade drops: `crypt_cleaver`, `hag_focus`, pendant/ring ladder.
+- Client character sheet shows AP/Armor/SP from snapshot; numbered bag keys **1–9**; unequip keys **1–8**.
 
 ## 1.11.0 — 2026-08-13
 

@@ -203,6 +203,14 @@ mod serialize_tests {
     use super::*;
 
     #[test]
+    fn equipment_dto_omitted_jewelry_defaults() {
+        let eq: EquipmentDto = serde_json::from_str(r#"{"main_hand":"worn_sword"}"#).unwrap();
+        assert_eq!(eq.main_hand.as_deref(), Some("worn_sword"));
+        assert!(eq.neck.is_none());
+        assert!(eq.finger.is_none());
+    }
+
+    #[test]
     fn inventory_equipment_quests_roundtrip() {
         let inv = vec![
             Some(InvStackDto {

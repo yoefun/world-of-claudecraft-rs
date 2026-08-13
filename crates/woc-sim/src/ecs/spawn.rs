@@ -77,6 +77,7 @@ fn insert_combat_blank(world: &mut World, id: EntityId, attack_damage: f32) {
         Combat {
             attack_damage,
             armor: 0.0,
+            spell_power: 0.0,
             swing_timer: 0.0,
             ability_cd: 0.0,
             auto_attack: false,
@@ -155,6 +156,9 @@ pub fn create_player(
     let equipment = Equipment {
         main_hand: Some(def.start_weapon.to_string()),
         chest: Some(def.start_chest.to_string()),
+        head: Some("recruit_cap".into()),
+        legs: Some("recruit_pants".into()),
+        feet: Some("recruit_boots".into()),
         ..Default::default()
     };
     let equipment_wear = EquipmentWear::full_for_equipment(&equipment);
@@ -297,6 +301,7 @@ pub fn create_pet(
         Combat {
             attack_damage: def.attack_damage,
             armor: 0.0,
+            spell_power: 0.0,
             swing_timer: 0.0,
             ability_cd: 0.0,
             auto_attack: true,

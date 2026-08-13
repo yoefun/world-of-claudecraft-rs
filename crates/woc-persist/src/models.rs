@@ -289,6 +289,10 @@ pub struct EquipmentDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feet: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub neck: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finger: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_hand_durability: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub off_hand_durability: Option<u32>,

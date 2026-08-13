@@ -1,8 +1,10 @@
 //! Interaction commands: talk, quests, vendor, equip, use item, loot corpse.
 
 use crate::ecs::components::AuraInstance;
-use crate::ecs::components::{dist2d, Equipment, EquipmentWear, Hearth, InvStack, Transform};
-use crate::ecs::components::{Bags, BuybackEntry, ClassKit, Health, Identity, Progress};
+use crate::ecs::components::{
+    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentWear, Health, Hearth, Identity,
+    InvStack, Progress, Transform,
+};
 use crate::ecs::World;
 use crate::inventory::remove_item;
 use crate::inventory::{grant_item, take_item};
@@ -12,7 +14,8 @@ use crate::quests::{
 use crate::stats::recalc_player_stats;
 use crate::types::INTERACT_RANGE;
 use woc_content::{
-    item, known_abilities_at_level, npc, ItemEquipSlot, ItemKind, NpcDef, NpcService,
+    can_equip, item, known_abilities_at_level, npc, EquipDeny, ItemEquipSlot, ItemKind, NpcDef,
+    NpcService, PlayerClass, WeaponStyle,
 };
 use woc_protocol::{
     BuybackSnapshot, EntityId, EntityKind, EquipSlot, InteractAction, NpcSessionSnapshot, SimEvent,
@@ -27,6 +30,21 @@ fn to_protocol_slot(slot: ItemEquipSlot) -> EquipSlot {
         ItemEquipSlot::Chest => EquipSlot::Chest,
         ItemEquipSlot::Legs => EquipSlot::Legs,
         ItemEquipSlot::Feet => EquipSlot::Feet,
+        ItemEquipSlot::Neck => EquipSlot::Neck,
+        ItemEquipSlot::Finger => EquipSlot::Finger,
+    }
+}
+
+fn equipment_slot_ref(equipment: &Equipment, slot: EquipSlot) -> &Option<String> {
+    match slot {
+        EquipSlot::MainHand => &equipment.main_hand,
+        EquipSlot::OffHand => &equipment.off_hand,
+        EquipSlot::Head => &equipment.head,
+        EquipSlot::Chest => &equipment.chest,
+        EquipSlot::Legs => &equipment.legs,
+        EquipSlot::Feet => &equipment.feet,
+        EquipSlot::Neck => &equipment.neck,
+        EquipSlot::Finger => &equipment.finger,
     }
 }
 
@@ -38,6 +56,8 @@ fn equipment_slot_mut(equipment: &mut Equipment, slot: EquipSlot) -> &mut Option
         EquipSlot::Chest => &mut equipment.chest,
         EquipSlot::Legs => &mut equipment.legs,
         EquipSlot::Feet => &mut equipment.feet,
+        EquipSlot::Neck => &mut equipment.neck,
+        EquipSlot::Finger => &mut equipment.finger,
     }
 }
 
@@ -49,17 +69,20 @@ fn equipment_slot(equipment: &Equipment, slot: EquipSlot) -> &Option<String> {
         EquipSlot::Chest => &equipment.chest,
         EquipSlot::Legs => &equipment.legs,
         EquipSlot::Feet => &equipment.feet,
+        EquipSlot::Neck => &equipment.neck,
+        EquipSlot::Finger => &equipment.finger,
     }
 }
 
-fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> &mut Option<u32> {
+fn equipment_wear_slot_mut(wear: &mut EquipmentWear, slot: EquipSlot) -> Option<&mut Option<u32>> {
     match slot {
-        EquipSlot::MainHand => &mut wear.main_hand,
-        EquipSlot::OffHand => &mut wear.off_hand,
-        EquipSlot::Head => &mut wear.head,
-        EquipSlot::Chest => &mut wear.chest,
-        EquipSlot::Legs => &mut wear.legs,
-        EquipSlot::Feet => &mut wear.feet,
+        EquipSlot::MainHand => Some(&mut wear.main_hand),
+        EquipSlot::OffHand => Some(&mut wear.off_hand),
+        EquipSlot::Head => Some(&mut wear.head),
+        EquipSlot::Chest => Some(&mut wear.chest),
+        EquipSlot::Legs => Some(&mut wear.legs),
+        EquipSlot::Feet => Some(&mut wear.feet),
+        EquipSlot::Neck | EquipSlot::Finger => None,
     }
 }
 
@@ -71,6 +94,7 @@ fn equipment_wear_slot(wear: &EquipmentWear, slot: EquipSlot) -> Option<u32> {
         EquipSlot::Chest => wear.chest,
         EquipSlot::Legs => wear.legs,
         EquipSlot::Feet => wear.feet,
+        EquipSlot::Neck | EquipSlot::Finger => None,
     }
 }
 
@@ -526,7 +550,9 @@ fn repair_all(
             let Some(max) = EquipmentWear::max_for_item(&item_id) else {
                 continue;
             };
-            *equipment_wear_slot_mut(&mut bags.equipment_wear, slot) = Some(max);
+            if let Some(wear_slot) = equipment_wear_slot_mut(&mut bags.equipment_wear, slot) {
+                *wear_slot = Some(max);
+            }
         }
         for stack in bags.inventory.iter_mut().flatten() {
             let Some(def) = item(&stack.item_id) else {
@@ -638,20 +664,85 @@ fn equip_from_bag(
     let Some(idef) = item(&stack.item_id) else {
         return;
     };
-    let Some(content_slot) = idef.equip_slot else {
-        events.push(SimEvent::Toast {
-            message: "Cannot equip that.".into(),
-        });
+    let class = world
+        .get::<ClassKit>(player_id)
+        .and_then(|k| k.class_id)
+        .unwrap_or(PlayerClass::Warrior);
+    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
+    match can_equip(idef, class, level) {
+        Ok(()) => {}
+        Err(EquipDeny::NotGear) => {
+            events.push(SimEvent::Toast {
+                message: "Cannot equip that.".into(),
+            });
+            return;
+        }
+        Err(EquipDeny::LevelReq(n)) => {
+            events.push(SimEvent::Toast {
+                message: format!("Requires level {n}."),
+            });
+            return;
+        }
+        Err(EquipDeny::WrongClass) => {
+            events.push(SimEvent::Toast {
+                message: "Your class cannot equip that.".into(),
+            });
+            return;
+        }
+        Err(EquipDeny::WrongArmor) => {
+            events.push(SimEvent::Toast {
+                message: "Your class cannot wear that armor.".into(),
+            });
+            return;
+        }
+    }
+    let content_slot = idef.equip_slot.unwrap();
+    let equip_slot = to_protocol_slot(content_slot);
+
+    let two_hand = matches!(
+        idef.weapon_style,
+        Some(WeaponStyle::TwoHand | WeaponStyle::Ranged)
+    );
+    if content_slot == ItemEquipSlot::OffHand {
+        let mh = world
+            .get::<Bags>(player_id)
+            .and_then(|b| b.equipment.main_hand.clone());
+        if let Some(id) = mh {
+            if let Some(cur) = item(&id) {
+                if matches!(
+                    cur.weapon_style,
+                    Some(WeaponStyle::TwoHand | WeaponStyle::Ranged)
+                ) {
+                    events.push(SimEvent::Toast {
+                        message: "Cannot dual-wield a two-handed weapon.".into(),
+                    });
+                    return;
+                }
+            }
+        }
+    }
+
+    let Some(bags) = world.get::<Bags>(player_id) else {
         return;
     };
-    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
-    if level < idef.level_req {
+    let empty_holes = bags.inventory.iter().filter(|s| s.is_none()).count();
+    let holes_after_remove = empty_holes + usize::from(stack.count == 1);
+    let mut displaced = Vec::new();
+    if let Some(prev) = equipment_slot_ref(&bags.equipment, equip_slot) {
+        displaced.push(prev.clone());
+    }
+    if two_hand {
+        if let Some(oh) = bags.equipment.off_hand.clone() {
+            displaced.push(oh);
+        }
+    }
+    if displaced.len() > holes_after_remove {
         events.push(SimEvent::Toast {
-            message: format!("Requires level {}.", idef.level_req),
+            message: "Inventory full.".into(),
         });
         return;
     }
-    let equip_slot = to_protocol_slot(content_slot);
+
     if let Some(bags) = world.get_mut::<Bags>(player_id) {
         if slot >= bags.inventory.len() {
             return;
@@ -664,12 +755,18 @@ fn equip_from_bag(
             .or_else(|| EquipmentWear::max_for_item(&removed_stack.item_id));
         let previous = equipment_slot_mut(&mut bags.equipment, equip_slot)
             .replace(removed_stack.item_id.clone());
-        let previous_wear = std::mem::replace(
-            equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot),
-            durability,
-        );
+        let previous_wear = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot)
+            .and_then(|wear_slot| std::mem::replace(wear_slot, durability));
         if let Some(prev) = previous {
             bags.inventory[slot] = Some(stack_with_durability(&prev, 1, previous_wear));
+        }
+        if two_hand {
+            if let Some(oh) = bags.equipment.off_hand.take() {
+                let oh_wear = bags.equipment_wear.off_hand.take();
+                if let Some(empty) = bags.inventory.iter_mut().find(|slot| slot.is_none()) {
+                    *empty = Some(stack_with_durability(&oh, 1, oh_wear));
+                }
+            }
         }
     }
     recalc_player_stats(world, player_id);
@@ -691,13 +788,16 @@ fn unequip_to_bag(
         let Some(item_id) = equipment_slot_mut(&mut bags.equipment, equip_slot).take() else {
             return;
         };
-        let wear = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot).take();
+        let wear = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot)
+            .and_then(|wear_slot| wear_slot.take());
         if let Some(empty) = bags.inventory.iter_mut().find(|slot| slot.is_none()) {
             *empty = Some(stack_with_durability(&item_id, 1, wear));
             restored = true;
         } else {
             *equipment_slot_mut(&mut bags.equipment, equip_slot) = Some(item_id.clone());
-            *equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot) = wear;
+            if let Some(wear_slot) = equipment_wear_slot_mut(&mut bags.equipment_wear, equip_slot) {
+                *wear_slot = wear;
+            }
         }
     }
     if !restored {
@@ -873,7 +973,7 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Bags, Health};
+    use crate::ecs::components::{Bags, Health, InvStack};
     use crate::inventory::{count_item, grant_into};
     use woc_content::PlayerClass;
 
@@ -961,7 +1061,10 @@ mod tests {
         let slot = bag_slot_of(&world, 1, "veteran_helm");
         let mut events = Vec::new();
         equip_from_bag(&mut world, 1, slot, &mut events);
-        assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
+        assert_ne!(
+            world.get::<Bags>(1).unwrap().equipment.head.as_deref(),
+            Some("veteran_helm")
+        );
         assert_eq!(
             count_item(&world.get::<Bags>(1).unwrap().inventory, "veteran_helm"),
             1
@@ -969,6 +1072,76 @@ mod tests {
         assert!(events.iter().any(|e| matches!(
             e,
             SimEvent::Toast { message } if message.contains("Requires level")
+        )));
+    }
+
+    #[test]
+    fn mage_refuses_sword() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Cas", PlayerClass::Mage, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "worn_sword", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "worn_sword");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        assert_ne!(
+            world.get::<Bags>(1).unwrap().equipment.main_hand.as_deref(),
+            Some("worn_sword")
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message.contains("class cannot equip")
+        )));
+    }
+
+    #[test]
+    fn two_hand_clears_off_hand_into_bag() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hunt", PlayerClass::Hunter, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.off_hand = Some("wooden_buckler".into());
+        }
+        let mut events = Vec::new();
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            assert!(grant_into(&mut bags.inventory, "worn_bow", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "worn_bow");
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        assert!(world.get::<Bags>(1).unwrap().equipment.off_hand.is_none());
+        assert_eq!(
+            world.get::<Bags>(1).unwrap().equipment.main_hand.as_deref(),
+            Some("worn_bow")
+        );
+        assert_eq!(
+            count_item(&world.get::<Bags>(1).unwrap().inventory, "wooden_buckler"),
+            1
+        );
+    }
+
+    #[test]
+    fn two_hand_refuses_when_bag_cannot_hold_off_hand() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hunt", PlayerClass::Hunter, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.off_hand = Some("wooden_buckler".into());
+            for i in 0..bags.inventory.len() {
+                if bags.inventory[i].is_none() {
+                    bags.inventory[i] = Some(InvStack::new("wolf_fang", 1));
+                }
+            }
+            bags.inventory[0] = Some(InvStack::new("worn_bow", 1));
+        }
+        let slot = bag_slot_of(&world, 1, "worn_bow");
+        let mut events = Vec::new();
+        equip_from_bag(&mut world, 1, slot, &mut events);
+        assert_eq!(
+            world.get::<Bags>(1).unwrap().equipment.off_hand.as_deref(),
+            Some("wooden_buckler")
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message.contains("Inventory full")
         )));
     }
 
