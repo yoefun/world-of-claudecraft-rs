@@ -128,6 +128,7 @@ impl AuctionHouse {
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn list_item(
         &mut self,
         world: &mut World,

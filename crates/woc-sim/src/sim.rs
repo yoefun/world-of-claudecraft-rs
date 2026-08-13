@@ -1192,8 +1192,8 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, Health, LootPile, Owner, Progress, QuestLog, QuestState, Reputation,
-        Threat, Transform,
+        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Owner, Progress, QuestLog,
+        QuestState, Reputation, Threat, Transform,
     };
     use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
@@ -1764,6 +1764,8 @@ mod tests {
                 count: 1,
                 durability: Some(0),
                 enchant_id: None,
+                quality: None,
+                bound: false,
             });
         }
         assert_eq!(crate::interaction::repair_cost(&world, 1), 40);

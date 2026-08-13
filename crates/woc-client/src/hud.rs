@@ -1492,7 +1492,10 @@ mod tests {
             slot: 0,
             item_id: "boar_tusk".into(),
             count: 1,
-            ..Default::default()
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
@@ -1519,7 +1522,8 @@ mod tests {
             count: 1,
             durability: Some(12),
             enchant_id: None,
-            ..Default::default()
+            quality: None,
+            bound: false,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
