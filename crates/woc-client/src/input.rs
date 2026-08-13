@@ -4,7 +4,7 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
-use woc_content::{can_equip, item, ItemKind, PlayerClass};
+use woc_content::{can_equip, item, npc, ItemKind, PlayerClass};
 use woc_protocol::{
     AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, QuestLogEntry,
     TickSnapshot,
@@ -898,6 +898,16 @@ pub(crate) fn handle_interact_keys(
     };
 
     host.interact(nid, InteractAction::Talk);
+
+    if template_id
+        .as_deref()
+        .and_then(npc)
+        .is_some_and(|d| d.is_auctioneer())
+    {
+        ui.show_market = true;
+        ui.show_character = false;
+        ui.show_map = false;
+    }
 
     if let Some(template_id) = template_id.as_deref() {
         for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {

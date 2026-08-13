@@ -145,6 +145,7 @@ fn spawn_overhead_markers(
         Repair,
         Trainer,
         Hearth,
+        Auction,
     }
     let mut cues = Vec::new();
     if def.is_quest_giver() {
@@ -161,6 +162,9 @@ fn spawn_overhead_markers(
     }
     if def.is_innkeeper() {
         cues.push(Cue::Hearth);
+    }
+    if def.is_auctioneer() {
+        cues.push(Cue::Auction);
     }
     let total = cues.len() as f32;
     for (idx, cue) in cues.into_iter().enumerate() {
@@ -254,6 +258,22 @@ fn spawn_overhead_markers(
                     ))
                     .id();
                 commands.entity(parent).add_child(hearth);
+            }
+            Cue::Auction => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.92, 0.78, 0.28),
+                    emissive: LinearRgba::from(Color::srgb(0.45, 0.32, 0.05)),
+                    ..default()
+                });
+                let gavel = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.32, 0.26, 0.22))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(gavel);
             }
         }
     }

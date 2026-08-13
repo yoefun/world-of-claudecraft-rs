@@ -220,6 +220,9 @@ fn format_label(
                     if n.is_innkeeper() {
                         tags.push_str("[H]");
                     }
+                    if n.is_auctioneer() {
+                        tags.push_str("[A]");
+                    }
                     if tags.is_empty() {
                         tags
                     } else {

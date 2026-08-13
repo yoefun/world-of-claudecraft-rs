@@ -448,6 +448,9 @@ fn npc_service_tags(template_id: Option<&str>) -> String {
     if def.is_innkeeper() {
         tags.push_str("[H]");
     }
+    if def.is_auctioneer() {
+        tags.push_str("[A]");
+    }
     tags
 }
 

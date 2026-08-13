@@ -187,17 +187,16 @@ pub(crate) fn first_consumable_bag_stack(snap: &TickSnapshot) -> Option<(u8, Str
 pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String, u32)> {
     snap.inventory.iter().find_map(|stack| {
         let def = item(&stack.item_id)?;
-        if matches!(def.kind, ItemKind::Junk | ItemKind::Consumable) {
-            let price = def.vendor_sell.max(1).saturating_mul(5);
-            Some((
-                stack.slot,
-                stack.count.min(1).max(1),
-                stack.item_id.clone(),
-                price,
-            ))
-        } else {
-            None
+        if matches!(def.kind, ItemKind::Quest) {
+            return None;
         }
+        let price = def.vendor_sell.max(1).saturating_mul(5);
+        Some((
+            stack.slot,
+            stack.count.min(1).max(1),
+            stack.item_id.clone(),
+            price,
+        ))
     })
 }
 
@@ -240,6 +239,14 @@ pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
         .unwrap_or(false)
     {
         parts.push("[T] Train");
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_auction)
+        .unwrap_or(false)
+    {
+        parts.push("[U] Auction");
     }
     parts.join("   ")
 }
@@ -503,23 +510,43 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
     if snap.market.is_empty() {
         lines.push("  (no listings)".into());
     } else {
-        lines.extend(snap.market.iter().map(|listing| {
-            let mine = if listing.mine { " [yours]" } else { "" };
-            format!(
-                "  #{} {}×{} — {}c ({}){mine}",
-                listing.id, listing.count, listing.item_id, listing.price, listing.seller
-            )
-        }));
+        lines.extend(snap.market.iter().map(listing_line));
     }
     match first_listable_bag_stack(snap) {
         Some((_, _, item_id, price)) => {
-            lines.push(format!("[L] List 1×{item_id} for {price}c (+5c fee)"));
+            let name = item(&item_id)
+                .map(|d| d.name.to_string())
+                .unwrap_or(item_id);
+            lines.push(format!("[L] List 1×{name} for {price}c (+5c fee)"));
         }
-        None => lines.push("[L] List first junk/consumable (none)".into()),
+        None => lines.push("[L] List first non-quest bag stack (none)".into()),
     }
     lines.push("[O] Buy first affordable listing (not yours)".into());
     lines.push("[X] Cancel your first listing".into());
     lines.join("\n")
+}
+
+fn listing_line(listing: &woc_protocol::MarketListingSnapshot) -> String {
+    let mine = if listing.mine { " [yours]" } else { "" };
+    let name = item(&listing.item_id)
+        .map(|d| d.name.to_string())
+        .unwrap_or_else(|| listing.item_id.clone());
+    let mut extra = String::new();
+    if let Some(def) = item(&listing.item_id) {
+        if def.max_durability > 0 {
+            let dur = listing.durability.unwrap_or(def.max_durability);
+            extra.push_str(&format!(" {dur}/{}", def.max_durability));
+        }
+    }
+    if let Some(eid) = listing.enchant_id.as_deref() {
+        if let Some(edef) = enchant(eid) {
+            extra.push_str(&format!(" [{}]", edef.name));
+        }
+    }
+    format!(
+        "  #{} {}×{name}{extra} — {}c ({}){mine}",
+        listing.id, listing.count, listing.price, listing.seller
+    )
 }
 
 pub(crate) fn update_chrome_panels(
@@ -1282,10 +1309,65 @@ mod tests {
         let text = market_panel_text(&chrome_snapshot());
 
         assert!(text.contains("Copper: 75"));
-        assert!(text.contains("#11 5×peacebloom — 30c (Grace)"));
+        assert!(text.contains("#11 5×Peacebloom — 30c (Grace)"));
         assert!(text.contains("[O] Buy first affordable listing"));
         assert!(text.contains("[L] List"));
         assert!(text.contains("[X] Cancel"));
+    }
+
+    #[test]
+    fn first_listable_bag_stack_skips_quest_and_allows_weapons() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
+            item_id: "boar_tusk".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "worn_sword".into(),
+            count: 1,
+            durability: Some(7),
+            enchant_id: Some("coarse_sharpening".into()),
+        });
+        let listed = first_listable_bag_stack(&snap).unwrap();
+        assert_eq!(listed.0, 1);
+        assert_eq!(listed.2, "worn_sword");
+    }
+
+    #[test]
+    fn market_panel_shows_wear_and_enchant() {
+        let mut snap = chrome_snapshot();
+        snap.market[0].item_id = "worn_sword".into();
+        snap.market[0].count = 1;
+        snap.market[0].durability = Some(7);
+        snap.market[0].enchant_id = Some("coarse_sharpening".into());
+        let text = market_panel_text(&snap);
+        assert!(text.contains("Worn Sword"));
+        assert!(text.contains("7/40"));
+        assert!(text.contains("Coarse Sharpening"));
+    }
+
+    #[test]
+    fn npc_session_help_mentions_auction_when_can_auction() {
+        let mut snap = TickSnapshot::default();
+        snap.open_npc = Some(NpcSessionSnapshot {
+            npc_id: 9,
+            npc_name: "Auctioneer Lise".into(),
+            greeting: String::new(),
+            services: vec!["auctioneer".into()],
+            stock: vec![],
+            train_professions: vec![],
+            can_repair: false,
+            repair_cost: 0,
+            can_bind: false,
+            buyback: vec![],
+            can_auction: true,
+        });
+        let text = npc_session_help(&snap);
+        assert!(text.contains("[U] Auction"));
     }
 
     #[test]
@@ -1405,6 +1487,14 @@ mod tests {
     fn warrior_and_druid_action_bar_hint_f_key() {
         let mut snap = chrome_snapshot();
         snap.progress.class_id = "warrior".into();
+        snap.ability_bar = vec![woc_protocol::AbilityBarSlot {
+            slot: 1,
+            ability_id: "heroic_strike".into(),
+            name: "Heroic Strike".into(),
+            known: true,
+            ready: true,
+            cooldown: 0.0,
+        }];
         assert!(format_action_bar(&snap).contains("[F] Stance"));
         snap.progress.class_id = "druid".into();
         assert!(format_action_bar(&snap).contains("[F] Form"));
