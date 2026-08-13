@@ -46,6 +46,11 @@ impl VersionInfo {
     }
 }
 
+mod compat;
+pub use compat::{
+    check_compat, parse_semver, ClientIdentity, Compat, RealmIdentity, SemVer,
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
