@@ -1,6 +1,6 @@
 # Parity status
 
-**Current rewrite:** `1.6.0` / `class-engine`.  
+**Current rewrite:** `1.7.0` / `class-identity`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md). Class identity continues as `1.6.0`–`1.8.0`.
 
 ## Class identity (`class-engine` → `class-forms`)
@@ -16,7 +16,7 @@
 | Hunter mana | done | Hunter `resource_type` is Mana. |
 | Self-AoE | done | Frost Nova fires without a hostile target. |
 | Rage from taken + Execute dump | done | Warriors gain rage when hit; Execute dumps leftover rage into damage. |
-| 1.7 kit swaps (Charge/Blink/Shield on bar) | planned | After this engine gate. |
+| 1.7 kit swaps (Charge/Blink/Shield on bar) | done | Warrior Charge; mage Blink; priest PW:S; hunter Aspect (1.1 damage). Dropped on-bar: rend, SW:P, Counterspell, Multi-Shot (still in `ABILITIES`). |
 | 1.8 stance / form / shout / fear | planned | **F** CycleStance / ToggleForm. |
 
 ## Post-completion (`stable` → `online-hard`)
@@ -54,7 +54,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.6.0` / class-engine (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.7.0` / class-identity (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |

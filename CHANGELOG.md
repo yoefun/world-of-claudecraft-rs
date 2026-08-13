@@ -8,7 +8,7 @@
 - Absorb shields soak damage before HP; interrupt lockout on Kick / Earth Shock / Counterspell; rogue combo builder/spend; Execute dumps leftover rage.
 - Stealth: rogue **Z**, aggro skip until melee, 0.7 move, breaks on hit or most abilities.
 - Charge / Blink / Life Tap / Power Word: Shield engine verbs (stubs off-kit until 1.7). Frost Nova self-AoE. Hunter spends mana.
-- Warrior rage from damage taken.
+- **1.7.0 `class-identity`:** default bars put warrior Charge, mage Blink, priest Power Word: Shield, and hunter Aspect of the Hawk on slot 5. Rend / Shadow Word: Pain / Counterspell / Multi-Shot stay in `ABILITIES` off-bar. Aspect and Battle Shout auras grant 1.1 outgoing damage. Rogue action bar hints **[Z] Stealth**.
 
 - Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
