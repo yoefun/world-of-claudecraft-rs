@@ -163,4 +163,22 @@ mod tests {
             "expected +8 hp_max from sta 4, got base {base_hp} with {with_pendant}"
         );
     }
+
+    #[test]
+    fn hag_focus_raises_spell_power() {
+        use crate::ecs::components::Combat;
+
+        let mut world = World::new();
+        create_player(&mut world, 1, "P", PlayerClass::Priest, 0.0, 0.0);
+        let base_sp = world.get::<Combat>(1).unwrap().spell_power;
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment.neck = Some("hag_focus".into());
+        }
+        recalc_player_stats(&mut world, 1);
+        let with_focus = world.get::<Combat>(1).unwrap().spell_power;
+        assert!(
+            (with_focus - base_sp - 8.0).abs() < 0.01,
+            "expected +8 spell_power from hag_focus, got base {base_sp} with {with_focus}"
+        );
+    }
 }

@@ -12,7 +12,7 @@ Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-c
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.3.0 (online-hard)
+## What works in 1.9.0 (gear-depth)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
@@ -20,7 +20,8 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Talk to NPCs (E), quests, combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
 - Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
-- Client panels: talents / bank / mail / market / bags (equip·use·sell); **minimap** + **world map** (M)
+- Client panels: talents / bank / mail / market / bags (equip·use·sell); **character sheet** (C: AP/armor/SP + jewelry); **minimap** + **world map** (M)
+- Class armor caps, two-hand occupancy, stamina → HP, spell power on heals/spells; independent loot piles
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
