@@ -12,7 +12,8 @@
 | **1.2.0** (this branch) | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
 | **1.3.0** (shipped) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
 | **1.6.0** (shipped) | `class-engine` | Combo, stealth, absorb, interrupt lockout, Charge/Blink/Life Tap, hunter mana |
-| **1.7.0** (this branch) | `class-identity` | Rogue stealth+combo, priest shield, warrior Charge, mage Blink, hunter Aspect |
+| **1.7.0** (shipped) | `class-identity` | Rogue stealth+combo, priest shield, warrior Charge, mage Blink, hunter Aspect |
+| **1.8.0** (this branch) | `class-forms` | Warrior stances, shaman/druid forms, paladin aura/seal, warlock Fear |
 
 ## Completion program (closed)
 

@@ -1,6 +1,6 @@
 # Parity status
 
-**Current rewrite:** `1.7.0` / `class-identity`.  
+**Current rewrite:** `1.8.0` / `class-forms`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md). Class identity continues as `1.6.0`–`1.8.0`.
 
 ## Class identity (`class-engine` → `class-forms`)
@@ -17,7 +17,21 @@
 | Self-AoE | done | Frost Nova fires without a hostile target. |
 | Rage from taken + Execute dump | done | Warriors gain rage when hit; Execute dumps leftover rage into damage. |
 | 1.7 kit swaps (Charge/Blink/Shield on bar) | done | Warrior Charge; mage Blink; priest PW:S; hunter Aspect (1.1 damage). Dropped on-bar: rend, SW:P, Counterspell, Multi-Shot (still in `ABILITIES`). |
-| 1.8 stance / form / shout / fear | planned | **F** CycleStance / ToggleForm. |
+| 1.8 stance / form / shout / fear | done | **F** CycleStance / ToggleForm; Lightning Shield thorns; Fear/Travel Form break on damage. |
+
+### Nine-class signatures
+
+| Class | Signature |
+| --- | --- |
+| Warrior | Charge; **F** battle/defensive (Battle Shout 1.1 / armor_flat + outgoing 0.9) |
+| Paladin | Devotion Aura at spawn; Crusader Strike seal DoT |
+| Hunter | Aspect of the Hawk (1.1 dmg); mana |
+| Rogue | **Z** stealth, combo, Cheap Shot |
+| Priest | Power Word: Shield |
+| Shaman | Lightning Shield thorns; **F** Ghost Wolf |
+| Mage | Blink; Frost Nova self-AoE |
+| Warlock | Life Tap; Fear (stun, breaks on damage) |
+| Druid | **F** Travel Form (1.4 move, breaks on hit) |
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -54,7 +68,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.7.0` / class-identity (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.8.0` / class-forms (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
