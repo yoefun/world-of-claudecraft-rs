@@ -107,6 +107,18 @@ pub struct GatherNodeDef {
     pub respawn_seconds: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct CorpseId(pub u16);
+
+#[derive(Clone, Debug)]
+pub struct Corpse {
+    pub id: CorpseId,
+    pub pos: Vec2,
+    pub has_hide: bool,
+    pub skinned: bool,
+    pub tier: u8,
+}
+
 pub const TIER_SKILL_STEP: u16 = 25;
 pub const HARVEST_RANGE: f32 = 5.0;
 pub const STATION_RADIUS: f32 = 20.0;
