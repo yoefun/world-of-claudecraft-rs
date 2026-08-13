@@ -535,6 +535,9 @@ mod tests {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Default::default(),
+            last_mount: String::new(),
         };
         // Force non-virgin by setting copper.
         assert!(!state.is_virgin());

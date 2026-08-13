@@ -45,6 +45,9 @@ pub fn character_to_state(character: &Character) -> PlayerPersistentState {
         hearth_z: character.hearth_z,
         hearth_ready_tick: character.hearth_ready_tick,
         stance_id: character.stance_id.clone(),
+        riding_rank: character.riding_rank,
+        known_mounts: character.known_mounts.iter().cloned().collect(),
+        last_mount: character.last_mount.clone(),
     }
 }
 
@@ -90,6 +93,9 @@ pub fn state_to_save(state: &PlayerPersistentState) -> CharacterSave {
         hearth_z: state.hearth_z,
         hearth_ready_tick: state.hearth_ready_tick,
         stance_id: state.stance_id.clone(),
+        riding_rank: state.riding_rank,
+        known_mounts: state.known_mounts.iter().cloned().collect(),
+        last_mount: state.last_mount.clone(),
     }
 }
 

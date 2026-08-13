@@ -46,6 +46,12 @@ pub struct Character {
     pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
+    #[serde(default)]
+    pub riding_rank: u8,
+    #[serde(default)]
+    pub known_mounts: Vec<String>,
+    #[serde(default)]
+    pub last_mount: String,
 }
 
 /// Fields updated on save (position / progression / bags).
@@ -87,6 +93,12 @@ pub struct CharacterSave {
     pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
+    #[serde(default)]
+    pub riding_rank: u8,
+    #[serde(default)]
+    pub known_mounts: Vec<String>,
+    #[serde(default)]
+    pub last_mount: String,
 }
 
 impl Default for CharacterSave {
@@ -114,6 +126,9 @@ impl Default for CharacterSave {
             hearth_z: default_hearth_z(),
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
         }
     }
 }
@@ -153,6 +168,12 @@ pub(crate) struct CharacterCompletionDto {
     pub hearth_ready_tick: u64,
     #[serde(default)]
     pub stance_id: String,
+    #[serde(default)]
+    pub riding_rank: u8,
+    #[serde(default)]
+    pub known_mounts: Vec<String>,
+    #[serde(default)]
+    pub last_mount: String,
 }
 
 impl From<&CharacterSave> for CharacterCompletionDto {
@@ -173,6 +194,9 @@ impl From<&CharacterSave> for CharacterCompletionDto {
             hearth_z: save.hearth_z,
             hearth_ready_tick: save.hearth_ready_tick,
             stance_id: save.stance_id.clone(),
+            riding_rank: save.riding_rank,
+            known_mounts: save.known_mounts.clone(),
+            last_mount: save.last_mount.clone(),
         }
     }
 }
@@ -209,6 +233,9 @@ impl Character {
             hearth_z: self.hearth_z,
             hearth_ready_tick: self.hearth_ready_tick,
             stance_id: self.stance_id.clone(),
+            riding_rank: self.riding_rank,
+            known_mounts: self.known_mounts.clone(),
+            last_mount: self.last_mount.clone(),
         }
     }
 
@@ -235,6 +262,9 @@ impl Character {
         self.hearth_z = save.hearth_z;
         self.hearth_ready_tick = save.hearth_ready_tick;
         self.stance_id = save.stance_id;
+        self.riding_rank = save.riding_rank;
+        self.known_mounts = save.known_mounts;
+        self.last_mount = save.last_mount;
     }
 }
 
@@ -392,6 +422,9 @@ pub(crate) fn completion_from_json(s: &str) -> Result<CharacterCompletionDto, se
             hearth_z: default_hearth_z(),
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
         },
     })
 }
@@ -492,6 +525,9 @@ mod tests {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
         };
         let save = CharacterSave {
             zone_id: "eastfen".into(),
@@ -544,6 +580,18 @@ mod tests {
         assert_eq!(state.hearth_x, 2.0);
         assert_eq!(state.hearth_z, 4.0);
         assert_eq!(state.hearth_ready_tick, 0);
+    }
+
+    #[test]
+    fn completion_json_without_riding_keys_defaults() {
+        let state = completion_from_json(
+            r#"{"quests":[],"zone_id":"eastbrook","talent_points":0,"talents":[],"bank":[],"bank_copper":0,"honor":0,"professions":[],"pvp_flagged":false,"completed_deeds":[],"hearth_zone_id":"eastbrook","hearth_x":2.0,"hearth_z":4.0,"hearth_ready_tick":0,"stance_id":""}"#,
+        )
+        .unwrap();
+
+        assert_eq!(state.riding_rank, 0);
+        assert!(state.known_mounts.is_empty());
+        assert!(state.last_mount.is_empty());
     }
 
     #[test]
