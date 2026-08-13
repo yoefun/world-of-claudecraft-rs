@@ -7,10 +7,13 @@
 - Procedural character / creature visual catalog (`woc-sim::visual_catalog`): class-, template-, and role-keyed mesh recipes (players, NPCs, mobs, pets, loot).
 - Bevy scene loading: Eastbrook building meshes from physics AABBs, hub beacons, zone-gate portal arches, campfire props; biome-tinted terrain bands + zone sky/ambient on travel.
 - Character create: rotating 3D class preview silhouette behind the UI panel.
+- In-world scene load for NPCs/mobs/herbs: nameplates, quest/vendor overhead markers, target ground ring, idle bob; gather nodes spawned into the realm with herb visuals.
+- Enter-world toast summarizing NPC / foe / herb counts; visual spawn/despawn lifecycle for corpses, loot, and pets.
 
 ### Fixed
 
 - Clippy `too_many_arguments` on mail send / market list (nightly).
+- Gather nodes are not auto-looted on proximity (Interact / Gather only).
 
 ## 1.0.0-pre — 2026-07-28
 
