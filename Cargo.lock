@@ -6781,6 +6781,7 @@ dependencies = [
  "sha2",
  "tar",
  "thiserror 2.0.19",
+ "ureq",
  "zstd",
 ]
 

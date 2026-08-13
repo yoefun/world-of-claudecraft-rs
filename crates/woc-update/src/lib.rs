@@ -20,4 +20,4 @@ pub use plan::{plan_fetch, FetchPlan};
 pub use sign::{
     sign_manifest, signing_key_from_hex, verify_manifest, verifying_key_from_hex,
 };
-pub use store::{ArtifactStore, DirStore};
+pub use store::{fetch_url, url_parent, ArtifactStore, DirStore, HttpStore};
