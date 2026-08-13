@@ -123,6 +123,57 @@ pub const RECIPES: &[RecipeDef] = &[
         item_level_budget: 6,
         station: Some(StationType::Tannery),
     },
+    RecipeDef {
+        id: RecipeId::BoltOfLinen,
+        profession: ProfessionId::Tailoring,
+        result: ItemId::BoltOfLinen,
+        result_count: 1,
+        reagents: &[Reagent {
+            item: ItemId::LinenCloth,
+            count: 2,
+        }],
+        skill_req: 0,
+        item_level_budget: 1,
+        station: None,
+    },
+    RecipeDef {
+        id: RecipeId::LinenTrousers,
+        profession: ProfessionId::Tailoring,
+        result: ItemId::LinenTrousers,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::BoltOfLinen,
+                count: 3,
+            },
+            Reagent {
+                item: ItemId::SpoolOfThread,
+                count: 2,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 8,
+        station: Some(StationType::Loom),
+    },
+    RecipeDef {
+        id: RecipeId::LinenVestments,
+        profession: ProfessionId::Tailoring,
+        result: ItemId::LinenVestments,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::BoltOfLinen,
+                count: 4,
+            },
+            Reagent {
+                item: ItemId::SpoolOfThread,
+                count: 3,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 9,
+        station: Some(StationType::Loom),
+    },
 ];
 
 pub fn recipe_by_id(id: RecipeId) -> Option<&'static RecipeDef> {
@@ -151,6 +202,10 @@ mod tests {
         Vec2 { x: 80.0, z: 40.0 }
     }
 
+    fn loom_pos() -> Vec2 {
+        Vec2 { x: 20.0, z: -10.0 }
+    }
+
     fn inv_with_light_leather() -> Inventory {
         let mut inv = Inventory::with_capacity(4);
         inv.try_add(ItemStack {
@@ -176,6 +231,31 @@ mod tests {
         inv
     }
 
+    fn inv_with_linen_cloth() -> Inventory {
+        let mut inv = Inventory::with_capacity(4);
+        inv.try_add(ItemStack {
+            item: ItemId::LinenCloth,
+            count: 2,
+        })
+        .unwrap();
+        inv
+    }
+
+    fn inv_with_trousers_reagents() -> Inventory {
+        let mut inv = Inventory::with_capacity(8);
+        inv.try_add(ItemStack {
+            item: ItemId::BoltOfLinen,
+            count: 3,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::SpoolOfThread,
+            count: 2,
+        })
+        .unwrap();
+        inv
+    }
+
     fn inv_with_shortsword_reagents() -> Inventory {
         let mut inv = Inventory::with_capacity(8);
         inv.try_add(ItemStack {
@@ -189,6 +269,97 @@ mod tests {
         })
         .unwrap();
         inv
+    }
+
+    #[test]
+    fn bolt_of_linen_is_field_craftable() {
+        let mut inv = inv_with_linen_cloth();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::BoltOfLinen,
+            1,
+            field_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::BoltOfLinen,
+            1,
+            field_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::BoltOfLinen), 1);
+        assert_eq!(inv.count(ItemId::LinenCloth), 0);
+        assert_eq!(gold.copper, 98);
+        assert_eq!(skills.get(ProfessionId::Tailoring), 2);
+    }
+
+    #[test]
+    fn trousers_require_loom() {
+        let inv = inv_with_trousers_reagents();
+        let gold = Gold { copper: 100 };
+        let err = evaluate_craft_admission(
+            RecipeId::LinenTrousers,
+            1,
+            forge_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err, DenyReason::StationRequired);
+
+        let mut inv = inv_with_trousers_reagents();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::LinenTrousers,
+            1,
+            loom_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::LinenTrousers,
+            1,
+            loom_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(grant.gold_spent, 16);
+        assert_eq!(inv.count(ItemId::LinenTrousers), 1);
+        assert_eq!(inv.count(ItemId::BoltOfLinen), 0);
+        assert_eq!(inv.count(ItemId::SpoolOfThread), 0);
+        assert_eq!(gold.copper, 84);
+        assert_eq!(skills.get(ProfessionId::Tailoring), 2);
     }
 
     #[test]
