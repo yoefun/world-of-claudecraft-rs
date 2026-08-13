@@ -433,15 +433,18 @@ impl Sim {
             }
         }
 
+        self.rebuild_world();
         // Phase 2: player combat
         for &pid in &player_ids {
             let ability = self.intents.get(&pid).and_then(|i| i.ability);
-            update_player_combat(pid, &mut self.entities, ability, &mut self.events);
+            update_player_combat(pid, &mut self.world, ability, &mut self.events);
         }
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
 
         // Pet AI (after player combat; keeps TICK_PHASES fingerprint stable).
         tick_pets(&mut self.entities, &mut self.events);
         self.reindex();
+        self.rebuild_world();
 
         // Phase 3: mob AI + combat (focus nearest living player)
         let mob_ids: Vec<EntityId> = self
@@ -467,12 +470,13 @@ impl Sim {
                 nearest_alive_player(&self.entities, mob, 40.0)
             });
             if let Some(pid) = focus {
-                update_mob_combat(*mid, pid, &mut self.entities, &mut self.events);
+                update_mob_combat(*mid, pid, &mut self.world, &mut self.events);
             }
         }
 
         // Aura/timer decay (hook into tick after combat; keeps TICK_PHASES fingerprint stable).
-        tick_auras(&mut self.entities, &mut self.events);
+        tick_auras(&mut self.world, &mut self.events);
+        crate::ecs::spawn::apply_world_to_entities(&self.world, &mut self.entities);
         tick_mob_respawns(&mut self.entities, DT);
 
         // Phase 4: kill rewards → killer (+ party share stub)

@@ -1,5 +1,9 @@
 //! Combat: auto-attack, primary ability, GCD, casts, auras, damage, death, XP, loot.
 
+use crate::ecs::components::{
+    Auras, ClassKit, Combat, Health, Identity, LootTable, Progress, Threat, Transform,
+};
+use crate::ecs::World;
 use crate::entity::{AuraInstance, CastState, Entity};
 use crate::rng::Rng;
 use crate::types::{
@@ -39,87 +43,111 @@ pub fn face_toward(from: &Entity, to: &Entity) -> f32 {
     (to.x - from.x).atan2(to.z - from.z)
 }
 
-fn gain_resource(player: &mut Entity, amount: f32) {
-    player.resource = (player.resource + amount).min(player.resource_max);
+fn dist2d_ids(world: &World, a: EntityId, b: EntityId) -> f32 {
+    crate::ecs::components::dist2d(world, a, b).unwrap_or(f32::MAX)
 }
 
-fn spend_resource(player: &mut Entity, amount: f32) -> bool {
-    if player.resource + 1e-3 < amount {
+fn face_toward_ids(world: &World, from: EntityId, to: EntityId) -> f32 {
+    let Some(a) = world.get::<Transform>(from) else {
+        return 0.0;
+    };
+    let Some(b) = world.get::<Transform>(to) else {
+        return 0.0;
+    };
+    (b.x - a.x).atan2(b.z - a.z)
+}
+
+fn gain_resource(kit: &mut ClassKit, amount: f32) {
+    kit.resource = (kit.resource + amount).min(kit.resource_max);
+}
+
+fn spend_resource(kit: &mut ClassKit, amount: f32) -> bool {
+    if kit.resource + 1e-3 < amount {
         return false;
     }
-    player.resource -= amount;
+    kit.resource -= amount;
     true
 }
 
-pub fn add_threat(mob: &mut Entity, source: EntityId, amount: f32) {
-    if amount <= 0.0 || mob.kind != EntityKind::Mob {
+pub fn add_threat(world: &mut World, mob_id: EntityId, source: EntityId, amount: f32) {
+    if amount <= 0.0 {
         return;
     }
-    *mob.threat.entry(source).or_insert(0.0) += amount;
+    let Some(threat) = world.get_mut::<Threat>(mob_id) else {
+        return;
+    };
+    *threat.threat.entry(source).or_insert(0.0) += amount;
 }
 
 /// Prefer current living target; else highest threat in range; else `None`.
-pub fn prefer_mob_target(mob: &Entity, entities: &[Entity], max_range: f32) -> Option<EntityId> {
-    if let Some(tid) = mob.target {
-        if entities
-            .iter()
-            .any(|e| e.id == tid && e.alive && e.kind == EntityKind::Player)
+pub fn prefer_mob_target(world: &World, mob_id: EntityId, max_range: f32) -> Option<EntityId> {
+    if let Some(tid) = world.get::<Combat>(mob_id).and_then(|c| c.target) {
+        if world.get::<ClassKit>(tid).is_some()
+            && world.get::<Health>(tid).is_some_and(|h| h.alive)
         {
             return Some(tid);
         }
     }
+    let threat = world.get::<Threat>(mob_id)?.threat.clone();
     let mut best: Option<(EntityId, f32)> = None;
-    for (&id, &threat) in &mob.threat {
-        let Some(e) = entities.iter().find(|e| e.id == id) else {
-            continue;
-        };
-        if !e.alive || e.kind != EntityKind::Player {
+    for (id, threat_val) in threat {
+        if world.get::<ClassKit>(id).is_none() {
             continue;
         }
-        let d = dist2d(mob, e);
+        if !world.get::<Health>(id).is_some_and(|h| h.alive) {
+            continue;
+        }
+        let d = dist2d_ids(world, mob_id, id);
         if d > max_range {
             continue;
         }
-        if best.map(|(_, t)| threat > t).unwrap_or(true) {
-            best = Some((id, threat));
+        if best.map(|(_, t)| threat_val > t).unwrap_or(true) {
+            best = Some((id, threat_val));
         }
     }
     best.map(|(id, _)| id)
 }
 
 pub fn deal_damage(
-    entities: &mut [Entity],
+    world: &mut World,
     source: EntityId,
     target: EntityId,
     amount: f32,
     ability_name: Option<&str>,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(ti) = entities.iter().position(|e| e.id == target) else {
+    if world.get::<Health>(target).is_none_or(|h| !h.alive) {
+        return;
+    }
+    if world.get::<Identity>(target).is_some_and(|i| i.kind == EntityKind::Npc) {
+        return;
+    }
+    let talent_mult = world
+        .get::<Progress>(source)
+        .map(|p| crate::talents::damage_multiplier_from_ranks(&p.talents))
+        .unwrap_or(1.0);
+    let armor = world.get::<Combat>(target).map(|c| c.armor).unwrap_or(0.0);
+    let mitigated = (amount * talent_mult - armor * 0.05).max(1.0);
+    let Some(health) = world.get_mut::<Health>(target) else {
         return;
     };
-    if !entities[ti].alive || entities[ti].kind == EntityKind::Npc {
-        return;
+    health.hp = (health.hp - mitigated).max(0.0);
+    let died = health.hp <= 0.0;
+    if died {
+        health.alive = false;
     }
-    let talent_mult = entities
-        .iter()
-        .find(|e| e.id == source)
-        .map(crate::talents::damage_multiplier)
-        .unwrap_or(1.0);
-    let mitigated = (amount * talent_mult - entities[ti].armor * 0.05).max(1.0);
-    entities[ti].hp = (entities[ti].hp - mitigated).max(0.0);
-    if entities[ti].kind == EntityKind::Mob {
-        add_threat(&mut entities[ti], source, mitigated);
-    }
+    add_threat(world, target, source, mitigated);
     events.push(SimEvent::Damage {
         source,
         target,
         amount: mitigated,
         ability: ability_name.map(|s| s.to_string()),
     });
-    if entities[ti].hp <= 0.0 {
-        entities[ti].alive = false;
-        let victim_name = entities[ti].name.clone();
+    if died {
+        let victim_name = world
+            .get::<Identity>(target)
+            .map(|i| i.name.clone())
+            .unwrap_or_default();
         events.push(SimEvent::Kill {
             killer: source,
             victim: target,
@@ -128,22 +156,49 @@ pub fn deal_damage(
     }
 }
 
-pub fn apply_aura(target: &mut Entity, aura: AuraInstance, events: &mut Vec<SimEvent>) {
+/// Bridge for modules still on `&mut [Entity]` (pets).
+pub fn deal_damage_entities(
+    entities: &mut [Entity],
+    source: EntityId,
+    target: EntityId,
+    amount: f32,
+    ability_name: Option<&str>,
+    events: &mut Vec<SimEvent>,
+) {
+    let mut world = World::new();
+    for e in entities.iter() {
+        crate::ecs::spawn::sync_entity_to_world(&mut world, e);
+    }
+    deal_damage(&mut world, source, target, amount, ability_name, events);
+    crate::ecs::spawn::apply_world_to_entities(&world, entities);
+}
+
+pub fn apply_aura(world: &mut World, target: EntityId, aura: AuraInstance, events: &mut Vec<SimEvent>) {
     let id = aura.id.clone();
     let remaining = aura.remaining;
     let stacks = aura.stacks;
-    if let Some(existing) = target.auras.iter_mut().find(|a| a.id == aura.id) {
-        existing.remaining = existing.remaining.max(aura.remaining);
-        existing.stacks = existing.stacks.max(aura.stacks);
-        existing.tick_damage = aura.tick_damage;
-        existing.tick_heal = aura.tick_heal;
-        existing.tick_interval = aura.tick_interval;
-        existing.source = aura.source;
+    let auras = world.get_mut::<Auras>(target);
+    if let Some(store) = auras {
+        if let Some(existing) = store.auras.iter_mut().find(|a| a.id == aura.id) {
+            existing.remaining = existing.remaining.max(aura.remaining);
+            existing.stacks = existing.stacks.max(aura.stacks);
+            existing.tick_damage = aura.tick_damage;
+            existing.tick_heal = aura.tick_heal;
+            existing.tick_interval = aura.tick_interval;
+            existing.source = aura.source;
+        } else {
+            store.auras.push(aura);
+        }
     } else {
-        target.auras.push(aura);
+        world.insert(
+            target,
+            Auras {
+                auras: vec![aura],
+            },
+        );
     }
     events.push(SimEvent::AuraApplied {
-        player: target.id,
+        player: target,
         id,
         remaining,
         stacks,
@@ -151,16 +206,13 @@ pub fn apply_aura(target: &mut Entity, aura: AuraInstance, events: &mut Vec<SimE
 }
 
 fn apply_primary_dot(
-    entities: &mut [Entity],
+    world: &mut World,
     source: EntityId,
     target: EntityId,
     ability_id: &str,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(ti) = entities.iter().position(|e| e.id == target) else {
-        return;
-    };
-    if !entities[ti].alive {
+    if !world.get::<Health>(target).is_some_and(|h| h.alive) {
         return;
     }
     let aura = match ability_id {
@@ -198,26 +250,29 @@ fn apply_primary_dot(
         },
         _ => return,
     };
-    apply_aura(&mut entities[ti], aura, events);
+    apply_aura(world, target, aura, events);
 }
 
 /// Tick all entity auras: DoT damage, HoT heals, and expiry.
-pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
-    // Collect tick applications first to avoid borrow issues across entities.
+pub fn tick_auras(world: &mut World, events: &mut Vec<SimEvent>) {
     let mut pending_dots: Vec<(EntityId, EntityId, f32, String)> = Vec::new();
     let mut pending_hots: Vec<(EntityId, f32, String)> = Vec::new();
-    let ids: Vec<EntityId> = entities.iter().map(|e| e.id).collect();
+    let ids = world.ids::<Auras>();
 
     for id in ids {
-        let Some(ei) = entities.iter().position(|e| e.id == id) else {
-            continue;
-        };
-        if !entities[ei].alive && entities[ei].kind != EntityKind::Mob {
-            entities[ei].auras.clear();
+        let alive = world.get::<Health>(id).is_some_and(|h| h.alive);
+        let is_mob = world.get::<LootTable>(id).is_some();
+        if !alive && !is_mob {
+            if let Some(store) = world.get_mut::<Auras>(id) {
+                store.auras.clear();
+            }
             continue;
         }
+        let Some(store) = world.get_mut::<Auras>(id) else {
+            continue;
+        };
         let mut expired = Vec::new();
-        for (ai, aura) in entities[ei].auras.iter_mut().enumerate() {
+        for (ai, aura) in store.auras.iter_mut().enumerate() {
             aura.remaining -= DT;
             let has_tick =
                 (aura.tick_damage > 0.0 || aura.tick_heal > 0.0) && aura.tick_interval > 0.0;
@@ -244,34 +299,34 @@ pub fn tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
             }
         }
         for ai in expired.into_iter().rev() {
-            entities[ei].auras.remove(ai);
+            store.auras.remove(ai);
         }
     }
 
     for (source, target, amount, aura_id) in pending_dots {
-        deal_damage(entities, source, target, amount, Some(&aura_id), events);
+        deal_damage(world, source, target, amount, Some(&aura_id), events);
     }
     for (target, amount, aura_id) in pending_hots {
-        apply_hot_tick(entities, target, amount, &aura_id, events);
+        apply_hot_tick(world, target, amount, &aura_id, events);
     }
 }
 
 fn apply_hot_tick(
-    entities: &mut [Entity],
+    world: &mut World,
     target: EntityId,
     amount: f32,
     aura_id: &str,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(ti) = entities.iter().position(|e| e.id == target) else {
+    let Some(health) = world.get_mut::<Health>(target) else {
         return;
     };
-    if !entities[ti].alive {
+    if !health.alive {
         return;
     }
-    let before = entities[ti].hp;
-    entities[ti].hp = (entities[ti].hp + amount).min(entities[ti].hp_max);
-    let healed = entities[ti].hp - before;
+    let before = health.hp;
+    health.hp = (health.hp + amount).min(health.hp_max);
+    let healed = health.hp - before;
     if healed > 0.0 {
         events.push(SimEvent::Toast {
             message: format!("{aura_id} heals for {:.0}.", healed),
@@ -407,9 +462,8 @@ pub fn try_pickup_loot(player_id: EntityId, entities: &mut [Entity], events: &mu
     }
 }
 
-fn ability_range(player: &Entity) -> f32 {
-    player
-        .primary_ability
+fn ability_range(kit: &ClassKit) -> f32 {
+    kit.primary_ability
         .as_deref()
         .and_then(ability)
         .map(|a| a.range)
@@ -427,45 +481,43 @@ fn slot_as_u8(slot: AbilitySlot) -> u8 {
 }
 
 /// Resolve a pressed ability slot to a known, level-unlocked ability def.
-fn resolve_slot_ability(player: &Entity, slot: AbilitySlot) -> Option<&'static AbilityDef> {
-    let class = player.class_id?;
+fn resolve_slot_ability(kit: &ClassKit, slot: AbilitySlot) -> Option<&'static AbilityDef> {
+    let class = kit.class_id?;
     let def = class_ability_for_slot(class, slot_as_u8(slot))?;
-    player
-        .known_abilities
+    kit.known_abilities
         .iter()
         .any(|id| id == def.id)
         .then_some(def)
 }
 
-fn tick_ability_cds(player: &mut Entity) {
-    let ids: Vec<String> = player.ability_cds.keys().cloned().collect();
+fn tick_ability_cds(kit: &mut ClassKit, combat: &mut Combat) {
+    let ids: Vec<String> = kit.ability_cds.keys().cloned().collect();
     for id in ids {
-        if let Some(cd) = player.ability_cds.get_mut(&id) {
+        if let Some(cd) = kit.ability_cds.get_mut(&id) {
             *cd = (*cd - DT).max(0.0);
         }
     }
-    player.ability_cds.retain(|_, cd| *cd > 0.0);
-    // Keep legacy `ability_cd` mirrored to the primary for HUD/snapshot.
-    player.ability_cd = player
+    kit.ability_cds.retain(|_, cd| *cd > 0.0);
+    combat.ability_cd = kit
         .primary_ability
         .as_deref()
-        .and_then(|id| player.ability_cds.get(id).copied())
+        .and_then(|id| kit.ability_cds.get(id).copied())
         .unwrap_or(0.0);
 }
 
-fn start_ability_cd(player: &mut Entity, abil_id: &str, cooldown: f32) {
-    player.ability_cds.insert(abil_id.to_string(), cooldown);
-    if player.primary_ability.as_deref() == Some(abil_id) {
-        player.ability_cd = cooldown;
+fn start_ability_cd(kit: &mut ClassKit, combat: &mut Combat, abil_id: &str, cooldown: f32) {
+    kit.ability_cds.insert(abil_id.to_string(), cooldown);
+    if kit.primary_ability.as_deref() == Some(abil_id) {
+        combat.ability_cd = cooldown;
     }
 }
 
-fn ability_on_cd(player: &Entity, abil_id: &str) -> bool {
-    player.ability_cds.get(abil_id).copied().unwrap_or(0.0) > 0.0
+fn ability_on_cd(kit: &ClassKit, abil_id: &str) -> bool {
+    kit.ability_cds.get(abil_id).copied().unwrap_or(0.0) > 0.0
 }
 
 fn resolve_ability_hit(
-    entities: &mut [Entity],
+    world: &mut World,
     src: EntityId,
     tid: EntityId,
     abil_id: &str,
@@ -473,116 +525,131 @@ fn resolve_ability_hit(
     def_damage: f32,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(pi) = entities.iter().position(|e| e.id == src) else {
-        return;
-    };
-    let dmg = def_damage + entities[pi].attack_damage * 0.35;
-    if matches!(entities[pi].resource_type, Some(ResourceType::Rage)) {
-        gain_resource(&mut entities[pi], 5.0);
+    let attack = world.get::<Combat>(src).map(|c| c.attack_damage).unwrap_or(0.0);
+    let rage = world
+        .get::<ClassKit>(src)
+        .and_then(|k| k.resource_type)
+        .is_some_and(|rt| matches!(rt, ResourceType::Rage));
+    if rage {
+        if let Some(kit) = world.get_mut::<ClassKit>(src) {
+            gain_resource(kit, 5.0);
+        }
     }
-    deal_damage(entities, src, tid, dmg, Some(def_name), events);
-    apply_primary_dot(entities, src, tid, abil_id, events);
+    let dmg = def_damage + attack * 0.35;
+    deal_damage(world, src, tid, dmg, Some(def_name), events);
+    apply_primary_dot(world, src, tid, abil_id, events);
+}
+
+fn is_living_mob(world: &World, id: EntityId) -> bool {
+    world.get::<LootTable>(id).is_some() && world.get::<Health>(id).is_some_and(|h| h.alive)
 }
 
 pub fn update_player_combat(
     player_id: EntityId,
-    entities: &mut [Entity],
+    world: &mut World,
     ability_slot: Option<AbilitySlot>,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(pi) = entities.iter().position(|e| e.id == player_id) else {
+    if !world.get::<Health>(player_id).is_some_and(|h| h.alive) {
+        if let Some(c) = world.get_mut::<Combat>(player_id) {
+            c.cast = None;
+        }
+        return;
+    }
+    let Some(mut combat) = world.get::<Combat>(player_id).cloned() else {
         return;
     };
-    if !entities[pi].alive {
-        entities[pi].cast = None;
+    let Some(mut kit) = world.get::<ClassKit>(player_id).cloned() else {
         return;
+    };
+
+    if let Some(ResourceType::Mana | ResourceType::Energy) = kit.resource_type {
+        gain_resource(&mut kit, 1.5 * DT);
     }
 
-    // Soft regen for mana/energy out of swings.
-    if let Some(ResourceType::Mana | ResourceType::Energy) = entities[pi].resource_type {
-        gain_resource(&mut entities[pi], 1.5 * DT);
+    tick_ability_cds(&mut kit, &mut combat);
+    if combat.gcd > 0.0 {
+        combat.gcd = (combat.gcd - DT).max(0.0);
     }
 
-    tick_ability_cds(&mut entities[pi]);
-    if entities[pi].gcd > 0.0 {
-        entities[pi].gcd = (entities[pi].gcd - DT).max(0.0);
-    }
-
-    let target_id = entities[pi].target;
+    let target_id = combat.target;
     let Some(tid) = target_id else {
-        entities[pi].swing_timer = 0.0;
-        entities[pi].cast = None;
+        combat.swing_timer = 0.0;
+        combat.cast = None;
+        world.insert(player_id, combat);
+        world.insert(player_id, kit);
         return;
     };
-    let Some(ti) = entities.iter().position(|e| e.id == tid) else {
-        entities[pi].target = None;
-        entities[pi].cast = None;
-        return;
-    };
-    if !entities[ti].alive || entities[ti].kind != EntityKind::Mob {
-        entities[pi].target = None;
-        entities[pi].auto_attack = false;
-        entities[pi].cast = None;
+    if !is_living_mob(world, tid) {
+        combat.target = None;
+        combat.auto_attack = false;
+        combat.cast = None;
+        world.insert(player_id, combat);
+        world.insert(player_id, kit);
         return;
     }
 
-    let range = ability_range(&entities[pi]).max(MELEE_RANGE);
-    let d = dist2d(&entities[pi], &entities[ti]);
+    let range = ability_range(&kit).max(MELEE_RANGE);
+    let d = dist2d_ids(world, player_id, tid);
     let in_melee = d <= MELEE_RANGE;
 
-    entities[pi].yaw = face_toward(&entities[pi], &entities[ti]);
+    let yaw = face_toward_ids(world, player_id, tid);
+    if let Some(t) = world.get_mut::<Transform>(player_id) {
+        t.yaw = yaw;
+    }
 
-    // Advance in-progress cast.
-    if entities[pi].cast.is_some() {
-        let cast_range = entities[pi]
+    if combat.cast.is_some() {
+        let cast_range = combat
             .cast
             .as_ref()
             .and_then(|c| ability(&c.ability_id))
             .map(|a| a.range)
             .unwrap_or(range);
         let in_cast_range = d <= cast_range.max(RANGED_FALLBACK.min(cast_range));
-        let cast_target = entities[pi].cast.as_ref().map(|c| c.target);
+        let cast_target = combat.cast.as_ref().map(|c| c.target);
         if cast_target != Some(tid) || !in_cast_range {
-            entities[pi].cast = None;
-        } else if let Some(mut cast) = entities[pi].cast.take() {
+            combat.cast = None;
+            world.insert(player_id, combat.clone());
+            world.insert(player_id, kit.clone());
+        } else if let Some(mut cast) = combat.cast.take() {
             cast.elapsed += DT;
             if cast.elapsed >= cast.duration {
                 let abil_id = cast.ability_id.clone();
+                world.insert(player_id, combat.clone());
+                world.insert(player_id, kit.clone());
                 if let Some(def) = ability(&abil_id) {
-                    let src = entities[pi].id;
-                    resolve_ability_hit(entities, src, tid, &abil_id, def.name, def.damage, events);
+                    resolve_ability_hit(world, player_id, tid, &abil_id, def.name, def.damage, events);
                 }
+                combat = world.get::<Combat>(player_id).cloned().unwrap_or(combat);
+                kit = world.get::<ClassKit>(player_id).cloned().unwrap_or(kit);
             } else {
-                entities[pi].cast = Some(cast);
+                combat.cast = Some(cast);
             }
         }
-        // While casting, still allow auto-attack below; do not start a new ability.
     } else if let Some(slot) = ability_slot {
-        if entities[pi].gcd <= 0.0 {
-            if let Some(def) = resolve_slot_ability(&entities[pi], slot) {
+        if combat.gcd <= 0.0 {
+            if let Some(def) = resolve_slot_ability(&kit, slot) {
                 let abil_id = def.id;
                 let abil_range = def.range.max(RANGED_FALLBACK.min(def.range));
                 let in_slot_range = d <= abil_range;
-                if in_slot_range
-                    && !ability_on_cd(&entities[pi], abil_id)
-                    && spend_resource(&mut entities[pi], def.cost)
+                if in_slot_range && !ability_on_cd(&kit, abil_id) && spend_resource(&mut kit, def.cost)
                 {
-                    start_ability_cd(&mut entities[pi], abil_id, def.cooldown);
-                    entities[pi].gcd = GCD_SEC;
-                    entities[pi].auto_attack = true;
+                    start_ability_cd(&mut kit, &mut combat, abil_id, def.cooldown);
+                    combat.gcd = GCD_SEC;
+                    combat.auto_attack = true;
                     if def.cast_time > 0.0 {
-                        entities[pi].cast = Some(CastState {
+                        combat.cast = Some(CastState {
                             ability_id: abil_id.to_string(),
                             elapsed: 0.0,
                             duration: def.cast_time,
                             target: tid,
                         });
                     } else {
-                        let src = entities[pi].id;
+                        world.insert(player_id, combat.clone());
+                        world.insert(player_id, kit.clone());
                         resolve_ability_hit(
-                            entities, src, tid, abil_id, def.name, def.damage, events,
+                            world, player_id, tid, abil_id, def.name, def.damage, events,
                         );
-                        // Instant ability: skip auto this frame (legacy behavior).
                         return;
                     }
                 }
@@ -590,61 +657,90 @@ pub fn update_player_combat(
         }
     }
 
-    if !entities[pi].auto_attack || !in_melee {
+    if !combat.auto_attack || !in_melee {
+        world.insert(player_id, combat);
+        world.insert(player_id, kit);
         return;
     }
 
-    entities[pi].swing_timer -= DT;
-    if entities[pi].swing_timer > 0.0 {
+    combat.swing_timer -= DT;
+    if combat.swing_timer > 0.0 {
+        world.insert(player_id, combat);
+        world.insert(player_id, kit);
         return;
     }
-    entities[pi].swing_timer = PLAYER_SWING_SEC;
-    let dmg = entities[pi].attack_damage.max(4.0);
-    if matches!(entities[pi].resource_type, Some(ResourceType::Rage)) {
-        gain_resource(&mut entities[pi], 5.0);
+    combat.swing_timer = PLAYER_SWING_SEC;
+    let dmg = combat.attack_damage.max(4.0);
+    if matches!(kit.resource_type, Some(ResourceType::Rage)) {
+        gain_resource(&mut kit, 5.0);
     }
-    let src = entities[pi].id;
-    deal_damage(entities, src, tid, dmg, None, events);
+    world.insert(player_id, combat);
+    world.insert(player_id, kit);
+    deal_damage(world, player_id, tid, dmg, None, events);
 }
 
 pub fn update_mob_combat(
     mob_id: EntityId,
     player_id: EntityId,
-    entities: &mut [Entity],
+    world: &mut World,
     events: &mut Vec<SimEvent>,
 ) {
-    let Some(mi) = entities.iter().position(|e| e.id == mob_id) else {
-        return;
-    };
-    if !entities[mi].alive || entities[mi].kind != EntityKind::Mob {
+    if !is_living_mob(world, mob_id) {
         return;
     }
-
-    // Prefer sticky current target / threat table over the suggested focus.
-    let focus = prefer_mob_target(&entities[mi], entities, 40.0).unwrap_or(player_id);
-    entities[mi].target = Some(focus);
-
-    let Some(pi) = entities.iter().position(|e| e.id == focus) else {
-        return;
-    };
-    if !entities[pi].alive {
-        entities[mi].target = None;
+    let focus = prefer_mob_target(world, mob_id, 40.0).unwrap_or(player_id);
+    if let Some(c) = world.get_mut::<Combat>(mob_id) {
+        c.target = Some(focus);
+    }
+    if !world.get::<Health>(focus).is_some_and(|h| h.alive) {
+        if let Some(c) = world.get_mut::<Combat>(mob_id) {
+            c.target = None;
+        }
         return;
     }
-
-    let d = dist2d(&entities[mi], &entities[pi]);
+    let d = dist2d_ids(world, mob_id, focus);
     if d > MELEE_RANGE {
         return;
     }
-    entities[mi].yaw = face_toward(&entities[mi], &entities[pi]);
-    entities[mi].swing_timer -= DT;
-    if entities[mi].swing_timer > 0.0 {
-        return;
+    let yaw = face_toward_ids(world, mob_id, focus);
+    if let Some(t) = world.get_mut::<Transform>(mob_id) {
+        t.yaw = yaw;
     }
-    entities[mi].swing_timer = MOB_SWING_SEC;
-    let dmg = entities[mi].attack_damage.max(3.0);
-    let src = entities[mi].id;
-    deal_damage(entities, src, focus, dmg, None, events);
+    let dmg = {
+        let Some(combat) = world.get_mut::<Combat>(mob_id) else {
+            return;
+        };
+        combat.swing_timer -= DT;
+        if combat.swing_timer > 0.0 {
+            return;
+        }
+        combat.swing_timer = MOB_SWING_SEC;
+        combat.attack_damage.max(3.0)
+    };
+    deal_damage(world, mob_id, focus, dmg, None, events);
+}
+
+/// Entity-facing aura apply for modules not yet cut to World (consumables).
+pub fn apply_aura_entity(target: &mut Entity, aura: AuraInstance, events: &mut Vec<SimEvent>) {
+    let id = aura.id.clone();
+    let remaining = aura.remaining;
+    let stacks = aura.stacks;
+    if let Some(existing) = target.auras.iter_mut().find(|a| a.id == aura.id) {
+        existing.remaining = existing.remaining.max(aura.remaining);
+        existing.stacks = existing.stacks.max(aura.stacks);
+        existing.tick_damage = aura.tick_damage;
+        existing.tick_heal = aura.tick_heal;
+        existing.tick_interval = aura.tick_interval;
+        existing.source = aura.source;
+    } else {
+        target.auras.push(aura);
+    }
+    events.push(SimEvent::AuraApplied {
+        player: target.id,
+        id,
+        remaining,
+        stacks,
+    });
 }
 
 #[cfg(test)]
@@ -653,6 +749,34 @@ mod tests {
     use crate::entity::AuraInstance;
     use woc_content::PlayerClass;
     use woc_protocol::AbilitySlot;
+
+    fn sync_world(entities: &[Entity]) -> crate::ecs::World {
+        let mut world = crate::ecs::World::new();
+        for e in entities {
+            crate::ecs::spawn::sync_entity_to_world(&mut world, e);
+        }
+        world
+    }
+
+    fn apply_world(world: &crate::ecs::World, entities: &mut [Entity]) {
+        crate::ecs::spawn::apply_world_to_entities(world, entities);
+    }
+
+    fn run_player_combat(
+        entities: &mut [Entity],
+        slot: Option<AbilitySlot>,
+        events: &mut Vec<SimEvent>,
+    ) {
+        let mut world = sync_world(entities);
+        update_player_combat(1, &mut world, slot, events);
+        apply_world(&world, entities);
+    }
+
+    fn run_tick_auras(entities: &mut [Entity], events: &mut Vec<SimEvent>) {
+        let mut world = sync_world(entities);
+        tick_auras(&mut world, events);
+        apply_world(&world, entities);
+    }
 
     fn player_and_mob() -> (Entity, Entity) {
         let mut player = crate::entity::create_player(1, "Tester", PlayerClass::Warrior, 0.0, 0.0);
@@ -676,7 +800,7 @@ mod tests {
         let mut entities = vec![player, mob];
         let mut events = Vec::new();
 
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Primary), &mut events);
         let after_first = entities[1].hp;
         assert!(after_first < mob_hp, "first cast should deal damage");
         assert!(entities[0].gcd > 0.0, "GCD should start after ability");
@@ -691,7 +815,7 @@ mod tests {
         let hp_before_second = entities[1].hp;
         let auras_before = entities[1].auras.len();
         events.clear();
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Primary), &mut events);
         assert_eq!(
             entities[1].hp, hp_before_second,
             "GCD must block a second ability cast"
@@ -718,7 +842,7 @@ mod tests {
         entities[0].ability_cds.clear();
         entities[0].resource = 100.0;
         entities[0].auto_attack = false;
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Primary), &mut events);
         assert!(
             entities[1].hp < hp_before_second,
             "cast after GCD should hit"
@@ -741,11 +865,11 @@ mod tests {
         let mut entities = vec![mob];
         let mut events = Vec::new();
 
-        tick_auras(&mut entities, &mut events);
+        run_tick_auras(&mut entities, &mut events);
         assert_eq!(entities[0].auras.len(), 1, "aura still active mid-duration");
         assert!(entities[0].auras[0].remaining > 0.0);
 
-        tick_auras(&mut entities, &mut events);
+        run_tick_auras(&mut entities, &mut events);
         assert!(
             entities[0].auras.is_empty(),
             "aura must expire once remaining elapses"
@@ -769,11 +893,11 @@ mod tests {
         let mut entities = vec![mob];
         let mut events = Vec::new();
 
-        tick_auras(&mut entities, &mut events);
+        run_tick_auras(&mut entities, &mut events);
         assert!(entities[0].hp < start_hp, "DoT should tick once");
         let after_tick = entities[0].hp;
 
-        tick_auras(&mut entities, &mut events);
+        run_tick_auras(&mut entities, &mut events);
         assert_eq!(
             entities[0].hp, after_tick,
             "no second tick before interval elapses"
@@ -793,7 +917,7 @@ mod tests {
         let mut entities = vec![player, mob];
         let mut events = Vec::new();
 
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Primary), &mut events);
         assert!(entities[0].cast.is_some(), "fireball should begin casting");
         assert_eq!(entities[1].hp, start_hp, "no damage until cast completes");
         assert!(entities[0].gcd > 0.0);
@@ -802,7 +926,7 @@ mod tests {
         let duration = entities[0].cast.as_ref().unwrap().duration;
         let ticks = (duration / DT).ceil() as u32 + 1;
         for _ in 0..ticks {
-            update_player_combat(1, &mut entities, None, &mut events);
+            run_player_combat(&mut entities, None, &mut events);
         }
         assert!(entities[0].cast.is_none());
         assert!(entities[1].hp < start_hp, "damage after cast finishes");
@@ -858,7 +982,7 @@ mod tests {
         let mut entities = vec![player, mob];
         let mut events = Vec::new();
 
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Slot2), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Slot2), &mut events);
         assert!(
             entities[1].hp < start_hp,
             "slot2 (cleave) should deal damage when known"
@@ -885,7 +1009,7 @@ mod tests {
         let mut entities = vec![player, mob];
         let mut events = Vec::new();
 
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Slot2), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Slot2), &mut events);
         assert_eq!(
             entities[1].hp, start_hp,
             "unknown slot2 must not deal damage"
@@ -906,7 +1030,7 @@ mod tests {
         let mut entities = vec![player, mob];
         let mut events = Vec::new();
 
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Primary), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Primary), &mut events);
         let after_primary = entities[1].hp;
         assert!(after_primary < 500.0);
 
@@ -916,7 +1040,7 @@ mod tests {
         entities[0].auto_attack = false;
         entities[0].swing_timer = 99.0;
         events.clear();
-        update_player_combat(1, &mut entities, Some(AbilitySlot::Slot3), &mut events);
+        run_player_combat(&mut entities, Some(AbilitySlot::Slot3), &mut events);
         assert!(
             entities[1].hp < after_primary,
             "slot3 execute should ignore primary ability CD"

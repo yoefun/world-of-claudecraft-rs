@@ -8,9 +8,9 @@ use woc_content::{talent, talent_tier_unlocked};
 use woc_protocol::{EntityId, SimEvent};
 
 /// Damage multiplier from learned talents (1.0 = none).
-pub fn damage_multiplier(player: &Entity) -> f32 {
+pub fn damage_multiplier_from_ranks(talents: &HashMap<String, u32>) -> f32 {
     let mut mult = 1.0;
-    for (id, rank) in &player.talents {
+    for (id, rank) in talents {
         if let Some(def) = talent(id) {
             if def.effect == "damage_pct" {
                 mult += def.effect_value * (*rank as f32);
@@ -18,6 +18,11 @@ pub fn damage_multiplier(player: &Entity) -> f32 {
         }
     }
     mult
+}
+
+/// Damage multiplier from learned talents (1.0 = none).
+pub fn damage_multiplier(player: &Entity) -> f32 {
+    damage_multiplier_from_ranks(&player.talents)
 }
 
 fn player_rank_pairs(player: &Entity) -> Vec<(String, u32)> {

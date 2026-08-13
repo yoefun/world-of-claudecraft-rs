@@ -208,3 +208,117 @@ fn sync_pet(world: &mut World, entity: &Entity) {
         world.insert(entity.id, Owner { owner_id });
     }
 }
+
+/// Copy columns back onto a fat `Entity` (combat writes World first).
+pub fn apply_world_to_entity(world: &World, entity: &mut Entity) {
+    let id = entity.id;
+    if let Some(identity) = world.get::<Identity>(id) {
+        entity.kind = identity.kind;
+        entity.name.clone_from(&identity.name);
+        entity.template_id.clone_from(&identity.template_id);
+        entity.zone_id.clone_from(&identity.zone_id);
+    }
+    if let Some(t) = world.get::<Transform>(id) {
+        entity.x = t.x;
+        entity.y = t.y;
+        entity.z = t.z;
+        entity.yaw = t.yaw;
+    }
+    if let Some(h) = world.get::<Health>(id) {
+        entity.hp = h.hp;
+        entity.hp_max = h.hp_max;
+        entity.alive = h.alive;
+        entity.level = h.level;
+    }
+    if let Some(c) = world.get::<Combat>(id) {
+        entity.attack_damage = c.attack_damage;
+        entity.armor = c.armor;
+        entity.swing_timer = c.swing_timer;
+        entity.ability_cd = c.ability_cd;
+        entity.auto_attack = c.auto_attack;
+        entity.target = c.target;
+        entity.gcd = c.gcd;
+        entity.cast = c.cast.clone();
+    }
+    if let Some(a) = world.get::<Auras>(id) {
+        entity.auras.clone_from(&a.auras);
+    }
+    if let Some(h) = world.get::<Home>(id) {
+        entity.home_x = h.home_x;
+        entity.home_z = h.home_z;
+    }
+    if let Some(t) = world.get::<Threat>(id) {
+        entity.threat.clone_from(&t.threat);
+    }
+    if let Some(l) = world.get::<LootTable>(id) {
+        entity.loot_copper = l.loot_copper;
+        entity.loot_item.clone_from(&l.loot_item);
+        entity.xp_value = l.xp_value;
+    }
+    if let Some(r) = world.get::<Respawn>(id) {
+        entity.respawn_timer = r.respawn_timer;
+    }
+    if let Some(l) = world.get::<LootPile>(id) {
+        entity.loot_copper = l.copper;
+        entity.loot_item.clone_from(&l.item);
+    }
+    if let Some(o) = world.get::<Owner>(id) {
+        entity.owner_id = Some(o.owner_id);
+    }
+    if let Some(k) = world.get::<ClassKit>(id) {
+        entity.class_id = k.class_id;
+        entity.resource = k.resource;
+        entity.resource_max = k.resource_max;
+        entity.resource_type = k.resource_type;
+        entity.primary_ability.clone_from(&k.primary_ability);
+        entity.known_abilities.clone_from(&k.known_abilities);
+        entity.ability_cds.clone_from(&k.ability_cds);
+    }
+    if let Some(b) = world.get::<Bags>(id) {
+        entity.inventory.clone_from(&b.inventory);
+        entity.equipment.clone_from(&b.equipment);
+        entity.open_vendor_npc = b.open_vendor_npc;
+    }
+    if let Some(q) = world.get::<QuestLog>(id) {
+        entity.quest_log.clone_from(&q.quest_log);
+    }
+    if let Some(p) = world.get::<Progress>(id) {
+        entity.xp = p.xp;
+        entity.copper = p.copper;
+        entity.talent_points = p.talent_points;
+        entity.talents.clone_from(&p.talents);
+        entity.honor = p.honor;
+        entity.pvp_flagged = p.pvp_flagged;
+        entity.professions.clone_from(&p.professions);
+        entity.completed_deeds.clone_from(&p.completed_deeds);
+    }
+    if let Some(b) = world.get::<Bank>(id) {
+        entity.bank.clone_from(&b.bank);
+    }
+    if let Some(m) = world.get::<Motion>(id) {
+        entity.vx = m.vx;
+        entity.vz = m.vz;
+        entity.vy = m.vy;
+        entity.on_ground = m.on_ground;
+        entity.jumping = m.jumping;
+        entity.fall_start_y = m.fall_start_y;
+        entity.flying = m.flying;
+    }
+    if let Some(s) = world.get::<Spirit>(id) {
+        entity.corpse_x = s.corpse_x;
+        entity.corpse_z = s.corpse_z;
+    }
+    if let Some(i) = world.get::<InstanceAt>(id) {
+        entity.instance_id.clone_from(&i.instance_id);
+        entity.delve_room = i.delve_room;
+    }
+    if let Some(d) = world.get::<Durable>(id) {
+        entity.durable_id.clone_from(&d.durable_id);
+    }
+}
+
+pub fn apply_world_to_entities(world: &World, entities: &mut [Entity]) {
+    for entity in entities {
+        apply_world_to_entity(world, entity);
+    }
+}

@@ -1,6 +1,6 @@
 //! Hunter / warlock pet summon, dismiss, and combat AI.
 
-use crate::combat::{deal_damage, dist2d, face_toward};
+use crate::combat::{deal_damage_entities, dist2d, face_toward};
 use crate::entity::Entity;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
 use woc_content::{pet_for_class, PetDef, PlayerClass};
@@ -186,7 +186,7 @@ fn tick_one_pet(pet_id: EntityId, entities: &mut [Entity], events: &mut Vec<SimE
                 entities[pi].swing_timer = PLAYER_SWING_SEC;
                 let dmg = entities[pi].attack_damage;
                 // Attribute kill credit to the owner for XP/loot.
-                deal_damage(entities, owner_id, tid, dmg, Some("pet"), events);
+                deal_damage_entities(entities, owner_id, tid, dmg, Some("pet"), events);
                 // Still show pet as damage source in a second event? Keep single event with owner.
             }
         }

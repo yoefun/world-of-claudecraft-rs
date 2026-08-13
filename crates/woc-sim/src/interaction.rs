@@ -299,7 +299,7 @@ fn use_item_from_bag(player: &mut Entity, bag_slot: u8, events: &mut Vec<SimEven
     let healed = player.hp - before;
     // Short HoT linger after consumable (≈3s at 4 HP/tick).
     let hot_tick = (idef.heal_hp * 0.15).max(2.0);
-    crate::combat::apply_aura(
+    crate::combat::apply_aura_entity(
         player,
         crate::entity::AuraInstance {
             id: "consumable_renew".into(),
