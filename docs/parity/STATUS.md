@@ -1,27 +1,27 @@
 # Parity status
 
-**Current rewrite:** `1.13.0` / `gear-slots`.  
-**Next:** `1.14.0` / `kill-loop` (planned).  
+**Current rewrite:** `1.14.0` / `kill-loop`.  
+**Next:** TBD (post–kill-loop depth).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots is `1.13.0`; kill loop shipped as `1.14.0`.
 
-## Kill loop (`kill-loop`) — planned
+## Kill loop (`kill-loop`) — done
 
 Design: [`../superpowers/specs/2026-08-13-kill-loop-design.md`](../superpowers/specs/2026-08-13-kill-loop-design.md)  
 Plan: [`../superpowers/plans/2026-08-13-kill-loop.md`](../superpowers/plans/2026-08-13-kill-loop.md)
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Per-template respawn | planned | `Respawn.delay_sec`; wolves 30 s; `mire_terror` 300 s |
-| Instance never-revive | planned | Crypt/barrow/delve `delay_sec = 0` |
-| Leash reset | planned | Restore HP, clear auras/threat |
-| `MobSpot` packs | planned | `count` + `radius`; Wolf Run ≥5 |
-| Loot `count` + TTL | planned | Honor `LootEntry.count`; piles expire at 2400 ticks |
-| Quest skip Need/Greed | planned | `ItemKind::Quest` piles stay FFA |
-| Pet kill credit | planned | `Owner` rewrite in `collect_pending_mob_kills` |
-| Mob abilities | planned | `wolf_bite` / `warden_smash` / `terror_slam` |
-| Threat switch | planned | 1.1× ratio |
-| Protocol | planned | Rev 8; additive `SimEvent::Loot.count` |
+| Per-template respawn | done | `Respawn.delay_sec`; wolves 30 s; `mire_terror` 300 s |
+| Instance never-revive | done | Crypt/barrow/delve `delay_sec = 0` |
+| Leash reset | done | Restore HP, clear auras/threat |
+| `MobSpot` packs | done | `count` + `radius`; Wolf Run ≥5 |
+| Loot `count` + TTL | done | Honor `LootEntry.count`; piles expire at 2400 ticks |
+| Quest skip Need/Greed | done | `ItemKind::Quest` piles stay FFA |
+| Pet kill credit | done | `Owner` rewrite in `collect_pending_mob_kills` |
+| Mob abilities | done | `wolf_bite` / `warden_smash` / `terror_slam` |
+| Threat switch | done | 1.1× ratio |
+| Protocol | done | Rev 8; additive `SimEvent::Loot.count` |
 
 ## Gear slots (`gear-slots`) — done
 
@@ -172,7 +172,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.13.0` / gear-slots (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.14.0` / kill-loop (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

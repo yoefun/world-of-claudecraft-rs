@@ -1,18 +1,18 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.13.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.14.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.13.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`gear-slots`**.
+**Rewrite `1.14.0`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`kill-loop`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.13.0 (gear-slots)
+## What works in 1.14.0 (kill-loop)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
@@ -21,11 +21,12 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
 - Client panels: talents / bank / mail / market / bags (equip·use·sell); **character sheet** (C: 9 slots, quality, MH enchant, AP/armor/SP); **minimap** + **world map** (M)
-- Class armor caps, two-hand occupancy, warrior/rogue dual-wield, two rings, catalog quality, MH oils; stamina → HP, spell power on heals/spells; independent loot piles
+- Class armor caps, two-hand occupancy, warrior/rogue dual-wield, two rings, catalog quality, MH oils; stamina → HP, spell power on heals/spells; independent loot piles with stack counts and 120 s TTL
+- Per-template mob respawn (instance trash never); leash HP reset; `MobSpot` packs; pet last-hit credits owner; mob abilities (`wolf_bite`, `warden_smash`, `terror_slam`); 1.1× threat switch
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.13.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.14.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -100,7 +101,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.13.0` / `gear-slots`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.14.0` / `kill-loop`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 
