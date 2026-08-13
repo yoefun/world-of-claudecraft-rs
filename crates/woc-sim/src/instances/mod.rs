@@ -3,7 +3,7 @@
 //! Each enter creates (or joins) a unique instance key so parties do not share
 //! bosses and overworld actors are never wiped.
 
-use crate::ecs::components::{Combat, Health, Identity, InstanceAt, Threat, Transform};
+use crate::ecs::components::{Bags, Combat, Health, Identity, InstanceAt, Threat, Transform};
 use crate::ecs::World;
 use crate::entity::Entity;
 use crate::social::party::PartyRoster;
@@ -97,11 +97,15 @@ pub fn enter_dungeon(
         combat.auto_attack = false;
         combat.cast = None;
     }
+    if let Some(bags) = world.get_mut::<Bags>(player_id) {
+        bags.open_vendor_npc = None;
+    }
     if let Some(threat) = world.get_mut::<Threat>(player_id) {
         threat.threat.clear();
     }
 
     if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        entity.threat.clear();
         crate::ecs::spawn::apply_world_to_entity(world, entity);
     }
 

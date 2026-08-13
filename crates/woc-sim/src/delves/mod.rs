@@ -88,6 +88,7 @@ pub fn enter_delve(
     world.set_next_id(next_id);
 
     if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        entity.threat.clear();
         crate::ecs::spawn::apply_world_to_entity(world, entity);
     }
 
@@ -166,6 +167,7 @@ pub fn try_advance_delve(
         world.set_next_id(next_id);
 
         if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+            entity.threat.clear();
             crate::ecs::spawn::apply_world_to_entity(world, entity);
         }
         return true;
@@ -199,6 +201,7 @@ pub fn try_advance_delve(
         inst.delve_room = None;
     }
     if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        entity.threat.clear();
         crate::ecs::spawn::apply_world_to_entity(world, entity);
     }
 

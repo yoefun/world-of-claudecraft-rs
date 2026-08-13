@@ -95,6 +95,7 @@ pub(crate) fn load_overworld_zone(
     }
 
     if let Some(entity) = entities.iter_mut().find(|e| e.id == player_id) {
+        entity.threat.clear();
         crate::ecs::spawn::apply_world_to_entity(world, entity);
     }
     true
