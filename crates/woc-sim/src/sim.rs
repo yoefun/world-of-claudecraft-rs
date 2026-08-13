@@ -414,21 +414,10 @@ impl Sim {
                     c.cast = None;
                 }
             }
-            let effect = step_player_motion(&mut self.world, pid, &intent);
-            if intent.fly_toggle {
-                let flying = self
-                    .world
-                    .get::<Motion>(pid)
-                    .map(|m| m.flying)
-                    .unwrap_or(false);
-                self.events.push(woc_protocol::SimEvent::Toast {
-                    message: if flying {
-                        "Travel flight engaged (Space up · Ctrl down · V land).".into()
-                    } else {
-                        "Travel flight disengaged.".into()
-                    },
-                });
+            if intent.fly_toggle && alive {
+                crate::mount::toggle_mount(&mut self.world, pid, &mut self.events);
             }
+            let effect = step_player_motion(&mut self.world, pid, &intent);
             if let Some(effect) = effect {
                 if effect.fall_damage > 0.0 {
                     let mut died = false;

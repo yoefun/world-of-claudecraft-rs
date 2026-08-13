@@ -1,8 +1,8 @@
 //! Player movement kernel (wish-vector + ground clamp + jump / swim / flight).
 //!
 //! Vertical state machine is aligned with upstream `src/sim/player_motion.ts`
-//! (gravity, coyote jump, swim tread, fall damage). Travel flight is a rewrite
-//! convenience mode (toggle) rather than a full mount/form system.
+//! (gravity, coyote jump, swim tread, fall damage). Flight kinematics apply when
+//! `Motion.flying` is set (e.g. by a flying mount via `mount::summon_mount`).
 
 use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Transform};
 use crate::ecs::World;
@@ -352,28 +352,6 @@ pub fn step_player_motion(
 
     t.yaw = intent.facing;
 
-    if intent.fly_toggle && health.alive {
-        m.flying = !m.flying;
-        if m.flying {
-            m.on_ground = false;
-            m.jumping = false;
-            m.vy = 0.0;
-            t.y = t.y.max(ground_height(t.x, t.z, WORLD_SEED) + 1.5);
-            m.fall_start_y = t.y;
-        } else {
-            // Drop out of flight into a fall / land.
-            m.vy = 0.0;
-            m.fall_start_y = t.y;
-            let ground = ground_height(t.x, t.z, WORLD_SEED);
-            if (t.y - ground).abs() < 0.75 {
-                t.y = ground;
-                m.on_ground = true;
-            } else {
-                m.on_ground = false;
-            }
-        }
-    }
-
     let swimming = is_swimming_at(t.x, t.y, t.z);
     let speed = if m.flying {
         RUN_SPEED * FLY_SPEED_MULT
@@ -492,24 +470,17 @@ mod tests {
     }
 
     #[test]
-    fn fly_toggle_enables_vertical_ascend() {
-        let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Flyer", PlayerClass::Mage, 0.0, 0.0);
-        let start_y = world.get::<Transform>(1).unwrap().y;
-        let toggle = PlayerIntent {
-            fly_toggle: true,
-            ..Default::default()
-        };
-        let _ = step_player_motion(&mut world, 1, &toggle);
-        assert!(world.get::<Motion>(1).unwrap().flying);
-        let up = PlayerIntent {
-            jump: true,
-            ..Default::default()
-        };
-        for _ in 0..10 {
-            let _ = step_player_motion(&mut world, 1, &up);
-        }
-        assert!(world.get::<Transform>(1).unwrap().y > start_y + 2.0);
+    fn fly_toggle_ignored_by_motion_kernel() {
+        let mut world = player_at(0.0, 0.0);
+        let _ = step_player_motion(
+            &mut world,
+            1,
+            &PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        assert!(!world.get::<Motion>(1).unwrap().flying);
     }
 
     #[test]

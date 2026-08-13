@@ -37,6 +37,7 @@ pub mod mail;
 pub mod map_view;
 pub mod market;
 pub mod mob;
+pub mod mount;
 pub mod persist_state;
 pub mod pet;
 pub mod physics;

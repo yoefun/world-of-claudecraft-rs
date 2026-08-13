@@ -327,6 +327,25 @@ pub fn handle_interact(
         InteractAction::BindHearth => {
             bind_hearth(world, player_id, target_id, events);
         }
+        InteractAction::TrainRiding => {
+            let is_trainer = world
+                .get::<Bags>(player_id)
+                .and_then(|b| b.open_vendor_npc)
+                .and_then(|npc_id| {
+                    world
+                        .get::<Identity>(npc_id)
+                        .and_then(|i| i.template_id.as_deref())
+                        .and_then(npc)
+                })
+                .is_some_and(|d| d.is_riding_trainer());
+            if !is_trainer {
+                events.push(SimEvent::Toast {
+                    message: "Talk to a riding trainer.".into(),
+                });
+            } else {
+                crate::mount::train_riding(world, player_id, events);
+            }
+        }
         _ => {}
     }
 }
@@ -1016,6 +1035,7 @@ fn opens_npc_session(def: &NpcDef) -> bool {
         || def.is_profession_trainer()
         || def.is_class_trainer()
         || def.is_innkeeper()
+        || def.is_riding_trainer()
 }
 
 fn service_name(service: NpcService) -> &'static str {
@@ -1094,7 +1114,7 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
         repair_cost: repair_cost(world, player_id),
         can_bind: def.is_innkeeper(),
         buyback,
-        train_riding: false,
+        train_riding: def.is_riding_trainer(),
     })
 }
 

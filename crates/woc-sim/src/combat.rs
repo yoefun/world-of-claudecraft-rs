@@ -185,6 +185,18 @@ fn remove_named_auras(world: &mut World, id: EntityId, names: &[&str]) {
     }
 }
 
+pub(crate) fn strip_travel_forms(world: &mut World, id: EntityId) {
+    remove_named_auras(world, id, &["ghost_wolf", "travel_form"]);
+    if let Some(kit) = world.get_mut::<ClassKit>(id) {
+        if matches!(
+            kit.stance_id.as_deref(),
+            Some("ghost_wolf") | Some("travel_form")
+        ) {
+            kit.stance_id = None;
+        }
+    }
+}
+
 fn instance_from_def(source: EntityId, def: &woc_content::AuraDef) -> AuraInstance {
     AuraInstance {
         id: def.id.into(),
