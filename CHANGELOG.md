@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 1.5.0 — 2026-08-13
+
+### Added
+
+- `woc-update` crate: signed full `.tar.zst` pack, per-file bsdiff `.wocdelta`, staging apply, ed25519 manifest verification.
+- `woc-pack` CI tool and `woc-updater` player launcher (Linux x86_64).
+- `woc-pack --gen-key` prints ed25519 seed and pubkey hex for one-time secret setup.
+- `/version` field `update_manifest_url` (`WOC_UPDATE_MANIFEST_URL` on the server).
+- Packaged title **Update** button execs sibling `woc-updater` when incompatible and URL is set.
+- `.github/workflows/client-release.yml` tag publish (full + optional delta from previous release).
+- Runbook: [`docs/client-update.md`](docs/client-update.md).
+
+## 1.4.0 — 2026-08-13
+
+### Added
+
+- Online client version gate (`client-compat`): title `/version` preflight, Hello identity, Welcome kick.
+
+- `woc-version::check_compat` fail-closed policy (semver floor + exact `protocol_rev`).
+- `GET /version` fields `protocol_rev` and `min_client_version` (`WOC_MIN_CLIENT_VERSION` override).
+- Hello additive `protocol_rev` / `rewrite_version`; server rejects missing or stale identity before spawn.
+- Title Online Continue blocked until compatible; Welcome protocol skew returns to Title.
+
+## 1.3.0 — 2026-08-13
+
 ### Added
 
 - Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.

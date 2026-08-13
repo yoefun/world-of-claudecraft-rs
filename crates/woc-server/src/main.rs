@@ -13,6 +13,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 use woc_persist::Persist;
+use woc_protocol::PROTOCOL_REV;
 use woc_version::{footer, VersionInfo};
 
 pub struct AppState {
@@ -35,7 +36,7 @@ async fn health() -> Json<Health> {
 }
 
 async fn version() -> Json<VersionInfo> {
-    Json(VersionInfo::current())
+    Json(VersionInfo::current(PROTOCOL_REV))
 }
 
 #[tokio::main]

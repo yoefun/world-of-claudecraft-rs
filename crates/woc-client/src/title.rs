@@ -4,9 +4,10 @@ use bevy::prelude::*;
 use woc_version::footer;
 
 use crate::menu_ui::{
-    self, button_bundle, panel_node, spawn_screen_root, MenuBtnKind, BODY, GOLD, MUTED,
+    self, button_bundle, panel_node, spawn_screen_root, status_color, MenuBtnKind, BODY, GOLD,
+    MUTED,
 };
-use crate::{cleanup_ui, AppState, PlayMode};
+use crate::{cleanup_ui, AppState, PlayMode, RealmCompat, RealmCompatState};
 
 pub(crate) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(AppState::Title), setup_title)
@@ -17,6 +18,9 @@ pub(crate) fn plugin(app: &mut App) {
                 menu_ui::menu_button_visuals,
                 title_clicks,
                 title_input,
+                poll_realm_compat,
+                refresh_compat_label,
+                refresh_update_button,
                 refresh_title_mode,
             )
                 .chain()
@@ -35,6 +39,48 @@ struct OnlineBtn;
 
 #[derive(Component)]
 struct ContinueBtn;
+
+#[derive(Component)]
+struct UpdateBtn;
+
+#[derive(Component)]
+struct UpdateRow;
+
+fn updater_path() -> Option<std::path::PathBuf> {
+    let path = std::env::current_exe().ok()?.parent()?.join("woc-updater");
+    if path.exists() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn update_offered(mode: PlayMode, compat: &RealmCompat) -> bool {
+    mode == PlayMode::Online
+        && matches!(compat.state, RealmCompatState::Incompatible { .. })
+        && !compat.update_manifest_url.is_empty()
+        && updater_path().is_some()
+}
+
+fn launch_updater(url: &str) {
+    let updater = updater_path().expect("update_offered checked updater exists");
+    let prefix = updater
+        .parent()
+        .expect("updater has a parent directory")
+        .to_path_buf();
+    let mut cmd = std::process::Command::new(&updater);
+    cmd.current_dir(&prefix)
+        .arg("--once")
+        .arg("--prefix")
+        .arg(&prefix)
+        .arg("--manifest")
+        .arg(url);
+    let _ = cmd.spawn();
+    std::process::exit(0);
+}
+
+#[derive(Component)]
+struct CompatLabel;
 
 fn setup_title(mut commands: Commands, mode: Res<PlayMode>) {
     let root = spawn_screen_root(&mut commands);
@@ -63,6 +109,17 @@ fn setup_title(mut commands: Commands, mode: Res<PlayMode>) {
                 ));
                 p.spawn((
                     Text::new(footer()),
+                    TextFont::from_font_size(13.0),
+                    TextColor(MUTED),
+                    Node {
+                        align_self: AlignSelf::Center,
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                ));
+                p.spawn((
+                    CompatLabel,
+                    Text::new("Offline: version check skipped"),
                     TextFont::from_font_size(13.0),
                     TextColor(MUTED),
                     Node {
@@ -108,6 +165,37 @@ fn setup_title(mut commands: Commands, mode: Res<PlayMode>) {
                                 TextColor(BODY),
                             ));
                         });
+                });
+
+                p.spawn((
+                    UpdateRow,
+                    Node {
+                        width: Val::Percent(100.0),
+                        margin: UiRect::top(Val::Px(4.0)),
+                        display: Display::None,
+                        ..default()
+                    },
+                ))
+                .with_children(|row| {
+                    let (b, k, n, bg, bd) = button_bundle(MenuBtnKind::Primary);
+                    row.spawn((
+                        b,
+                        k,
+                        Node {
+                            width: Val::Percent(100.0),
+                            ..n
+                        },
+                        bg,
+                        bd,
+                        UpdateBtn,
+                    ))
+                    .with_children(|btn| {
+                        btn.spawn((
+                            Text::new("Update"),
+                            TextFont::from_font_size(16.0),
+                            TextColor(BODY),
+                        ));
+                    });
                 });
 
                 p.spawn(Node {
@@ -157,18 +245,26 @@ fn mode_prompt(mode: PlayMode) -> String {
     }
 }
 
-fn continue_from_title(mode: PlayMode, next: &mut NextState<AppState>) {
+fn continue_from_title(mode: PlayMode, next: &mut NextState<AppState>, compat: &mut RealmCompat) {
     match mode {
         PlayMode::Offline => next.set(AppState::CharCreate),
-        PlayMode::Online => next.set(AppState::Login),
+        PlayMode::Online => {
+            if matches!(compat.state, RealmCompatState::Compatible { .. }) {
+                next.set(AppState::Login);
+            } else {
+                compat.begin_probe();
+            }
+        }
     }
 }
 
 fn title_clicks(
     mut mode: ResMut<PlayMode>,
     mut next: ResMut<NextState<AppState>>,
+    mut compat: ResMut<RealmCompat>,
     offline: Query<&Interaction, (Changed<Interaction>, With<OfflineBtn>)>,
     online: Query<&Interaction, (Changed<Interaction>, With<OnlineBtn>)>,
+    update: Query<&Interaction, (Changed<Interaction>, With<UpdateBtn>)>,
     cont: Query<&Interaction, (Changed<Interaction>, With<ContinueBtn>)>,
 ) {
     for interaction in &offline {
@@ -179,11 +275,17 @@ fn title_clicks(
     for interaction in &online {
         if *interaction == Interaction::Pressed {
             *mode = PlayMode::Online;
+            compat.begin_probe();
+        }
+    }
+    for interaction in &update {
+        if *interaction == Interaction::Pressed && update_offered(*mode, &compat) {
+            launch_updater(&compat.update_manifest_url);
         }
     }
     for interaction in &cont {
         if *interaction == Interaction::Pressed {
-            continue_from_title(*mode, &mut next);
+            continue_from_title(*mode, &mut next, &mut compat);
         }
     }
 }
@@ -192,26 +294,76 @@ fn title_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<PlayMode>,
     mut next: ResMut<NextState<AppState>>,
+    mut compat: ResMut<RealmCompat>,
 ) {
     if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
         *mode = PlayMode::Offline;
     }
     if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
         *mode = PlayMode::Online;
+        compat.begin_probe();
     }
     if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowRight) {
-        *mode = match *mode {
+        let next_mode = match *mode {
             PlayMode::Offline => PlayMode::Online,
             PlayMode::Online => PlayMode::Offline,
         };
+        *mode = next_mode;
+        if matches!(next_mode, PlayMode::Online) {
+            compat.begin_probe();
+        }
     }
     if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
-        continue_from_title(*mode, &mut next);
+        if update_offered(*mode, &compat) {
+            launch_updater(&compat.update_manifest_url);
+        } else {
+            continue_from_title(*mode, &mut next, &mut compat);
+        }
     }
 }
 
 fn refresh_title_mode(mode: Res<PlayMode>, mut label: Query<&mut Text, With<ModeLabel>>) {
     if let Ok(mut text) = label.single_mut() {
         **text = mode_prompt(*mode);
+    }
+}
+
+fn poll_realm_compat(mut compat: ResMut<RealmCompat>) {
+    compat.poll();
+}
+
+fn refresh_compat_label(
+    mode: Res<PlayMode>,
+    compat: Res<RealmCompat>,
+    mut label: Query<(&mut Text, &mut TextColor), With<CompatLabel>>,
+) {
+    let Ok((mut text, mut color)) = label.single_mut() else {
+        return;
+    };
+    match *mode {
+        PlayMode::Offline => {
+            **text = "Offline: version check skipped".into();
+            *color = TextColor(MUTED);
+        }
+        PlayMode::Online => {
+            let line = compat.status_line();
+            let busy = matches!(compat.state, RealmCompatState::Checking);
+            **text = line.clone();
+            *color = TextColor(status_color(busy, &line));
+        }
+    }
+}
+
+fn refresh_update_button(
+    mode: Res<PlayMode>,
+    compat: Res<RealmCompat>,
+    mut row: Query<&mut Node, With<UpdateRow>>,
+) {
+    if let Ok(mut node) = row.single_mut() {
+        node.display = if update_offered(*mode, &compat) {
+            Display::Flex
+        } else {
+            Display::None
+        };
     }
 }

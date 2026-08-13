@@ -10,7 +10,9 @@
 | **1.0.0** (this branch) | `stable` | Tick-phase contract, CI on `develop`, docs/demo hygiene |
 | **1.1.0** (this branch) | `combat-depth` | Data-driven ability effects: heal, AoE, miss/crit, interrupt, taunt |
 | **1.2.0** (this branch) | `content-depth` | Mining/smith, dungeon trash, second instance, ability-mod talents |
-| **1.3.0** (this branch) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
+| **1.3.0** (shipped) | `online-hard` | Reconnect park/resume, snapshot AOI, Postgres production notes |
+| **1.4.0** (shipped) | `client-compat` | Online version gate (title preflight + Hello identity) |
+| **1.5.0** (this branch) | `client-update` | Signed full + bsdiff delta packages; `woc-updater` launcher (Linux x86_64) |
 
 ## Completion program (closed)
 
@@ -26,6 +28,21 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 **Max-parallel schedule:** [`docs/superpowers/plans/2026-08-13-parallel-post-completion.md`](superpowers/plans/2026-08-13-parallel-post-completion.md)
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
+
+## Client version gate (current)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-client-version-update-design.md`](superpowers/specs/2026-08-13-client-version-update-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-client-version-update.md`](superpowers/plans/2026-08-13-client-version-update.md)
+
+Online Bevy clients must not enter a realm with a mismatched rewrite version or `protocol_rev`. `PROTOCOL_REV` stays 6 (additive Hello fields). Packaged incremental updates are **1.5.0**, not part of the gate.
+
+## Client update packages (current)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-client-update-packages-design.md`](superpowers/specs/2026-08-13-client-update-packages-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-client-update-packages.md`](superpowers/plans/2026-08-13-client-update-packages.md)  
+**Runbook:** [`docs/client-update.md`](client-update.md)
+
+Players start `woc-updater`. CI on version tags packs a zstd full archive plus a per-file bsdiff from the previous GitHub Release. Skip-version downloads full. Windows/macOS and Velopack/Electron stay out of scope.
 
 ## Internal: sim ECS columns (done)
 

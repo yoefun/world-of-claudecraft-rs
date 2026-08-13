@@ -1,15 +1,16 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.3.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.5.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.3.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`online-hard`**.
+**Rewrite `1.5.0`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`client-update`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
+Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
 ## What works in 1.3.0 (online-hard)
 
@@ -23,7 +24,7 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.3.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.5.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -37,6 +38,7 @@ See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATU
 | `woc-sim` | Deterministic game core (no Bevy) |
 | `woc-client` | Bevy offline + online host |
 | `woc-server` | HTTP + WebSocket sim host |
+| `woc-update` | Pack, delta, and apply signed client updates ([runbook](docs/client-update.md)) |
 
 ## Quick start
 
@@ -50,6 +52,9 @@ cargo test --workspace --exclude woc-client
 # Server (health + WS game host)
 cargo run -p woc-server
 # curl http://127.0.0.1:8787/version
+# GET /version includes protocol_rev and min_client_version.
+# Online title probes this before Login (fail-closed).
+# WOC_MIN_CLIENT_VERSION=1.4.0 overrides the floor (default: rewrite version).
 # WS: ws://127.0.0.1:8787/ws/game
 ```
 
@@ -93,7 +98,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.3.0` / `online-hard`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.5.0` / `client-update`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 

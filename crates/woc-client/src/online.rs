@@ -36,7 +36,8 @@ use std::time::Duration;
 
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message, WebSocket};
-use woc_protocol::{WsClientMsg, WsServerMsg};
+use woc_protocol::{WsClientMsg, WsServerMsg, PROTOCOL_REV};
+use woc_version::REWRITE_VERSION;
 
 /// Configurable WebSocket endpoint for online play.
 pub const ONLINE_WS_URL: &str = "ws://127.0.0.1:8787/ws/game";
@@ -61,6 +62,8 @@ pub fn spawn_online_session(
         class_id: String::new(),
         token: Some(token),
         character_id: Some(character_id.to_string()),
+        protocol_rev: Some(PROTOCOL_REV),
+        rewrite_version: Some(REWRITE_VERSION.to_string()),
     };
     let _ = to_net_tx.send(hello);
 

@@ -9,6 +9,9 @@ pub type EntityId = u32;
 /// Rev 3: authenticated Hello (`token` + `character_id`) and inventory slot indices.
 /// Rev 4: jump / swim / flight intent + motion snapshot flags.
 /// Rev 5: clear_target intent + ability_bar kit slots for combat HUD.
+/// Rev 6: bank copper + pending loot (this rev). Hello may also carry additive
+/// `protocol_rev` / `rewrite_version` identity; omitting them is valid JSON and
+/// the server refuses those Hellos (policy, not a wire bump).
 pub const PROTOCOL_REV: u32 = 6;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
@@ -703,6 +706,12 @@ pub enum WsClientMsg {
         /// Durable character UUID (string form).
         #[serde(default)]
         character_id: Option<String>,
+        /// Client protocol revision. Missing (old clients) deserializes as `None`.
+        #[serde(default)]
+        protocol_rev: Option<u32>,
+        /// Client rewrite semver. Missing deserializes as `None`.
+        #[serde(default)]
+        rewrite_version: Option<String>,
     },
     Intent(PlayerIntent),
     Interact {
@@ -788,6 +797,8 @@ mod tests {
             class_id: "mage".into(),
             token: Some("tok".into()),
             character_id: Some("11111111-1111-1111-1111-111111111111".into()),
+            protocol_rev: None,
+            rewrite_version: None,
         };
         let s = serde_json::to_string(&msg).unwrap();
         let back: WsClientMsg = serde_json::from_str(&s).unwrap();
@@ -797,6 +808,8 @@ mod tests {
                 class_id,
                 token,
                 character_id,
+                protocol_rev,
+                rewrite_version,
             } => {
                 assert_eq!(name, "Ada");
                 assert_eq!(class_id, "mage");
@@ -805,6 +818,35 @@ mod tests {
                     character_id.as_deref(),
                     Some("11111111-1111-1111-1111-111111111111")
                 );
+                assert!(protocol_rev.is_none());
+                assert!(rewrite_version.is_none());
+            }
+            _ => panic!("expected Hello"),
+        }
+    }
+
+    #[test]
+    fn ws_hello_identity_roundtrip() {
+        let msg = WsClientMsg::Hello {
+            name: "Ada".into(),
+            class_id: "mage".into(),
+            token: Some("tok".into()),
+            character_id: Some("11111111-1111-1111-1111-111111111111".into()),
+            protocol_rev: Some(6),
+            rewrite_version: Some("1.4.0".into()),
+        };
+        let s = serde_json::to_string(&msg).unwrap();
+        assert!(s.contains("protocol_rev"));
+        assert!(s.contains("rewrite_version"));
+        let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+        match back {
+            WsClientMsg::Hello {
+                protocol_rev,
+                rewrite_version,
+                ..
+            } => {
+                assert_eq!(protocol_rev, Some(6));
+                assert_eq!(rewrite_version.as_deref(), Some("1.4.0"));
             }
             _ => panic!("expected Hello"),
         }
@@ -1124,11 +1166,15 @@ mod tests {
                 class_id,
                 token,
                 character_id,
+                protocol_rev,
+                rewrite_version,
             } => {
                 assert_eq!(name, "Ada");
                 assert_eq!(class_id, "mage");
                 assert!(token.is_none());
                 assert!(character_id.is_none());
+                assert!(protocol_rev.is_none());
+                assert!(rewrite_version.is_none());
             }
             _ => panic!("expected Hello"),
         }

@@ -1,7 +1,31 @@
 # Parity status
 
-**Current rewrite:** `1.3.0` / `online-hard`.  
-**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).
+**Current rewrite:** `1.5.0` / `client-update`.  
+**Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
+**Runbook:** [`../client-update.md`](../client-update.md).
+
+## Client version gate (`client-compat`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `check_compat` policy | done | `woc-version`; prerelease suffix stripped |
+| `/version` protocol + min client | done | `WOC_MIN_CLIENT_VERSION` |
+| Hello identity | done | Additive; missing → reject |
+| Title Online preflight | done | Fail-closed |
+| Welcome kick | done | `version:` → Title |
+
+## Client update packages (`client-update`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Full `.tar.zst` pack / unpack | done | `woc-update::pack_full` |
+| Per-file bsdiff delta | done | One predecessor (`N-1 → N`); skip-version uses full |
+| ed25519 signed manifest | done | `WOC_UPDATE_SIGNING_KEY` / `WOC_UPDATE_PUBKEY` |
+| `woc-updater` apply + exec client | done | Staging swap; `--once` for title launch |
+| `/version` `update_manifest_url` | done | `WOC_UPDATE_MANIFEST_URL` on server |
+| Title **Update** button | done | Sibling `woc-updater` when incompatible |
+| Linux tag publish workflow | done | `.github/workflows/client-release.yml` |
+| Runbook | done | [`docs/client-update.md`](../client-update.md) |
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -38,7 +62,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.3.0` / online-hard (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.5.0` / client-update (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |
