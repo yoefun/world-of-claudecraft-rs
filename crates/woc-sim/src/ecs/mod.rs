@@ -4,6 +4,7 @@
 
 pub mod components;
 pub mod sparse;
+pub mod spawn;
 pub mod world;
 
 pub use components::{Identity, LootPile, Transform};
@@ -101,6 +102,16 @@ mod tests {
         );
         let live: Vec<_> = w.live_ids().collect();
         assert_eq!(live, vec![id]);
+    }
+
+    #[test]
+    fn adopt_keeps_existing_id() {
+        let mut w = World::new();
+        w.adopt(9);
+        assert!(w.contains(9));
+        assert_eq!(w.next_id(), 10);
+        w.adopt(9);
+        assert_eq!(w.spawn_count(), 1);
     }
 
     #[test]

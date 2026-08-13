@@ -64,6 +64,19 @@ impl World {
         self.live_index.contains_key(&id)
     }
 
+    /// Register an existing id (dual-write from the fat `Entity` list). Does not allocate 0.
+    pub fn adopt(&mut self, id: EntityId) {
+        if id == 0 || self.contains(id) {
+            return;
+        }
+        let idx = self.live.len();
+        self.live.push(id);
+        self.live_index.insert(id, idx);
+        if id >= self.next_id {
+            self.next_id = id.saturating_add(1);
+        }
+    }
+
     pub fn live_ids(&self) -> impl Iterator<Item = EntityId> + '_ {
         self.live.iter().copied()
     }

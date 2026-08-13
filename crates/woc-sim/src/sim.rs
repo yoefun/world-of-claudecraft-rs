@@ -17,6 +17,7 @@ use crate::combat::{
     update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
+use crate::ecs::World;
 use crate::entity::{create_player, Entity, QuestState};
 use crate::interaction::vendor_snapshot;
 use crate::mob::{tick_mob_respawns, update_mob_ai};
@@ -44,6 +45,8 @@ pub struct Sim {
     pub seed: u32,
     pub rng: Rng,
     pub entities: Vec<Entity>,
+    /// Sparse-column mirror of `entities` (dual-write during ECS migration).
+    pub world: World,
     /// Parallel index: `EntityId` → slot in `entities`. Kept in sync on spawn/despawn.
     pub by_id: HashMap<EntityId, usize>,
     pub next_id: EntityId,
@@ -61,6 +64,15 @@ pub struct Sim {
 }
 
 impl Sim {
+    pub(crate) fn rebuild_world(&mut self) {
+        let mut world = World::new();
+        world.set_next_id(self.next_id);
+        for entity in &self.entities {
+            crate::ecs::spawn::sync_entity_to_world(&mut world, entity);
+        }
+        self.world = world;
+    }
+
     fn reindex(&mut self) {
         self.by_id.clear();
         for (i, e) in self.entities.iter().enumerate() {
@@ -68,9 +80,11 @@ impl Sim {
         }
     }
 
-    fn push_entity(&mut self, e: Entity) {
+    pub(crate) fn push_entity(&mut self, e: Entity) {
         self.by_id.insert(e.id, self.entities.len());
+        crate::ecs::spawn::sync_entity_to_world(&mut self.world, &e);
         self.entities.push(e);
+        self.world.set_next_id(self.next_id);
     }
 
     pub fn entity_index(&self, id: EntityId) -> Option<usize> {
@@ -99,6 +113,7 @@ impl Sim {
             seed,
             rng,
             entities,
+            world: World::new(),
             by_id: HashMap::new(),
             next_id,
             player_id: 0,
@@ -111,6 +126,7 @@ impl Sim {
             pvp: crate::pvp::PvpState::default(),
         };
         sim.reindex();
+        sim.rebuild_world();
         sim
     }
 
@@ -219,7 +235,9 @@ impl Sim {
         let _ = self.parties.on_despawn(player_id);
         self.entities
             .retain(|e| !(e.id == player_id && e.kind == EntityKind::Player));
+        self.world.despawn(player_id);
         self.reindex();
+        self.rebuild_world();
         self.intents.remove(&player_id);
         if self.player_id == player_id {
             self.player_id = self
@@ -504,6 +522,7 @@ impl Sim {
             try_pickup_loot(pid, &mut self.entities, &mut self.events);
         }
         self.reindex();
+        self.rebuild_world();
 
         // Phase 6: snapshot
         let viewer = if self.player_id != 0 {
@@ -913,6 +932,33 @@ mod tests {
             );
         }
         assert!(sim.entity_index(u32::MAX).is_none());
+    }
+
+    #[test]
+    fn loot_has_no_bags_column() {
+        let mut sim = Sim::new_eastbrook("LootCol", PlayerClass::Warrior);
+        let id = sim.next_id;
+        sim.next_id += 1;
+        sim.push_entity(crate::entity::create_loot(id, 0.0, 0.0, 5, None));
+        assert!(sim
+            .world
+            .get::<crate::ecs::components::LootPile>(id)
+            .is_some());
+        assert!(sim.world.get::<crate::ecs::components::Bags>(id).is_none());
+        assert!(sim.world.get::<crate::ecs::components::Bank>(id).is_none());
+        assert!(sim
+            .world
+            .get::<crate::ecs::components::ClassKit>(id)
+            .is_none());
+        let player_id = sim.player_id;
+        assert!(sim
+            .world
+            .get::<crate::ecs::components::Bags>(player_id)
+            .is_some());
+        assert!(sim
+            .world
+            .get::<crate::ecs::components::LootPile>(player_id)
+            .is_none());
     }
 
     #[test]
