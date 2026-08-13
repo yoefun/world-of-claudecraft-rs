@@ -174,6 +174,51 @@ pub const RECIPES: &[RecipeDef] = &[
         item_level_budget: 9,
         station: Some(StationType::Loom),
     },
+    RecipeDef {
+        id: RecipeId::ProspectCopper,
+        profession: ProfessionId::Jewelcrafting,
+        result: ItemId::Tigerseye,
+        result_count: 1,
+        reagents: &[Reagent {
+            item: ItemId::CopperOre,
+            count: 5,
+        }],
+        skill_req: 0,
+        item_level_budget: 2,
+        station: None,
+    },
+    RecipeDef {
+        id: RecipeId::CopperSetting,
+        profession: ProfessionId::Jewelcrafting,
+        result: ItemId::CopperSetting,
+        result_count: 1,
+        reagents: &[Reagent {
+            item: ItemId::CopperBar,
+            count: 1,
+        }],
+        skill_req: 0,
+        item_level_budget: 1,
+        station: None,
+    },
+    RecipeDef {
+        id: RecipeId::TigerseyeBand,
+        profession: ProfessionId::Jewelcrafting,
+        result: ItemId::TigerseyeBand,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::Tigerseye,
+                count: 1,
+            },
+            Reagent {
+                item: ItemId::CopperSetting,
+                count: 1,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 8,
+        station: Some(StationType::JewelersBench),
+    },
 ];
 
 pub fn recipe_by_id(id: RecipeId) -> Option<&'static RecipeDef> {
@@ -269,6 +314,123 @@ mod tests {
         })
         .unwrap();
         inv
+    }
+
+    fn jewelers_bench_pos() -> Vec2 {
+        Vec2 { x: 15.0, z: 5.0 }
+    }
+
+    fn inv_with_copper_ore() -> Inventory {
+        let mut inv = Inventory::with_capacity(4);
+        inv.try_add(ItemStack {
+            item: ItemId::CopperOre,
+            count: 5,
+        })
+        .unwrap();
+        inv
+    }
+
+    fn inv_with_tigerseye_band_reagents() -> Inventory {
+        let mut inv = Inventory::with_capacity(8);
+        inv.try_add(ItemStack {
+            item: ItemId::Tigerseye,
+            count: 1,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::CopperSetting,
+            count: 1,
+        })
+        .unwrap();
+        inv
+    }
+
+    #[test]
+    fn prospect_copper_is_field_craftable_and_deterministic() {
+        let mut inv = inv_with_copper_ore();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::ProspectCopper,
+            1,
+            field_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::ProspectCopper,
+            1,
+            field_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::Tigerseye), 1);
+        assert_eq!(inv.count(ItemId::CopperOre), 0);
+        assert_eq!(skills.get(ProfessionId::Jewelcrafting), 2);
+    }
+
+    #[test]
+    fn tigerseye_band_requires_jewelers_bench() {
+        let inv = inv_with_tigerseye_band_reagents();
+        let gold = Gold { copper: 100 };
+        let err = evaluate_craft_admission(
+            RecipeId::TigerseyeBand,
+            1,
+            field_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err, DenyReason::StationRequired);
+
+        let mut inv = inv_with_tigerseye_band_reagents();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::TigerseyeBand,
+            1,
+            jewelers_bench_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::TigerseyeBand,
+            1,
+            jewelers_bench_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::TigerseyeBand), 1);
+        assert_eq!(inv.count(ItemId::Tigerseye), 0);
+        assert_eq!(inv.count(ItemId::CopperSetting), 0);
+        assert_eq!(skills.get(ProfessionId::Jewelcrafting), 2);
     }
 
     #[test]
