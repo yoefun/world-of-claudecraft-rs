@@ -1104,6 +1104,34 @@ mod tests {
     }
 
     #[test]
+    fn overworld_wolves_respawn_in_thirty_seconds() {
+        let w = mob("young_wolf").expect("young_wolf");
+        assert!((w.respawn_seconds - 30.0).abs() < f32::EPSILON);
+        assert!(w.ability_id.is_none());
+    }
+
+    #[test]
+    fn world_boss_respawns_in_five_minutes() {
+        let t = mob("mire_terror").expect("mire_terror");
+        assert!((t.respawn_seconds - 300.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn eastbrook_wolf_run_is_a_pack() {
+        let wolves: u32 = EASTBROOK
+            .mobs
+            .iter()
+            .filter(|s| s.mob_id == "young_wolf")
+            .map(|s| s.count)
+            .sum();
+        assert!(wolves >= 5, "wolf run count={wolves}");
+        for spot in EASTBROOK.mobs {
+            assert!(spot.count >= 1);
+            assert!(spot.radius > 0.0);
+        }
+    }
+
+    #[test]
     fn stations_and_enchants_are_registered() {
         assert_eq!(STATIONS.len(), 6);
         assert!(in_station_range(0.0, 0.0, "forge"));

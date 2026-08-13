@@ -24,6 +24,8 @@ pub struct MobTemplate {
     pub copper_max: u32,
     pub attack_damage: f32,
     pub loot: &'static [LootEntry],
+    pub respawn_seconds: f32,
+    pub ability_id: Option<&'static str>,
 }
 
 const SCARRED_WOLF_LOOT: &[LootEntry] = &[
@@ -73,6 +75,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
             chance: 0.55,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
     },
     MobTemplate {
         id: "scarred_wolf",
@@ -84,6 +88,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_max: 14,
         attack_damage: 9.0,
         loot: SCARRED_WOLF_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: None,
     },
     MobTemplate {
         id: "young_boar",
@@ -95,6 +101,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_max: 10,
         attack_damage: 7.0,
         loot: YOUNG_BOAR_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: None,
     },
     MobTemplate {
         id: "crypt_warden",
@@ -106,6 +114,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_max: 40,
         attack_damage: 14.0,
         loot: CRYPT_WARDEN_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: None,
     },
 ];
 
