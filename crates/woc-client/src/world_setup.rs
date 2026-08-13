@@ -69,7 +69,8 @@ fn setup_world(
     mut ambient: ResMut<AmbientLight>,
     mut atmo: ResMut<ActiveAtmosphere>,
     mut images: ResMut<Assets<Image>>,
-    name: Res<CharName>,    class: Res<SelectedClass>,
+    name: Res<CharName>,
+    class: Res<SelectedClass>,
     play_mode: Res<PlayMode>,
     session: Res<crate::AuthSession>,
 ) {
@@ -305,7 +306,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB attack · 1–5 abilities · E interact · B bags · L quests · C sheet · N talents · K bank · I mail · M map · U market · RMB look · Esc",
+                        "LMB/F attack · Tab target · 1–5 abilities · E interact · B bags · L quests · C sheet · N talents · K bank · I mail · M map · U market · RMB look · Esc clear",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
@@ -513,7 +514,7 @@ fn setup_world(
                     // Action bar
                     bot.spawn((
                         Node {
-                            width: Val::Px(520.0),
+                            width: Val::Px(920.0),
                             padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
                             justify_content: JustifyContent::Center,
                             ..default()
@@ -524,7 +525,7 @@ fn setup_world(
                         bar.spawn((
                             HudActionBarText,
                             Text::new("[1] Ability   [2] —   [3] —   [4] —   [5] —"),
-                            TextFont::from_font_size(16.0),
+                            TextFont::from_font_size(15.0),
                             TextColor(Color::srgb(0.9, 0.88, 0.7)),
                         ));
                     });
@@ -580,6 +581,7 @@ fn cleanup_world(
     commands.remove_resource::<map::MapTextures>();
 }
 fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
+    let pid = host.snapshot.player_id;
     for ev in events {
         match ev {
             SimEvent::LevelUp { level, .. } => {
@@ -587,6 +589,27 @@ fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
                     .push((format!("Level up! You are now {level}."), 3.0));
             }
             SimEvent::Toast { message } => host.recent_toasts.push((message.clone(), 3.0)),
+            SimEvent::Damage {
+                source,
+                target,
+                amount,
+                ability,
+            } => {
+                // Ability hits outgoing + any damage taken (skip spammy auto swings out).
+                if *target == pid {
+                    let label = ability
+                        .as_deref()
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or("hit");
+                    host.recent_toasts
+                        .push((format!("Took {label} for {:.0}", amount), 1.2));
+                } else if *source == pid {
+                    if let Some(abil) = ability.as_deref().filter(|s| !s.is_empty()) {
+                        host.recent_toasts
+                            .push((format!("{abil} hits for {:.0}", amount), 1.2));
+                    }
+                }
+            }
             SimEvent::Kill { victim_name, .. } => {
                 host.recent_toasts
                     .push((format!("Slain: {victim_name}"), 2.5));
@@ -611,6 +634,10 @@ fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
             }
             SimEvent::NpcDialog { text, .. } => {
                 host.recent_toasts.push((text.clone(), 3.0));
+            }
+            SimEvent::AuraApplied { id, remaining, .. } => {
+                host.recent_toasts
+                    .push((format!("Aura: {id} ({remaining:.0}s)"), 1.5));
             }
             _ => {}
         }
@@ -686,6 +713,7 @@ pub(crate) fn sim_fixed_step(
                 let _ = tx.send(WsClientMsg::Intent(intent));
             }
             host.pending_intent.ability = None;
+            host.pending_intent.clear_target = false;
         }
     } else {
         host.accumulator += time.delta_secs();
@@ -699,6 +727,7 @@ pub(crate) fn sim_fixed_step(
                 events_all.extend(events);
             }
             host.pending_intent.ability = None;
+            host.pending_intent.clear_target = false;
         }
         push_events_toasts(&mut host, &events_all);
         if let Some(sim) = host.sim.as_ref() {
@@ -850,7 +879,10 @@ pub(crate) fn sync_visuals(
                 tf.rotation = Quat::from_euler(EulerRot::YXZ, e.yaw, pitch, 0.0);
                 tf.scale = Vec3::ONE;
                 *visibility = Visibility::Visible;
-            } else if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Player) {
+            } else if matches!(
+                e.kind,
+                EntityKind::Mob | EntityKind::Npc | EntityKind::Player
+            ) {
                 // Corpse pose: tip onto the side; keep clickable for loot.
                 tf.translation = Vec3::new(e.x, e.y + 0.15, e.z);
                 tf.rotation = death_root_rotation(e.yaw);
