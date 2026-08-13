@@ -4,7 +4,8 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
-use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, TickSnapshot};
+use woc_protocol::{AbilitySlot, EntityId, EntityKind, InteractAction, PlayerIntent, QuestLogEntry, TickSnapshot};
+use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
@@ -235,6 +236,25 @@ fn local_pet_alive(snap: &TickSnapshot) -> bool {
     snap.entities
         .iter()
         .any(|e| e.kind == EntityKind::Pet && e.alive)
+}
+
+pub(crate) fn quest_interact_actions(
+    template_id: &str,
+    log: &[QuestLogEntry],
+) -> Vec<InteractAction> {
+    let offers = npc_quest_offers(template_id, log);
+    let mut out = Vec::new();
+    for q in offers.turn_in {
+        out.push(InteractAction::TurnInQuest {
+            quest_id: q.id.to_string(),
+        });
+    }
+    for q in offers.accept {
+        out.push(InteractAction::AcceptQuest {
+            quest_id: q.id.to_string(),
+        });
+    }
+    out
 }
 
 pub(crate) fn handle_interact_keys(
@@ -632,7 +652,7 @@ pub(crate) fn handle_interact_keys(
         return;
     }
 
-    let mut best: Option<(EntityId, f32, bool)> = None;
+    let mut best: Option<(EntityId, f32, Option<String>)> = None;
     for e in &host.snapshot.entities {
         if e.kind != EntityKind::Npc || !e.alive {
             continue;
@@ -640,56 +660,20 @@ pub(crate) fn handle_interact_keys(
         let dx = e.x - player.x;
         let dz = e.z - player.z;
         let d = (dx * dx + dz * dz).sqrt();
-        if d < 5.0 && best.map(|(_, bd, _)| d < bd).unwrap_or(true) {
-            best = Some((e.id, d, e.template_id.as_deref() == Some("captain_alden")));
+        if d < 5.0 && best.as_ref().map(|(_, bd, _)| d < *bd).unwrap_or(true) {
+            best = Some((e.id, d, e.template_id.clone()));
         }
     }
-    let Some((nid, _, is_alden)) = best else {
+    let Some((nid, _, template_id)) = best else {
         host.recent_toasts.push(("No NPC nearby.".into(), 2.0));
         return;
     };
 
     host.interact(nid, InteractAction::Talk);
 
-    if is_alden {
-        let log = host.snapshot.quest_log.clone();
-        let has_wolves = log.iter().any(|q| q.quest_id == "wolves_at_the_gate");
-        let wolves_ready = log
-            .iter()
-            .any(|q| q.quest_id == "wolves_at_the_gate" && q.state == "ready");
-        if wolves_ready {
-            host.interact(
-                nid,
-                InteractAction::TurnInQuest {
-                    quest_id: "wolves_at_the_gate".into(),
-                },
-            );
-        } else if !has_wolves {
-            host.interact(
-                nid,
-                InteractAction::AcceptQuest {
-                    quest_id: "wolves_at_the_gate".into(),
-                },
-            );
-        }
-        let has_boar = log.iter().any(|q| q.quest_id == "boar_tusks");
-        let boar_ready = log
-            .iter()
-            .any(|q| q.quest_id == "boar_tusks" && q.state == "ready");
-        if boar_ready {
-            host.interact(
-                nid,
-                InteractAction::TurnInQuest {
-                    quest_id: "boar_tusks".into(),
-                },
-            );
-        } else if !has_boar && has_wolves {
-            host.interact(
-                nid,
-                InteractAction::AcceptQuest {
-                    quest_id: "boar_tusks".into(),
-                },
-            );
+    if let Some(template_id) = template_id.as_deref() {
+        for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
+            host.interact(nid, action);
         }
     }
 }
@@ -697,7 +681,48 @@ pub(crate) fn handle_interact_keys(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use woc_protocol::{InvSlotSnapshot, TalentRankSnapshot, TickSnapshot};
+    use woc_protocol::{InvSlotSnapshot, QuestLogEntry, TalentRankSnapshot, TickSnapshot};
+    use super::quest_interact_actions;
+
+    #[test]
+    fn e_on_crier_accepts_report_only() {
+        let actions = quest_interact_actions("town_crier", &[]);
+        assert_eq!(
+            actions,
+            vec![InteractAction::AcceptQuest {
+                quest_id: "report_to_alden".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn e_on_alden_turns_in_then_accepts_next() {
+        let log = vec![QuestLogEntry {
+            quest_id: "report_to_alden".into(),
+            state: "ready".into(),
+            counts: vec![1],
+        }];
+        let actions = quest_interact_actions("captain_alden", &log);
+        assert_eq!(
+            actions,
+            vec![InteractAction::TurnInQuest {
+                quest_id: "report_to_alden".into(),
+            }]
+        );
+
+        let log = vec![QuestLogEntry {
+            quest_id: "report_to_alden".into(),
+            state: "completed".into(),
+            counts: vec![1],
+        }];
+        let actions = quest_interact_actions("captain_alden", &log);
+        assert_eq!(
+            actions,
+            vec![InteractAction::AcceptQuest {
+                quest_id: "wolves_at_the_gate".into(),
+            }]
+        );
+    }
 
     #[test]
     fn first_available_talent_uses_class_and_skips_max_rank() {
