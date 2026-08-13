@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use woc_content::{item, talents::talents_for_class, ItemKind};
-use woc_protocol::{EntityId, InteractAction, TickSnapshot, VendorSnapshot};
+use woc_content::{item, quest, talents::talents_for_class, ItemKind, QuestObjective};
+use woc_protocol::{EntityId, InteractAction, QuestLogEntry, TickSnapshot, VendorSnapshot};
 
 use crate::{GameHost, NetStatus, PlayMode};
 
@@ -444,6 +444,27 @@ pub(crate) fn update_chrome_panels(
     }
 }
 
+pub(crate) fn format_quest_log_line(entry: &QuestLogEntry) -> String {
+    let Some(def) = quest(&entry.quest_id) else {
+        return format!("{} [{}]", entry.quest_id, entry.state);
+    };
+    let objs: Vec<String> = def
+        .objectives
+        .iter()
+        .enumerate()
+        .map(|(i, obj)| {
+            let (label, need) = match obj {
+                QuestObjective::Kill { label, count, .. } => (*label, *count),
+                QuestObjective::Collect { label, count, .. } => (*label, *count),
+                QuestObjective::Talk { label, .. } => (*label, 1u32),
+            };
+            let have = entry.counts.get(i).copied().unwrap_or(0);
+            format!("{label} {have}/{need}")
+        })
+        .collect();
+    format!("{} [{}] — {}", def.name, entry.state, objs.join("; "))
+}
+
 pub(crate) fn update_hud(
     host: Res<GameHost>,
     ui: Res<UiFlags>,
@@ -606,13 +627,9 @@ pub(crate) fn update_hud(
     if let Ok(mut t) = quest.single_mut() {
         if ui.show_quests {
             if snap.quest_log.is_empty() {
-                **t = "Quests: (none — talk to Captain Alden with E)".into();
+                **t = "Quests: (none — talk to a quest giver with E)".into();
             } else {
-                let lines: Vec<String> = snap
-                    .quest_log
-                    .iter()
-                    .map(|q| format!("{} [{}]", q.quest_id, q.state))
-                    .collect();
+                let lines: Vec<String> = snap.quest_log.iter().map(format_quest_log_line).collect();
                 **t = format!("Quests: {}", lines.join(" · "));
             }
         } else {
@@ -621,7 +638,7 @@ pub(crate) fn update_hud(
                 .iter()
                 .find(|q| q.state == "active" || q.state == "ready");
             **t = match active {
-                Some(q) => format!("Quest: {} [{}] (L list)", q.quest_id, q.state),
+                Some(q) => format!("{} (L list)", format_quest_log_line(q)),
                 None => "Quest: — (E talk · L list)".into(),
             };
         }
@@ -1029,6 +1046,23 @@ mod tests {
         assert!(text.contains("[O] Buy first affordable listing"));
         assert!(text.contains("[L] List"));
         assert!(text.contains("[X] Cancel"));
+    }
+
+    #[test]
+    fn quest_log_line_uses_name_and_counts() {
+        use woc_protocol::QuestLogEntry;
+        use super::format_quest_log_line;
+
+        let line = format_quest_log_line(&QuestLogEntry {
+            quest_id: "wolves_at_the_gate".into(),
+            state: "active".into(),
+            counts: vec![1],
+        });
+        assert!(line.contains("Wolves at the Gate"));
+        assert!(line.contains("active"));
+        assert!(line.contains("1/3"));
+        assert!(line.contains("Young Wolves slain"));
+        assert!(!line.starts_with("wolves_at_the_gate"));
     }
 
     #[test]

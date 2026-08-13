@@ -6,9 +6,9 @@
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use woc_content::{npc, quest, zone_by_id, ZONES};
+use woc_content::{npc, zone_by_id, ZONES};
 use woc_protocol::{EntityId, EntityKind, TickSnapshot};
-use woc_sim::quests::quests_for_npc;
+use woc_sim::quests::npc_quest_offers;
 use woc_sim::{
     paint_map_frame, paint_player_arrow, region_for_zone, static_markers_for_region,
     world_to_pixel, MapMarker, MapMarkerKind, MapRegion, WORLD_SEED,
@@ -468,22 +468,40 @@ fn npc_quest_marker(snap: &TickSnapshot, template_id: Option<&str>) -> Option<Ma
     if !def.is_quest_giver {
         return None;
     }
-    let ready = snap.quest_log.iter().any(|q| {
-        q.state.eq_ignore_ascii_case("ready")
-            && quest(&q.quest_id)
-                .and_then(|qd| qd.turn_in_npc)
-                .map(|npc_id| npc_id == template_id)
-                .unwrap_or(false)
-    });
-    if ready {
+    let offers = npc_quest_offers(template_id, &snap.quest_log);
+    if !offers.turn_in.is_empty() {
         return Some(MapMarkerKind::QuestReady);
     }
-    let available = quests_for_npc(template_id)
-        .iter()
-        .any(|qd| !snap.quest_log.iter().any(|e| e.quest_id == qd.id));
-    if available {
+    if !offers.accept.is_empty() {
         Some(MapMarkerKind::QuestAvailable)
     } else {
         Some(MapMarkerKind::Npc)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::npc_quest_marker;
+    use woc_protocol::{QuestLogEntry, TickSnapshot};
+    use woc_sim::map_view::MapMarkerKind;
+
+    #[test]
+    fn alden_is_plain_until_report_completed() {
+        let snap = TickSnapshot::default();
+        assert_eq!(
+            npc_quest_marker(&snap, Some("captain_alden")),
+            Some(MapMarkerKind::Npc)
+        );
+
+        let mut snap = TickSnapshot::default();
+        snap.quest_log.push(QuestLogEntry {
+            quest_id: "report_to_alden".into(),
+            state: "completed".into(),
+            counts: vec![1],
+        });
+        assert_eq!(
+            npc_quest_marker(&snap, Some("captain_alden")),
+            Some(MapMarkerKind::QuestAvailable)
+        );
     }
 }
