@@ -1,13 +1,13 @@
+use super::skill::ProfessionSkills;
+use super::tools::{best_tool_tier, can_gather_tier, profession_for_node};
+use super::types::{
+    DenyReason, GatherNodeDef, NodeId, NodeKind, ProfessionId, Vec2, HARVEST_RANGE,
+};
 use crate::content::nodes::{herb_is_earthroot, node_by_id};
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::ItemId;
 use crate::rng::Rng;
 use crate::TICK_HZ;
-use super::skill::ProfessionSkills;
-use super::tools::{best_tool_tier, can_gather_tier, profession_for_node};
-use super::types::{
-    DenyReason, GatherNodeDef, HARVEST_RANGE, NodeId, NodeKind, ProfessionId, Vec2,
-};
 
 pub fn evaluate_gather(
     pos: Vec2,
@@ -42,37 +42,6 @@ fn harvest_items(node: &GatherNodeDef) -> (ItemId, ItemId) {
     }
 }
 
-fn can_accept_stacks(inv: &Inventory, stacks: &[ItemStack]) -> bool {
-    let mut trial = inv.clone();
-    for stack in stacks {
-        if trial.try_add(*stack).is_err() {
-            return false;
-        }
-    }
-    true
-}
-
-/// Preflight: deny before RNG when no harvest outcome fits in the bag.
-fn can_accept_any_harvest(inv: &Inventory, node: &GatherNodeDef) -> bool {
-    let (base, fine) = harvest_items(node);
-    let normal = [ItemStack { item: base, count: 1 }];
-    let double: Vec<ItemStack> = if node.kind == NodeKind::Ore {
-        vec![
-            ItemStack { item: base, count: 2 },
-            ItemStack {
-                item: ItemId::CoarseStone,
-                count: 1,
-            },
-        ]
-    } else {
-        vec![ItemStack { item: base, count: 2 }]
-    };
-    let rare = [ItemStack { item: fine, count: 5 }];
-    can_accept_stacks(inv, &normal)
-        || can_accept_stacks(inv, &double)
-        || can_accept_stacks(inv, &rare)
-}
-
 pub struct HarvestGrant {
     pub stacks: Vec<ItemStack>,
     pub skill_gained: u16,
@@ -90,16 +59,19 @@ pub fn complete_gather(
     rng: &mut impl Rng,
 ) -> Result<HarvestGrant, DenyReason> {
     let profession = evaluate_gather(pos, inv, node, ready_tick, now, false)?;
-    if !can_accept_any_harvest(inv, node) {
-        return Err(DenyReason::InventoryFull);
-    }
     let tool_tier = best_tool_tier(inv, profession).expect("tool re-checked");
     let rare = rng.chance(15);
     let double = rng.chance(20);
     let (base, fine) = harvest_items(node);
     let use_fine = rare || tool_tier > node.tier;
     let item = if use_fine { fine } else { base };
-    let count = if rare { 5 } else if double { 2 } else { 1 };
+    let count = if rare {
+        5
+    } else if double {
+        2
+    } else {
+        1
+    };
     let mut stacks = vec![ItemStack { item, count }];
     if node.kind == NodeKind::Ore && double && !rare {
         stacks.push(ItemStack {
@@ -107,9 +79,13 @@ pub fn complete_gather(
             count: 1,
         });
     }
+    let mut trial = inv.clone();
     for stack in &stacks {
-        inv.try_add(*stack).map_err(|_| DenyReason::InventoryFull)?;
+        trial
+            .try_add(*stack)
+            .map_err(|_| DenyReason::InventoryFull)?;
     }
+    *inv = trial;
     let skill_gained = skills.gain(profession, node.skill_req);
     Ok(HarvestGrant {
         stacks,
@@ -138,8 +114,8 @@ mod tests {
     use crate::content::nodes::node_by_id;
     use crate::inventory::Inventory;
     use crate::professions::skill::ProfessionSkills;
-    use crate::rng::ScriptedRng;
     use crate::professions::types::NodeId;
+    use crate::rng::ScriptedRng;
 
     fn node1() -> &'static GatherNodeDef {
         node_by_id(NodeId(1)).unwrap()
@@ -149,15 +125,7 @@ mod tests {
     fn bare_hands_cannot_mine() {
         let inv = Inventory::with_capacity(4);
         let mut rng = ScriptedRng::from_seq(&[]);
-        let err = evaluate_gather(
-            node1().pos,
-            &inv,
-            node1(),
-            0,
-            0,
-            false,
-        )
-        .unwrap_err();
+        let err = evaluate_gather(node1().pos, &inv, node1(), 0, 0, false).unwrap_err();
         assert_eq!(err, DenyReason::MissingTool);
         let _ = &mut rng;
     }
@@ -172,12 +140,40 @@ mod tests {
         .unwrap();
         let mut skills = ProfessionSkills::default();
         let mut rng = ScriptedRng::from_seq(&[99, 99]);
-        let grant = complete_gather(node1().pos, &mut inv, &mut skills, node1(), 0, 0, &mut rng)
-            .unwrap();
+        let grant =
+            complete_gather(node1().pos, &mut inv, &mut skills, node1(), 0, 0, &mut rng).unwrap();
         assert_eq!(grant.stacks[0].item, ItemId::CopperOre);
         assert_eq!(grant.stacks[0].count, 1);
         assert_eq!(skills.get(ProfessionId::Mining), 2);
         assert_eq!(grant.next_ready_tick, 60 * 20);
+    }
+
+    #[test]
+    fn double_ore_harvest_failure_leaves_inventory_unchanged() {
+        let mut inv = Inventory::with_capacity(2);
+        inv.try_add(ItemStack {
+            item: ItemId::CopperPick,
+            count: 1,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::CopperOre,
+            count: 1,
+        })
+        .unwrap();
+        let mut skills = ProfessionSkills::default();
+        let mut rng = ScriptedRng::from_seq(&[99, 0]);
+
+        let err = match complete_gather(node1().pos, &mut inv, &mut skills, node1(), 0, 0, &mut rng)
+        {
+            Ok(_) => panic!("double ore harvest unexpectedly fit in a full bag"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err, DenyReason::InventoryFull);
+        assert_eq!(inv.count(ItemId::CopperOre), 1);
+        assert_eq!(inv.count(ItemId::CopperPick), 1);
+        assert_eq!(skills.get(ProfessionId::Mining), 0);
     }
 
     #[test]

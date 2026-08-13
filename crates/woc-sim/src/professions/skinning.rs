@@ -1,9 +1,9 @@
+use super::skill::ProfessionSkills;
+use super::tools::{best_tool_tier, can_gather_tier};
+use super::types::{Corpse, DenyReason, ProfessionId, Vec2, HARVEST_RANGE};
 use crate::inventory::{Inventory, ItemStack};
 use crate::item::ItemId;
 use crate::rng::Rng;
-use super::skill::ProfessionSkills;
-use super::tools::{best_tool_tier, can_gather_tier};
-use super::types::{Corpse, DenyReason, HARVEST_RANGE, ProfessionId, Vec2};
 
 const SKIN_SKILL_REQ: u16 = 0;
 
@@ -74,9 +74,6 @@ pub fn complete_skin(
     rng: &mut impl Rng,
 ) -> Result<SkinGrant, DenyReason> {
     evaluate_skin(pos, inv, corpse, false)?;
-    if !can_accept_any_skin(inv) {
-        return Err(DenyReason::InventoryFull);
-    }
     let tool_tier = best_tool_tier(inv, ProfessionId::Skinning).expect("knife re-checked");
     let rare = rng.chance(15);
     let double = rng.chance(20);
@@ -86,11 +83,21 @@ pub fn complete_skin(
     } else {
         ItemId::LightLeather
     };
-    let count = if rare { 5 } else if double { 2 } else { 1 };
+    let count = if rare {
+        5
+    } else if double {
+        2
+    } else {
+        1
+    };
     let stacks = vec![ItemStack { item, count }];
+    let mut trial = inv.clone();
     for stack in &stacks {
-        inv.try_add(*stack).map_err(|_| DenyReason::InventoryFull)?;
+        trial
+            .try_add(*stack)
+            .map_err(|_| DenyReason::InventoryFull)?;
     }
+    *inv = trial;
     corpse.skinned = true;
     let skill_gained = skills.gain(ProfessionId::Skinning, SKIN_SKILL_REQ);
     Ok(SkinGrant {
@@ -169,12 +176,14 @@ mod tests {
         let mut skills = ProfessionSkills::default();
         let mut rng = ScriptedRng::from_seq(&[99, 99]);
         start_skin(corpse.pos, &inv, &corpse, false).unwrap();
-        let grant = complete_skin(corpse.pos, &mut inv, &mut skills, &mut corpse, &mut rng).unwrap();
+        let grant =
+            complete_skin(corpse.pos, &mut inv, &mut skills, &mut corpse, &mut rng).unwrap();
         assert_eq!(grant.stacks[0].item, ItemId::LightLeather);
         assert_eq!(grant.stacks[0].count, 1);
         assert_eq!(skills.get(ProfessionId::Skinning), 2);
         assert!(corpse.skinned);
-        let err = complete_skin(corpse.pos, &mut inv, &mut skills, &mut corpse, &mut rng).unwrap_err();
+        let err =
+            complete_skin(corpse.pos, &mut inv, &mut skills, &mut corpse, &mut rng).unwrap_err();
         assert_eq!(err, DenyReason::AlreadySkinned);
     }
 

@@ -27,6 +27,16 @@ v1 设计规格：[`../superpowers/specs/2026-08-13-manufacturing-system-design.
 
 `StationType`：`Forge`、`Tannery`、`Loom`、`JewelersBench`、`Apothecary`、`Toolworks`。半径 20 世界单位。
 
+`JewelersBench` 位于 `Vec2 { x: 120.0, z: -50.0 }`，避免与 `Forge`、`Loom`、`Toolworks` 的工作台半径重叠。
+
+### 实现边界
+
+精工仍只记录为 `last_masterwork` 标记；v1 不引入逐实例品质。
+
+v1 中 `skill_req = 0` 的配方在技能 75 时变灰（收益 0），直到后续更高阶内容落地。
+
+物品数据不添加 `use_effect` 战斗钩子，也不新增手腕部位装备。
+
 ### 经济
 
 每条配方满足 `input_value > output_value`（`reagent_unit_value` × 数量 对 `sell_value × result_count`）。采集物不进 NPC 货物表。

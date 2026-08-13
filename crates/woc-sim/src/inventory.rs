@@ -49,6 +49,14 @@ impl Inventory {
         !def.stackable && def.slot != EquipSlot::None
     }
 
+    fn occupied_slots(&self) -> usize {
+        self.slots.iter().filter(|s| s.is_some()).count() + self.instances.len()
+    }
+
+    fn free_slots(&self) -> usize {
+        self.slots.len().saturating_sub(self.occupied_slots())
+    }
+
     pub fn count(&self, item: ItemId) -> u16 {
         let stacked: u16 = self
             .slots
@@ -57,17 +65,16 @@ impl Inventory {
             .filter(|s| s.item == item)
             .map(|s| s.count)
             .sum();
-        let instanced = self
-            .instances
-            .iter()
-            .filter(|i| i.item == item)
-            .count() as u16;
+        let instanced = self.instances.iter().filter(|i| i.item == item).count() as u16;
         stacked.saturating_add(instanced)
     }
 
     pub fn try_add(&mut self, stack: ItemStack) -> Result<(), InventoryError> {
         let def = crate::content::items::item_def(stack.item);
         if Self::is_instanced_equipment(stack.item) {
+            if self.free_slots() < usize::from(stack.count) {
+                return Err(InventoryError::Full);
+            }
             for _ in 0..stack.count {
                 let id = self.next_instance_id;
                 self.next_instance_id += 1;
@@ -89,6 +96,9 @@ impl Inventory {
                 existing.count = existing.count.saturating_add(stack.count);
                 return Ok(());
             }
+        }
+        if self.free_slots() == 0 {
+            return Err(InventoryError::Full);
         }
         let empty = self
             .slots
@@ -118,6 +128,18 @@ impl Inventory {
                     }
                 }
             }
+        }
+        while remaining > 0 && Self::is_instanced_equipment(item) {
+            let index = self
+                .instances
+                .iter()
+                .position(|instance| instance.item == item)
+                .ok_or(InventoryError::Missing)?;
+            self.instances.remove(index);
+            remaining -= 1;
+        }
+        if remaining > 0 {
+            return Err(InventoryError::Missing);
         }
         Ok(())
     }
@@ -164,5 +186,41 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(err, InventoryError::Full);
+    }
+
+    #[test]
+    fn full_bag_rejects_additional_instanced_equipment() {
+        let mut inv = Inventory::with_capacity(1);
+        inv.try_add(ItemStack {
+            item: ItemId::CopperShortsword,
+            count: 1,
+        })
+        .unwrap();
+
+        let err = inv
+            .try_add(ItemStack {
+                item: ItemId::CopperChainVest,
+                count: 1,
+            })
+            .unwrap_err();
+
+        assert_eq!(err, InventoryError::Full);
+        assert_eq!(inv.count(ItemId::CopperShortsword), 1);
+        assert_eq!(inv.count(ItemId::CopperChainVest), 0);
+    }
+
+    #[test]
+    fn try_remove_removes_instanced_equipment() {
+        let mut inv = Inventory::with_capacity(1);
+        inv.try_add(ItemStack {
+            item: ItemId::CopperShortsword,
+            count: 1,
+        })
+        .unwrap();
+
+        inv.try_remove(ItemId::CopperShortsword, 1).unwrap();
+
+        assert_eq!(inv.count(ItemId::CopperShortsword), 0);
+        assert!(inv.instances.is_empty());
     }
 }

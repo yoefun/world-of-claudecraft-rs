@@ -20,7 +20,7 @@ pub const STATIONS: &[StationDef] = &[
     },
     StationDef {
         kind: StationType::JewelersBench,
-        pos: Vec2 { x: 15.0, z: 5.0 },
+        pos: Vec2 { x: 120.0, z: -50.0 },
     },
     StationDef {
         kind: StationType::Apothecary,

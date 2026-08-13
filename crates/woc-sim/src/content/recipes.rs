@@ -404,7 +404,7 @@ mod tests {
     }
 
     fn jewelers_bench_pos() -> Vec2 {
-        Vec2 { x: 15.0, z: 5.0 }
+        Vec2 { x: 120.0, z: -50.0 }
     }
 
     fn apothecary_pos() -> Vec2 {

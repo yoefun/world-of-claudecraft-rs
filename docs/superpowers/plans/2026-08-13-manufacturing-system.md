@@ -1355,7 +1355,7 @@ pub const STATIONS: &[StationDef] = &[
     StationDef { kind: StationType::Forge, pos: Vec2 { x: 0.0, z: 0.0 } },
     StationDef { kind: StationType::Tannery, pos: Vec2 { x: 80.0, z: 40.0 } },
     StationDef { kind: StationType::Loom, pos: Vec2 { x: 20.0, z: -10.0 } },
-    StationDef { kind: StationType::JewelersBench, pos: Vec2 { x: 15.0, z: 5.0 } },
+    StationDef { kind: StationType::JewelersBench, pos: Vec2 { x: 120.0, z: -50.0 } },
     StationDef { kind: StationType::Apothecary, pos: Vec2 { x: 7.0, z: 660.0 } },
     StationDef { kind: StationType::Toolworks, pos: Vec2 { x: 30.0, z: 10.0 } },
 ];
@@ -1761,7 +1761,7 @@ fn tigerseye_band_requires_jewelers_bench() {
         at_forge.start_craft(RecipeId::TigerseyeBand, 1).unwrap_err(),
         DenyReason::StationRequired
     );
-    let mut at_bench = test_session_at(Vec2 { x: 15.0, z: 5.0 });
+    let mut at_bench = test_session_at(Vec2 { x: 120.0, z: -50.0 });
     at_bench.inventory.try_add(ItemStack { item: ItemId::Tigerseye, count: 1 }).unwrap();
     at_bench.inventory.try_add(ItemStack { item: ItemId::CopperSetting, count: 1 }).unwrap();
     at_bench.start_craft(RecipeId::TigerseyeBand, 1).unwrap();

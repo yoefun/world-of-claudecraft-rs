@@ -1,12 +1,23 @@
+use woc_sim::content::items::ITEM_DEFS;
 use woc_sim::content::nodes::node_by_id;
 use woc_sim::item::ItemId;
 use woc_sim::professions::duration::craft_cast_seconds;
 use woc_sim::professions::session::ProfessionSession;
-use woc_sim::professions::types::{NodeId, ProfessionId, RecipeId, Vec2};
+use woc_sim::professions::types::{DenyReason, NodeId, ProfessionId, RecipeId, Vec2};
 use woc_sim::rng::XorShift64;
 use woc_sim::ticks_from_seconds;
 
-fn play(seed: u64) -> (Vec<u16>, u32, u16) {
+#[derive(Debug, Eq, PartialEq)]
+struct ProfessionSnapshot {
+    inventory_counts: Vec<(ItemId, u16)>,
+    gold_copper: u32,
+    skills: Vec<(ProfessionId, u16)>,
+    tick: u64,
+    last_deny: Option<DenyReason>,
+    last_masterwork: Option<RecipeId>,
+}
+
+fn play(seed: u64) -> ProfessionSnapshot {
     let mut rng = XorShift64::new(seed);
     let mut s = ProfessionSession::new_eastbrook();
     let node = node_by_id(NodeId(1)).unwrap();
@@ -19,14 +30,20 @@ fn play(seed: u64) -> (Vec<u16>, u32, u16) {
         s.advance(ticks_from_seconds(craft_cast_seconds(0)));
         s.complete_ready(&mut rng).unwrap();
     }
-    (
-        ProfessionId::ALL
+    ProfessionSnapshot {
+        inventory_counts: ITEM_DEFS
             .iter()
-            .map(|id| s.skills.get(*id))
+            .map(|def| (def.id, s.inventory.count(def.id)))
             .collect(),
-        s.gold.copper,
-        s.inventory.count(ItemId::CopperOre),
-    )
+        gold_copper: s.gold.copper,
+        skills: ProfessionId::ALL
+            .iter()
+            .map(|id| (*id, s.skills.get(*id)))
+            .collect(),
+        tick: s.tick,
+        last_deny: s.last_deny,
+        last_masterwork: s.last_masterwork,
+    }
 }
 
 #[test]

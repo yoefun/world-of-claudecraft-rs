@@ -18,9 +18,7 @@ use super::gathering::{complete_gather, start_gather_node};
 use super::skill::{tier_for_skill, ProfessionSkills};
 use super::skinning::{complete_skin, start_skin};
 use super::tools::{best_tool_tier, profession_for_node};
-use super::types::{
-    Corpse, CorpseId, DenyReason, NodeId, RecipeId, Vec2,
-};
+use super::types::{Corpse, CorpseId, DenyReason, NodeId, RecipeId, Vec2};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ActiveCast {
@@ -168,14 +166,7 @@ impl ProfessionSession {
         }
         record_deny(
             &mut self.last_deny,
-            evaluate_craft_admission(
-                recipe,
-                count,
-                self.pos,
-                &self.inventory,
-                &self.gold,
-                false,
-            ),
+            evaluate_craft_admission(recipe, count, self.pos, &self.inventory, &self.gold, false),
         )?;
         let recipe_def = recipe_by_id(recipe).expect("admission checked recipe");
         let duration = ticks_from_seconds(craft_cast_seconds(recipe_def.skill_req));
@@ -234,6 +225,7 @@ impl ProfessionSession {
             Some(c) if self.tick >= complete_tick_of(c) => c.clone(),
             _ => return Ok(()),
         };
+        self.cast = None;
 
         match cast {
             ActiveCast::Gather { node, .. } => {
@@ -255,7 +247,6 @@ impl ProfessionSession {
                     ),
                 )?;
                 self.node_ready.insert(node, grant.next_ready_tick);
-                self.cast = None;
             }
             ActiveCast::Skin { corpse, .. } => {
                 let corpse_state = match self.corpses.get_mut(&corpse) {
@@ -272,12 +263,9 @@ impl ProfessionSession {
                         rng,
                     ),
                 )?;
-                self.cast = None;
             }
             ActiveCast::Craft {
-                recipe,
-                remaining,
-                ..
+                recipe, remaining, ..
             } => {
                 record_deny(
                     &mut self.last_deny,
@@ -313,21 +301,13 @@ impl ProfessionSession {
                         remaining: next_remaining,
                         complete_tick: self.tick + u64::from(duration),
                     });
-                } else {
-                    self.cast = None;
                 }
             }
             ActiveCast::Disenchant { instance, .. } => {
                 record_deny(
                     &mut self.last_deny,
-                    complete_disenchant(
-                        instance,
-                        &mut self.inventory,
-                        &mut self.skills,
-                        false,
-                    ),
+                    complete_disenchant(instance, &mut self.inventory, &mut self.skills, false),
                 )?;
-                self.cast = None;
             }
             ActiveCast::ApplyEnchant {
                 instance,
@@ -346,7 +326,6 @@ impl ProfessionSession {
                         false,
                     ),
                 )?;
-                self.cast = None;
             }
         }
         self.last_deny = None;
@@ -395,8 +374,8 @@ fn gather_duration_ticks(
 ) -> u32 {
     let tool_tier = best_tool_tier(inv, profession).unwrap_or(0);
     let tool_tiers_above = tool_tier.saturating_sub(target_tier);
-    let proficiency_bands_above = tier_for_skill(skills.get(profession))
-        .saturating_sub(tier_for_skill(skill_req));
+    let proficiency_bands_above =
+        tier_for_skill(skills.get(profession)).saturating_sub(tier_for_skill(skill_req));
     ticks_from_seconds(gather_cast_seconds(
         tool_tiers_above,
         proficiency_bands_above,
@@ -450,5 +429,32 @@ mod tests {
         assert!(session.cast.is_none());
         assert_eq!(session.skills.get(ProfessionId::Mining), 2);
         assert!(session.inventory.count(ItemId::CopperOre) > 0);
+    }
+
+    #[test]
+    fn failed_skin_completion_clears_cast() {
+        let mut session = ProfessionSession::new_eastbrook();
+        let corpse_id = CorpseId(1);
+        let corpse = Corpse {
+            id: corpse_id,
+            pos: Vec2 { x: 4.0, z: 4.0 },
+            has_hide: true,
+            skinned: false,
+            tier: 1,
+        };
+        session.pos = corpse.pos;
+        session.corpses.insert(corpse_id, corpse);
+        session.start_skin(corpse_id).unwrap();
+        session.advance(60);
+        session.corpses.remove(&corpse_id);
+
+        let mut rng = ScriptedRng::from_seq(&[]);
+        let err = session.complete_ready(&mut rng).unwrap_err();
+
+        assert_eq!(err, DenyReason::CorpseGone);
+        assert!(session.cast.is_none());
+        let node = node_by_id(NodeId(1)).unwrap();
+        session.pos = node.pos;
+        session.start_gather(NodeId(1)).unwrap();
     }
 }
