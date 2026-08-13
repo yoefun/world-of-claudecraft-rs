@@ -1,8 +1,20 @@
 # Parity status
 
 **Current rewrite:** `1.13.0` / `gear-slots`.  
+**Next:** `1.14.0` / `mounts` (planned) — [`../superpowers/specs/2026-08-13-mounts-riding-design.md`](../superpowers/specs/2026-08-13-mounts-riding-design.md).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`.
+
+## Mounts / riding (`mounts`) — planned
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Riding ranks | planned | Apprentice L2 / Journeyman L5 / Expert L8 at Ross |
+| Mount items | planned | Pony 1.6, steed 2.0, gryphon flying 2.0; learn-on-use |
+| **V** toggle | planned | Replaces free travel flight; `fly_toggle` wire bit reused |
+| Combat / instance dismount | planned | Hit, ability, death, dungeon/delve, swim |
+| Persist | planned | Additive completion JSON; load dismounted |
+| Protocol | planned | Rev 8; `TrainRiding` + `mounted` / `riding_rank` |
 
 ## Gear slots (`gear-slots`) — done
 
