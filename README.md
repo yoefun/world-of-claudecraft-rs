@@ -18,7 +18,7 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
 - Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; Eastbrook Crypt + Mirefen Barrow + 3-room delve
 - Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), vendor buyback, repair, trainers, hearth, combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
-- Guilds: create (**J**), invite (**V**), ranks, MOTD (`/motd`), guild + officer (`/o`) chat, transfer (**T**), leave (**Q**), disband (**D**); persist across relog
+- Guilds: **J** panel types the guild name / chat / `/motd` / `/o` officer chat; verbs are Ctrl+key (invite **Ctrl+V**, kick **Ctrl+K**, ranks **Ctrl+P**/**Ctrl+O**, transfer **Ctrl+T**, leave **Ctrl+Q**, disband **Ctrl+D**); persist across relog
 - Hub reputation (Watch / Circle / Ferry / Highwatch); Friendly vendor discounts and gated Watch Signet; **C** sheet lists standing
 - Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)

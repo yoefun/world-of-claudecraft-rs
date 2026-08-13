@@ -16,7 +16,7 @@ Plan: [`../superpowers/plans/2026-08-13-guilds.md`](../superpowers/plans/2026-08
 | guild + officer chat | done | member-only fan-out |
 | MOTD | done | officer+; max 240 |
 | persist | done | `RealmEconomy.guilds` |
-| client J panel | done | compose + target V |
+| client J panel | done | compose types A-Z/digits/`/`; verbs are Ctrl+key |
 | protocol | done | rev 9 |
 | Guild bank / calendar / friends | n/a | Explicit non-goals |
 

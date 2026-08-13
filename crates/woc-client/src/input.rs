@@ -109,33 +109,35 @@ pub(crate) fn collect_intent(
         clear_target,
         ..default()
     };
-    let mut mx = 0.0;
-    let mut mz = 0.0;
-    if keys.pressed(KeyCode::KeyW) {
-        mz += 1.0;
-    }
-    if keys.pressed(KeyCode::KeyS) {
-        mz -= 1.0;
-    }
-    if !ui.show_guild {
+    // The guild panel's compose line owns the keyboard while it is open.
+    let typing = ui.show_guild;
+    if !typing {
+        let mut mx = 0.0;
+        let mut mz = 0.0;
+        if keys.pressed(KeyCode::KeyW) {
+            mz += 1.0;
+        }
+        if keys.pressed(KeyCode::KeyS) {
+            mz -= 1.0;
+        }
         if keys.pressed(KeyCode::KeyA) {
             mx -= 1.0;
         }
         if keys.pressed(KeyCode::KeyD) {
             mx += 1.0;
         }
-    }
-    intent.move_x = mx;
-    intent.move_z = mz;
-    if !ui.show_guild && (keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space)) {
-        // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
-        intent.jump = true;
-    }
-    if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
-        intent.descend = true;
-    }
-    if keys.just_pressed(KeyCode::KeyV) && !ui.show_bags && !ui.show_guild {
-        intent.fly_toggle = true;
+        intent.move_x = mx;
+        intent.move_z = mz;
+        if keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space) {
+            // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
+            intent.jump = true;
+        }
+        if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
+            intent.descend = true;
+        }
+        if keys.just_pressed(KeyCode::KeyV) && !ui.show_bags {
+            intent.fly_toggle = true;
+        }
     }
     // Digit keys: talents, loot rolls, bank withdraw, or abilities.
     let loot_rolling = host.snapshot.pending_loot.iter().any(|p| !p.rolled);
@@ -168,8 +170,9 @@ pub(crate) fn collect_intent(
     let form_f = matches!(class_id, "warrior" | "shaman" | "druid")
         && keys.just_pressed(KeyCode::KeyF)
         && !bags_consume_f;
-    if mouse.just_pressed(MouseButton::Left)
-        || (keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f)
+    if !typing
+        && (mouse.just_pressed(MouseButton::Left)
+            || (keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f))
     {
         intent.attack = true;
         host.local_auto_attack = true;
@@ -327,7 +330,7 @@ pub(crate) fn handle_interact_keys(
     mut host: ResMut<GameHost>,
     mut ui: ResMut<UiFlags>,
 ) {
-    if keys.just_pressed(KeyCode::KeyB) {
+    if keys.just_pressed(KeyCode::KeyB) && !ui.show_guild {
         ui.show_bags = !ui.show_bags;
     }
     if keys.just_pressed(KeyCode::KeyL) && !ui.show_market && !ui.show_guild {
@@ -397,6 +400,13 @@ pub(crate) fn handle_interact_keys(
     }
     if keys.just_pressed(KeyCode::Escape) && ui.show_map {
         ui.show_map = false;
+    }
+
+    // Compose owns the keyboard while the guild panel is open: no gameplay,
+    // no other panel's hotkeys.
+    if ui.show_guild {
+        handle_guild_panel_keys(&keys, &mut host, &mut ui);
+        return;
     }
 
     let player_id = host.snapshot.player_id;
@@ -641,84 +651,6 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.recent_toasts
                 .push(("You have no listings.".into(), 2.0));
-        }
-    }
-
-    if ui.show_guild {
-        if keys.just_pressed(KeyCode::Enter) {
-            let compose = ui.guild_compose.clone();
-            let msg = if host.snapshot.guild_invite.is_some() {
-                WsClientMsg::GuildAccept
-            } else if host.snapshot.guild.is_none() {
-                WsClientMsg::GuildCreate {
-                    name: compose.trim().to_string(),
-                }
-            } else if let Some(rest) = compose.strip_prefix("/motd ") {
-                WsClientMsg::GuildSetMotd {
-                    text: rest.to_string(),
-                }
-            } else if let Some(rest) = compose.strip_prefix("/o ") {
-                WsClientMsg::Chat {
-                    channel: "officer".into(),
-                    text: rest.to_string(),
-                }
-            } else {
-                WsClientMsg::Chat {
-                    channel: "guild".into(),
-                    text: compose,
-                }
-            };
-            host.guild_msg(msg);
-            ui.guild_compose.clear();
-        }
-        if keys.just_pressed(KeyCode::KeyX) && host.snapshot.guild_invite.is_some() {
-            host.guild_msg(WsClientMsg::GuildDecline);
-        }
-        if keys.just_pressed(KeyCode::KeyQ) && host.snapshot.guild.is_some() {
-            host.guild_msg(WsClientMsg::GuildLeave);
-        }
-        if keys.just_pressed(KeyCode::KeyV) && host.snapshot.guild.is_some() {
-            if let Some(name) = targeted_player_name(&host.snapshot) {
-                host.guild_msg(WsClientMsg::GuildInvite { name });
-            }
-        }
-        if let Some(g) = host.snapshot.guild.as_ref() {
-            let rank = g.rank.clone();
-            if let Some(name) = targeted_player_name(&host.snapshot) {
-                if keys.just_pressed(KeyCode::KeyK) && (rank == "leader" || rank == "officer") {
-                    host.guild_msg(WsClientMsg::GuildKick { name: name.clone() });
-                }
-                if rank == "leader" {
-                    if keys.just_pressed(KeyCode::KeyP) {
-                        host.guild_msg(WsClientMsg::GuildSetRank {
-                            name: name.clone(),
-                            rank: "officer".into(),
-                        });
-                    }
-                    if keys.just_pressed(KeyCode::KeyO) {
-                        host.guild_msg(WsClientMsg::GuildSetRank {
-                            name: name.clone(),
-                            rank: "member".into(),
-                        });
-                    }
-                    if keys.just_pressed(KeyCode::KeyT) {
-                        host.guild_msg(WsClientMsg::GuildTransferLeader { name });
-                    }
-                }
-            }
-            if rank == "leader" && keys.just_pressed(KeyCode::KeyD) {
-                host.guild_msg(WsClientMsg::GuildDisband);
-            }
-        }
-        if keys.just_pressed(KeyCode::Backspace) {
-            ui.guild_compose.pop();
-        }
-        for key in guild_compose_keys() {
-            if keys.just_pressed(key) {
-                if let Some(ch) = guild_compose_char_from_key(key) {
-                    ui.guild_compose.push(ch);
-                }
-            }
         }
     }
 
@@ -1031,51 +963,179 @@ fn targeted_player_name(snap: &TickSnapshot) -> Option<String> {
     }
 }
 
-fn guild_compose_keys() -> [KeyCode; 18] {
-    [
-        KeyCode::KeyA,
-        KeyCode::KeyB,
-        KeyCode::KeyC,
-        KeyCode::KeyE,
-        KeyCode::KeyF,
-        KeyCode::KeyG,
-        KeyCode::KeyH,
-        KeyCode::KeyI,
-        KeyCode::KeyL,
-        KeyCode::KeyM,
-        KeyCode::KeyN,
-        KeyCode::KeyR,
-        KeyCode::KeyS,
-        KeyCode::KeyU,
-        KeyCode::KeyW,
-        KeyCode::KeyY,
-        KeyCode::KeyZ,
-        KeyCode::Space,
-    ]
+/// Guild panel keys: Ctrl+letter runs a verb, everything else composes text.
+/// `J` is not a compose key — it still toggles the panel shut.
+fn handle_guild_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui: &mut UiFlags) {
+    if keys.just_pressed(KeyCode::Enter) {
+        let compose = ui.guild_compose.clone();
+        let msg = if host.snapshot.guild_invite.is_some() {
+            WsClientMsg::GuildAccept
+        } else if host.snapshot.guild.is_none() {
+            WsClientMsg::GuildCreate {
+                name: compose.trim().to_string(),
+            }
+        } else if let Some(rest) = compose.strip_prefix("/motd ") {
+            WsClientMsg::GuildSetMotd {
+                text: rest.to_string(),
+            }
+        } else if let Some(rest) = compose.strip_prefix("/o ") {
+            WsClientMsg::Chat {
+                channel: "officer".into(),
+                text: rest.to_string(),
+            }
+        } else {
+            WsClientMsg::Chat {
+                channel: "guild".into(),
+                text: compose,
+            }
+        };
+        host.guild_msg(msg);
+        ui.guild_compose.clear();
+        return;
+    }
+
+    if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight) {
+        if keys.just_pressed(KeyCode::KeyX) && host.snapshot.guild_invite.is_some() {
+            host.guild_msg(WsClientMsg::GuildDecline);
+        }
+        if keys.just_pressed(KeyCode::KeyQ) && host.snapshot.guild.is_some() {
+            host.guild_msg(WsClientMsg::GuildLeave);
+        }
+        if keys.just_pressed(KeyCode::KeyV) && host.snapshot.guild.is_some() {
+            if let Some(name) = targeted_player_name(&host.snapshot) {
+                host.guild_msg(WsClientMsg::GuildInvite { name });
+            }
+        }
+        if let Some(g) = host.snapshot.guild.as_ref() {
+            let rank = g.rank.clone();
+            if let Some(name) = targeted_player_name(&host.snapshot) {
+                if keys.just_pressed(KeyCode::KeyK) && (rank == "leader" || rank == "officer") {
+                    host.guild_msg(WsClientMsg::GuildKick { name: name.clone() });
+                }
+                if rank == "leader" {
+                    if keys.just_pressed(KeyCode::KeyP) {
+                        host.guild_msg(WsClientMsg::GuildSetRank {
+                            name: name.clone(),
+                            rank: "officer".into(),
+                        });
+                    }
+                    if keys.just_pressed(KeyCode::KeyO) {
+                        host.guild_msg(WsClientMsg::GuildSetRank {
+                            name: name.clone(),
+                            rank: "member".into(),
+                        });
+                    }
+                    if keys.just_pressed(KeyCode::KeyT) {
+                        host.guild_msg(WsClientMsg::GuildTransferLeader { name });
+                    }
+                }
+            }
+            if rank == "leader" && keys.just_pressed(KeyCode::KeyD) {
+                host.guild_msg(WsClientMsg::GuildDisband);
+            }
+        }
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::Backspace) {
+        ui.guild_compose.pop();
+    }
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    for key in GUILD_COMPOSE_KEYS {
+        if keys.just_pressed(key) {
+            if let Some(ch) = guild_compose_char_from_key(key, shift) {
+                ui.guild_compose.push(ch);
+            }
+        }
+    }
 }
 
-fn guild_compose_char_from_key(key: KeyCode) -> Option<char> {
-    match key {
-        KeyCode::KeyA => Some('a'),
-        KeyCode::KeyB => Some('b'),
-        KeyCode::KeyC => Some('c'),
-        KeyCode::KeyE => Some('e'),
-        KeyCode::KeyF => Some('f'),
-        KeyCode::KeyG => Some('g'),
-        KeyCode::KeyH => Some('h'),
-        KeyCode::KeyI => Some('i'),
-        KeyCode::KeyL => Some('l'),
-        KeyCode::KeyM => Some('m'),
-        KeyCode::KeyN => Some('n'),
-        KeyCode::KeyR => Some('r'),
-        KeyCode::KeyS => Some('s'),
-        KeyCode::KeyU => Some('u'),
-        KeyCode::KeyW => Some('w'),
-        KeyCode::KeyY => Some('y'),
-        KeyCode::KeyZ => Some('z'),
-        KeyCode::Space => Some(' '),
-        _ => None,
-    }
+const GUILD_COMPOSE_KEYS: [KeyCode; 39] = [
+    KeyCode::KeyA,
+    KeyCode::KeyB,
+    KeyCode::KeyC,
+    KeyCode::KeyD,
+    KeyCode::KeyE,
+    KeyCode::KeyF,
+    KeyCode::KeyG,
+    KeyCode::KeyH,
+    KeyCode::KeyI,
+    KeyCode::KeyK,
+    KeyCode::KeyL,
+    KeyCode::KeyM,
+    KeyCode::KeyN,
+    KeyCode::KeyO,
+    KeyCode::KeyP,
+    KeyCode::KeyQ,
+    KeyCode::KeyR,
+    KeyCode::KeyS,
+    KeyCode::KeyT,
+    KeyCode::KeyU,
+    KeyCode::KeyV,
+    KeyCode::KeyW,
+    KeyCode::KeyX,
+    KeyCode::KeyY,
+    KeyCode::KeyZ,
+    KeyCode::Space,
+    KeyCode::Slash,
+    KeyCode::Period,
+    KeyCode::Minus,
+    KeyCode::Digit0,
+    KeyCode::Digit1,
+    KeyCode::Digit2,
+    KeyCode::Digit3,
+    KeyCode::Digit4,
+    KeyCode::Digit5,
+    KeyCode::Digit6,
+    KeyCode::Digit7,
+    KeyCode::Digit8,
+    KeyCode::Digit9,
+];
+
+fn guild_compose_char_from_key(key: KeyCode, shift: bool) -> Option<char> {
+    let ch = match key {
+        KeyCode::KeyA => 'a',
+        KeyCode::KeyB => 'b',
+        KeyCode::KeyC => 'c',
+        KeyCode::KeyD => 'd',
+        KeyCode::KeyE => 'e',
+        KeyCode::KeyF => 'f',
+        KeyCode::KeyG => 'g',
+        KeyCode::KeyH => 'h',
+        KeyCode::KeyI => 'i',
+        KeyCode::KeyK => 'k',
+        KeyCode::KeyL => 'l',
+        KeyCode::KeyM => 'm',
+        KeyCode::KeyN => 'n',
+        KeyCode::KeyO => 'o',
+        KeyCode::KeyP => 'p',
+        KeyCode::KeyQ => 'q',
+        KeyCode::KeyR => 'r',
+        KeyCode::KeyS => 's',
+        KeyCode::KeyT => 't',
+        KeyCode::KeyU => 'u',
+        KeyCode::KeyV => 'v',
+        KeyCode::KeyW => 'w',
+        KeyCode::KeyX => 'x',
+        KeyCode::KeyY => 'y',
+        KeyCode::KeyZ => 'z',
+        KeyCode::Space => ' ',
+        KeyCode::Slash => '/',
+        KeyCode::Period => '.',
+        KeyCode::Minus => '-',
+        KeyCode::Digit0 => '0',
+        KeyCode::Digit1 => '1',
+        KeyCode::Digit2 => '2',
+        KeyCode::Digit3 => '3',
+        KeyCode::Digit4 => '4',
+        KeyCode::Digit5 => '5',
+        KeyCode::Digit6 => '6',
+        KeyCode::Digit7 => '7',
+        KeyCode::Digit8 => '8',
+        KeyCode::Digit9 => '9',
+        _ => return None,
+    };
+    Some(if shift { ch.to_ascii_uppercase() } else { ch })
 }
 
 #[cfg(test)]
@@ -1268,6 +1328,83 @@ mod tests {
         snap.target_id = Some(first);
         let second = tab_cycle_from_snapshot(&snap, 0.0).expect("second");
         assert_ne!(first, second);
+    }
+
+    fn compose(keys: &[(KeyCode, bool)]) -> String {
+        keys.iter()
+            .filter_map(|&(key, shift)| guild_compose_char_from_key(key, shift))
+            .collect()
+    }
+
+    #[test]
+    fn compose_alphabet_types_guild_name_and_slash_commands() {
+        assert_eq!(
+            compose(&[
+                (KeyCode::KeyV, true),
+                (KeyCode::KeyA, false),
+                (KeyCode::KeyL, false),
+                (KeyCode::KeyE, false),
+                (KeyCode::Space, false),
+                (KeyCode::KeyW, true),
+                (KeyCode::KeyA, false),
+                (KeyCode::KeyT, false),
+                (KeyCode::KeyC, false),
+                (KeyCode::KeyH, false),
+            ]),
+            "Vale Watch"
+        );
+        assert_eq!(
+            compose(&[
+                (KeyCode::Slash, false),
+                (KeyCode::KeyM, false),
+                (KeyCode::KeyO, false),
+                (KeyCode::KeyT, false),
+                (KeyCode::KeyD, false),
+                (KeyCode::Space, false),
+                (KeyCode::KeyR, false),
+                (KeyCode::KeyA, false),
+                (KeyCode::KeyI, false),
+                (KeyCode::KeyD, false),
+                (KeyCode::Space, false),
+                (KeyCode::Digit8, false),
+            ]),
+            "/motd raid 8"
+        );
+        assert_eq!(
+            compose(&[
+                (KeyCode::Slash, false),
+                (KeyCode::KeyO, false),
+                (KeyCode::Space, false),
+                (KeyCode::KeyH, false),
+                (KeyCode::KeyI, false),
+            ]),
+            "/o hi"
+        );
+    }
+
+    #[test]
+    fn compose_keys_cover_every_typed_char_except_panel_toggle() {
+        for key in GUILD_COMPOSE_KEYS {
+            assert!(
+                guild_compose_char_from_key(key, false).is_some(),
+                "{key:?} is listed but types nothing"
+            );
+        }
+        // J toggles the panel, so it must never reach the compose line.
+        assert!(!GUILD_COMPOSE_KEYS.contains(&KeyCode::KeyJ));
+        // Guild verbs are Ctrl+letter; their letters still type on their own.
+        for key in [
+            KeyCode::KeyV,
+            KeyCode::KeyQ,
+            KeyCode::KeyX,
+            KeyCode::KeyK,
+            KeyCode::KeyP,
+            KeyCode::KeyO,
+            KeyCode::KeyT,
+            KeyCode::KeyD,
+        ] {
+            assert!(GUILD_COMPOSE_KEYS.contains(&key), "{key:?} must type");
+        }
     }
 
     #[test]

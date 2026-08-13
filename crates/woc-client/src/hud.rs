@@ -586,7 +586,7 @@ fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
     let mut lines = vec!["Guild  [J]".into()];
     if let Some(inv) = &snap.guild_invite {
         lines.push(format!(
-            "{} invited you to <{}>. Enter accept · X decline",
+            "{} invited you to <{}>. Enter accept · Ctrl+X decline",
             inv.from_name, inv.guild_name
         ));
     }
@@ -599,11 +599,15 @@ fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
             let star = if m.online { "*" } else { " " };
             lines.push(format!("{star}{}  {}  {}", m.name, m.rank, m.level));
         }
-        lines.push("Enter chat · /o officer · /motd · V invite target · Q leave".into());
+        lines.push("Type to chat · /o officer · /motd text · Enter send".into());
+        lines.push("Ctrl+V invite target · Ctrl+Q leave".into());
         if g.rank == "leader" {
-            lines.push("P officer · O member · T transfer · D disband · K kick".into());
+            lines.push(
+                "Ctrl+P officer · Ctrl+O member · Ctrl+T transfer · Ctrl+D disband · Ctrl+K kick"
+                    .into(),
+            );
         } else if g.rank == "officer" {
-            lines.push("V invite · K kick".into());
+            lines.push("Ctrl+V invite · Ctrl+K kick".into());
         }
     } else if snap.guild_invite.is_none() {
         lines.push("Type a name, Enter to found a guild (3-24 letters).".into());
