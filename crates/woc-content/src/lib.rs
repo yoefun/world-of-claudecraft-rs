@@ -648,7 +648,10 @@ mod tests {
         assert!(ability("warden_smash").is_some());
         assert!(ability("terror_slam").is_some());
         assert_eq!(mob("scarred_wolf").unwrap().ability_id, Some("wolf_bite"));
-        assert_eq!(mob("crypt_warden").unwrap().ability_id, Some("warden_smash"));
+        assert_eq!(
+            mob("crypt_warden").unwrap().ability_id,
+            Some("warden_smash")
+        );
         assert_eq!(mob("mire_terror").unwrap().ability_id, Some("terror_slam"));
     }
 
@@ -1082,7 +1085,10 @@ mod tests {
                 recipe.id
             );
             if let Some(station_id) = recipe.station {
-                assert!(station(station_id).is_some(), "missing station {station_id}");
+                assert!(
+                    station(station_id).is_some(),
+                    "missing station {station_id}"
+                );
             }
         }
     }
@@ -1149,6 +1155,9 @@ mod tests {
         assert_eq!(PROFESSION_ENCHANTS.len(), 3);
         assert!(profession_enchant("weapon_minor_might").is_some());
         assert!(enchant("weapon_minor_might").is_some());
-        assert_eq!(disenchant_yield("copper_shortsword")[0].item_id, "arcane_dust");
+        assert_eq!(
+            disenchant_yield("copper_shortsword")[0].item_id,
+            "arcane_dust"
+        );
     }
 }
