@@ -53,6 +53,13 @@ pub enum EquipSlot {
     Neck,
     Finger,
     Finger2,
+    Shoulder,
+    Back,
+    Wrist,
+    Hands,
+    Waist,
+    Trinket,
+    Trinket2,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -288,6 +295,8 @@ pub struct InvSlotSnapshot {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -308,7 +317,23 @@ pub struct EquipmentSnapshot {
     #[serde(default)]
     pub finger2: Option<String>,
     #[serde(default)]
+    pub shoulder: Option<String>,
+    #[serde(default)]
+    pub back: Option<String>,
+    #[serde(default)]
+    pub wrist: Option<String>,
+    #[serde(default)]
+    pub hands: Option<String>,
+    #[serde(default)]
+    pub waist: Option<String>,
+    #[serde(default)]
+    pub trinket: Option<String>,
+    #[serde(default)]
+    pub trinket2: Option<String>,
+    #[serde(default)]
     pub main_hand_enchant: Option<String>,
+    #[serde(default)]
+    pub off_hand_enchant: Option<String>,
     #[serde(default)]
     pub main_hand_durability: Option<u32>,
     #[serde(default)]
@@ -321,6 +346,48 @@ pub struct EquipmentSnapshot {
     pub legs_durability: Option<u32>,
     #[serde(default)]
     pub feet_durability: Option<u32>,
+    #[serde(default)]
+    pub shoulder_durability: Option<u32>,
+    #[serde(default)]
+    pub back_durability: Option<u32>,
+    #[serde(default)]
+    pub wrist_durability: Option<u32>,
+    #[serde(default)]
+    pub hands_durability: Option<u32>,
+    #[serde(default)]
+    pub waist_durability: Option<u32>,
+    #[serde(default)]
+    pub main_hand_quality: Option<String>,
+    #[serde(default)]
+    pub off_hand_quality: Option<String>,
+    #[serde(default)]
+    pub head_quality: Option<String>,
+    #[serde(default)]
+    pub chest_quality: Option<String>,
+    #[serde(default)]
+    pub legs_quality: Option<String>,
+    #[serde(default)]
+    pub feet_quality: Option<String>,
+    #[serde(default)]
+    pub neck_quality: Option<String>,
+    #[serde(default)]
+    pub finger_quality: Option<String>,
+    #[serde(default)]
+    pub finger2_quality: Option<String>,
+    #[serde(default)]
+    pub shoulder_quality: Option<String>,
+    #[serde(default)]
+    pub back_quality: Option<String>,
+    #[serde(default)]
+    pub wrist_quality: Option<String>,
+    #[serde(default)]
+    pub hands_quality: Option<String>,
+    #[serde(default)]
+    pub waist_quality: Option<String>,
+    #[serde(default)]
+    pub trinket_quality: Option<String>,
+    #[serde(default)]
+    pub trinket2_quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1403,9 +1470,27 @@ mod tests {
             serde_json::from_str(r#"{"main_hand":null,"off_hand":null,"chest":null}"#).unwrap();
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
+        assert!(eq.off_hand_enchant.is_none());
+        assert!(eq.back.is_none());
         let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
+        assert!(slot.quality.is_none());
         assert_eq!(PROTOCOL_REV, 8);
+    }
+
+    #[test]
+    fn unequip_shoulder_roundtrip() {
+        let a = InteractAction::Unequip {
+            equip_slot: EquipSlot::Shoulder,
+        };
+        let v = serde_json::to_value(&a).unwrap();
+        let back: InteractAction = serde_json::from_value(v).unwrap();
+        assert!(matches!(
+            back,
+            InteractAction::Unequip {
+                equip_slot: EquipSlot::Shoulder
+            }
+        ));
     }
 
     #[test]
