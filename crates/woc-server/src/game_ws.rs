@@ -270,14 +270,102 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     }
                 }
             }
-            WsClientMsg::PartyDecline
-            | WsClientMsg::PartyKick { .. }
-            | WsClientMsg::PartyPromote { .. }
-            | WsClientMsg::PartyDisband
-            | WsClientMsg::PartyReadyCheck
-            | WsClientMsg::PartyReadyRespond { .. }
-            | WsClientMsg::ConvertToRaid
-            | WsClientMsg::ConvertToParty => {}
+            WsClientMsg::PartyDecline => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_decline(b.player_id);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyKick { name } => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_kick(b.player_id, &name);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyPromote { name } => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_promote(b.player_id, &name);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyDisband => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_disband(b.player_id);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyReadyCheck => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_ready_check(b.player_id);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::PartyReadyRespond { ready } => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.party_ready_respond(b.player_id, ready);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::ConvertToRaid => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.convert_to_raid(b.player_id);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
+            WsClientMsg::ConvertToParty => {
+                if let Some(b) = &binding {
+                    let mut realm = shared.realm.lock().await;
+                    let outs = realm.sim.convert_to_party(b.player_id);
+                    drop(realm);
+                    for msg in outs {
+                        let _ = shared
+                            .notices
+                            .send(serde_json::to_string(&msg).unwrap_or_default());
+                    }
+                }
+            }
             WsClientMsg::Chat { channel, text } => {
                 if let Some(b) = &binding {
                     let mut realm = shared.realm.lock().await;
