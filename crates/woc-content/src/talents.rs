@@ -277,6 +277,69 @@ pub fn talents_for_class(class_id: &str) -> impl Iterator<Item = &'static Talent
         .filter(move |t| t.class_id == class_id || t.class_id == "*")
 }
 
+/// Points that must be spent in lower tiers before a talent of `tier` unlocks.
+/// Tier 1 is free; each subsequent tier needs `POINTS_PER_TIER` in prior tiers.
+pub const POINTS_PER_TIER: u32 = 5;
+
+/// Human-readable one-line effect for a talent rank (or per-rank if `rank` is 0).
+pub fn format_talent_effect(def: &TalentDef, rank: u32) -> String {
+    let r = rank.max(1) as f32;
+    let per = def.effect_value;
+    match def.effect {
+        "damage_pct" => format!(
+            "+{:.0}% damage{}",
+            per * r * 100.0,
+            if rank == 0 { "/rank" } else { "" }
+        ),
+        "max_hp_pct" => format!(
+            "+{:.0}% max HP{}",
+            per * r * 100.0,
+            if rank == 0 { "/rank" } else { "" }
+        ),
+        "armor_pct" => format!(
+            "+{:.0}% armor{}",
+            per * r * 100.0,
+            if rank == 0 { "/rank" } else { "" }
+        ),
+        "armor_flat" => format!(
+            "+{:.0} armor{}",
+            per * r,
+            if rank == 0 { "/rank" } else { "" }
+        ),
+        "resource_pct" => {
+            format!(
+                "+{:.0}% resource{}",
+                per * r * 100.0,
+                if rank == 0 { "/rank" } else { "" }
+            )
+        }
+        other => format!("{other} ×{r}"),
+    }
+}
+
+/// Total points spent in talents with `tier < max_tier` for `class_id`.
+pub fn points_spent_below_tier(class_id: &str, ranks: &[(String, u32)], max_tier: u32) -> u32 {
+    ranks
+        .iter()
+        .filter_map(|(id, rank)| {
+            let def = talent(id)?;
+            if def.class_id != class_id && def.class_id != "*" {
+                return None;
+            }
+            (def.tier < max_tier).then_some(*rank)
+        })
+        .sum()
+}
+
+/// Whether `def` is unlocked given current talent ranks for the player's class.
+pub fn talent_tier_unlocked(class_id: &str, ranks: &[(String, u32)], def: &TalentDef) -> bool {
+    if def.tier <= 1 {
+        return true;
+    }
+    let needed = (def.tier - 1) * POINTS_PER_TIER;
+    points_spent_below_tier(class_id, ranks, def.tier) >= needed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,5 +386,18 @@ mod tests {
                 talent.effect
             );
         }
+    }
+
+    #[test]
+    fn tier_two_requires_points_in_tier_one() {
+        let empty: Vec<(String, u32)> = vec![];
+        let tier2 = talents_for_class("warrior")
+            .find(|t| t.tier == 2)
+            .expect("warrior tier 2");
+        assert!(!talent_tier_unlocked("warrior", &empty, tier2));
+
+        let ranks = vec![("warrior_cruelty".into(), POINTS_PER_TIER)];
+        assert!(talent_tier_unlocked("warrior", &ranks, tier2));
+        assert!(format_talent_effect(tier2, 1).contains("HP"));
     }
 }

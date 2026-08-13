@@ -145,6 +145,12 @@ fn talent_panel_text(snap: &TickSnapshot) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     };
+    let class = snap.progress.class_id.as_str();
+    let ranks: Vec<(String, u32)> = snap
+        .talents
+        .iter()
+        .map(|t| (t.talent_id.clone(), t.rank))
+        .collect();
     let mut lines = vec![
         "Talents [N]".to_string(),
         format!("Zone: {}   Honor: {}", zone_name(snap), snap.honor),
@@ -152,17 +158,34 @@ fn talent_panel_text(snap: &TickSnapshot) -> String {
         format!("Points: {}", snap.talent_points),
     ];
     let mut any = false;
-    for def in talents_for_class(&snap.progress.class_id) {
+    for (idx, def) in talents_for_class(class).enumerate() {
         any = true;
-        let rank = snap
-            .talents
+        let rank = ranks
             .iter()
-            .find(|rank| rank.talent_id == def.id)
-            .map(|rank| rank.rank)
+            .find(|(id, _)| id == def.id)
+            .map(|(_, r)| *r)
             .unwrap_or(0);
+        let unlocked = woc_content::talent_tier_unlocked(class, &ranks, def);
+        let status = if !unlocked {
+            "LOCKED".to_string()
+        } else if rank >= def.max_rank {
+            "MAX".to_string()
+        } else if snap.talent_points == 0 {
+            "no pts".to_string()
+        } else {
+            "ready".to_string()
+        };
+        let effect = woc_content::format_talent_effect(def, rank.max(1));
         lines.push(format!(
-            "  {} {}/{} — {}",
-            def.id, rank, def.max_rank, def.name
+            "  [{}] T{} {} {}/{} — {} ({}) [{}]",
+            idx + 1,
+            def.tier,
+            def.name,
+            rank,
+            def.max_rank,
+            effect,
+            def.id,
+            status
         ));
     }
     if !any {
@@ -174,8 +197,51 @@ fn talent_panel_text(snap: &TickSnapshot) -> String {
     if !any {
         lines.push("  (none for current class)".into());
     }
-    lines.push("[Enter/Y] Learn first available   [R] Respec".into());
+    lines.push("[1–3] Learn talent   [Y/Enter] first available   [R] Respec".into());
+    lines.push(format!("Bonuses: {}", talent_bonus_summary(snap)));
     lines.join("\n")
+}
+
+fn talent_bonus_summary(snap: &TickSnapshot) -> String {
+    let mut dmg = 0.0f32;
+    let mut hp = 0.0f32;
+    let mut armor_pct = 0.0f32;
+    let mut armor_flat = 0.0f32;
+    let mut resource = 0.0f32;
+    for rank in &snap.talents {
+        let Some(def) = woc_content::talent(&rank.talent_id) else {
+            continue;
+        };
+        let r = rank.rank as f32;
+        match def.effect {
+            "damage_pct" => dmg += def.effect_value * r,
+            "max_hp_pct" => hp += def.effect_value * r,
+            "armor_pct" => armor_pct += def.effect_value * r,
+            "armor_flat" => armor_flat += def.effect_value * r,
+            "resource_pct" => resource += def.effect_value * r,
+            _ => {}
+        }
+    }
+    if dmg == 0.0 && hp == 0.0 && armor_pct == 0.0 && armor_flat == 0.0 && resource == 0.0 {
+        return "none".into();
+    }
+    let mut parts = Vec::new();
+    if dmg > 0.0 {
+        parts.push(format!("+{:.0}% dmg", dmg * 100.0));
+    }
+    if hp > 0.0 {
+        parts.push(format!("+{:.0}% HP", hp * 100.0));
+    }
+    if armor_pct > 0.0 {
+        parts.push(format!("+{:.0}% armor", armor_pct * 100.0));
+    }
+    if armor_flat > 0.0 {
+        parts.push(format!("+{:.0} armor", armor_flat));
+    }
+    if resource > 0.0 {
+        parts.push(format!("+{:.0}% resource", resource * 100.0));
+    }
+    parts.join(" · ")
 }
 
 fn bank_panel_text(snap: &TickSnapshot) -> String {
@@ -514,11 +580,13 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
             snap.progress.copper,
+            snap.talent_points,
+            talent_bonus_summary(snap),
             eq.main_hand.as_deref().unwrap_or("—"),
             eq.off_hand.as_deref().unwrap_or("—"),
             eq.head.as_deref().unwrap_or("—"),
@@ -744,12 +812,15 @@ mod tests {
         let text = talent_panel_text(&chrome_snapshot());
 
         assert!(text.contains("Points: 2"));
-        assert!(text.contains("warrior_cruelty 1/5"));
+        assert!(text.contains("Cruelty"));
+        assert!(text.contains("[1]"));
         assert!(text.contains("Zone: eastbrook"));
         assert!(text.contains("Honor: 12"));
         assert!(text.contains("herbalism 18"));
-        assert!(text.contains("[Enter/Y] Learn"));
+        assert!(text.contains("[1–3] Learn"));
         assert!(text.contains("[R] Respec"));
+        assert!(text.contains("Bonuses:"));
+        assert!(text.contains("+5% dmg") || text.contains("dmg"));
     }
 
     #[test]
