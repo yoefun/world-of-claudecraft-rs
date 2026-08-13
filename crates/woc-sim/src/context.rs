@@ -1,9 +1,8 @@
 //! SimContext seam: emit + World lookup without the full `Sim` facade.
 
-use crate::ecs::components::{Health, Identity};
 use crate::ecs::World;
 use crate::rng::Rng;
-use woc_protocol::{EntityId, EntityKind, SimEvent};
+use woc_protocol::{EntityId, SimEvent};
 
 /// Callback bag held during a tick / interaction.
 ///
@@ -19,18 +18,15 @@ impl<'a> SimContext<'a> {
         self.events.push(event);
     }
 
+    /// Every player in the realm, dead or alive.
     pub fn player_ids(&self) -> Vec<EntityId> {
-        self.world
-            .live_ids()
-            .filter(|&id| {
-                self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
-                    && self
-                        .world
-                        .get::<Health>(id)
-                        .map(|h| h.alive)
-                        .unwrap_or(false)
-            })
-            .collect()
+        crate::ecs::player_ids(self.world)
+    }
+
+    /// Players that are currently alive. Named apart from [`Self::player_ids`]
+    /// so the dead/living distinction is visible at the call site.
+    pub fn living_player_ids(&self) -> Vec<EntityId> {
+        crate::ecs::living_player_ids(self.world)
     }
 }
 

@@ -63,13 +63,10 @@ pub struct Sim {
 }
 
 impl Sim {
-    fn player_ids(&self) -> Vec<EntityId> {
-        self.world
-            .live_ids()
-            .filter(|&id| {
-                self.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Player)
-            })
-            .collect()
+    /// Every player in the realm, dead or alive. See [`crate::ecs::living_player_ids`]
+    /// for the alive-only variant.
+    pub fn player_ids(&self) -> Vec<EntityId> {
+        crate::ecs::player_ids(&self.world)
     }
 
     /// Continuous overworld (all zone bands) with no player. Online sticky realm.
@@ -1028,8 +1025,32 @@ mod tests {
                 message: "hi".into(),
             });
             assert_eq!(ctx.player_ids().len(), 1);
+            assert_eq!(ctx.living_player_ids().len(), 1);
         }
         assert_eq!(sim.events.len(), 1);
+    }
+
+    #[test]
+    fn player_ids_keeps_the_dead_and_living_player_ids_does_not() {
+        let mut sim = Sim::new_eastbrook("Ghost", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        sim.world.get_mut::<Health>(pid).unwrap().alive = false;
+
+        assert_eq!(sim.player_ids(), vec![pid]);
+        let ctx = sim.context();
+        assert_eq!(ctx.player_ids(), vec![pid]);
+        assert!(ctx.living_player_ids().is_empty());
+    }
+
+    #[test]
+    fn player_ids_excludes_npcs_mobs_and_loot_in_a_populated_realm() {
+        let mut sim = Sim::new_eastbrook("Solo", PlayerClass::Warrior);
+        assert!(kind_count(&sim, EntityKind::Npc) >= 3);
+        assert!(kind_count(&sim, EntityKind::Mob) >= 3);
+        let loot_id = sim.world.next_id();
+        crate::ecs::spawn::create_loot(&mut sim.world, loot_id, 0.0, 0.0, 5, None);
+
+        assert_eq!(sim.player_ids(), vec![sim.player_id]);
     }
 
     #[test]

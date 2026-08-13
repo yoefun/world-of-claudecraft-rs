@@ -3,11 +3,13 @@
 //! Not Bevy. Iteration order is spawn/insertion order.
 
 pub mod components;
+pub mod query;
 pub mod sparse;
 pub mod spawn;
 pub mod world;
 
 pub use components::{Identity, LootPile, Transform};
+pub use query::{living_player_ids, player_ids};
 pub use sparse::SparseSet;
 pub use world::World;
 

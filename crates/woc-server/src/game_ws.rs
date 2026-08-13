@@ -319,19 +319,7 @@ async fn ensure_tick_loop(shared: Arc<Shared>) {
                     let (per_player, events, economy_checkpoint) = {
                         let mut realm = shared.realm.lock().await;
                         let (_primary_snap, events) = realm.sim.tick_all();
-                        let players: Vec<EntityId> = realm
-                            .sim
-                            .world
-                            .live_ids()
-                            .filter(|&id| {
-                                realm
-                                    .sim
-                                    .world
-                                    .get::<woc_sim::ecs::components::Identity>(id)
-                                    .map(|i| i.kind)
-                                    == Some(woc_protocol::EntityKind::Player)
-                            })
-                            .collect();
+                        let players: Vec<EntityId> = realm.sim.player_ids();
                         let mut snaps = Vec::new();
                         for pid in players {
                             let snap = WorldHost::snapshot_for(&realm.sim, pid);
