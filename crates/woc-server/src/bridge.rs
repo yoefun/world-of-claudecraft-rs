@@ -412,3 +412,57 @@ fn quests_to_dto(quests: &[QuestProgress]) -> Vec<QuestProgressDto> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn two_member_economy() -> RealmEconomy {
+        RealmEconomy {
+            guilds: vec![GuildDto {
+                id: 7,
+                name: "Vale Watch".into(),
+                motd: "Kill wolves at dusk".into(),
+                motd_set_by: "Alice".into(),
+                members: vec![
+                    GuildMemberDto {
+                        durable_id: "char-alice".into(),
+                        name: "Alice".into(),
+                        class_id: "warrior".into(),
+                        level: 12,
+                        rank: "leader".into(),
+                    },
+                    GuildMemberDto {
+                        durable_id: "char-bob".into(),
+                        name: "Bob".into(),
+                        class_id: "mage".into(),
+                        level: 8,
+                        rank: "officer".into(),
+                    },
+                ],
+            }],
+            next_guild_id: 8,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn guild_roundtrips_through_apply_and_export() {
+        let economy = two_member_economy();
+        let mut sim = Sim::new_empty_eastbrook();
+        apply_economy_to_sim(&mut sim, &economy);
+        let exported = export_economy_from_sim(&sim);
+        assert_eq!(exported.guilds, economy.guilds);
+        assert_eq!(exported.next_guild_id, 8);
+    }
+
+    #[test]
+    fn unknown_rank_loads_as_member() {
+        let mut economy = two_member_economy();
+        economy.guilds[0].members[1].rank = "warlord".into();
+        let mut sim = Sim::new_empty_eastbrook();
+        apply_economy_to_sim(&mut sim, &economy);
+        let exported = export_economy_from_sim(&sim);
+        assert_eq!(exported.guilds[0].members[1].rank, "member");
+    }
+}

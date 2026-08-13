@@ -692,6 +692,67 @@ mod tests {
     }
 
     #[test]
+    fn remove_member_from_economy_promotes_then_deletes() {
+        let mut economy = woc_persist::RealmEconomy {
+            guilds: vec![woc_persist::GuildDto {
+                id: 1,
+                name: "Vale Watch".into(),
+                motd: "Kill wolves at dusk".into(),
+                motd_set_by: "Alice".into(),
+                members: vec![
+                    woc_persist::GuildMemberDto {
+                        durable_id: "char-alice".into(),
+                        name: "Alice".into(),
+                        class_id: "warrior".into(),
+                        level: 5,
+                        rank: "leader".into(),
+                    },
+                    woc_persist::GuildMemberDto {
+                        durable_id: "char-bob".into(),
+                        name: "Bob".into(),
+                        class_id: "mage".into(),
+                        level: 3,
+                        rank: "member".into(),
+                    },
+                ],
+            }],
+            next_guild_id: 2,
+            ..Default::default()
+        };
+        remove_member_from_economy(&mut economy, "char-alice");
+        assert_eq!(economy.guilds.len(), 1);
+        assert_eq!(economy.guilds[0].members.len(), 1);
+        assert_eq!(economy.guilds[0].members[0].durable_id, "char-bob");
+        assert_eq!(economy.guilds[0].members[0].rank, "leader");
+        remove_member_from_economy(&mut economy, "char-bob");
+        assert!(economy.guilds.is_empty(), "empty guild is dropped");
+    }
+
+    #[test]
+    fn cold_and_live_member_removal_agree() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        for (id, durable) in [(a, "char-alice"), (b, "char-bob")] {
+            sim.world
+                .get_mut::<woc_sim::ecs::components::Durable>(id)
+                .unwrap()
+                .durable_id = Some(durable.into());
+        }
+        let _ = sim.guild_create(a, "Vale Watch");
+        let _ = sim.guild_invite(a, "Bob");
+        let _ = sim.guild_accept(b);
+        let mut cold = export_economy_from_sim(&sim);
+        assert_eq!(cold.guilds[0].members.len(), 2);
+
+        remove_member_from_economy(&mut cold, "char-alice");
+        sim.guilds.remove_member("char-alice");
+        let live = export_economy_from_sim(&sim);
+        assert_eq!(live.guilds, cold.guilds);
+        assert_eq!(live.guilds[0].members[0].rank, "leader");
+    }
+
+    #[test]
     fn multi_intent_tick_moves_both_players() {
         let mut realm = Realm::new(Sim::new_empty_eastbrook());
         let a = realm.sim.spawn_player("A", PlayerClass::Warrior).unwrap();
