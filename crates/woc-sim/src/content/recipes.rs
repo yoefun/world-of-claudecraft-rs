@@ -72,6 +72,57 @@ pub const RECIPES: &[RecipeDef] = &[
         item_level_budget: 8,
         station: Some(StationType::Forge),
     },
+    RecipeDef {
+        id: RecipeId::CureLightLeather,
+        profession: ProfessionId::Leatherworking,
+        result: ItemId::CuredLightLeather,
+        result_count: 1,
+        reagents: &[Reagent {
+            item: ItemId::LightLeather,
+            count: 1,
+        }],
+        skill_req: 0,
+        item_level_budget: 1,
+        station: None,
+    },
+    RecipeDef {
+        id: RecipeId::LightLeatherJerkin,
+        profession: ProfessionId::Leatherworking,
+        result: ItemId::LightLeatherJerkin,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::CuredLightLeather,
+                count: 4,
+            },
+            Reagent {
+                item: ItemId::SpoolOfThread,
+                count: 2,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 9,
+        station: Some(StationType::Tannery),
+    },
+    RecipeDef {
+        id: RecipeId::LightLeatherBelt,
+        profession: ProfessionId::Leatherworking,
+        result: ItemId::LightLeatherBelt,
+        result_count: 1,
+        reagents: &[
+            Reagent {
+                item: ItemId::CuredLightLeather,
+                count: 2,
+            },
+            Reagent {
+                item: ItemId::SpoolOfThread,
+                count: 1,
+            },
+        ],
+        skill_req: 0,
+        item_level_budget: 6,
+        station: Some(StationType::Tannery),
+    },
 ];
 
 pub fn recipe_by_id(id: RecipeId) -> Option<&'static RecipeDef> {
@@ -88,12 +139,41 @@ mod tests {
     use crate::professions::types::{DenyReason, ProfessionId, RecipeId, Vec2};
     use crate::rng::ScriptedRng;
 
+    fn field_pos() -> Vec2 {
+        Vec2 { x: 50.0, z: 50.0 }
+    }
+
     fn forge_pos() -> Vec2 {
         Vec2 { x: 0.0, z: 0.0 }
     }
 
     fn tannery_pos() -> Vec2 {
         Vec2 { x: 80.0, z: 40.0 }
+    }
+
+    fn inv_with_light_leather() -> Inventory {
+        let mut inv = Inventory::with_capacity(4);
+        inv.try_add(ItemStack {
+            item: ItemId::LightLeather,
+            count: 1,
+        })
+        .unwrap();
+        inv
+    }
+
+    fn inv_with_jerkin_reagents() -> Inventory {
+        let mut inv = Inventory::with_capacity(8);
+        inv.try_add(ItemStack {
+            item: ItemId::CuredLightLeather,
+            count: 4,
+        })
+        .unwrap();
+        inv.try_add(ItemStack {
+            item: ItemId::SpoolOfThread,
+            count: 2,
+        })
+        .unwrap();
+        inv
     }
 
     fn inv_with_shortsword_reagents() -> Inventory {
@@ -109,6 +189,97 @@ mod tests {
         })
         .unwrap();
         inv
+    }
+
+    #[test]
+    fn curing_hide_is_field_craftable() {
+        let mut inv = inv_with_light_leather();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::CureLightLeather,
+            1,
+            field_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::CureLightLeather,
+            1,
+            field_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(inv.count(ItemId::CuredLightLeather), 1);
+        assert_eq!(inv.count(ItemId::LightLeather), 0);
+        assert_eq!(gold.copper, 98);
+        assert_eq!(skills.get(ProfessionId::Leatherworking), 2);
+    }
+
+    #[test]
+    fn jerkin_requires_tannery() {
+        let inv = inv_with_jerkin_reagents();
+        let gold = Gold { copper: 100 };
+        let err = evaluate_craft_admission(
+            RecipeId::LightLeatherJerkin,
+            1,
+            forge_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err, DenyReason::StationRequired);
+
+        let mut inv = inv_with_jerkin_reagents();
+        let mut gold = Gold { copper: 100 };
+        let mut skills = ProfessionSkills::default();
+        let mut last_masterwork = None;
+        let mut rng = ScriptedRng::from_seq(&[99]);
+
+        evaluate_craft_admission(
+            RecipeId::LightLeatherJerkin,
+            1,
+            tannery_pos(),
+            &inv,
+            &gold,
+            false,
+        )
+        .unwrap();
+
+        let grant = complete_craft(
+            RecipeId::LightLeatherJerkin,
+            1,
+            tannery_pos(),
+            &mut inv,
+            &mut gold,
+            &mut skills,
+            false,
+            &mut last_masterwork,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert_eq!(grant.items_crafted, 1);
+        assert_eq!(grant.gold_spent, 18);
+        assert_eq!(inv.count(ItemId::LightLeatherJerkin), 1);
+        assert_eq!(inv.count(ItemId::CuredLightLeather), 0);
+        assert_eq!(inv.count(ItemId::SpoolOfThread), 0);
+        assert_eq!(gold.copper, 82);
+        assert_eq!(skills.get(ProfessionId::Leatherworking), 2);
     }
 
     #[test]
