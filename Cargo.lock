@@ -6598,6 +6598,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "woc-update"
+version = "1.4.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "woc-version"
 version = "1.4.0"
 dependencies = [
