@@ -1,8 +1,19 @@
 # Parity status
 
-**Current rewrite:** `1.3.0` / `online-hard`.  
+**Current rewrite:** `1.4.0` / `client-compat`.  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Next:** `1.4.0` / `client-compat` version gate, then `1.5.0` / `client-update` packages — [`../superpowers/specs/2026-08-13-client-version-update-design.md`](../superpowers/specs/2026-08-13-client-version-update-design.md) · [`../superpowers/specs/2026-08-13-client-update-packages-design.md`](../superpowers/specs/2026-08-13-client-update-packages-design.md).
+**Next:** `1.5.0` / `client-update` packages — [`../superpowers/specs/2026-08-13-client-update-packages-design.md`](../superpowers/specs/2026-08-13-client-update-packages-design.md).
+
+## Client version gate (`client-compat`)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| `check_compat` policy | done | `woc-version`; prerelease suffix stripped |
+| `/version` protocol + min client | done | `WOC_MIN_CLIENT_VERSION` |
+| Hello identity | done | Additive; missing → reject |
+| Title Online preflight | done | Fail-closed |
+| Welcome kick | done | `version:` → Title |
+| Packaged auto-update | planned | Rewrite 1.5.0 / `client-update` |
 
 ## Post-completion (`stable` → `online-hard`)
 
@@ -39,7 +50,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.3.0` / online-hard (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.4.0` / client-compat (upstream still 0.31.0) |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
 | Seeded RNG (mulberry32) | done | |

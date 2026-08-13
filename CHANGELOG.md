@@ -4,6 +4,21 @@
 
 ### Added
 
+- Online client version gate (`1.4.0` / `client-compat`): title `/version` preflight, Hello identity, Welcome kick.
+
+## 1.4.0 — 2026-08-13
+
+### Added
+
+- `woc-version::check_compat` fail-closed policy (semver floor + exact `protocol_rev`).
+- `GET /version` fields `protocol_rev` and `min_client_version` (`WOC_MIN_CLIENT_VERSION` override).
+- Hello additive `protocol_rev` / `rewrite_version`; server rejects missing or stale identity before spawn.
+- Title Online Continue blocked until compatible; Welcome protocol skew returns to Title.
+
+## 1.3.0 — 2026-08-13
+
+### Added
+
 - Typed sparse-column `World` is the sim actor store (`AGENTS.md` + `docs/architecture/ecs.md`); fat `Entity` removed.
 - Post-completion program: design, implementation plan, and parallel dispatch for `1.0.0` (`stable`) through `1.3.0` (`online-hard`).
 - Wave 0 `stable`: nine locked tick phases; CI on `develop`; `docs/parity/DEMO.md`; drop stub/framework-slice copy.
