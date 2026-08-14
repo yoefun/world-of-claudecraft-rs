@@ -252,7 +252,14 @@ pub fn apply_spawn_identity(world: &mut World, player_id: EntityId) {
         .and_then(|k| k.stance_id.clone());
     match class {
         Some(woc_content::PlayerClass::Paladin) => {
-            apply_named_aura(world, player_id, player_id, "devotion_aura", &mut events);
+            if stance.as_deref() == Some("retribution") {
+                apply_named_aura(world, player_id, player_id, "retribution_aura", &mut events);
+            } else {
+                if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                    kit.stance_id = Some("devotion".into());
+                }
+                apply_named_aura(world, player_id, player_id, "devotion_aura", &mut events);
+            }
         }
         Some(woc_content::PlayerClass::Warrior) => {
             if stance.as_deref() == Some("defensive") {
@@ -276,35 +283,64 @@ pub fn apply_spawn_identity(world: &mut World, player_id: EntityId) {
 
 pub fn cycle_stance(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
     let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
-    if class != Some(woc_content::PlayerClass::Warrior) {
-        events.push(SimEvent::Toast {
-            message: "You cannot change stance.".into(),
-        });
-        return;
-    }
-    crate::mount::dismount(world, player_id, events);
-    let current = world
-        .get::<ClassKit>(player_id)
-        .and_then(|k| k.stance_id.clone());
-    let next = if current.as_deref() == Some("defensive") {
-        "battle"
-    } else {
-        "defensive"
-    };
-    if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
-        kit.stance_id = Some(next.into());
-    }
-    remove_named_auras(world, player_id, &["battle_shout", "defensive_stance"]);
-    if next == "battle" {
-        apply_named_aura(world, player_id, player_id, "battle_shout", events);
-        events.push(SimEvent::Toast {
-            message: "Battle Stance.".into(),
-        });
-    } else {
-        apply_named_aura(world, player_id, player_id, "defensive_stance", events);
-        events.push(SimEvent::Toast {
-            message: "Defensive Stance.".into(),
-        });
+    match class {
+        Some(woc_content::PlayerClass::Warrior) => {
+            crate::mount::dismount(world, player_id, events);
+            let current = world
+                .get::<ClassKit>(player_id)
+                .and_then(|k| k.stance_id.clone());
+            let next = if current.as_deref() == Some("defensive") {
+                "battle"
+            } else {
+                "defensive"
+            };
+            if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                kit.stance_id = Some(next.into());
+            }
+            remove_named_auras(world, player_id, &["battle_shout", "defensive_stance"]);
+            if next == "battle" {
+                apply_named_aura(world, player_id, player_id, "battle_shout", events);
+                events.push(SimEvent::Toast {
+                    message: "Battle Stance.".into(),
+                });
+            } else {
+                apply_named_aura(world, player_id, player_id, "defensive_stance", events);
+                events.push(SimEvent::Toast {
+                    message: "Defensive Stance.".into(),
+                });
+            }
+        }
+        Some(woc_content::PlayerClass::Paladin) => {
+            crate::mount::dismount(world, player_id, events);
+            let current = world
+                .get::<ClassKit>(player_id)
+                .and_then(|k| k.stance_id.clone());
+            let next = if current.as_deref() == Some("retribution") {
+                "devotion"
+            } else {
+                "retribution"
+            };
+            if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                kit.stance_id = Some(next.into());
+            }
+            remove_named_auras(world, player_id, &["devotion_aura", "retribution_aura"]);
+            if next == "devotion" {
+                apply_named_aura(world, player_id, player_id, "devotion_aura", events);
+                events.push(SimEvent::Toast {
+                    message: "Devotion Aura.".into(),
+                });
+            } else {
+                apply_named_aura(world, player_id, player_id, "retribution_aura", events);
+                events.push(SimEvent::Toast {
+                    message: "Retribution Aura.".into(),
+                });
+            }
+        }
+        _ => {
+            events.push(SimEvent::Toast {
+                message: "You cannot change stance.".into(),
+            });
+        }
     }
 }
 
@@ -3848,6 +3884,61 @@ mod tests {
             .auras
             .iter()
             .any(|a| a.id == "battle_shout"));
+    }
+
+    #[test]
+    fn paladin_cycle_stance_swaps_devotion_and_retribution() {
+        let mut world = class_and_mob(PlayerClass::Paladin, 1);
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("devotion")
+        );
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "devotion_aura"));
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("retribution")
+        );
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "retribution_aura"));
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .all(|a| a.id != "devotion_aura"));
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("devotion")
+        );
+    }
+
+    #[test]
+    fn paladin_retribution_buffs_outgoing_damage() {
+        let mut world = class_and_mob(PlayerClass::Paladin, 1);
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        let hp = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Primary);
+        let with_ret = hp - world.get::<Health>(2).unwrap().hp;
+
+        let mut world = class_and_mob(PlayerClass::Paladin, 1);
+        let hp = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Primary);
+        let with_dev = hp - world.get::<Health>(2).unwrap().hp;
+        assert!(
+            with_ret > with_dev + 0.5,
+            "retribution aura should raise crusader strike damage ({with_ret} vs {with_dev})"
+        );
     }
 
     #[test]

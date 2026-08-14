@@ -376,6 +376,7 @@ pub static AURAS: &[AuraDef] = &[
     form("travel_form", 120.0, 1.4),
     haste("sprint", 8.0, 1.5),
     armor_aura("devotion_aura", 3600.0, 20.0),
+    buff("retribution_aura", 3600.0, 1.1),
     stance("defensive_stance", 3600.0, 0.9, 20.0),
 ];
 
@@ -424,6 +425,9 @@ mod tests {
         assert!((sprint.move_mult - 1.5).abs() < f32::EPSILON);
         assert!(!sprint.breaks_on_damage);
         assert_eq!(sprint.duration, 8.0);
+        let retribution = aura("retribution_aura").expect("retribution_aura");
+        assert!((retribution.damage_mult - 1.1).abs() < f32::EPSILON);
+        assert_eq!(retribution.armor_flat, 0.0);
     }
 
     #[test]
