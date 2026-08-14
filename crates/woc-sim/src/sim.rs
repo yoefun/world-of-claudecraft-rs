@@ -518,73 +518,7 @@ impl Sim {
         tick_mob_respawns(&mut self.world, DT);
 
         // Phase 6: kill_rewards → killer (+ party share)
-        let rewards = collect_pending_mob_kills(&self.events, &self.world);
-        for reward in rewards {
-            let mut recipients = vec![reward.killer];
-            for mate in kill_credit_share(&self.parties, &self.world, reward.killer) {
-                if !recipients.contains(&mate) {
-                    recipients.push(mate);
-                }
-            }
-            for rid in recipients {
-                if self.world.get::<Identity>(rid).map(|i| i.kind) == Some(EntityKind::Player) {
-                    grant_xp(&mut self.world, rid, reward.xp, &mut self.events);
-                    if let Some(ref tid) = reward.template_id {
-                        on_mob_killed(&mut self.world, rid, tid, &mut self.events);
-                        crate::worldboss::on_boss_killed(
-                            &mut self.world,
-                            rid,
-                            tid,
-                            &mut self.events,
-                        );
-                    }
-                }
-            }
-            let zone = self
-                .world
-                .get::<Identity>(reward.victim)
-                .map(|i| i.zone_id.clone())
-                .unwrap_or_else(|| "eastbrook".into());
-            let killer_is_player = self.world.get::<Identity>(reward.killer).map(|i| i.kind)
-                == Some(EntityKind::Player);
-            if killer_is_player {
-                let expires = self.tick.saturating_add(crate::types::LOOT_PILE_TTL_TICKS);
-                let loot_before: HashSet<EntityId> =
-                    self.world.ids::<LootPile>().into_iter().collect();
-                let _first = spawn_mob_loot(
-                    &mut self.world,
-                    &mut self.rng,
-                    reward.template_id.as_deref(),
-                    reward.x,
-                    reward.z,
-                    &zone,
-                    expires,
-                );
-                let killer_inst = self
-                    .world
-                    .get::<InstanceAt>(reward.killer)
-                    .and_then(|i| i.instance_id.clone());
-                for loot_id in self
-                    .world
-                    .ids::<LootPile>()
-                    .into_iter()
-                    .filter(|id| !loot_before.contains(id))
-                {
-                    if let Some(ref inst) = killer_inst {
-                        if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
-                            loot.instance_id = Some(inst.clone());
-                        }
-                    }
-                    self.loot_rules.maybe_start_party_roll(
-                        &self.parties,
-                        &self.world,
-                        reward.killer,
-                        loot_id,
-                        &mut self.events,
-                    );
-                }
-            }
-        }
+        self.grant_pending_kill_rewards();
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
         crate::death::on_player_death_check(&mut self.world, &mut self.events);
 
@@ -621,6 +555,83 @@ impl Sim {
         let snapshot = self.snapshot_for_player(viewer);
         let events = self.events.clone();
         (snapshot, events)
+    }
+
+    pub(crate) fn grant_pending_kill_rewards(&mut self) {
+        let rewards = collect_pending_mob_kills(&self.events, &self.world);
+        for reward in rewards {
+            let mut recipients = vec![reward.killer];
+            for mate in kill_credit_share(&self.parties, &self.world, reward.killer) {
+                if !recipients.contains(&mate) {
+                    recipients.push(mate);
+                }
+            }
+            for rid in recipients {
+                if self.world.get::<Identity>(rid).map(|i| i.kind) == Some(EntityKind::Player) {
+                    grant_xp(&mut self.world, rid, reward.xp, &mut self.events);
+                    if let Some(ref tid) = reward.template_id {
+                        on_mob_killed(&mut self.world, rid, tid, &mut self.events);
+                        crate::worldboss::on_boss_killed(
+                            &mut self.world,
+                            rid,
+                            tid,
+                            &mut self.events,
+                        );
+                    }
+                }
+            }
+            let zone = self
+                .world
+                .get::<Identity>(reward.victim)
+                .map(|i| i.zone_id.clone())
+                .unwrap_or_else(|| "eastbrook".into());
+            let killer_drops_loot = self
+                .world
+                .get::<Identity>(reward.killer)
+                .is_some_and(|i| matches!(i.kind, EntityKind::Player | EntityKind::Pet));
+            if killer_drops_loot {
+                let expires = self.tick.saturating_add(crate::types::LOOT_PILE_TTL_TICKS);
+                let loot_before: HashSet<EntityId> =
+                    self.world.ids::<LootPile>().into_iter().collect();
+                let _first = spawn_mob_loot(
+                    &mut self.world,
+                    &mut self.rng,
+                    reward.template_id.as_deref(),
+                    reward.x,
+                    reward.z,
+                    &zone,
+                    expires,
+                );
+                let inst = self
+                    .world
+                    .get::<InstanceAt>(reward.killer)
+                    .and_then(|i| i.instance_id.clone())
+                    .or_else(|| {
+                        self.world
+                            .get::<InstanceAt>(reward.victim)
+                            .and_then(|i| i.instance_id.clone())
+                    });
+                for loot_id in self
+                    .world
+                    .ids::<LootPile>()
+                    .into_iter()
+                    .filter(|id| !loot_before.contains(id))
+                {
+                    if let Some(ref inst) = inst {
+                        if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
+                            loot.instance_id = Some(inst.clone());
+                        }
+                    }
+                    self.loot_rules.maybe_start_party_roll(
+                        &self.parties,
+                        &self.world,
+                        reward.killer,
+                        loot_id,
+                        &mut self.events,
+                    );
+                }
+            }
+        }
     }
 
     pub fn snapshot(&self) -> TickSnapshot {
@@ -2490,5 +2501,112 @@ mod tests {
         );
         assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_claw")));
         assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_focus")));
+    }
+
+    #[test]
+    fn loot_inherits_victim_instance_when_killer_has_none() {
+        let mut sim = Sim::new_eastbrook("NoInst", PlayerClass::Warrior);
+        let instance_id = "eastbrook_crypt#victim-loot".to_string();
+        if let Some(i) = sim.world.get_mut::<InstanceAt>(sim.player_id) {
+            i.instance_id = None;
+        }
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "barrow_hag", 0.0, 0.0)
+            .expect("barrow_hag");
+        if let Some(i) = sim.world.get_mut::<InstanceAt>(mob_id) {
+            i.instance_id = Some(instance_id.clone());
+        }
+        if let Some(h) = sim.world.get_mut::<Health>(mob_id) {
+            h.hp = 1.0;
+            h.hp_max = 1.0;
+        }
+        place_player_at(&mut sim, 2.5, 0.0);
+        if let Some(kit) = sim.world.get_mut::<ClassKit>(sim.player_id) {
+            kit.resource = 100.0;
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
+            c.target = Some(mob_id);
+            c.auto_attack = true;
+        }
+        let intent = PlayerIntent {
+            attack: true,
+            ability: Some(AbilitySlot::Primary),
+            target_id: Some(mob_id),
+            ..Default::default()
+        };
+        let mut saw_kill = false;
+        for _ in 0..400 {
+            let (_snap, events) = sim.tick(intent);
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob_id))
+            {
+                saw_kill = true;
+                break;
+            }
+        }
+        assert!(saw_kill, "barrow_hag should die in combat");
+        let piles: Vec<Option<String>> = sim
+            .world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| {
+                let item = sim.world.get::<LootPile>(id)?.item.clone();
+                if matches!(item.as_deref(), Some("hag_claw") | Some("hag_focus")) {
+                    Some(sim.world.get::<InstanceAt>(id)?.instance_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!piles.is_empty(), "player kill must still drop loot");
+        assert!(
+            piles.iter().all(|inst| inst.as_ref() == Some(&instance_id)),
+            "piles must inherit the victim's instance when the killer has none"
+        );
+    }
+
+    #[test]
+    fn pet_last_hit_without_owner_still_spawns_loot() {
+        let mut sim = Sim::new_eastbrook("Orphan", PlayerClass::Hunter);
+        assert!(crate::pet::summon_pet(
+            &mut sim.world,
+            sim.player_id,
+            &mut sim.events
+        ));
+        let pet = crate::pet::find_pet(&sim.world, sim.player_id).expect("pet");
+        if let Some(owner) = sim.world.get_mut::<crate::ecs::components::Owner>(pet) {
+            owner.owner_id = 999_999;
+        }
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "young_wolf", 0.0, 0.0)
+            .expect("young_wolf");
+        if let Some(h) = sim.world.get_mut::<Health>(mob_id) {
+            h.hp = 1.0;
+            h.hp_max = 1.0;
+        }
+        let piles_before = sim.world.ids::<LootPile>().len();
+        crate::combat::deal_damage(
+            &mut sim.world,
+            pet,
+            mob_id,
+            50.0,
+            None,
+            true,
+            &mut sim.events,
+        );
+        // Drive the same kill_rewards helper tick_all uses (do not copy the if-player guard into the test).
+        sim.grant_pending_kill_rewards();
+        let piles_after = sim.world.ids::<LootPile>().len();
+        assert!(
+            piles_after > piles_before,
+            "pet last-hit must still spawn corpse loot when the owner entity is missing"
+        );
+        assert!(
+            sim.world
+                .get::<crate::ecs::components::Progress>(sim.player_id)
+                .is_some(),
+            "living hunter is not the credited killer; XP path stays skipped"
+        );
     }
 }

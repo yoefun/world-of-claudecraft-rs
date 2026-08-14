@@ -1319,7 +1319,11 @@ pub struct KillReward {
 }
 
 fn credit_actor(world: &World, id: EntityId) -> EntityId {
-    world.get::<Owner>(id).map(|o| o.owner_id).unwrap_or(id)
+    world
+        .get::<Owner>(id)
+        .map(|o| o.owner_id)
+        .filter(|owner_id| world.get::<Identity>(*owner_id).is_some())
+        .unwrap_or(id)
 }
 
 pub fn collect_pending_mob_kills(events: &[SimEvent], world: &World) -> Vec<KillReward> {
@@ -1613,8 +1617,9 @@ fn grant_loot_pile(
     let Some(pile) = world.get::<LootPile>(lid).cloned() else {
         return false;
     };
+    let count = pile.count.max(1);
     if let Some(ref it) = pile.item {
-        if crate::inventory::grant_item(world, player_id, it, pile.count.max(1), events).is_err() {
+        if crate::inventory::grant_item(world, player_id, it, count, events).is_err() {
             events.push(SimEvent::Toast {
                 message: "Inventory full.".into(),
             });
@@ -1630,7 +1635,7 @@ fn grant_loot_pile(
         player: player_id,
         copper: pile.copper,
         item: pile.item,
-        count: pile.count,
+        count,
     });
     true
 }
@@ -3658,6 +3663,36 @@ mod tests {
         assert_eq!(pile.1.item.as_deref(), Some("wolf_fang"));
         assert_eq!(pile.1.count, 2);
         assert!(item("wolf_fang").is_some());
+    }
+
+    #[test]
+    fn loot_event_count_treats_zero_as_one() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        let lid = crate::ecs::spawn::create_loot_ex(
+            &mut world,
+            50,
+            0.0,
+            0.0,
+            3,
+            Some("wolf_fang".into()),
+            0,
+            0,
+            "eastbrook",
+        );
+        if let Some(p) = world.get_mut::<LootPile>(lid) {
+            p.count = 0;
+        }
+        let mut events = Vec::new();
+        assert!(grant_loot_pile(&mut world, 1, lid, &mut events));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Loot {
+                player: 1,
+                count: 1,
+                ..
+            }
+        )));
     }
 
     #[test]
