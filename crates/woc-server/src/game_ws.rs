@@ -157,6 +157,23 @@ async fn run_social_op(
     send_to_players(shared, recips).await;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InboundChatKind {
+    Whisper,
+    Guild,
+    Broadcast,
+}
+
+fn inbound_chat_kind(channel: &str) -> InboundChatKind {
+    if channel.eq_ignore_ascii_case("whisper") {
+        InboundChatKind::Whisper
+    } else if channel.eq_ignore_ascii_case("guild") || channel.eq_ignore_ascii_case("officer") {
+        InboundChatKind::Guild
+    } else {
+        InboundChatKind::Broadcast
+    }
+}
+
 fn remove_social_from_economy(economy: &mut woc_persist::RealmEconomy, durable_id: &str) {
     economy.social.retain(|b| b.owner_durable != durable_id);
     for book in &mut economy.social {
@@ -581,21 +598,22 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                 target,
             } => {
                 if let Some(b) = &binding {
-                    if channel.eq_ignore_ascii_case("whisper") {
-                        run_social_op(&shared, false, |sim| {
-                            sim.whisper(b.player_id, &target, &text)
-                        })
-                        .await;
-                    } else {
-                        let mut realm = shared.realm.lock().await;
-                        if channel.eq_ignore_ascii_case("guild")
-                            || channel.eq_ignore_ascii_case("officer")
-                        {
+                    match inbound_chat_kind(&channel) {
+                        InboundChatKind::Whisper => {
+                            run_social_op(&shared, false, |sim| {
+                                sim.whisper(b.player_id, &target, &text)
+                            })
+                            .await;
+                        }
+                        InboundChatKind::Guild => {
+                            let mut realm = shared.realm.lock().await;
                             let outs = realm.sim.guild_chat(b.player_id, &channel, &text);
                             let recips = expand_deliveries(&realm.sim, outs);
                             drop(realm);
                             send_to_players(&shared, recips).await;
-                        } else {
+                        }
+                        InboundChatKind::Broadcast => {
+                            let mut realm = shared.realm.lock().await;
                             let outs = realm.sim.chat(b.player_id, &channel, &text);
                             drop(realm);
                             for msg in outs {
@@ -957,6 +975,47 @@ mod tests {
         assert!(economy.social.iter().all(|b| {
             b.friends.iter().all(|e| e.durable_id != "char-bob")
                 && b.ignored.iter().all(|e| e.durable_id != "char-bob")
+        }));
+    }
+
+    #[test]
+    fn whisper_channel_is_not_a_notices_broadcast() {
+        assert_eq!(inbound_chat_kind("whisper"), InboundChatKind::Whisper);
+        assert_eq!(inbound_chat_kind("WHISPER"), InboundChatKind::Whisper);
+        assert_eq!(inbound_chat_kind("guild"), InboundChatKind::Guild);
+        assert_eq!(inbound_chat_kind("officer"), InboundChatKind::Guild);
+        assert_eq!(inbound_chat_kind("say"), InboundChatKind::Broadcast);
+        assert_eq!(inbound_chat_kind("party"), InboundChatKind::Broadcast);
+        assert_eq!(inbound_chat_kind("raid"), InboundChatKind::Broadcast);
+    }
+
+    #[test]
+    fn cold_and_live_social_removal_agree() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        for (id, durable) in [(a, "char-alice"), (b, "char-bob")] {
+            sim.world
+                .get_mut::<woc_sim::ecs::components::Durable>(id)
+                .unwrap()
+                .durable_id = Some(durable.into());
+        }
+        sim.directory.register("Alice", "char-alice");
+        sim.directory.register("Bob", "char-bob");
+        let _ = sim.friend_add(a, "Bob");
+        let _ = sim.friend_ignore(b, "Alice");
+        let mut cold = export_economy_from_sim(&sim);
+        remove_social_from_economy(&mut cold, "char-bob");
+        sim.friends.remove_character("char-bob");
+        let live = export_economy_from_sim(&sim);
+        assert_eq!(live.social, cold.social);
+        assert!(live
+            .social
+            .iter()
+            .all(|book| book.owner_durable != "char-bob"));
+        assert!(live.social.iter().all(|book| {
+            book.friends.iter().all(|e| e.durable_id != "char-bob")
+                && book.ignored.iter().all(|e| e.durable_id != "char-bob")
         }));
     }
 
