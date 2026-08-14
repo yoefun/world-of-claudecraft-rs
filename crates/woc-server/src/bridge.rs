@@ -4,7 +4,7 @@ use woc_content::ItemQuality;
 use woc_persist::{
     Character, CharacterSave, EquipmentDto, GuildDto, GuildMemberDto, InvStackDto, MailDto,
     MarketListingDto, ProfessionSkillDto, QuestProgressDto, RealmEconomy, ReputationDto,
-    TalentRankDto,
+    SocialBookDto, SocialEntryDto, TalentRankDto,
 };
 use woc_sim::ecs::components::{
     Equipment, EquipmentQualities, EquipmentWear, InvStack, QuestProgress,
@@ -12,6 +12,7 @@ use woc_sim::ecs::components::{
 use woc_sim::mail::MailItem;
 use woc_sim::market::Listing;
 use woc_sim::persist_state::{quest_state_from_str, quest_state_to_str, PlayerPersistentState};
+use woc_sim::social::friends::{FriendEntry, SocialBook};
 use woc_sim::social::guild::{Guild, GuildMember, GuildRank};
 use woc_sim::Sim;
 
@@ -167,6 +168,9 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
 
     let guilds: Vec<Guild> = economy.guilds.iter().map(guild_from_dto).collect();
     sim.guilds.load_guilds(guilds, economy.next_guild_id);
+
+    let books: Vec<SocialBook> = economy.social.iter().map(social_book_from_dto).collect();
+    sim.friends.load_books(books);
 }
 
 pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
@@ -222,6 +226,12 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
             .map(guild_to_dto)
             .collect(),
         next_guild_id: sim.guilds.next_id(),
+        social: sim
+            .friends
+            .all_books()
+            .into_iter()
+            .map(social_book_to_dto)
+            .collect(),
     }
 }
 
@@ -242,6 +252,40 @@ fn guild_member_from_dto(dto: &GuildMemberDto) -> GuildMember {
         class_id: dto.class_id.clone(),
         level: dto.level,
         rank: GuildRank::parse(&dto.rank).unwrap_or(GuildRank::Member),
+    }
+}
+
+fn social_entry_from_dto(dto: &SocialEntryDto) -> FriendEntry {
+    FriendEntry {
+        durable_id: dto.durable_id.clone(),
+        name: dto.name.clone(),
+        class_id: dto.class_id.clone(),
+        level: dto.level,
+    }
+}
+
+fn social_book_from_dto(dto: &SocialBookDto) -> SocialBook {
+    SocialBook {
+        owner_durable: dto.owner_durable.clone(),
+        friends: dto.friends.iter().map(social_entry_from_dto).collect(),
+        ignored: dto.ignored.iter().map(social_entry_from_dto).collect(),
+    }
+}
+
+fn social_entry_to_dto(e: FriendEntry) -> SocialEntryDto {
+    SocialEntryDto {
+        durable_id: e.durable_id,
+        name: e.name,
+        class_id: e.class_id,
+        level: e.level,
+    }
+}
+
+fn social_book_to_dto(b: SocialBook) -> SocialBookDto {
+    SocialBookDto {
+        owner_durable: b.owner_durable,
+        friends: b.friends.into_iter().map(social_entry_to_dto).collect(),
+        ignored: b.ignored.into_iter().map(social_entry_to_dto).collect(),
     }
 }
 
@@ -516,5 +560,21 @@ mod tests {
         apply_economy_to_sim(&mut sim, &economy);
         let exported = export_economy_from_sim(&sim);
         assert_eq!(exported.guilds[0].members[1].rank, "member");
+    }
+
+    #[test]
+    fn social_survives_economy_roundtrip() {
+        let mut sim = Sim::new_eastbrook("Alice", woc_content::PlayerClass::Warrior);
+        let _ = sim
+            .spawn_player("Bob", woc_content::PlayerClass::Mage)
+            .unwrap();
+        let _ = sim.friend_add(sim.player_id, "Bob");
+        let eco = export_economy_from_sim(&sim);
+        assert_eq!(eco.social.len(), 1);
+        let mut sim2 = Sim::new_eastbrook("Alice", woc_content::PlayerClass::Warrior);
+        apply_economy_to_sim(&mut sim2, &eco);
+        let snap = sim2.snapshot_for_player(sim2.player_id);
+        assert_eq!(snap.friends.len(), 1);
+        assert_eq!(snap.friends[0].name, "Bob");
     }
 }

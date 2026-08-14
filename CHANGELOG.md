@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.25.0 — 2026-08-14
+
+### Added
+
+- **1.25.0 `friends`:** Friend book and ignore list on `Sim.friends` (`FriendRoster`), keyed by durable character id.
+- Unidirectional `/add` via `CharacterDirectory` (offline names work); ignore kicks a friend; caps 50/50.
+- Whisper (`/w Name text`) fans out through `player_tx`, never realm `notices`. Ignore filters whisper only.
+- Online = intent slot (parked friends show offline). Presence toasts `{name} has come/gone online.`
+- Persist `RealmEconomy.social`. Character delete sweeps every book.
+- Bevy **O** panel: `/add` `/remove` `/ignore` `/unignore` `/w` `/invite`; party accept and AH buyout still win **O**. `/invite Name` (or `/invite` with a targeted player) sends the existing party invite.
+- Protocol rev **11** (`Chat.target`, friend WS verbs, snapshot `friends` / `ignored`).
+
+### Notes
+
+- Planned as `1.22.0` while develop shipped kill-loop / dungeon-depth / delve-depth as `1.22.0`–`1.24.0`; the theme lands as `1.25.0`.
+
 ## 1.24.0 — 2026-08-14
 
 ### Added

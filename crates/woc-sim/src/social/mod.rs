@@ -1,11 +1,13 @@
 //! Party roster and chat channels (say / party / raid).
 
 pub mod chat;
+pub mod friends;
 pub mod guild;
 pub mod loot;
 pub mod party;
 
 pub use chat::{handle_chat, ChatEffect};
+pub use friends::{FriendEntry, FriendRoster, SocialBook, SocialDelivery, SocialEffect};
 pub use guild::{GuildDelivery, GuildEffect, GuildRank, GuildRoster};
 pub use loot::{LootMode, LootRules, RollChoice};
 pub use party::{
