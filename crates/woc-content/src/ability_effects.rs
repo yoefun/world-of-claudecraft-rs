@@ -267,6 +267,23 @@ const fn form(id: &'static str, duration: f32, move_mult: f32) -> AuraDef {
     }
 }
 
+const fn haste(id: &'static str, duration: f32, move_mult: f32) -> AuraDef {
+    AuraDef {
+        id,
+        duration,
+        tick_interval: 0.0,
+        tick_damage: 0.0,
+        tick_heal: 0.0,
+        stun: false,
+        move_mult,
+        absorb: 0.0,
+        breaks_on_damage: false,
+        damage_mult: 1.0,
+        thorns: 0.0,
+        armor_flat: 0.0,
+    }
+}
+
 const fn fear(id: &'static str, duration: f32) -> AuraDef {
     AuraDef {
         id,
@@ -357,6 +374,7 @@ pub static AURAS: &[AuraDef] = &[
     fear("fear", 4.0),
     form("ghost_wolf", 120.0, 1.4),
     form("travel_form", 120.0, 1.4),
+    haste("sprint", 8.0, 1.5),
     armor_aura("devotion_aura", 3600.0, 20.0),
     stance("defensive_stance", 3600.0, 0.9, 20.0),
 ];
@@ -402,6 +420,10 @@ mod tests {
         assert!((defensive.damage_mult - 0.9).abs() < f32::EPSILON);
         assert!(defensive.armor_flat > 0.0);
         assert!(aura("seal_righteousness").is_some());
+        let sprint = aura("sprint").expect("sprint");
+        assert!((sprint.move_mult - 1.5).abs() < f32::EPSILON);
+        assert!(!sprint.breaks_on_damage);
+        assert_eq!(sprint.duration, 8.0);
     }
 
     #[test]

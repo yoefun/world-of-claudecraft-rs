@@ -295,6 +295,19 @@ pub static ABILITIES: &[AbilityDef] = &[
         effect: AbilityEffect::Interrupt,
         flags: AbilityFlags::DEFAULT.lockout(1.5),
     },
+    AbilityDef {
+        id: "sprint",
+        name: "Sprint",
+        damage: 0.0,
+        cost: 40.0,
+        cooldown: 20.0,
+        range: 0.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: Some("sprint"),
+        effect: AbilityEffect::ApplyAura,
+        flags: AbilityFlags::DEFAULT,
+    },
     // —— Priest ——
     AbilityDef {
         id: "smite",
@@ -850,5 +863,18 @@ mod tests {
         assert!(ability("execute").unwrap().flags.rage_dump);
         assert!(ability("frost_nova").unwrap().flags.self_aoe);
         assert!(ability("kick").unwrap().flags.interrupt_lockout > 0.0);
+    }
+
+    #[test]
+    fn sprint_is_apply_aura_self_buff() {
+        let sprint = ability("sprint").expect("sprint");
+        assert!(matches!(sprint.effect, AbilityEffect::ApplyAura));
+        assert_eq!(sprint.cost, 40.0);
+        assert_eq!(sprint.cooldown, 20.0);
+        assert_eq!(sprint.min_level, 1);
+        assert_eq!(sprint.aura, Some("sprint"));
+        assert_eq!(sprint.name, "Sprint");
+        assert!(sprint.flags.breaks_stealth);
+        assert!(!sprint.flags.requires_stealth);
     }
 }
