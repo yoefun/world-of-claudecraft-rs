@@ -138,6 +138,16 @@ fn dist_xz(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
+fn at_home(world: &World, id: EntityId) -> bool {
+    let Some(t) = world.get::<Transform>(id) else {
+        return false;
+    };
+    let Some(home) = world.get::<Home>(id) else {
+        return false;
+    };
+    dist_xz(t.x, t.z, home.home_x, home.home_z) <= 0.2
+}
+
 pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
     if !is_living_mob(world, mob_id) {
         return;
@@ -181,7 +191,7 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
     let current_target = world.get::<Combat>(mob_id).and_then(|c| c.target);
     let stealthed = crate::combat::is_stealthed(world, player_id);
     let can_see = !(stealthed && d_player > MELEE_RANGE);
-    if current_target.is_none() && d_player <= AGGRO_RANGE && can_see {
+    if current_target.is_none() && at_home(world, mob_id) && d_player <= AGGRO_RANGE && can_see {
         if let Some(c) = world.get_mut::<Combat>(mob_id) {
             c.target = Some(player_id);
         }
@@ -286,6 +296,35 @@ mod tests {
         let before = world.get::<Transform>(2).unwrap().x;
         update_mob_ai(&mut world, 2, 1);
         assert!(world.get::<Transform>(2).unwrap().x > before);
+        assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
+    }
+
+    #[test]
+    fn returning_mob_does_not_reaggro_until_home() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 2.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        // Place the wolf inside leash, not at Home, with no target.
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 10.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = None;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert!(
+            world.get::<Combat>(2).unwrap().target.is_none(),
+            "must not acquire aggro while returning to Home"
+        );
+        // Snap to Home — now it may aggro.
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 0.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        update_mob_ai(&mut world, 2, 1);
         assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
     }
 
@@ -403,7 +442,7 @@ mod tests {
         crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
         crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 4.0, 0.0).unwrap();
         if let Some(t) = world.get_mut::<Transform>(2) {
-            t.x = 2.0;
+            t.x = 0.0;
             t.z = 0.0;
             t.y = crate::ecs::spawn::ground_at(t.x, t.z);
         }
