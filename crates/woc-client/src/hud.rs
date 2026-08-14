@@ -1926,6 +1926,7 @@ mod tests {
             repair_cost: 0,
             can_bind: false,
             buyback: vec![],
+            train_riding: false,
             can_auction: true,
             can_bank: false,
             can_mail: false,

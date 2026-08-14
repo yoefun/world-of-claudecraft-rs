@@ -410,6 +410,26 @@ fn market_search_keys() -> impl Iterator<Item = (KeyCode, char)> {
     .into_iter()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OKeyClosedAction {
+    PartyAccept,
+    ReadyRespond,
+    MarketBuyout,
+    OpenFriends,
+}
+
+fn o_key_closed_action(pending: bool, ready_prompt: bool, show_market: bool) -> OKeyClosedAction {
+    if pending {
+        OKeyClosedAction::PartyAccept
+    } else if ready_prompt {
+        OKeyClosedAction::ReadyRespond
+    } else if show_market {
+        OKeyClosedAction::MarketBuyout
+    } else {
+        OKeyClosedAction::OpenFriends
+    }
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
@@ -546,27 +566,48 @@ pub(crate) fn handle_interact_keys(
         .ready_check
         .as_ref()
         .is_some_and(|r| !r.you_responded);
+    let player_id = host.snapshot.player_id;
 
-    if pending && !ui.show_market && !ui.show_friends && keys.just_pressed(KeyCode::KeyO) {
-        host.send_party(WsClientMsg::PartyAccept);
-    } else if ready_prompt
-        && !ui.show_market
-        && !ui.show_friends
-        && keys.just_pressed(KeyCode::KeyO)
-    {
-        host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
-    } else if !pending
-        && !ready_prompt
-        && !ui.show_market
-        && !ui.show_friends
-        && keys.just_pressed(KeyCode::KeyO)
-    {
-        ui.show_friends = true;
-        ui.show_guild = false;
-        ui.guild_compose.clear();
-        ui.show_character = false;
-        ui.show_map = false;
-        ui.show_market = false;
+    if keys.just_pressed(KeyCode::KeyO) {
+        match o_key_closed_action(pending, ready_prompt, ui.show_market) {
+            OKeyClosedAction::PartyAccept => {
+                host.send_party(WsClientMsg::PartyAccept);
+            }
+            OKeyClosedAction::ReadyRespond => {
+                host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
+            }
+            OKeyClosedAction::MarketBuyout => {
+                if let Some(listing) = host
+                    .snapshot
+                    .market
+                    .iter()
+                    .find(|l| !l.mine && l.price <= host.snapshot.progress.copper)
+                    .cloned()
+                {
+                    host.interact(
+                        player_id,
+                        InteractAction::MarketBuy {
+                            listing_id: listing.id,
+                        },
+                    );
+                    host.recent_toasts.push((
+                        format!("Buying listing #{} for {}c.", listing.id, listing.price),
+                        2.0,
+                    ));
+                } else {
+                    host.recent_toasts
+                        .push(("No affordable market listings.".into(), 2.0));
+                }
+            }
+            OKeyClosedAction::OpenFriends => {
+                ui.show_friends = true;
+                ui.show_guild = false;
+                ui.guild_compose.clear();
+                ui.show_character = false;
+                ui.show_map = false;
+                ui.show_market = false;
+            }
+        }
     }
 
     if pending && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
@@ -623,7 +664,6 @@ pub(crate) fn handle_interact_keys(
         }
     }
 
-    let player_id = host.snapshot.player_id;
     if ui.show_quests && !ui.show_talents {
         if keys.just_pressed(KeyCode::KeyX) {
             if let Some(qid) = tracked_quest_id(&host.snapshot.quest_log).map(str::to_string) {
@@ -936,29 +976,6 @@ pub(crate) fn handle_interact_keys(
     }
     if ui.show_market && keys.just_pressed(KeyCode::Period) {
         ui.market_duration_hours = cycle_duration_hours(ui.market_duration_hours, true);
-    }
-    if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
-        if let Some(listing) = host
-            .snapshot
-            .market
-            .iter()
-            .find(|l| !l.mine && l.price <= host.snapshot.progress.copper)
-            .cloned()
-        {
-            host.interact(
-                player_id,
-                InteractAction::MarketBuy {
-                    listing_id: listing.id,
-                },
-            );
-            host.recent_toasts.push((
-                format!("Buying listing #{} for {}c.", listing.id, listing.price),
-                2.0,
-            ));
-        } else {
-            host.recent_toasts
-                .push(("No affordable market listings.".into(), 2.0));
-        }
     }
     if ui.show_market && keys.just_pressed(KeyCode::KeyL) {
         if let Some((bag_slot, count, item_id, price)) = first_listable_bag_stack(&host.snapshot) {
@@ -2041,6 +2058,24 @@ mod tests {
         assert!(matches!(rem, WsClientMsg::FriendRemove { name } if name == "Bob"));
         let unign = friend_enter_msg("/unignore Bob", None).unwrap();
         assert!(matches!(unign, WsClientMsg::FriendUnignore { name } if name == "Bob"));
+    }
+
+    #[test]
+    fn o_key_priority_matches_spec() {
+        use OKeyClosedAction::*;
+        assert_eq!(
+            o_key_closed_action(true, false, true),
+            PartyAccept,
+            "pending invite beats market buyout"
+        );
+        assert_eq!(
+            o_key_closed_action(false, true, true),
+            ReadyRespond,
+            "ready check beats market buyout"
+        );
+        assert_eq!(o_key_closed_action(false, false, true), MarketBuyout);
+        assert_eq!(o_key_closed_action(false, false, false), OpenFriends);
+        assert_eq!(o_key_closed_action(true, true, false), PartyAccept);
     }
 
     #[test]
