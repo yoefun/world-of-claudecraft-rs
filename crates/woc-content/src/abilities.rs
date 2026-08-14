@@ -774,6 +774,21 @@ pub static ABILITIES: &[AbilityDef] = &[
         flags: AbilityFlags::DEFAULT,
     },
     AbilityDef {
+        id: "imp_firebolt",
+        name: "Firebolt",
+        damage: 14.0,
+        cost: 0.0,
+        cooldown: 6.0,
+        range: 14.0,
+        cast_time: 0.0,
+        min_level: 1,
+        aura: None,
+        effect: AbilityEffect::SpellDamage {
+            school: DamageSchool::Fire,
+        },
+        flags: AbilityFlags::DEFAULT,
+    },
+    AbilityDef {
         id: "warden_smash",
         name: "Warden Smash",
         damage: 18.0,

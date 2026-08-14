@@ -852,7 +852,7 @@ mod tests {
 
     #[test]
     fn every_ability_declares_an_effect() {
-        assert_eq!(ABILITIES.len(), 55);
+        assert_eq!(ABILITIES.len(), 56);
         for def in ABILITIES {
             let _ = def.effect;
             if let Some(aura_id) = def.aura {
