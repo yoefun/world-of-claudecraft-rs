@@ -108,7 +108,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.22.0` / `kill-loop`, `1.23.0` / `dungeon-depth`, and `1.24.0` / `delve-depth`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.22.0` / `kill-loop`, `1.23.0` / `dungeon-depth`, and `1.24.0` / `delve-depth`. **Planned:** `1.25.0` / `class-depth`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 
