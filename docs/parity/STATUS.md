@@ -8,19 +8,22 @@
 ## Kill loop (`kill-loop`) — done
 
 Design: [`../superpowers/specs/2026-08-13-kill-loop-design.md`](../superpowers/specs/2026-08-13-kill-loop-design.md)  
-Plan: [`../superpowers/plans/2026-08-13-kill-loop.md`](../superpowers/plans/2026-08-13-kill-loop.md)
+Plan: [`../superpowers/plans/2026-08-13-kill-loop.md`](../superpowers/plans/2026-08-13-kill-loop.md) · Polish: [`../superpowers/plans/2026-08-14-kill-loop-polish.md`](../superpowers/plans/2026-08-14-kill-loop-polish.md)
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
 | Per-template respawn | done | `Respawn.delay_sec`; wolves 30 s; `mire_terror` 300 s |
 | Instance never-revive | done | Crypt/barrow/delve `delay_sec = 0` |
 | Leash reset | done | Restore HP, clear auras/threat |
+| Leash evade | done | No re-aggro until Home |
 | `MobSpot` packs | done | `count` + `radius`; Wolf Run ≥5 |
 | Loot `count` + TTL | done | Honor `LootEntry.count`; piles expire at 2400 ticks |
+| Victim instance loot | done | Killer `InstanceAt` else victim |
 | Quest skip Need/Greed | done | `ItemKind::Quest` piles stay FFA |
 | Pet kill credit | done | `Owner` rewrite in `collect_pending_mob_kills` |
 | Mob abilities | done | `wolf_bite` / `warden_smash` / `terror_slam` |
 | Threat switch | done | 1.1× ratio |
+| Portal zone seed | done | Tag bytes, not `tag.len()` |
 | Protocol | done | Rev 8; additive `SimEvent::Loot.count` |
 
 ## Gear slots (`gear-slots`) — done

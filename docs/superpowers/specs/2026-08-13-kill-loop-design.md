@@ -1,6 +1,6 @@
 # Kill-loop design — `1.14.0` / `kill-loop`
 
-**Status:** Proposed (planning deliverable 2026-08-13).  
+**Status:** Shipped as rewrite 1.14.0 / kill-loop (polish 2026-08-14).  
 **Baseline:** rewrite `1.13.0` / `gear-slots` on `develop` (ECS `World` actor store; manufacturing wired).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `kill-loop`.
