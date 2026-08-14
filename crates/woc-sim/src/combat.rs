@@ -1897,7 +1897,7 @@ pub fn update_mob_combat(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Auras, Bags, ClassKit, Combat, Health, Transform};
+    use crate::ecs::components::{Auras, Bags, ClassKit, Combat, Health, InstanceAt, Transform};
     use woc_content::PlayerClass;
     use woc_protocol::AbilitySlot;
 
@@ -1926,6 +1926,96 @@ mod tests {
             h.hp_max = 500.0;
         }
         world
+    }
+
+    fn set_instance(world: &mut World, id: EntityId, key: &str) {
+        if world.get::<InstanceAt>(id).is_none() {
+            world.insert(id, InstanceAt::default());
+        }
+        world.get_mut::<InstanceAt>(id).unwrap().instance_id = Some(key.into());
+    }
+
+    #[test]
+    fn final_review_cross_instance_damage_aoe_targeting_and_healing_are_blocked() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Priest, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.0, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 4, "young_wolf", 0.0, 0.0).unwrap();
+        for id in [1, 3] {
+            set_instance(&mut world, id, "eastbrook_hollow#a");
+        }
+        for id in [2, 4] {
+            set_instance(&mut world, id, "eastbrook_hollow#b");
+        }
+
+        let b_mob_hp = world.get::<Health>(4).unwrap().hp;
+        deal_damage(
+            &mut world,
+            1,
+            4,
+            25.0,
+            Some("Smite"),
+            false,
+            &mut Vec::new(),
+        );
+        assert_eq!(world.get::<Health>(4).unwrap().hp, b_mob_hp);
+
+        if let Some(combat) = world.get_mut::<Combat>(4) {
+            combat.target = Some(1);
+        }
+        if let Some(threat) = world.get_mut::<Threat>(4) {
+            threat.threat.insert(1, 100.0);
+        }
+        assert_eq!(prefer_mob_target(&world, 4, 40.0), None);
+
+        let targets = aoe_targets(&world, 1, 3, 10.0, 10);
+        assert!(targets.contains(&3));
+        assert!(!targets.contains(&4));
+
+        assert_eq!(heal_target(&world, 1, Some(2)), 1);
+    }
+
+    fn cross_instance_loot_world() -> (World, EntityId) {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        let loot_id = crate::ecs::spawn::create_loot(&mut world, 2, 0.0, 0.0, 25, None);
+        set_instance(&mut world, 1, "eastbrook_hollow#a");
+        set_instance(&mut world, loot_id, "eastbrook_hollow#b");
+        (world, loot_id)
+    }
+
+    #[test]
+    fn final_review_auto_loot_ignores_other_instance_piles() {
+        let (mut world, loot_id) = cross_instance_loot_world();
+        let copper = world.get::<Progress>(1).unwrap().copper;
+
+        try_pickup_loot(
+            1,
+            &mut world,
+            &mut Vec::new(),
+            &crate::social::LootRules::default(),
+        );
+
+        assert!(world.contains(loot_id));
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, copper);
+    }
+
+    #[test]
+    fn final_review_direct_loot_rejects_other_instance_pile() {
+        let (mut world, loot_id) = cross_instance_loot_world();
+        let copper = world.get::<Progress>(1).unwrap().copper;
+
+        assert!(!claim_loot_target(
+            1,
+            loot_id,
+            &mut world,
+            &mut Vec::new(),
+            &crate::social::LootRules::default(),
+        ));
+
+        assert!(world.contains(loot_id));
+        assert_eq!(world.get::<Progress>(1).unwrap().copper, copper);
     }
 
     #[test]

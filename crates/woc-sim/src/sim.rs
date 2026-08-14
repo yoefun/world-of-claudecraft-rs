@@ -1588,6 +1588,26 @@ mod tests {
     }
 
     #[test]
+    fn final_review_nearest_targets_stay_in_instance_space() {
+        let mut world = World::new();
+        spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        spawn::create_player(&mut world, 2, "B", PlayerClass::Warrior, 0.0, 0.0);
+        spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.0, 0.0).unwrap();
+        spawn::create_mob_from_template(&mut world, 4, "young_wolf", 0.0, 0.0).unwrap();
+        for id in [1, 4] {
+            world.get_mut::<InstanceAt>(id).unwrap().instance_id =
+                Some("eastbrook_hollow#a".into());
+        }
+        for id in [2, 3] {
+            world.get_mut::<InstanceAt>(id).unwrap().instance_id =
+                Some("eastbrook_hollow#b".into());
+        }
+
+        assert_eq!(nearest_mob(&world, 1, 30.0), Some(4));
+        assert_eq!(nearest_alive_player(&world, 3, 40.0), Some(2));
+    }
+
+    #[test]
     fn catalog_sparsity_by_kind() {
         let sim = Sim::new_eastbrook("Sparse", woc_content::PlayerClass::Warrior);
         for id in sim.world.live_ids() {

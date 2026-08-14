@@ -407,7 +407,8 @@ pub(crate) fn dungeon_interact_action(
         }
     }
     for def in woc_content::DELVES {
-        let zone_ok = def.zone_id == zone_id || (def.zone_id == "eastbrook" && zone_id == "eastbrook");
+        let zone_ok =
+            def.zone_id == zone_id || (def.zone_id == "eastbrook" && zone_id == "eastbrook");
         if zone_ok && dist(def.entrance_x, def.entrance_z) < RANGE {
             return Some(InteractAction::EnterDelve {
                 delve_id: def.id.to_string(),
@@ -1992,6 +1993,19 @@ mod tests {
             "eastbrook_crypt#9",
         );
         assert_eq!(action, Some(InteractAction::LeaveInstance));
+    }
+
+    #[test]
+    fn final_review_instance_interaction_accepts_exact_range_boundary() {
+        let crypt = woc_content::dungeon("eastbrook_crypt").unwrap();
+        let action =
+            dungeon_interact_action(crypt.entrance_x - 5.0, crypt.entrance_z, "eastbrook", "");
+        assert_eq!(
+            action,
+            Some(InteractAction::EnterDungeon {
+                dungeon_id: "eastbrook_crypt".into()
+            })
+        );
     }
 
     #[test]

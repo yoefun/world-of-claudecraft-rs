@@ -430,6 +430,35 @@ mod tests {
     }
 
     #[test]
+    fn final_review_dead_player_cannot_enter_dungeon_silently() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Dead", PlayerClass::Warrior, 0.0, 0.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        if let Some(health) = world.get_mut::<Health>(1) {
+            health.alive = false;
+            health.hp = 0.0;
+        }
+        let before_next_id = world.next_id();
+        let before_live = world.live_ids().count();
+        let mut events = Vec::new();
+
+        assert!(!enter_dungeon(
+            &mut world,
+            &PartyRoster::new(),
+            1,
+            "eastbrook_crypt",
+            &mut events,
+        ));
+        assert!(events.is_empty());
+        assert_eq!(world.next_id(), before_next_id);
+        assert_eq!(world.live_ids().count(), before_live);
+        assert!(world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.as_ref())
+            .is_none());
+    }
+
+    #[test]
     fn enter_rejects_low_level_at_barrow_entrance() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Low", PlayerClass::Warrior, 25.0, 430.0);
@@ -695,6 +724,70 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| matches!(event, SimEvent::InstanceLeft { player: 1 })));
+    }
+
+    fn instance_non_players(world: &World, instance_key: &str) -> usize {
+        world
+            .live_ids()
+            .filter(|&id| {
+                world.get::<Identity>(id).is_some_and(|identity| {
+                    identity.kind != EntityKind::Player
+                        && world
+                            .get::<InstanceAt>(id)
+                            .and_then(|i| i.instance_id.as_deref())
+                            == Some(instance_key)
+                })
+            })
+            .count()
+    }
+
+    #[test]
+    fn final_review_hearth_keeps_occupied_instance_and_cleans_last_exit_silently() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 0.0, 0.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        place_at_dungeon(&mut world, 2, "eastbrook_crypt");
+        let mut parties = PartyRoster::new();
+        let _ = parties.invite(1, "B", &world, 0);
+        let _ = parties.accept(2, &world);
+        let mut events = Vec::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events,
+        ));
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            2,
+            "eastbrook_crypt",
+            &mut events,
+        ));
+        let key = world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.clone())
+            .unwrap();
+        let populated = instance_non_players(&world, &key);
+        assert!(populated > 0);
+
+        events.clear();
+        assert!(crate::zones::use_hearthstone(&mut world, 1, 0, &mut events));
+        assert_eq!(instance_non_players(&world, &key), populated);
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            SimEvent::Toast { message } if message == "Left the instance."
+        )));
+
+        events.clear();
+        assert!(crate::zones::use_hearthstone(&mut world, 2, 0, &mut events));
+        assert_eq!(instance_non_players(&world, &key), 0);
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            SimEvent::Toast { message } if message == "Left the instance."
+        )));
     }
 
     fn living_instance_loot<'a>(

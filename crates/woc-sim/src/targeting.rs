@@ -101,7 +101,7 @@ pub fn tab_target(world: &World, player_id: EntityId) -> Option<EntityId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Combat, Health, Identity, Transform};
+    use crate::ecs::components::{Combat, Health, Identity, InstanceAt, Transform};
     use crate::sim::Sim;
     use woc_content::PlayerClass;
     use woc_protocol::EntityKind;
@@ -134,6 +134,21 @@ mod tests {
         if let Some(h) = world.get_mut::<Health>(2) {
             h.alive = false;
         }
+        assert_eq!(tab_target(&world, 1), Some(3));
+    }
+
+    #[test]
+    fn final_review_tab_target_ignores_other_instance_mobs() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Tabber", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 1.0, 0.0).unwrap();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 2.0, 0.0).unwrap();
+        for id in [1, 3] {
+            world.get_mut::<InstanceAt>(id).unwrap().instance_id =
+                Some("eastbrook_hollow#a".into());
+        }
+        world.get_mut::<InstanceAt>(2).unwrap().instance_id = Some("eastbrook_hollow#b".into());
+
         assert_eq!(tab_target(&world, 1), Some(3));
     }
 

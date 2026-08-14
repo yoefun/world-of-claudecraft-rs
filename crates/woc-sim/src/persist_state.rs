@@ -434,9 +434,8 @@ mod tests {
     use super::*;
     use woc_content::PlayerClass;
 
-    #[test]
-    fn virgin_keeps_starter_kit() {
-        let state = PlayerPersistentState {
+    fn virgin_state(zone_id: &str) -> PlayerPersistentState {
+        PlayerPersistentState {
             durable_id: Some("abc".into()),
             level: 1,
             xp: 0,
@@ -449,7 +448,7 @@ mod tests {
             equipment_enchants: Default::default(),
             equipment_qualities: Default::default(),
             quests: vec![],
-            zone_id: "eastbrook".into(),
+            zone_id: zone_id.into(),
             talent_points: 0,
             talents: Default::default(),
             bank: vec![],
@@ -467,11 +466,55 @@ mod tests {
             known_mounts: Default::default(),
             last_mount: String::new(),
             reputation: Default::default(),
-        };
+        }
+    }
+
+    #[test]
+    fn virgin_keeps_starter_kit() {
+        let state = virgin_state("eastbrook");
         assert!(state.is_virgin());
         let mut world = World::new();
         create_player_from_state(&mut world, 1, "Ada", PlayerClass::Warrior, &state);
         assert!(world.get::<Bags>(1).unwrap().equipment.main_hand.is_some());
+    }
+
+    #[test]
+    fn final_review_virgin_barrow_save_ejects_to_mirefen_entrance() {
+        let state = virgin_state("instance:mirefen_barrow");
+        let mut sim = crate::Sim::new_empty_eastbrook();
+        let id = sim
+            .spawn_player_with_state("Ada", PlayerClass::Warrior, &state)
+            .unwrap();
+        let def = woc_content::dungeon("mirefen_barrow").unwrap();
+        let transform = sim.world.get::<Transform>(id).unwrap();
+
+        assert_eq!(sim.world.get::<Identity>(id).unwrap().zone_id, "mirefen");
+        assert!((transform.x - def.entrance_x).abs() < 1e-3);
+        assert!((transform.z - def.entrance_z).abs() < 1e-3);
+        assert!(sim
+            .world
+            .get::<InstanceAt>(id)
+            .and_then(|instance| instance.instance_id.as_ref())
+            .is_none());
+    }
+
+    #[test]
+    fn final_review_virgin_hollow_save_ejects_to_hollow_entrance() {
+        let state = virgin_state("delve:eastbrook_hollow");
+        let mut sim = crate::Sim::new_empty_eastbrook();
+        let id = sim
+            .spawn_player_with_state("Ada", PlayerClass::Warrior, &state)
+            .unwrap();
+        let transform = sim.world.get::<Transform>(id).unwrap();
+
+        assert_eq!(sim.world.get::<Identity>(id).unwrap().zone_id, "eastbrook");
+        assert!((transform.x - 8.0).abs() < 1e-3);
+        assert!((transform.z - -6.0).abs() < 1e-3);
+        assert!(sim
+            .world
+            .get::<InstanceAt>(id)
+            .and_then(|instance| instance.instance_id.as_ref())
+            .is_none());
     }
 
     /// Ports base's `non_virgin_restore_roundtrip` forward. Every field here had

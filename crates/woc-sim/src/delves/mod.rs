@@ -416,6 +416,36 @@ mod tests {
     }
 
     #[test]
+    fn final_review_dead_player_cannot_enter_delve_silently() {
+        let mut world = World::new();
+        let def = woc_content::delve("eastbrook_hollow").unwrap();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Dead",
+            PlayerClass::Warrior,
+            def.entrance_x,
+            def.entrance_z,
+        );
+        if let Some(health) = world.get_mut::<Health>(1) {
+            health.alive = false;
+            health.hp = 0.0;
+        }
+        let before_next_id = world.next_id();
+        let before_live = world.live_ids().count();
+        let mut events = Vec::new();
+
+        assert!(!enter_delve(&mut world, 1, "eastbrook_hollow", &mut events,));
+        assert!(events.is_empty());
+        assert_eq!(world.next_id(), before_next_id);
+        assert_eq!(world.live_ids().count(), before_live);
+        assert!(world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.as_ref())
+            .is_none());
+    }
+
+    #[test]
     fn leaving_delve_early_grants_no_reward() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Aborter", PlayerClass::Warrior, 0.0, 0.0);
