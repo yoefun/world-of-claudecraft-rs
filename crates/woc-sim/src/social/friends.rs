@@ -135,12 +135,19 @@ impl FriendRoster {
                 format!("{} is already on your friends list.", target.name),
             )];
         }
-        let book = self.ensure_book(&owner);
-        if book.friends.len() >= MAX_FRIENDS {
-            return vec![error(owner_id, "Your friends list is full.")];
-        }
         let display = target.name.clone();
-        book.friends.push(entry_from_resolved(&target));
+        let live = target.entity_id.is_some();
+        let durable = target.durable.clone();
+        {
+            let book = self.ensure_book(&owner);
+            if book.friends.len() >= MAX_FRIENDS {
+                return vec![error(owner_id, "Your friends list is full.")];
+            }
+            book.friends.push(entry_from_resolved(&target));
+        }
+        if live {
+            self.refresh_entry(world, &durable);
+        }
         vec![notice(
             owner_id,
             format!("{display} has been added to your friends list."),
@@ -207,13 +214,20 @@ impl FriendRoster {
                 format!("{} is already on your ignore list.", target.name),
             )];
         }
-        let book = self.ensure_book(&owner);
-        if book.ignored.len() >= MAX_IGNORE {
-            return vec![error(owner_id, "Your ignore list is full.")];
-        }
-        book.friends.retain(|e| e.durable_id != target.durable);
         let display = target.name.clone();
-        book.ignored.push(entry_from_resolved(&target));
+        let live = target.entity_id.is_some();
+        let durable = target.durable.clone();
+        {
+            let book = self.ensure_book(&owner);
+            if book.ignored.len() >= MAX_IGNORE {
+                return vec![error(owner_id, "Your ignore list is full.")];
+            }
+            book.friends.retain(|e| e.durable_id != target.durable);
+            book.ignored.push(entry_from_resolved(&target));
+        }
+        if live {
+            self.refresh_entry(world, &durable);
+        }
         vec![notice(owner_id, format!("{display} is now being ignored."))]
     }
 
@@ -1027,5 +1041,42 @@ mod tests {
         let (offline, _) = roster.snapshot_for(1, &world, &intents_for(&[1]));
         assert_eq!(offline[0].level, 1);
         assert!(!offline[0].online);
+    }
+
+    #[test]
+    fn add_and_ignore_refresh_other_books_when_target_is_live() {
+        let mut world = world_with_players(1);
+        let mut dir = CharacterDirectory::default();
+        dir.register("Bob", "bob-durable");
+        let mut roster = FriendRoster::new();
+        let _ = roster.add(1, "bob", &world, &dir);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        world
+            .get_mut::<crate::ecs::components::Durable>(2)
+            .unwrap()
+            .durable_id = Some("bob-durable".into());
+        world.get_mut::<Health>(2).unwrap().level = 9;
+        crate::ecs::spawn::create_player(&mut world, 3, "Carol", PlayerClass::Rogue, 2.0, 0.0);
+        let _ = roster.ignore(3, "Bob", &world, &dir);
+        let alice = &roster
+            .book_of(&FriendRoster::owner_key(&world, 1))
+            .unwrap()
+            .friends[0];
+        assert_eq!(alice.name, "Bob");
+        assert_eq!(alice.class_id, "mage");
+        assert_eq!(alice.level, 9);
+    }
+
+    #[test]
+    fn whisper_unknown_name() {
+        let world = world_with_players(1);
+        let dir = dir_from_world(&world);
+        let roster = FriendRoster::new();
+        assert!(roster
+            .whisper(1, "Zed", "hi", &world, &dir, &intents_for(&[1]))
+            .iter()
+            .any(|e| {
+                matches!(e, SocialEffect::Error { message, .. } if message == "No player named 'Zed'.")
+            }));
     }
 }
