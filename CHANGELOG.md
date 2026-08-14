@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.23.0 — 2026-08-14
+
+### Added
+
+- **1.23.0 `delve-depth`:** Eastbrook Hollow uses `{id}#{seq}` keys and no longer despawns the overworld.
+- Two players get two Hollows. Room clears auto-advance on the kill tick.
+- Hollow entrance moved to `(8, -6)`. **E** enters; Leave / Hearth / release abort with no reward.
+
 ## 1.22.0 — 2026-08-14
 
 ### Added

@@ -30,7 +30,7 @@
 | **1.20.0** (shipped) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
 | **1.21.0** (shipped) | `mounts` | Riding ranks, learnable mounts, **V** toggle, Expert flying |
 | **1.22.0** (shipped) | `dungeon-depth` | Playable Crypt/Barrow enter/leave, isolation, parent GY |
-| **1.23.0** (planned) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
+| **1.23.0** (shipped) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
 
 ## Completion program (closed)
 
@@ -81,12 +81,12 @@ Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then F
 
 Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
 
-## Instance depth (shipped as `1.22.0` + planned `1.23.0`)
+## Instance depth (shipped as `1.22.0` + `1.23.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-instance-depth-design.md`](superpowers/specs/2026-08-13-instance-depth-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-instance-depth.md`](superpowers/plans/2026-08-13-instance-depth.md)
 
-`1.22.0` makes 5-man dungeons playable (Bevy **E** at the portal, 5-yard sim gate, leave-to-entrance, snapshot isolation, pet follow, parent-zone graveyard, persist eject). `1.23.0` gives Eastbrook Hollow unique `{id}#{seq}` keys so it stops wiping the overworld, auto-advances cleared rooms, and moves the entrance off spawn. Protocol rev stays **10**. Dungeon Finder, lockouts, and 10-man raid encounters stay out of scope.
+`1.22.0` makes 5-man dungeons playable (Bevy **E** at the portal, 5-yard sim gate, leave-to-entrance, snapshot isolation, pet follow, parent-zone graveyard, persist eject). `1.23.0` gives Eastbrook Hollow unique `{id}#{seq}` keys so it stops wiping the overworld, auto-advances cleared rooms, and moves the entrance to `(8, -6)` with client **E** enter and room HUD. Protocol rev stays **10**. Dungeon Finder, lockouts, and 10-man raid encounters stay out of scope.
 
 ## Mounts and riding (shipped as `1.21.0`)
 

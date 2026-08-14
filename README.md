@@ -1,18 +1,18 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.22.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.23.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.22.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`dungeon-depth`**.
+**Rewrite `1.23.0`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`delve-depth`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.22.0 (dungeon-depth)
+## What works in 1.23.0 (delve-depth)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
@@ -26,12 +26,13 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Class armor caps, two-hand occupancy, warrior/rogue/hunter dual-wield, two rings, two trinkets, catalog + instance loot quality, MH/OH oils; stamina → HP, spell power on heals/spells; independent loot piles
 - Riding ranks at Stable Master Ross; learn Brown Pony / Swift Bay Steed / Tawny Gryphon; **V** toggles last mount (training + known mount required); Expert gryphon flying replaces free travel flight; combat/instance dismount
 - Dungeon portals: **E** at Eastbrook Crypt or Mirefen Barrow entrance enters; **E** at the same point inside leaves to that portal (5-yard sim gate; party shares one instance key)
+- Eastbrook Hollow delve: unique `{id}#{seq}` keys per player (no overworld wipe); walk southeast of spawn to `(8, -6)`, **E** to enter; room clears auto-advance on the kill tick; **E** at entrance inside aborts to portal (no reward); HUD shows delve room
 - Snapshot hides cross-instance players/mobs; hunter/warlock pets copy `InstanceAt` and follow into instances
 - Death release in a dungeon uses the parent-zone graveyard; persist ejects `instance:` saves to the parent entrance
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim; flying mounts use Space/Ctrl vertical
-- Version footer: `WoC-rs 1.22.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.23.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -106,7 +107,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.22.0` / `dungeon-depth` (after `1.21.0` / `mounts`). Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.23.0` / `delve-depth` (after `1.22.0` / `dungeon-depth`). Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 
