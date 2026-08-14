@@ -28,6 +28,18 @@ fn layout_zone_tag(zone_id: &str) -> &'static str {
     }
 }
 
+fn zone_population_seed(tag: &str) -> u32 {
+    let mut h = WORLD_SEED;
+    for b in tag.as_bytes() {
+        h = h.wrapping_mul(16777619) ^ u32::from(*b);
+    }
+    if h == 0 {
+        0x9e3779b9
+    } else {
+        h
+    }
+}
+
 /// Teleport through a portal without wiping other-zone actors.
 pub fn enter_portal(
     world: &mut World,
@@ -76,7 +88,7 @@ pub(crate) fn load_overworld_zone_at(
     }
 
     let tag = layout_zone_tag(zone_id);
-    let mut rng = crate::rng::Rng::new(WORLD_SEED.wrapping_add(tag.len() as u32));
+    let mut rng = crate::rng::Rng::new(zone_population_seed(tag));
     ensure_zone_population(world, layout, tag, &mut rng);
 
     let y = crate::ecs::spawn::ground_at(x, z);
@@ -211,10 +223,6 @@ pub fn populate_all_overworld(world: &mut World, rng: &mut crate::rng::Rng) {
                 {
                     if let Some(identity) = world.get_mut::<Identity>(mid) {
                         identity.zone_id = tag.to_string();
-                    }
-                    if let Some(home) = world.get_mut::<crate::ecs::components::Home>(mid) {
-                        home.home_x = x;
-                        home.home_z = z;
                     }
                 }
             }
@@ -393,5 +401,16 @@ mod tests {
             })
             .count();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn zone_population_seed_differs_for_equal_length_tags() {
+        let a = zone_population_seed("eastfen");
+        let b = zone_population_seed("mirefen");
+        assert_ne!(
+            a, b,
+            "equal-length zone tags must not share a portal population seed"
+        );
+        assert_ne!(zone_population_seed("eastbrook"), a);
     }
 }
