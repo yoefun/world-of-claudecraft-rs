@@ -406,6 +406,14 @@ pub(crate) fn dungeon_interact_action(
             });
         }
     }
+    for def in woc_content::DELVES {
+        let zone_ok = def.zone_id == zone_id || (def.zone_id == "eastbrook" && zone_id == "eastbrook");
+        if zone_ok && dist(def.entrance_x, def.entrance_z) < RANGE {
+            return Some(InteractAction::EnterDelve {
+                delve_id: def.id.to_string(),
+            });
+        }
+    }
     None
 }
 
@@ -1984,5 +1992,22 @@ mod tests {
             "eastbrook_crypt#9",
         );
         assert_eq!(action, Some(InteractAction::LeaveInstance));
+    }
+
+    #[test]
+    fn e_at_hollow_entrance_enters_delve() {
+        let hollow = woc_content::delve("eastbrook_hollow").unwrap();
+        let action = dungeon_interact_action(hollow.entrance_x, hollow.entrance_z, "eastbrook", "");
+        assert_eq!(
+            action,
+            Some(InteractAction::EnterDelve {
+                delve_id: "eastbrook_hollow".into()
+            })
+        );
+    }
+
+    #[test]
+    fn e_at_spawn_still_does_not_enter_hollow() {
+        assert!(dungeon_interact_action(2.0, 4.0, "eastbrook", "").is_none());
     }
 }
