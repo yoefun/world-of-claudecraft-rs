@@ -1,6 +1,6 @@
-# Mounts and riding design — `1.16.0` / `mounts`
+# Mounts and riding design — `1.21.0` / `mounts`
 
-**Status:** Shipped (rewrite `1.16.0` / `mounts`).  
+**Status:** Shipped (rewrite `1.21.0` / `mounts`).  
 **Baseline:** rewrite `1.13.0` / `gear-slots` on `develop` (ECS `World`; NPC services shipped).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `mounts`.
@@ -48,9 +48,9 @@ Do **not** put mount state on `Bags` equipment. Mounts are not paper-doll slots.
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
 | **1.13.0** | `gear-slots` | Dual-wield, Finger2, quality, MH enchant (shipped) |
-| **1.16.0** | `mounts` | Riding ranks, three mounts, combat dismount, gated flight |
+| **1.21.0** | `mounts` | Riding ranks, three mounts, combat dismount, gated flight |
 
-`PROTOCOL_REV` stays **8**. New fields use `#[serde(default)]`. Upstream pin stays **0.31.0**. Tick fingerprint stays `3214741777866168171`. No new named tick phase. Implementation tags `1.16.0` (after reputation `1.14.0` and gear-more `1.15.0`).
+`PROTOCOL_REV` stays **10**. New fields use `#[serde(default)]`. Upstream pin stays **0.31.0**. Tick fingerprint stays `3214741777866168171`. No new named tick phase. Implementation tags `1.21.0` (after parcel-bank `1.20.0`).
 
 ## 5. Architecture
 

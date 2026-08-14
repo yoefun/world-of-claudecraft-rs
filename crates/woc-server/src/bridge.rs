@@ -2,8 +2,9 @@
 
 use woc_content::ItemQuality;
 use woc_persist::{
-    Character, CharacterSave, EquipmentDto, InvStackDto, MailDto, MarketListingDto,
-    ProfessionSkillDto, QuestProgressDto, RealmEconomy, ReputationDto, TalentRankDto,
+    Character, CharacterSave, EquipmentDto, GuildDto, GuildMemberDto, InvStackDto, MailDto,
+    MarketListingDto, ProfessionSkillDto, QuestProgressDto, RealmEconomy, ReputationDto,
+    TalentRankDto,
 };
 use woc_sim::ecs::components::{
     Equipment, EquipmentQualities, EquipmentWear, InvStack, QuestProgress,
@@ -11,6 +12,7 @@ use woc_sim::ecs::components::{
 use woc_sim::mail::MailItem;
 use woc_sim::market::Listing;
 use woc_sim::persist_state::{quest_state_from_str, quest_state_to_str, PlayerPersistentState};
+use woc_sim::social::guild::{Guild, GuildMember, GuildRank};
 use woc_sim::Sim;
 
 pub fn character_to_state(character: &Character) -> PlayerPersistentState {
@@ -129,6 +131,12 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             copper: m.copper,
             item_id: m.item_id.clone(),
             item_count: m.item_count,
+            durability: m.durability,
+            enchant_id: m.enchant_id.clone(),
+            quality: quality_from_dto(&m.quality),
+            bound: m.bound,
+            expires_tick: m.expires_tick,
+            return_to: m.return_to.clone(),
         })
         .collect();
     sim.mail.load_mails(mails, economy.next_mail_id);
@@ -143,11 +151,22 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             seller_name: l.seller_name.clone(),
             item_id: l.item_id.clone(),
             count: l.count,
+            durability: l.durability,
+            enchant_id: l.enchant_id.clone(),
+            quality: quality_from_dto(&l.quality),
+            bound: l.bound,
             price: l.price,
+            start_bid: l.start_bid,
+            current_bid: l.current_bid,
+            bidder_durable: l.bidder_durable.clone(),
+            bidder_name: l.bidder_name.clone(),
             expires_tick: l.expires_tick,
         })
         .collect();
     sim.market.load_listings(listings, economy.next_listing_id);
+
+    let guilds: Vec<Guild> = economy.guilds.iter().map(guild_from_dto).collect();
+    sim.guilds.load_guilds(guilds, economy.next_guild_id);
 }
 
 pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
@@ -164,6 +183,12 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 copper: m.copper,
                 item_id: m.item_id,
                 item_count: m.item_count,
+                durability: m.durability,
+                enchant_id: m.enchant_id,
+                quality: quality_to_dto(m.quality),
+                bound: m.bound,
+                expires_tick: m.expires_tick,
+                return_to: m.return_to,
             })
             .collect(),
         market: sim
@@ -178,10 +203,65 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 count: l.count,
                 price: l.price,
                 expires_tick: l.expires_tick,
+                durability: l.durability,
+                enchant_id: l.enchant_id.clone(),
+                quality: quality_to_dto(l.quality),
+                bound: l.bound,
+                start_bid: l.start_bid,
+                current_bid: l.current_bid,
+                bidder_durable: l.bidder_durable.clone(),
+                bidder_name: l.bidder_name.clone(),
             })
             .collect(),
         next_mail_id: sim.mail.next_id(),
         next_listing_id: sim.market.next_id(),
+        guilds: sim
+            .guilds
+            .all_guilds()
+            .into_iter()
+            .map(guild_to_dto)
+            .collect(),
+        next_guild_id: sim.guilds.next_id(),
+    }
+}
+
+fn guild_from_dto(dto: &GuildDto) -> Guild {
+    Guild {
+        id: dto.id,
+        name: dto.name.clone(),
+        motd: dto.motd.clone(),
+        motd_set_by: dto.motd_set_by.clone(),
+        members: dto.members.iter().map(guild_member_from_dto).collect(),
+    }
+}
+
+fn guild_member_from_dto(dto: &GuildMemberDto) -> GuildMember {
+    GuildMember {
+        durable_id: dto.durable_id.clone(),
+        name: dto.name.clone(),
+        class_id: dto.class_id.clone(),
+        level: dto.level,
+        rank: GuildRank::parse(&dto.rank).unwrap_or(GuildRank::Member),
+    }
+}
+
+fn guild_to_dto(g: Guild) -> GuildDto {
+    GuildDto {
+        id: g.id,
+        name: g.name,
+        motd: g.motd,
+        motd_set_by: g.motd_set_by,
+        members: g
+            .members
+            .into_iter()
+            .map(|m| GuildMemberDto {
+                durable_id: m.durable_id,
+                name: m.name,
+                class_id: m.class_id,
+                level: m.level,
+                rank: m.rank.as_str().to_string(),
+            })
+            .collect(),
     }
 }
 
@@ -203,6 +283,7 @@ fn inv_from_dto(slots: &[Option<InvStackDto>]) -> Vec<Option<InvStack>> {
                 durability: st.durability,
                 enchant_id: st.enchant_id.clone(),
                 quality: quality_from_dto(&st.quality),
+                bound: st.bound,
             })
         })
         .collect()
@@ -218,6 +299,7 @@ fn inv_to_dto(slots: &[Option<InvStack>]) -> Vec<Option<InvStackDto>> {
                 durability: st.durability,
                 enchant_id: st.enchant_id.clone(),
                 quality: quality_to_dto(st.quality),
+                bound: st.bound,
             })
         })
         .collect()
@@ -365,4 +447,74 @@ fn quests_to_dto(quests: &[QuestProgress]) -> Vec<QuestProgressDto> {
             completed_tick: q.completed_tick,
         })
         .collect()
+}
+
+pub fn apply_mailbox_directory(sim: &mut Sim, names: &[(String, uuid::Uuid)]) {
+    for (name, id) in names {
+        sim.directory.register(name, id.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn directory_lookup_after_apply() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let id = Uuid::nil();
+        apply_mailbox_directory(&mut sim, &[("Ada".into(), id)]);
+        let key = id.to_string();
+        assert_eq!(sim.directory.lookup("ada"), Some(key.as_str()));
+    }
+
+    fn two_member_economy() -> RealmEconomy {
+        RealmEconomy {
+            guilds: vec![GuildDto {
+                id: 7,
+                name: "Vale Watch".into(),
+                motd: "Kill wolves at dusk".into(),
+                motd_set_by: "Alice".into(),
+                members: vec![
+                    GuildMemberDto {
+                        durable_id: "char-alice".into(),
+                        name: "Alice".into(),
+                        class_id: "warrior".into(),
+                        level: 12,
+                        rank: "leader".into(),
+                    },
+                    GuildMemberDto {
+                        durable_id: "char-bob".into(),
+                        name: "Bob".into(),
+                        class_id: "mage".into(),
+                        level: 8,
+                        rank: "officer".into(),
+                    },
+                ],
+            }],
+            next_guild_id: 8,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn guild_roundtrips_through_apply_and_export() {
+        let economy = two_member_economy();
+        let mut sim = Sim::new_empty_eastbrook();
+        apply_economy_to_sim(&mut sim, &economy);
+        let exported = export_economy_from_sim(&sim);
+        assert_eq!(exported.guilds, economy.guilds);
+        assert_eq!(exported.next_guild_id, 8);
+    }
+
+    #[test]
+    fn unknown_rank_loads_as_member() {
+        let mut economy = two_member_economy();
+        economy.guilds[0].members[1].rank = "warlord".into();
+        let mut sim = Sim::new_empty_eastbrook();
+        apply_economy_to_sim(&mut sim, &economy);
+        let exported = export_economy_from_sim(&sim);
+        assert_eq!(exported.guilds[0].members[1].rank, "member");
+    }
 }

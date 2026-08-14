@@ -79,5 +79,6 @@ async fn delete_character(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let account_id = account_from_headers(&state.persist, &headers).await?;
     state.persist.delete_character(account_id, id).await?;
+    crate::game_ws::on_character_deleted(id, &state.persist).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

@@ -407,7 +407,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         let mut parties = PartyRoster::new();
-        let _ = parties.invite(1, "B", &world);
+        let _ = parties.invite(1, "B", &world, 0);
         let _ = parties.accept(2, &world);
         let mut events = Vec::new();
         assert!(enter_dungeon(
@@ -513,7 +513,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         let mut parties = PartyRoster::new();
-        let _ = parties.invite(1, "B", &world);
+        let _ = parties.invite(1, "B", &world, 0);
         let _ = parties.accept(2, &world);
         let mut events = Vec::new();
         assert!(enter_dungeon(

@@ -35,6 +35,7 @@ use crate::quests::{
 };
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
+use crate::social::guild::{GuildDelivery, GuildEffect, GuildRank, GuildRoster};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
 use crate::world::WORLD_SEED;
@@ -47,7 +48,7 @@ use woc_protocol::{
 };
 
 /// Max concurrent player entities on one Eastbrook realm (dev scaffold).
-pub const MAX_REALM_PLAYERS: usize = 8;
+pub const MAX_REALM_PLAYERS: usize = 10;
 
 /// Snapshot radius for other players, mobs, pets, and non-roll loot (yards).
 pub const SNAPSHOT_AOI_RADIUS: f32 = 80.0;
@@ -64,6 +65,7 @@ fn inv_slot_snap(i: usize, st: &crate::ecs::components::InvStack) -> InvSlotSnap
         durability: st.durability,
         enchant_id: st.enchant_id.clone(),
         quality: quality_snap(st.quality),
+        bound: st.bound,
     }
 }
 
@@ -142,7 +144,11 @@ pub struct Sim {
     pub intents: HashMap<EntityId, PlayerIntent>,
     /// Party invite / membership roster for this realm.
     pub parties: PartyRoster,
+    /// Persistent guild roster for this realm.
+    pub guilds: GuildRoster,
     pub mail: crate::mail::Mailbox,
+    /// Realm character name → durable mailbox key, for offline `MailSend`.
+    pub directory: crate::mail::CharacterDirectory,
     pub market: crate::market::AuctionHouse,
     pub loot_rules: crate::social::LootRules,
     pub pvp: crate::pvp::PvpState,
@@ -171,7 +177,9 @@ impl Sim {
             events: Vec::new(),
             intents: HashMap::new(),
             parties: PartyRoster::new(),
+            guilds: GuildRoster::new(),
             mail: crate::mail::Mailbox::new(),
+            directory: crate::mail::CharacterDirectory::default(),
             market: crate::market::AuctionHouse::new(),
             loot_rules: crate::social::LootRules::default(),
             pvp: crate::pvp::PvpState::default(),
@@ -207,9 +215,12 @@ impl Sim {
             EASTBROOK.player_spawn_z,
         );
         self.intents.insert(id, PlayerIntent::default());
+        self.guilds.refresh_member(&self.world, id);
         if self.player_id == 0 {
             self.player_id = id;
         }
+        let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
+        self.directory.register(name, key);
         Some(id)
     }
 
@@ -222,6 +233,7 @@ impl Sim {
     ) -> Option<EntityId> {
         if let Some(ref did) = state.durable_id {
             if let Some(id) = self.resume_player(did) {
+                self.guilds.refresh_member(&self.world, id);
                 return Some(id);
             }
         }
@@ -267,9 +279,12 @@ impl Sim {
             }
         }
         self.intents.insert(id, PlayerIntent::default());
+        self.guilds.refresh_member(&self.world, id);
         if self.player_id == 0 {
             self.player_id = id;
         }
+        let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
+        self.directory.register(name, key);
         Some(id)
     }
 
@@ -335,7 +350,7 @@ impl Sim {
 
     /// Party invite by target player name.
     pub fn party_invite(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
-        let effects = self.parties.invite(player_id, name, &self.world);
+        let effects = self.parties.invite(player_id, name, &self.world, self.tick);
         map_party_effects(effects)
     }
 
@@ -350,15 +365,224 @@ impl Sim {
         map_party_effects(self.parties.leave(player_id))
     }
 
+    pub fn party_decline(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.decline(player_id, &self.world))
+    }
+
+    pub fn party_kick(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.kick(player_id, name, &self.world))
+    }
+
+    pub fn party_promote(&mut self, player_id: EntityId, name: &str) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.promote(player_id, name, &self.world))
+    }
+
+    pub fn party_disband(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.disband(player_id))
+    }
+
+    pub fn party_ready_check(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.ready_check(player_id, self.tick))
+    }
+
+    pub fn party_ready_respond(&mut self, player_id: EntityId, ready: bool) -> Vec<WsServerMsg> {
+        let connected: Vec<EntityId> = self
+            .parties
+            .members_of(player_id)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| self.intents.contains_key(id))
+            .collect();
+        map_party_effects(
+            self.parties
+                .ready_respond(player_id, ready, &self.world, &connected),
+        )
+    }
+
+    pub fn convert_to_raid(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.convert_to_raid(player_id))
+    }
+
+    pub fn convert_to_party(&mut self, player_id: EntityId) -> Vec<WsServerMsg> {
+        map_party_effects(self.parties.convert_to_party(player_id))
+    }
+
     /// Say / party chat.
     pub fn chat(&mut self, player_id: EntityId, channel: &str, text: &str) -> Vec<WsServerMsg> {
         map_chat_effects(handle_chat(
             &self.parties,
+            &self.guilds,
             &self.world,
             player_id,
             channel,
             text,
         ))
+    }
+
+    /// Guild / officer chat routed for live recipient expansion.
+    pub fn guild_chat(
+        &mut self,
+        player_id: EntityId,
+        channel: &str,
+        text: &str,
+    ) -> Vec<GuildDelivery> {
+        handle_chat(
+            &self.parties,
+            &self.guilds,
+            &self.world,
+            player_id,
+            channel,
+            text,
+        )
+        .into_iter()
+        .map(|e| match e {
+            ChatEffect::Error { message } => GuildDelivery::To {
+                player: player_id,
+                msg: WsServerMsg::Chat {
+                    channel: "system".into(),
+                    from: "Guild".into(),
+                    text: message,
+                },
+            },
+            ChatEffect::Message {
+                channel,
+                from,
+                text,
+            } => {
+                let key = GuildRoster::member_key(&self.world, player_id);
+                let guild_id = self.guilds.guild_id_of(&key).expect("guild chat member");
+                let officer_only = channel == "officer";
+                GuildDelivery::Guild {
+                    guild_id,
+                    officer_only,
+                    msg: WsServerMsg::Chat {
+                        channel,
+                        from,
+                        text,
+                    },
+                }
+            }
+        })
+        .collect()
+    }
+
+    pub fn guild_create(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.create(player_id, name, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_invite(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.invite(player_id, name, self.tick, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_accept(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.accept(player_id, self.tick, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_decline(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.decline(player_id, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_leave(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.leave(player_id, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_kick(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.kick(player_id, name, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_set_rank(
+        &mut self,
+        player_id: EntityId,
+        name: &str,
+        rank: &str,
+    ) -> Vec<GuildDelivery> {
+        let parsed = GuildRank::parse(rank).filter(|r| *r != GuildRank::Leader);
+        if parsed.is_none() {
+            let message = if rank == "leader" {
+                "Use a guild transfer to hand over leadership."
+            } else {
+                "Unknown rank."
+            };
+            return vec![GuildDelivery::To {
+                player: player_id,
+                msg: WsServerMsg::Chat {
+                    channel: "system".into(),
+                    from: "Guild".into(),
+                    text: message.into(),
+                },
+            }];
+        }
+        map_guild_effects(
+            self.guilds
+                .set_rank(player_id, name, parsed.unwrap(), &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_transfer_leader(&mut self, player_id: EntityId, name: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.transfer_leader(player_id, name, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_disband(&mut self, player_id: EntityId) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.disband(player_id, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn guild_set_motd(&mut self, player_id: EntityId, text: &str) -> Vec<GuildDelivery> {
+        map_guild_effects(
+            self.guilds.set_motd(player_id, text, &self.world),
+            &self.guilds,
+            &self.world,
+        )
+    }
+
+    pub fn live_guild_recipients(&self, guild_id: u32, officer_only: bool) -> Vec<EntityId> {
+        let Some(g) = self.guilds.guild(guild_id) else {
+            return Vec::new();
+        };
+        g.members
+            .iter()
+            .filter(|m| {
+                if officer_only {
+                    matches!(m.rank, GuildRank::Leader | GuildRank::Officer)
+                } else {
+                    true
+                }
+            })
+            .filter_map(|m| live_id_for_durable(&self.world, &m.durable_id))
+            .collect()
     }
 
     /// Current party member list for `player_id`, if any.
@@ -472,6 +696,14 @@ impl Sim {
         for &pid in &player_ids {
             refresh_daily_quests(&mut self.world, pid, self.tick);
         }
+
+        self.parties.expire_invites(self.tick);
+        let ready_effects = self.parties.expire_ready_check(self.tick, &self.world);
+        self.events
+            .extend(ready_effects.into_iter().filter_map(|e| match e {
+                PartyEffect::Notice { message } => Some(woc_protocol::SimEvent::Toast { message }),
+                _ => None,
+            }));
 
         // Phase 1: apply intents + motion
         for &pid in &player_ids {
@@ -596,9 +828,10 @@ impl Sim {
                     recipients.push(mate);
                 }
             }
+            let share = crate::social::party::group_xp(reward.xp, recipients.len());
             for rid in recipients {
                 if self.world.get::<Identity>(rid).map(|i| i.kind) == Some(EntityKind::Player) {
-                    grant_xp(&mut self.world, rid, reward.xp, &mut self.events);
+                    grant_xp(&mut self.world, rid, share, &mut self.events);
                     if let Some(ref tid) = reward.template_id {
                         on_mob_killed(&mut self.world, rid, tid, &mut self.events);
                         crate::reputation::on_mob_killed(
@@ -655,6 +888,7 @@ impl Sim {
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
             .tick_expire(self.tick, &mut self.world, &mut self.mail);
+        self.mail.tick_expire(self.tick, &mut self.events);
 
         // Phase 8: loot_pickup
         for &pid in &player_ids {
@@ -836,6 +1070,18 @@ impl Sim {
                 .map(|h| !h.alive)
                 .unwrap_or(false),
             party_id: self.parties.party_id(player_id),
+            party_leader_id: self.parties.leader_of(player_id),
+            party_kind: self
+                .parties
+                .kind_of(player_id)
+                .map(|k| match k {
+                    crate::social::party::GroupKind::Party => "party".into(),
+                    crate::social::party::GroupKind::Raid => "raid".into(),
+                })
+                .unwrap_or_default(),
+            party_members: self.party_member_snapshots(player_id),
+            pending_invite_from: self.parties.pending_inviter_name(player_id, &self.world),
+            ready_check: self.parties.ready_snapshot(player_id, self.tick),
             zone_id: world
                 .get::<Identity>(player_id)
                 .map(|i| i.zone_id.clone())
@@ -928,8 +1174,44 @@ impl Sim {
             mounted: world
                 .get::<Riding>(player_id)
                 .and_then(|r| r.active_id.clone()),
+            mail_postage: if world.get::<ClassKit>(player_id).is_some() {
+                crate::mail::MAIL_POSTAGE
+            } else {
+                0
+            },
+            guild: self.guilds.snapshot_for(player_id, world),
+            guild_invite: self.guilds.invite_snapshot_for(player_id, world),
             reputation: crate::reputation::snapshot(world, player_id),
         }
+    }
+
+    fn party_member_snapshots(
+        &self,
+        player_id: EntityId,
+    ) -> Vec<woc_protocol::PartyMemberSnapshot> {
+        let Some(members) = self.parties.members_of(player_id) else {
+            return Vec::new();
+        };
+        members
+            .into_iter()
+            .map(|id| {
+                let ident = self.world.get::<Identity>(id);
+                let hp = self.world.get::<Health>(id);
+                let kit = self.world.get::<ClassKit>(id);
+                woc_protocol::PartyMemberSnapshot {
+                    id,
+                    name: ident.map(|i| i.name.clone()).unwrap_or_default(),
+                    class_id: kit
+                        .and_then(|k| k.class_id)
+                        .map(|c| c.as_str().to_string())
+                        .unwrap_or_default(),
+                    hp: hp.map(|h| h.hp).unwrap_or(0.0),
+                    hp_max: hp.map(|h| h.hp_max).unwrap_or(0.0),
+                    online: self.intents.contains_key(&id),
+                    raid_group: self.parties.raid_group_of(id),
+                }
+            })
+            .collect()
     }
 
     fn snapshot_visible(
@@ -1120,6 +1402,60 @@ fn map_chat_effects(effects: Vec<ChatEffect>) -> Vec<WsServerMsg> {
         .collect()
 }
 
+fn live_id_for_durable(world: &World, durable: &str) -> Option<EntityId> {
+    world
+        .ids::<ClassKit>()
+        .into_iter()
+        .find(|&id| GuildRoster::member_key(world, id) == durable)
+}
+
+fn map_guild_effects(
+    effects: Vec<GuildEffect>,
+    guilds: &GuildRoster,
+    world: &World,
+) -> Vec<GuildDelivery> {
+    let _ = (guilds, world);
+    effects
+        .into_iter()
+        .map(|e| match e {
+            GuildEffect::Error { to, message } | GuildEffect::Notice { to, message } => {
+                GuildDelivery::To {
+                    player: to,
+                    msg: WsServerMsg::Chat {
+                        channel: "system".into(),
+                        from: "Guild".into(),
+                        text: message,
+                    },
+                }
+            }
+            GuildEffect::GuildNotice { guild_id, message } => GuildDelivery::Guild {
+                guild_id,
+                officer_only: false,
+                msg: WsServerMsg::Chat {
+                    channel: "system".into(),
+                    from: "Guild".into(),
+                    text: message,
+                },
+            },
+            GuildEffect::Chat {
+                guild_id,
+                channel,
+                from,
+                text,
+                officer_only,
+            } => GuildDelivery::Guild {
+                guild_id,
+                officer_only,
+                msg: WsServerMsg::Chat {
+                    channel,
+                    from,
+                    text,
+                },
+            },
+        })
+        .collect()
+}
+
 fn nearest_mob(world: &World, from: EntityId, max_range: f32) -> Option<EntityId> {
     let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
@@ -1180,8 +1516,8 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, Health, LootPile, Motion, Owner, Progress, QuestLog, QuestState,
-        Reputation, Riding, Threat, Transform,
+        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Motion, Owner, Progress,
+        QuestLog, QuestState, Reputation, Riding, Threat, Transform,
     };
     use crate::ecs::spawn;
     use crate::instances::enter_dungeon;
@@ -1201,6 +1537,15 @@ mod tests {
                 .and_then(|i| i.template_id.as_deref())
                 == Some(template)
         })
+    }
+
+    fn talk_to_mailbox(sim: &mut Sim) {
+        let post = find_template(sim, "mailbox_post").expect("mailbox_post");
+        if let Some(nt) = sim.world.get::<Transform>(post).cloned() {
+            place_player_at(sim, nt.x, nt.z);
+        }
+        sim.interact(post, InteractAction::Talk);
+        sim.events.clear();
     }
 
     fn place_player_at(sim: &mut Sim, x: f32, z: f32) {
@@ -1298,6 +1643,74 @@ mod tests {
         assert_eq!(TICK_PHASES[8], "profession_casts");
         assert_eq!(TICK_PHASES[9], "build_snapshot");
         assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+    }
+
+    #[test]
+    fn mail_expiry_runs_inside_pvp_and_market_without_fingerprint_change() {
+        use crate::mail::{MAIL_POSTAGE, MAIL_TTL_TICKS};
+
+        assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+        let mut sim = Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 5;
+        }
+        talk_to_mailbox(&mut sim);
+        sim.interact(
+            0,
+            InteractAction::MailSend {
+                to_name: "Bob".into(),
+                copper: 2,
+                bag_slot: None,
+                count: 0,
+            },
+        );
+        assert_eq!(sim.snapshot_for(bob).mail.len(), 1);
+        sim.tick = MAIL_TTL_TICKS;
+        sim.tick_all();
+        assert!(sim.snapshot_for(bob).mail.is_empty());
+        assert_eq!(
+            sim.snapshot_for(sim.player_id).mail[0].subject,
+            "Returned: Parcel"
+        );
+        assert_eq!(sim.snapshot_for(sim.player_id).mail_postage, MAIL_POSTAGE);
+    }
+
+    #[test]
+    fn mail_refuses_quest_item() {
+        let mut sim = Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let _bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            assert!(crate::inventory::grant_into(
+                &mut bags.inventory,
+                "boar_tusk",
+                1
+            ));
+        }
+        let slot = sim
+            .world
+            .get::<Bags>(sim.player_id)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "boar_tusk"))
+            .unwrap() as u8;
+        talk_to_mailbox(&mut sim);
+        sim.interact(
+            0,
+            InteractAction::MailSend {
+                to_name: "Bob".into(),
+                copper: 0,
+                bag_slot: Some(slot),
+                count: 1,
+            },
+        );
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "This item is needed for a quest."
+        )));
+        assert!(sim.snapshot_for(sim.player_id).mail.is_empty());
+        assert!(sim.snapshot_for(_bob).mail.is_empty());
     }
 
     #[test]
@@ -1680,6 +2093,34 @@ mod tests {
         let wear = &sim.world.get::<Bags>(sim.player_id).unwrap().equipment_wear;
         assert_eq!(wear.main_hand, Some(40));
         assert_eq!(wear.chest, Some(30));
+    }
+
+    #[test]
+    fn repair_cost_includes_banked_gear() {
+        let mut world = World::new();
+        spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_wear = EquipmentWear::full_for_equipment(&bags.equipment);
+            for stack in bags.inventory.iter_mut().flatten() {
+                if let Some(def) = woc_content::item(&stack.item_id) {
+                    if def.max_durability > 0 {
+                        stack.durability = Some(def.max_durability);
+                    }
+                }
+            }
+        }
+        if let Some(bank) = world.get_mut::<Bank>(1) {
+            let empty = bank.bank.iter().position(|s| s.is_none()).unwrap();
+            bank.bank[empty] = Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(0),
+                enchant_id: None,
+                quality: None,
+                bound: false,
+            });
+        }
+        assert_eq!(crate::interaction::repair_cost(&world, 1), 40);
     }
 
     #[test]
@@ -2149,6 +2590,37 @@ mod tests {
         );
         assert!(sim.party_members(a).is_none());
         assert!(sim.snapshot_for_player(a).party_id.is_none());
+    }
+
+    #[test]
+    fn park_keeps_party_membership() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let _ = sim.party_invite(a, "Bob");
+        let _ = sim.party_accept(b);
+        assert!(sim.parties.party_id(a).is_some());
+        sim.park_player(b);
+        assert_eq!(sim.party_members(a), Some(vec![a, b]));
+        let snap = sim.snapshot_for_player(a);
+        let bob = snap
+            .party_members
+            .iter()
+            .find(|m| m.id == b)
+            .expect("bob on roster");
+        assert!(!bob.online);
+        assert_eq!(snap.party_kind, "party");
+        assert_eq!(snap.party_leader_id, Some(a));
+    }
+
+    #[test]
+    fn snapshot_pending_invite_name() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let _ = sim.party_invite(a, "Bob");
+        let snap = sim.snapshot_for_player(b);
+        assert_eq!(snap.pending_invite_from, "Alice");
     }
 
     #[test]
@@ -2719,5 +3191,81 @@ mod tests {
             &mut events
         ));
         assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_none());
+    }
+
+    #[test]
+    fn guild_create_invite_survives_export_import() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        let _ = sim.guild_create(a, "Vale Watch");
+        let _ = sim.guild_invite(a, "Bob");
+        let _ = sim.guild_accept(b);
+        assert!(
+            sim.snapshot_for_player(a)
+                .guild
+                .as_ref()
+                .unwrap()
+                .members
+                .len()
+                == 2
+        );
+        let dumped = sim.guilds.all_guilds();
+        let next = sim.guilds.next_id();
+        let mut sim2 = Sim::new_empty_eastbrook();
+        let a2 = sim2.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        let b2 = sim2.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        sim2.guilds.load_guilds(dumped, next);
+        assert!(sim2.snapshot_for_player(a2).guild.is_some());
+        assert_eq!(
+            sim2.snapshot_for_player(b2).guild.as_ref().unwrap().name,
+            "Vale Watch"
+        );
+    }
+
+    #[test]
+    fn park_does_not_leave_guild() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(a) {
+            d.durable_id = Some("char-alice".into());
+        }
+        let _ = sim.guild_create(a, "Vale Watch");
+        sim.park_player(a);
+        assert!(sim.world.contains(a), "park must keep the entity");
+        assert!(sim.guilds.guild_id_of("char-alice").is_some());
+        let resumed = sim.resume_player("char-alice").expect("resume parked");
+        assert_eq!(resumed, a);
+        assert_eq!(
+            sim.snapshot_for_player(a).guild.as_ref().unwrap().name,
+            "Vale Watch"
+        );
+    }
+
+    #[test]
+    fn spawn_refreshes_cached_guild_level() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let a = sim.spawn_player("Alice", PlayerClass::Warrior).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(a) {
+            d.durable_id = Some("char-alice".into());
+        }
+        let _ = sim.guild_create(a, "Vale Watch");
+        assert_eq!(
+            sim.snapshot_for_player(a).guild.as_ref().unwrap().members[0].level,
+            1
+        );
+        if let Some(h) = sim.world.get_mut::<Health>(a) {
+            h.level = 9;
+        }
+        sim.park_player(a);
+        let state = sim.export_player_state(a).expect("export parked state");
+        let resumed = sim
+            .spawn_player_with_state("Alice", PlayerClass::Warrior, &state)
+            .expect("resume on hello");
+        assert_eq!(resumed, a);
+        assert_eq!(
+            sim.snapshot_for_player(a).guild.as_ref().unwrap().members[0].level,
+            9
+        );
     }
 }

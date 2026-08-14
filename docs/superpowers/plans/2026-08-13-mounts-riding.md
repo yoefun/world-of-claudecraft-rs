@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship rewrite `1.16.0` / `mounts`: riding ranks at a stable master, three learnable mounts, **V** toggles the last mount, and flying is Expert + gryphon instead of free travel flight.
+**Goal:** Ship rewrite `1.21.0` / `mounts`: riding ranks at a stable master, three learnable mounts, **V** toggles the last mount, and flying is Expert + gryphon instead of free travel flight.
 
 **Architecture:** Player-only `Riding` column (`rank`, `known`, `last_id`, `active_id`). Content tables `RIDING_RANKS` / `MOUNTS`. `PlayerIntent.fly_toggle` stays on the wire; `mount::toggle_mount` runs in `apply_intents_motion` before `step_player_motion`. `Motion.flying` is set only by a flying mount. Client draws a child silhouette from `EntitySnapshot.mounted`. No `EntityKind::Mount`.
 

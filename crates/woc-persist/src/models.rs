@@ -304,6 +304,8 @@ pub struct InvStackDto {
     pub enchant_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -620,6 +622,7 @@ mod tests {
                 durability: None,
                 enchant_id: None,
                 quality: None,
+                bound: false,
             })],
             bank_copper: 0,
             honor: 125,
@@ -699,6 +702,7 @@ mod tests {
                 durability: None,
                 enchant_id: None,
                 quality: None,
+                bound: false,
             })],
             bank_copper: 0,
             honor: 125,

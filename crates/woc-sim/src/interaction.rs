@@ -2,7 +2,7 @@
 
 use crate::ecs::components::AuraInstance;
 use crate::ecs::components::{
-    dist2d, Bags, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentQualities,
+    dist2d, Bags, Bank, BuybackEntry, ClassKit, Equipment, EquipmentEnchants, EquipmentQualities,
     EquipmentWear, Health, Hearth, Identity, InvStack, Progress, Riding, Transform,
 };
 use crate::ecs::World;
@@ -257,6 +257,9 @@ fn stack_with_durability(
     }
     stack.enchant_id = enchant_id;
     stack.quality = quality;
+    if item(item_id).is_some_and(|d| d.bind != woc_content::ItemBind::None) {
+        stack.bound = true;
+    }
     stack
 }
 
@@ -286,6 +289,19 @@ pub fn repair_cost(world: &World, player_id: EntityId) -> u32 {
         }
         let current = stack.durability.unwrap_or(def.max_durability);
         cost = cost.saturating_add(def.max_durability.saturating_sub(current));
+    }
+
+    if let Some(bank) = world.get::<Bank>(player_id) {
+        for stack in bank.bank.iter().flatten() {
+            let Some(def) = item(&stack.item_id) else {
+                continue;
+            };
+            if def.max_durability == 0 {
+                continue;
+            }
+            let current = stack.durability.unwrap_or(def.max_durability);
+            cost = cost.saturating_add(def.max_durability.saturating_sub(current));
+        }
     }
 
     cost
@@ -757,6 +773,16 @@ fn repair_all(
             }
         }
     }
+    if let Some(bank) = world.get_mut::<Bank>(player_id) {
+        for stack in bank.bank.iter_mut().flatten() {
+            let Some(def) = item(&stack.item_id) else {
+                continue;
+            };
+            if def.max_durability > 0 {
+                stack.durability = Some(def.max_durability);
+            }
+        }
+    }
     if let Some(p) = world.get_mut::<Progress>(player_id) {
         p.copper = p.copper.saturating_sub(cost);
     }
@@ -1199,6 +1225,9 @@ fn opens_npc_session(def: &NpcDef) -> bool {
         || def.is_class_trainer()
         || def.is_innkeeper()
         || def.is_riding_trainer()
+        || def.is_auctioneer()
+        || def.is_banker()
+        || def.is_mailbox()
 }
 
 fn service_name(service: NpcService) -> &'static str {
@@ -1210,6 +1239,9 @@ fn service_name(service: NpcService) -> &'static str {
         NpcService::Innkeeper => "innkeeper",
         NpcService::QuestGiver => "quest_giver",
         NpcService::RidingTrainer => "riding_trainer",
+        NpcService::Auctioneer => "auctioneer",
+        NpcService::Banker => "banker",
+        NpcService::Mailbox => "mailbox",
     }
 }
 
@@ -1284,6 +1316,9 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
         can_bind: def.is_innkeeper(),
         buyback,
         train_riding: def.is_riding_trainer(),
+        can_auction: def.is_auctioneer(),
+        can_bank: def.is_banker(),
+        can_mail: def.is_mailbox(),
         discount_pct: crate::reputation::vendor_discount(crate::reputation::npc_standing(
             world, player_id, def,
         )),
@@ -1368,6 +1403,15 @@ mod tests {
         );
         unequip_to_bag(&mut world, 1, EquipSlot::Head, &mut events);
         assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
+        let cap_stack = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "recruit_cap")
+            .unwrap();
+        assert!(cap_stack.bound);
     }
 
     #[test]

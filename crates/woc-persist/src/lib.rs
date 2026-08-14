@@ -29,7 +29,7 @@ mod password;
 pub mod postgres;
 mod store;
 
-pub use economy::{MailDto, MarketListingDto, RealmEconomy};
+pub use economy::{GuildDto, GuildMemberDto, MailDto, MarketListingDto, RealmEconomy};
 pub use error::{PersistError, PersistResult};
 pub use memory::MemoryStore;
 pub use models::{
@@ -101,6 +101,14 @@ impl Persist {
             Self::Memory(s) => s.list_characters(account_id).await,
             #[cfg(feature = "postgres")]
             Self::Postgres(s) => s.list_characters(account_id).await,
+        }
+    }
+
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        match self {
+            Self::Memory(s) => s.list_mailbox_directory().await,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(s) => s.list_mailbox_directory().await,
         }
     }
 
@@ -223,6 +231,7 @@ mod serialize_tests {
                 durability: None,
                 enchant_id: None,
                 quality: None,
+                bound: false,
             }),
             None,
         ];
