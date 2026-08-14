@@ -1,21 +1,33 @@
 # Parity status
 
-**Current rewrite:** `1.21.0` / `mounts` (PROTOCOL_REV=10).  
-**Next (planned):** `1.22.0` / `dungeon-depth` then `1.23.0` / `delve-depth` — [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md).  
+**Current rewrite:** `1.22.0` / `dungeon-depth` (PROTOCOL_REV=10).  
+**Next (planned):** `1.23.0` / `delve-depth` — [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; dungeon-depth shipped as `1.22.0`.
 
-## Instance depth (`dungeon-depth` → `delve-depth`) — planned
+## Dungeon depth (`dungeon-depth`) — done
 
 Design: [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md)  
 Plan: [`../superpowers/plans/2026-08-13-instance-depth.md`](../superpowers/plans/2026-08-13-instance-depth.md)
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Client **E** enter/leave dungeon | planned | Sim verbs exist; `input.rs` never sends them |
-| 5-yard sim gate + leave-to-entrance | planned | Leave currently snaps to zone spawn |
-| Snapshot isolation + pet `InstanceAt` | planned | Cross-instance players leak; pets have no column |
-| Parent-zone graveyard / persist eject | planned | Release always Eastbrook; load forces `eastbrook` |
+| Client **E** enter/leave | done | Bevy **E** at Crypt/Barrow portal in and out |
+| 5-yard sim gate + leave-to-entrance | done | Leave lands on portal, not zone spawn |
+| Snapshot isolation | done | Cross-instance players/mobs hidden from `entities` |
+| Pet `InstanceAt` follow | done | Pets copy owner instance; summon in-instance works |
+| Parent-zone graveyard | done | Death release uses Eastbrook/Mirefen GY by parent zone |
+| Persist eject | done | `instance:` saves load at parent entrance coords |
+| Client | done | `EnterInstance` / `LeaveInstance` from `input.rs` |
+| Protocol | done | Rev 10; additive `instance_id` / `instance_name` / `delve_room` |
+
+## Delve depth (`delve-depth`) — planned
+
+Design: [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-instance-depth.md`](../superpowers/plans/2026-08-13-instance-depth.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
 | Delve unique keys / no world wipe | planned | `enter_delve` despawns all Mob/Npc/Loot |
 | Hollow entrance + auto-advance | planned | Entrance `(0,0)` overlaps spawn **E** range |
 | Dungeon Finder / lockout / raid boss | n/a | Explicit non-goals |
@@ -276,7 +288,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.21.0` / mounts (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.22.0` / dungeon-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

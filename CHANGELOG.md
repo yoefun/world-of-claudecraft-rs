@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.22.0 — 2026-08-14
+
+### Added
+
+- **1.22.0 `dungeon-depth`:** Bevy **E** at a dungeon entrance enters; **E** at the same point inside leaves to that entrance.
+- Sim 5-yard enter gate; leave lands on the portal, not the zone spawn.
+- Snapshot hides cross-instance players/mobs; pets copy `InstanceAt` and follow.
+- Death release uses the parent-zone graveyard; persist ejects `instance:` saves to the parent entrance.
+- Additive `instance_id` / `instance_name` / `delve_room` on rev **10**.
+
 ## 1.21.0 — 2026-08-14
 
 ### Added

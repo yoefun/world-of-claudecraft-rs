@@ -1,8 +1,8 @@
 # Machine-readable rewrite / upstream pin for World of ClaudeCraft (Rust).
 # Keep Cargo.toml workspace.package.version in sync with rewrite_version.
 
-rewrite_version = "1.21.0"
+rewrite_version = "1.22.0"
 upstream_repo = "https://github.com/levy-street/world-of-claudecraft"
 upstream_version = "0.31.0"
 upstream_commit = "a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9"
-parity_target = "mounts"
+parity_target = "dungeon-depth"
