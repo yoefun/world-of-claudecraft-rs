@@ -397,6 +397,11 @@ impl FriendRoster {
             .map(|e| {
                 let live_id = find_player_by_durable(world, &e.durable_id);
                 let online = live_id.is_some_and(|id| intents.contains_key(&id));
+                let live = if online {
+                    live_id.and_then(|id| live_projection(world, id))
+                } else {
+                    None
+                };
                 let zone_id = if online {
                     live_id
                         .and_then(|id| world.get::<Identity>(id).map(|i| i.zone_id.clone()))
@@ -405,9 +410,15 @@ impl FriendRoster {
                     String::new()
                 };
                 woc_protocol::FriendSnapshot {
-                    name: e.name.clone(),
-                    class_id: e.class_id.clone(),
-                    level: e.level,
+                    name: live
+                        .as_ref()
+                        .map(|l| l.name.clone())
+                        .unwrap_or_else(|| e.name.clone()),
+                    class_id: live
+                        .as_ref()
+                        .map(|l| l.class_id.clone())
+                        .unwrap_or_else(|| e.class_id.clone()),
+                    level: live.as_ref().map(|l| l.level).unwrap_or(e.level),
                     online,
                     zone_id,
                 }
@@ -519,18 +530,15 @@ fn entry_from_resolved(target: &Resolved) -> FriendEntry {
 }
 
 fn live_projection(world: &World, id: EntityId) -> Option<FriendEntry> {
-    if world.get::<ClassKit>(id).is_none() {
-        return None;
-    }
+    let kit = world.get::<ClassKit>(id)?;
     Some(FriendEntry {
         durable_id: FriendRoster::owner_key(world, id),
         name: world
             .get::<Identity>(id)
             .map(|i| i.name.clone())
             .unwrap_or_else(|| "Unknown".into()),
-        class_id: world
-            .get::<ClassKit>(id)
-            .and_then(|k| k.class_id)
+        class_id: kit
+            .class_id
             .map(|c| c.as_str().to_string())
             .unwrap_or_default(),
         level: world.get::<Health>(id).map(|h| h.level).unwrap_or(1),
@@ -920,5 +928,104 @@ mod tests {
         assert_eq!(friends[1].name, "Carol");
         assert!(!friends[1].online);
         assert_eq!(friends[1].zone_id, "");
+    }
+
+    #[test]
+    fn add_succeeds_when_target_ignores_you() {
+        let world = world_with_players(2);
+        let dir = dir_from_world(&world);
+        let mut roster = FriendRoster::new();
+        let _ = roster.ignore(2, "Alice", &world, &dir);
+        let effects = roster.add(1, "Bob", &world, &dir);
+        assert!(effects.iter().any(|e| matches!(
+            e,
+            SocialEffect::Notice { to: 1, message }
+                if message == "Bob has been added to your friends list."
+        )));
+        assert!(roster
+            .whisper(1, "Bob", "hi", &world, &dir, &intents_for(&[1, 2]))
+            .iter()
+            .any(|e| {
+                matches!(e, SocialEffect::Error { message, .. } if message == "Bob is ignoring you.")
+            }));
+    }
+
+    #[test]
+    fn add_directory_lookup_is_case_insensitive() {
+        let world = world_with_players(1);
+        let mut dir = CharacterDirectory::default();
+        dir.register("Bob", "bob-durable");
+        let mut roster = FriendRoster::new();
+        let effects = roster.add(1, "BOB", &world, &dir);
+        assert!(effects.iter().any(|e| matches!(
+            e,
+            SocialEffect::Notice { to: 1, message }
+                if message == "BOB has been added to your friends list."
+        )));
+        let book = roster.book_of(&FriendRoster::owner_key(&world, 1)).unwrap();
+        assert_eq!(book.friends[0].durable_id, "bob-durable");
+    }
+
+    #[test]
+    fn all_books_omits_empty_after_remove() {
+        let world = world_with_players(2);
+        let dir = dir_from_world(&world);
+        let mut roster = FriendRoster::new();
+        let _ = roster.add(1, "Bob", &world, &dir);
+        let _ = roster.remove(1, "Bob", &world, &dir);
+        assert!(roster.all_books().is_empty());
+    }
+
+    #[test]
+    fn presence_refreshes_cached_projection() {
+        let mut world = world_with_players(1);
+        let mut dir = CharacterDirectory::default();
+        dir.register("Bob", "bob-durable");
+        let mut roster = FriendRoster::new();
+        let _ = roster.add(1, "bob", &world, &dir);
+        let before = roster
+            .book_of(&FriendRoster::owner_key(&world, 1))
+            .unwrap()
+            .friends[0]
+            .clone();
+        assert_eq!(before.name, "bob");
+        assert_eq!(before.class_id, "");
+        assert_eq!(before.level, 1);
+
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        world
+            .get_mut::<crate::ecs::components::Durable>(2)
+            .unwrap()
+            .durable_id = Some("bob-durable".into());
+        world.get_mut::<Health>(2).unwrap().level = 9;
+
+        let came = roster.presence(2, true, &world, &intents_for(&[1, 2]));
+        assert!(came.iter().any(|e| matches!(
+            e,
+            SocialEffect::Notice { to: 1, message } if message == "Bob has come online."
+        )));
+        let after = &roster
+            .book_of(&FriendRoster::owner_key(&world, 1))
+            .unwrap()
+            .friends[0];
+        assert_eq!(after.name, "Bob");
+        assert_eq!(after.class_id, "mage");
+        assert_eq!(after.level, 9);
+    }
+
+    #[test]
+    fn snapshot_uses_live_level_when_friend_is_online() {
+        let mut world = world_with_players(2);
+        let dir = dir_from_world(&world);
+        let mut roster = FriendRoster::new();
+        let _ = roster.add(1, "Bob", &world, &dir);
+        world.get_mut::<Health>(2).unwrap().level = 12;
+        let (friends, _) = roster.snapshot_for(1, &world, &intents_for(&[1, 2]));
+        assert_eq!(friends[0].name, "Bob");
+        assert_eq!(friends[0].level, 12);
+        assert!(friends[0].online);
+        let (offline, _) = roster.snapshot_for(1, &world, &intents_for(&[1]));
+        assert_eq!(offline[0].level, 1);
+        assert!(!offline[0].online);
     }
 }

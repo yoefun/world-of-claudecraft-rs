@@ -2027,10 +2027,20 @@ mod tests {
             WsClientMsg::Chat { channel, target, text }
                 if channel == "whisper" && target == "Bob" && text == "pull west"
         ));
+        let whisper = friend_enter_msg("/whisper Bob pull west", None).unwrap();
+        assert!(matches!(
+            whisper,
+            WsClientMsg::Chat { channel, target, text }
+                if channel == "whisper" && target == "Bob" && text == "pull west"
+        ));
         let add_tgt = friend_enter_msg("/add", Some("Carol")).unwrap();
         assert!(matches!(add_tgt, WsClientMsg::FriendAdd { name } if name == "Carol"));
         let ign = friend_enter_msg("/ignore", Some("Carol")).unwrap();
         assert!(matches!(ign, WsClientMsg::FriendIgnore { name } if name == "Carol"));
+        let rem = friend_enter_msg("/remove Bob", None).unwrap();
+        assert!(matches!(rem, WsClientMsg::FriendRemove { name } if name == "Bob"));
+        let unign = friend_enter_msg("/unignore Bob", None).unwrap();
+        assert!(matches!(unign, WsClientMsg::FriendUnignore { name } if name == "Bob"));
     }
 
     #[test]

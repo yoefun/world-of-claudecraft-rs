@@ -3385,6 +3385,37 @@ mod tests {
     }
 
     #[test]
+    fn park_and_resume_queue_presence_notices() {
+        let mut sim = Sim::new_eastbrook("Alice", PlayerClass::Warrior);
+        let alice = sim.player_id;
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(bob) {
+            d.durable_id = Some("bob-uuid".into());
+        }
+        sim.directory.register("Bob", "bob-uuid");
+        let _ = sim.take_social();
+        let _ = sim.friend_add(alice, "Bob");
+        sim.park_player(bob);
+        let gone = sim.take_social();
+        assert!(gone.iter().any(|d| matches!(
+            d,
+            SocialDelivery::To {
+                player,
+                msg: WsServerMsg::Chat { text, from, .. }
+            } if *player == alice && from == "Friends" && text == "Bob has gone offline."
+        )));
+        let _ = sim.resume_player("bob-uuid");
+        let came = sim.take_social();
+        assert!(came.iter().any(|d| matches!(
+            d,
+            SocialDelivery::To {
+                player,
+                msg: WsServerMsg::Chat { text, from, .. }
+            } if *player == alice && from == "Friends" && text == "Bob has come online."
+        )));
+    }
+
+    #[test]
     fn whisper_offline_after_park() {
         let mut sim = Sim::new_eastbrook("Alice", PlayerClass::Warrior);
         let alice = sim.player_id;
