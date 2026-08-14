@@ -310,7 +310,9 @@ pub(crate) fn cycle_duration_hours(hours: u32, next: bool) -> u32 {
 }
 
 fn zone_name(snap: &TickSnapshot) -> &str {
-    if snap.zone_id.is_empty() {
+    if !snap.instance_name.is_empty() {
+        &snap.instance_name
+    } else if snap.zone_id.is_empty() {
         "—"
     } else {
         &snap.zone_id
@@ -1890,6 +1892,7 @@ mod tests {
             repair_cost: 0,
             can_bind: false,
             buyback: vec![],
+            train_riding: false,
             can_auction: true,
             can_bank: false,
             can_mail: false,

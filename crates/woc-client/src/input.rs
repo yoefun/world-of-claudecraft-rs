@@ -367,6 +367,48 @@ pub(crate) fn quest_interact_actions(
     out
 }
 
+pub(crate) fn dungeon_interact_action(
+    player_x: f32,
+    player_z: f32,
+    zone_id: &str,
+    instance_id: &str,
+) -> Option<InteractAction> {
+    const RANGE: f32 = 5.0;
+    let dist = |x: f32, z: f32| {
+        let dx = player_x - x;
+        let dz = player_z - z;
+        (dx * dx + dz * dz).sqrt()
+    };
+    if !instance_id.is_empty() {
+        let content_id = instance_id.split('#').next().unwrap_or(instance_id);
+        if let Some(def) = woc_content::dungeon(content_id) {
+            if dist(def.entrance_x, def.entrance_z) < RANGE {
+                return Some(InteractAction::LeaveInstance);
+            }
+        }
+        if let Some(def) = woc_content::delve(content_id) {
+            if dist(def.entrance_x, def.entrance_z) < RANGE {
+                return Some(InteractAction::LeaveInstance);
+            }
+        }
+        return None;
+    }
+    for def in woc_content::DUNGEONS {
+        if def.zone_id != zone_id && def.zone_id != zone_id.trim_start_matches("instance:") {
+            // eastbrook crypt lives in eastbrook
+        }
+        let zone_ok = def.zone_id == zone_id
+            || (def.zone_id == "eastbrook" && zone_id == "eastbrook")
+            || (def.zone_id == "mirefen" && zone_id == "mirefen");
+        if zone_ok && dist(def.entrance_x, def.entrance_z) < RANGE {
+            return Some(InteractAction::EnterDungeon {
+                dungeon_id: def.id.to_string(),
+            });
+        }
+    }
+    None
+}
+
 fn mail_target_player_name(snap: &TickSnapshot) -> Option<String> {
     let tid = snap.target_id?;
     snap.entities
@@ -1266,6 +1308,16 @@ pub(crate) fn handle_interact_keys(
         return;
     }
 
+    if let Some(action) = dungeon_interact_action(
+        player.x,
+        player.z,
+        &host.snapshot.zone_id,
+        &host.snapshot.instance_id,
+    ) {
+        host.interact(player_id, action);
+        return;
+    }
+
     let mut best: Option<(EntityId, f32, Option<String>)> = None;
     for e in &host.snapshot.entities {
         if e.kind != EntityKind::Npc || !e.alive {
@@ -1903,5 +1955,34 @@ mod tests {
         assert_eq!(AbilitySlot::Primary as u8, 1);
         assert_eq!(AbilitySlot::Slot2 as u8, 2);
         assert_eq!(AbilitySlot::Slot5 as u8, 5);
+    }
+
+    #[test]
+    fn e_at_crypt_entrance_enters() {
+        let crypt = woc_content::dungeon("eastbrook_crypt").unwrap();
+        let action = dungeon_interact_action(crypt.entrance_x, crypt.entrance_z, "eastbrook", "");
+        assert_eq!(
+            action,
+            Some(InteractAction::EnterDungeon {
+                dungeon_id: "eastbrook_crypt".into()
+            })
+        );
+    }
+
+    #[test]
+    fn e_at_spawn_does_not_enter_crypt() {
+        assert!(dungeon_interact_action(2.0, 4.0, "eastbrook", "").is_none());
+    }
+
+    #[test]
+    fn e_inside_crypt_at_entrance_leaves() {
+        let crypt = woc_content::dungeon("eastbrook_crypt").unwrap();
+        let action = dungeon_interact_action(
+            crypt.entrance_x,
+            crypt.entrance_z,
+            "instance:eastbrook_crypt",
+            "eastbrook_crypt#9",
+        );
+        assert_eq!(action, Some(InteractAction::LeaveInstance));
     }
 }
