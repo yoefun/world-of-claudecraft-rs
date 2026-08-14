@@ -7,6 +7,7 @@ pub mod classes;
 pub mod delves;
 pub mod dungeons;
 pub mod enchants;
+pub mod factions;
 pub mod gather_nodes;
 pub mod graveyards;
 pub mod items;
@@ -14,6 +15,7 @@ pub mod items_zone2;
 pub mod mobs;
 pub mod mobs_zone2;
 pub mod mobs_zone3;
+pub mod mounts;
 pub mod npcs;
 pub mod npcs_zone2;
 pub mod npcs_zone3;
@@ -41,17 +43,27 @@ pub use dungeons::{dungeon, DungeonDef, DungeonTrashSpot, DUNGEONS};
 pub use enchants::{
     disenchant_yield, profession_enchant, EnchantReagent, ProfessionEnchantDef, PROFESSION_ENCHANTS,
 };
+pub use factions::{
+    clamp_reputation, discounted_price, faction, standing_at, standing_from_value, standing_next,
+    vendor_discount_pct, FactionDef, RepAward, Standing, EXALTED_AT, FACTIONS,
+    FACTION_EASTBROOK_WATCH, FACTION_EASTFEN_CIRCLE, FACTION_HIGHWATCH, FACTION_MIREFEN_FERRY,
+    FRIENDLY_AT, HONORED_AT, STANDING_CAP, STANDING_FLOOR,
+};
 pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER_NODES};
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{
     base_of, can_dual_wield, can_equip, class_armor_cap, enchant, fine_substitute_for, item,
-    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny, ItemDef,
-    ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
+    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny,
+    ItemBind, ItemDef, ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
 };
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
 pub use mobs_zone3::ZONE3_MOBS;
+pub use mounts::{
+    mount, mount_by_item, riding_rank, riding_rank_by_n, MountDef, MountKind, RidingRankDef,
+    MOUNTS, RIDING_RANKS,
+};
 pub use npcs::{npc, NpcDef, NpcService, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
@@ -120,7 +132,7 @@ mod tests {
                         assert!(it.armor_class.is_none(), "{}", it.id);
                     } else if matches!(
                         it.equip_slot,
-                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger)
+                        Some(ItemEquipSlot::Neck | ItemEquipSlot::Finger | ItemEquipSlot::Trinket)
                     ) {
                         assert!(style.is_none(), "{}", it.id);
                         assert!(it.armor_class.is_none(), "{}", it.id);
@@ -558,6 +570,160 @@ mod tests {
         assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
+        assert!(npc("stable_master_ross").unwrap().is_riding_trainer());
+        assert!(npc("auctioneer_lise").unwrap().is_auctioneer());
+        assert!(npc("banker_holme").unwrap().is_banker());
+        assert!(npc("mailbox_post").unwrap().is_mailbox());
+        assert_eq!(
+            npc("trader_wilkes").unwrap().faction,
+            Some("eastbrook_watch")
+        );
+        assert!(npc("trader_wilkes")
+            .unwrap()
+            .vendor_stock
+            .iter()
+            .any(|o| o.item_id == "watch_signet" && o.min_standing == crate::Standing::Friendly));
+    }
+
+    #[test]
+    fn stable_master_ross_roster() {
+        let ross = npc("stable_master_ross").expect("ross");
+        assert!(ross.is_riding_trainer());
+        assert!(ross.is_vendor());
+        assert!(!ross.is_profession_trainer());
+        assert!(ross.trains.is_empty());
+        let stock: Vec<_> = ross.vendor_stock.iter().map(|o| o.item_id).collect();
+        assert!(stock.contains(&"brown_pony"));
+        assert!(stock.contains(&"swift_bay_steed"));
+        assert!(stock.contains(&"tawny_gryphon"));
+        assert!(EASTBROOK.npcs.iter().any(|s| {
+            s.npc_id == "stable_master_ross" && (s.x - 4.0).abs() < 1e-6 && (s.z - 9.0).abs() < 1e-6
+        }));
+    }
+
+    #[test]
+    fn riding_trainers_stock_mounts() {
+        for n in NPCS.iter() {
+            if n.services.contains(&NpcService::RidingTrainer) {
+                assert!(n.is_vendor(), "{} riding trainer must vendor", n.id);
+                assert!(!n.vendor_stock.is_empty(), "{} empty stock", n.id);
+                for offer in n.vendor_stock {
+                    let it = item(offer.item_id).unwrap();
+                    assert_eq!(it.kind, ItemKind::Mount, "{} stocks non-mount", n.id);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn auctioneer_lise_is_eastbrook_auction_only() {
+        let lise = npc("auctioneer_lise").expect("auctioneer_lise");
+        assert!(lise.is_auctioneer());
+        assert!(!lise.is_vendor());
+        assert!(!lise.can_repair());
+        assert!(lise.vendor_stock.is_empty());
+        assert!(lise.trains.is_empty());
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "auctioneer_lise"
+            && (s.x - 4.0).abs() < f32::EPSILON
+            && (s.z - 6.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn banker_and_mailbox_are_eastbrook_only_services() {
+        let holme = npc("banker_holme").expect("banker_holme");
+        assert!(holme.is_banker());
+        assert!(!holme.is_auctioneer());
+        assert!(!holme.is_vendor());
+        assert_eq!(holme.greeting, "Your coin is safer with me.");
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "banker_holme"
+            && (s.x - 6.0).abs() < f32::EPSILON
+            && (s.z - 6.0).abs() < f32::EPSILON));
+
+        let post = npc("mailbox_post").expect("mailbox_post");
+        assert!(post.is_mailbox());
+        assert!(!post.is_banker());
+        assert_eq!(post.greeting, "Leave it. We'll see it through.");
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "mailbox_post"
+            && (s.x - 0.0).abs() < f32::EPSILON
+            && (s.z - 8.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn catalog_bind_rules() {
+        use crate::ItemBind;
+        assert_eq!(item("worn_sword").unwrap().bind, ItemBind::OnEquip);
+        assert_eq!(item("recruit_tunic").unwrap().bind, ItemBind::OnEquip);
+        assert_eq!(item("boar_tusk").unwrap().bind, ItemBind::OnPickup);
+        assert_eq!(item("silverleaf").unwrap().bind, ItemBind::None);
+        assert_eq!(item("travelers_ration").unwrap().bind, ItemBind::None);
+    }
+
+    #[test]
+    fn factions_and_reputation_tables_are_consistent() {
+        use crate::{faction, FACTIONS};
+
+        assert_eq!(FACTIONS.len(), 4);
+        for n in NPCS.iter() {
+            if let Some(id) = n.faction {
+                assert!(faction(id).is_some(), "{} unknown faction {id}", n.id);
+            }
+            for offer in n.vendor_stock {
+                assert!(
+                    ITEMS.iter().any(|i| i.id == offer.item_id),
+                    "vendor {} missing gated item {}",
+                    n.id,
+                    offer.item_id
+                );
+            }
+        }
+        for q in QUESTS.iter() {
+            if let Some(rep) = q.reward.reputation {
+                assert!(
+                    faction(rep.faction_id).is_some(),
+                    "quest {} unknown faction {}",
+                    q.id,
+                    rep.faction_id
+                );
+                assert!(rep.amount > 0, "quest {} reputation must be positive", q.id);
+            }
+        }
+        for m in MOBS.iter() {
+            if let Some(rep) = m.kill_reputation {
+                assert!(
+                    faction(rep.faction_id).is_some(),
+                    "mob {} unknown faction {}",
+                    m.id,
+                    rep.faction_id
+                );
+                assert!(
+                    rep.amount > 0,
+                    "mob {} kill reputation must be positive",
+                    m.id
+                );
+            }
+        }
+        assert_eq!(
+            quest("report_to_alden")
+                .unwrap()
+                .reward
+                .reputation
+                .unwrap()
+                .amount,
+            150
+        );
+        assert_eq!(
+            quest("wolves_at_the_gate")
+                .unwrap()
+                .reward
+                .reputation
+                .unwrap()
+                .faction_id,
+            "eastbrook_watch"
+        );
+        assert_eq!(
+            item("watch_signet").unwrap().equip_slot,
+            Some(ItemEquipSlot::Finger)
+        );
     }
 
     #[test]
@@ -1159,5 +1325,40 @@ mod tests {
             disenchant_yield("copper_shortsword")[0].item_id,
             "arcane_dust"
         );
+    }
+
+    #[test]
+    fn riding_ranks_locked() {
+        assert_eq!(RIDING_RANKS.len(), 3);
+        let a = riding_rank("apprentice").expect("apprentice");
+        assert_eq!(a.rank, 1);
+        assert_eq!(a.level_req, 2);
+        assert_eq!(a.copper, 10);
+        assert!((a.ground_speed_mult - 1.6).abs() < 1e-6);
+        assert_eq!(riding_rank_by_n(3).unwrap().id, "expert");
+        assert!(riding_rank_by_n(0).is_none());
+    }
+
+    #[test]
+    fn mount_table_matches_items() {
+        assert_eq!(MOUNTS.len(), 3);
+        for def in MOUNTS.iter() {
+            let it = item(def.item_id).unwrap_or_else(|| panic!("missing {}", def.item_id));
+            assert_eq!(it.kind, ItemKind::Mount, "{}", def.id);
+            assert_eq!(it.stack_size, 1);
+            assert_eq!(it.max_durability, 0);
+            assert!(it.equip_slot.is_none());
+            assert_eq!(mount_by_item(def.item_id).map(|m| m.id), Some(def.id));
+        }
+        let pony = mount("brown_pony").unwrap();
+        assert_eq!(pony.riding_rank, 1);
+        assert!(matches!(pony.kind, MountKind::Ground));
+        assert!((pony.speed_mult - 1.6).abs() < 1e-6);
+        let gryphon = mount("tawny_gryphon").unwrap();
+        assert!(matches!(gryphon.kind, MountKind::Flying));
+        assert_eq!(gryphon.riding_rank, 3);
+        assert_eq!(item("brown_pony").unwrap().vendor_buy, 25);
+        assert_eq!(item("swift_bay_steed").unwrap().vendor_buy, 150);
+        assert_eq!(item("tawny_gryphon").unwrap().vendor_buy, 300);
     }
 }

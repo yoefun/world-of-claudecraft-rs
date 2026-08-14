@@ -1,17 +1,103 @@
 # Changelog
 
-## 1.14.0 — 2026-08-13
+## 1.22.0 — 2026-08-14
 
 ### Added
 
-- **1.14.0 `kill-loop`:** Per-template `Respawn.delay_sec` (wolves 30 s; `mire_terror` 300 s); instance/delve trash and bosses never revive (`delay_sec = 0`).
+- **1.22.0 `kill-loop`:** Per-template `Respawn.delay_sec` (wolves 30 s; `mire_terror` 300 s); instance/delve trash and bosses never revive (`delay_sec = 0`).
 - Leash reset restores full HP and clears auras/threat when mobs return home.
 - `MobSpot` `count` + `radius` packs; Wolf Run spawns ≥5 young wolves.
 - Loot honors `LootEntry.count`; piles expire after 2_400 ticks (120 s); `create_loot_ex` stamps the correct zone.
 - Quest `ItemKind::Quest` piles skip Need/Greed rolls (FFA pickup).
 - Pet last-hit credits the `Owner` for XP/quest/party share via `collect_pending_mob_kills`.
 - Mob abilities: `wolf_bite`, `warden_smash`, `terror_slam`; threat switches at 1.1× ratio.
-- Protocol rev stays **8** (additive `SimEvent::Loot.count`).
+- Protocol rev stays **10** (additive `SimEvent::Loot.count`).
+
+### Notes
+
+- Planned as `1.14.0` while develop shipped `1.14.0` … `1.21.0` in parallel; the theme lands as `1.22.0`.
+
+## 1.21.0 — 2026-08-14
+
+### Added
+
+- **1.21.0 `mounts`:** Riding ranks (Apprentice L2 / Journeyman L5 / Expert L8) at Stable Master Ross; three learn-on-use mounts (Brown Pony 1.6×, Swift Bay Steed 2.0×, Tawny Gryphon flying 2.0×).
+- **V** toggles the last known mount (requires training + learned mount); Expert gryphon replaces free travel flight.
+- Combat, death, dungeon/delve, and swim dismount; crypt refuses mounts.
+- `Riding` ECS column; `TrainRiding` interact; snapshot `mounted` / `riding_rank`; persist rank + known (load dismounted).
+- Protocol rev stays **10** (`TrainRiding`, `mounted`, `riding_rank` are additive).
+
+## 1.20.0 — 2026-08-14
+
+### Added
+
+- **1.20.0 `parcel-bank`:** Offline parcels via `CharacterDirectory`, client compose/send/numbered collect/return, postage 1c, inbox cap 20, 24h tick expiry with return, and `RepairAll` includes banked gear.
+- Client **K** **G** banks any non-quest stack; **I** **S**/**Y** send item or wallet copper, **1–9** numbered collect, **X** return; compose field for recipient names.
+- Banker Holme and Eastbrook Post still gate **K** / **I** actions (from `1.16.0`). Additive on protocol rev **10** (`mail_postage`, `MailReturn`, mail `expires_tick`).
+
+## 1.19.0 — 2026-08-14
+
+### Added
+
+- **1.19.0 `guilds`:** Create guild, invite/accept/leave with durable character id and tick TTL 1_200.
+- Ranks (leader/officer/member), kick, transfer leadership, and disband.
+- Guild chat and officer chat (`/o`) with member-only fan-out.
+- MOTD (officer+; max 240 chars).
+- Persist `RealmEconomy.guilds` across realm restart.
+- Client **J** panel: compose guild name / chat / `/motd` / `/o`; `/invite` `/kick` `/officer` `/member` `/transfer` by name; Ctrl+letter verbs; Esc closes.
+- Protocol rev **10** (snapshot `guild` / `guild_invite` + guild client verbs).
+
+## 1.18.0 — 2026-08-14
+
+### Added
+
+- **1.18.0 `raid`:** Convert a full 5-man party into a 10-player raid of two groups.
+- Leader **Equals** converts party → raid (`Converted to a raid.`); convert back when size ≤ 5 (`Too many members to convert to a party.` at 6+).
+- `MAX_RAID_SIZE` **10**; `MAX_REALM_PLAYERS` **10**.
+- `raid` chat channel (error `You are not in a raid.` when not in a raid).
+- Client frames prefix other members with **G1** / **G2** (`raid_group + 1`). Local player still omitted.
+
+## 1.17.0 — 2026-08-14
+
+### Added
+
+- **1.17.0 `party-depth`:** Playable 5-man parties in the Bevy client.
+- Client **G** invite (player target), **O** accept / **P** decline, **P** party panel, snapshot frames with HP.
+- Leader kick / promote / disband (panel **Y** / **-** / **Backspace**); **X** leave; **R** ready check.
+- Invite TTL **600** ticks (pending dropped silently).
+- Snapshot roster frames (`party_members`) even when a mate is outside AOI; disconnect shows **AFK**.
+- Park-safe membership: `park_player` keeps the roster; resume restores the same party.
+- Classic-era `group_xp` split (2-man = 75% each).
+- Ready check (300 ticks; parked members do not block early complete).
+- Protocol rev **9** (roster snapshot fields + kick/promote/disband/ready/raid-convert verbs).
+
+## 1.16.0 — 2026-08-13
+
+### Added
+
+- **1.16.0 `economy-depth`:** Auctioneer Lise, instance-preserving listings, 5% house cut, mail-always proceeds.
+- Auction bids, 12/24/48 hour listings, client search/pagination, soulbound, banker and mailbox NPCs.
+- Bid copper is held; outbid mail returns it. Expire with a bid mails `"Auction won"` and sale proceeds. Buyout still instant.
+- Weapons/armor bind on equip; quest items bind on pickup. Bound stacks cannot list or mail.
+- Eastbrook Banker Holme and Eastbrook Post gate **K** / **I** actions. Protocol rev stays **8**.
+
+## 1.15.0 — 2026-08-13
+
+### Added
+
+- **1.15.0 `gear-more`:** Extra doll slots (Shoulder, Back, Wrist, Hands, Waist, Trinket + Trinket2).
+- Hunter dual-wield (with Warrior/Rogue). Worn Hatchet at Wilkes; Hunter can equip copper shortsword.
+- Off-hand weapon enchants: second oil applies to OH at full AP/SP; C-sheet Off line shows `[enchant]`.
+- Instance loot quality on Weapon/Armor piles (`max(catalog, roll)`); persist roundtrips stack quality.
+- Protocol rev stays **8** (additive extra slots, `off_hand_enchant`, per-stack `quality`).
+
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `reputation`:** four hub factions (Eastbrook Watch, Eastfen Circle, Mirefen Ferry, Highwatch) with a Neutral→Exalted ladder on a player `Reputation` column.
+- Quest turn-in and mob kills grant standing (party-shared on kills). Friendly+ vendor discounts; Unfriendly vendors refuse trade.
+- Wilkes sells `watch_signet` at Friendly Watch. Character sheet **C** lists standing. Additive on protocol rev **8**.
 
 ## 1.13.0 — 2026-08-13
 

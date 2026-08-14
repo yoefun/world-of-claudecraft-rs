@@ -21,7 +21,15 @@
 | **1.11.0** (shipped) | `npc-services` | Vendor buyback, durability/repair, profession/class trainers, hearth |
 | **1.12.0** (shipped) | `gear-depth` | Class gear rules, jewelry, secondary stats, upgrade drops |
 | **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
-| **1.14.0** (shipped) | `kill-loop` | Per-template respawn, leash reset, loot count/TTL, pet credit, mob abilities |
+| **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
+| **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
+| **1.16.0** (shipped) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
+| **1.17.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
+| **1.18.0** (shipped) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
+| **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
+| **1.20.0** (shipped) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
+| **1.21.0** (shipped) | `mounts` | Riding ranks, learnable mounts, **V** toggle, Expert flying |
+| **1.22.0** (shipped) | `kill-loop` | Per-template respawn, leash reset, loot count/TTL, pet credit, mob abilities |
 
 ## Completion program (closed)
 
@@ -38,12 +46,25 @@ Gameplay-core rewrite against upstream **0.31.0** is **shipped** as `1.0.0-pre`.
 
 Upstream pin remains **0.31.0** unless explicitly bumped. Browser/Electron/Web3/RL/admin/i18n stay non-goals. New per-actor gameplay state must be a `World` component column (`AGENTS.md`); do not reintroduce a fat `Entity`.
 
+## Reputation (shipped as `1.14.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-reputation-design.md`](superpowers/specs/2026-08-13-reputation-design.md)
+
+Four hub factions on a player `Reputation` column. Quest and kill grants; Friendly vendor discount and gated `watch_signet`; Unfriendly refuse. Protocol rev stays **8**.
+
 ## Gear depth (shipped as `1.12.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-depth-design.md`](superpowers/specs/2026-08-13-gear-depth-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-depth.md`](superpowers/plans/2026-08-13-gear-depth.md)
 
 Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services.
+
+## Guilds (this branch as `1.16.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-guilds-design.md`](superpowers/specs/2026-08-13-guilds-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-guilds.md`](superpowers/plans/2026-08-13-guilds.md)
+
+`GuildRoster` on `Sim`, keyed by durable character id (like mail). Parties stay ephemeral. Protocol rev **9**. Guild bank, calendar, friends/ignore stay out of scope.
 
 ## Gear slots (shipped as `1.13.0`)
 
@@ -52,12 +73,47 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
 
-## Kill loop (shipped as `1.14.0`)
+## Kill loop (shipped as `1.22.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-kill-loop-design.md`](superpowers/specs/2026-08-13-kill-loop-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-kill-loop.md`](superpowers/plans/2026-08-13-kill-loop.md)
 
-Close spawn → fight → loot → respawn: per-template respawn (instance trash never), leash HP reset, `MobSpot` packs, loot `count` + 120 s TTL, pet last-hit credits the owner, three mob abilities, 1.1× threat switch. Protocol rev stays **8**. No new tick phase.
+Close spawn → fight → loot → respawn: per-template respawn (instance trash never), leash HP reset, `MobSpot` packs, loot `count` + 120 s TTL, pet last-hit credits the owner, three mob abilities, 1.1× threat switch. Planned as `1.14.0`; renumbered to `1.22.0` after develop shipped `1.14.0`–`1.21.0` in parallel. Protocol rev stays **10**. No new tick phase.
+
+## Gear more (shipped as `1.15.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-more-design.md`](superpowers/specs/2026-08-13-gear-more-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
+
+Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
+
+## Mounts and riding (shipped as `1.21.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-mounts-riding-design.md`](superpowers/specs/2026-08-13-mounts-riding-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-mounts-riding.md`](superpowers/plans/2026-08-13-mounts-riding.md)
+
+Free **V** travel flight is replaced by a gated mount loop. Players train riding at Stable Master Ross, learn a mount item, and toggle with **V**. Combat/instance dismount. Protocol rev stays **10** (additive riding fields). Tick fingerprint unchanged.
+
+## Economy depth (shipped as `1.16.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-economy-depth-design.md`](superpowers/specs/2026-08-13-economy-depth-design.md)
+
+Auctioneer Lise, instance listings, 5% cut, mail-always proceeds, then bids, 12/24/48 h, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
+
+## Parcel and bank (shipped as `1.20.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-parcel-bank-design.md`](superpowers/specs/2026-08-13-parcel-bank-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-parcel-bank.md`](superpowers/plans/2026-08-13-parcel-bank.md)
+
+Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the first non-quest bag stack. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. Banker/mailbox NPC gates from `1.16.0` stay. Additive on protocol rev **10**.
+
+
+## Party depth (shipped as `1.17.0`) + raid (shipped as `1.18.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-party-raid-design.md`](superpowers/specs/2026-08-13-party-raid-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-party-raid.md`](superpowers/plans/2026-08-13-party-raid.md)
+
+`1.17.0` makes 5-man parties playable (invite/decline/kick/promote/disband, snapshot frames, classic XP split, park-safe membership, ready check). `1.18.0` converts a full party into a 10-player raid of two groups and raises `MAX_REALM_PLAYERS` to 10. Protocol rev **9**. Guilds and Dungeon Finder stay out of scope.
 
 ## Client version gate (current)
 

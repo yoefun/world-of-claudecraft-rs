@@ -220,6 +220,15 @@ fn format_label(
                     if n.is_innkeeper() {
                         tags.push_str("[H]");
                     }
+                    if n.is_auctioneer() {
+                        tags.push_str("[A]");
+                    }
+                    if n.is_banker() {
+                        tags.push_str("[B]");
+                    }
+                    if n.is_mailbox() {
+                        tags.push_str("[M]");
+                    }
                     if tags.is_empty() {
                         tags
                     } else {

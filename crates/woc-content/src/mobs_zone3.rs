@@ -1,5 +1,6 @@
 //! Zone 3 (Thornpeak Heights) mob templates.
 
+use crate::factions::RepAward;
 use crate::mobs::{LootEntry, MobTemplate};
 
 pub static ZONE3_MOBS: &[MobTemplate] = &[
@@ -19,6 +20,7 @@ pub static ZONE3_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("highwatch", 30)),
     },
     MobTemplate {
         id: "cragback_boar",
@@ -36,6 +38,7 @@ pub static ZONE3_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("highwatch", 25)),
     },
     MobTemplate {
         id: "gale_harpy",
@@ -49,5 +52,6 @@ pub static ZONE3_MOBS: &[MobTemplate] = &[
         loot: &[],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("highwatch", 35)),
     },
 ];

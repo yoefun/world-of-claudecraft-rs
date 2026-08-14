@@ -2,6 +2,7 @@
 
 use std::sync::LazyLock;
 
+use crate::factions::Standing;
 use crate::npcs_zone2::ZONE2_NPCS;
 use crate::npcs_zone3::ZONE3_NPCS;
 
@@ -9,6 +10,25 @@ use crate::npcs_zone3::ZONE3_NPCS;
 pub struct VendorOffer {
     pub item_id: &'static str,
     pub count: u32,
+    pub min_standing: Standing,
+}
+
+impl VendorOffer {
+    pub const fn stack(item_id: &'static str, count: u32) -> Self {
+        Self {
+            item_id,
+            count,
+            min_standing: Standing::Neutral,
+        }
+    }
+
+    pub const fn gated(item_id: &'static str, count: u32, min_standing: Standing) -> Self {
+        Self {
+            item_id,
+            count,
+            min_standing,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +39,10 @@ pub enum NpcService {
     ProfessionTrainer,
     ClassTrainer,
     Innkeeper,
+    RidingTrainer,
+    Auctioneer,
+    Banker,
+    Mailbox,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +53,7 @@ pub struct NpcDef {
     pub services: &'static [NpcService],
     pub vendor_stock: &'static [VendorOffer],
     pub trains: &'static [&'static str],
+    pub faction: Option<&'static str>,
 }
 
 impl NpcDef {
@@ -56,6 +81,22 @@ impl NpcDef {
         self.services.contains(&NpcService::Innkeeper)
     }
 
+    pub fn is_riding_trainer(&self) -> bool {
+        self.services.contains(&NpcService::RidingTrainer)
+    }
+
+    pub fn is_auctioneer(&self) -> bool {
+        self.services.contains(&NpcService::Auctioneer)
+    }
+
+    pub fn is_banker(&self) -> bool {
+        self.services.contains(&NpcService::Banker)
+    }
+
+    pub fn is_mailbox(&self) -> bool {
+        self.services.contains(&NpcService::Mailbox)
+    }
+
     pub fn trains_profession(&self, id: &str) -> bool {
         self.trains.contains(&id)
     }
@@ -69,35 +110,29 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver, NpcService::ClassTrainer],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("eastbrook_watch"),
     },
     NpcDef {
         id: "trader_wilkes",
         name: "Trader Wilkes",
         greeting: "Fresh rations and a fair price, traveler.",
-        services: &[NpcService::QuestGiver, NpcService::Vendor, NpcService::ProfessionTrainer],
+        services: &[
+            NpcService::QuestGiver,
+            NpcService::Vendor,
+            NpcService::ProfessionTrainer,
+        ],
         vendor_stock: &[
-            VendorOffer {
-                item_id: "travelers_ration",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "baked_bread",
-                count: 40,
-            },
-            VendorOffer {
-                item_id: "spring_water",
-                count: 40,
-            },
-            VendorOffer {
-                item_id: "spool_of_thread",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "linen_cloth",
-                count: 20,
-            },
+            VendorOffer::stack("travelers_ration", 20),
+            VendorOffer::stack("baked_bread", 40),
+            VendorOffer::stack("spring_water", 40),
+            VendorOffer::stack("spool_of_thread", 20),
+            VendorOffer::stack("linen_cloth", 20),
+            VendorOffer::gated("watch_signet", 1, Standing::Friendly),
+            VendorOffer::stack("worn_hatchet", 2),
+            VendorOffer::stack("lucky_pebble", 2),
         ],
         trains: &["skinning", "leatherworking", "tailoring", "jewelcrafting"],
+        faction: Some("eastbrook_watch"),
     },
     NpcDef {
         id: "town_crier",
@@ -106,6 +141,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("eastbrook_watch"),
     },
     NpcDef {
         id: "eastbrook_courier",
@@ -114,6 +150,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         services: &[],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("eastbrook_watch"),
     },
     NpcDef {
         id: "smith_brann",
@@ -125,52 +162,22 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
             NpcService::ProfessionTrainer,
         ],
         vendor_stock: &[
-            VendorOffer {
-                item_id: "worn_sword",
-                count: 1,
-            },
-            VendorOffer {
-                item_id: "wooden_buckler",
-                count: 1,
-            },
-            VendorOffer {
-                item_id: "copper_shortsword",
-                count: 1,
-            },
-            VendorOffer {
-                item_id: "recruit_tunic",
-                count: 1,
-            },
-            VendorOffer {
-                item_id: "coarse_whetstone",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "minor_wizard_oil",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "copper_pick",
-                count: 5,
-            },
-            VendorOffer {
-                item_id: "skinning_knife",
-                count: 5,
-            },
-            VendorOffer {
-                item_id: "smithing_flux",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "copper_sickle",
-                count: 5,
-            },
-            VendorOffer {
-                item_id: "empty_vial",
-                count: 20,
-            },
+            VendorOffer::stack("worn_sword", 1),
+            VendorOffer::stack("wooden_buckler", 1),
+            VendorOffer::stack("copper_shortsword", 1),
+            VendorOffer::stack("recruit_tunic", 1),
+            VendorOffer::stack("coarse_whetstone", 20),
+            VendorOffer::stack("minor_wizard_oil", 20),
+            VendorOffer::stack("copper_pick", 5),
+            VendorOffer::stack("skinning_knife", 5),
+            VendorOffer::stack("smithing_flux", 20),
+            VendorOffer::stack("copper_sickle", 5),
+            VendorOffer::stack("empty_vial", 20),
+            VendorOffer::stack("wool_cloak", 8),
+            VendorOffer::stack("work_gloves", 8),
         ],
         trains: &["mining", "blacksmithing", "engineering"],
+        faction: Some("eastbrook_watch"),
     },
     NpcDef {
         id: "herbalist_wren",
@@ -179,6 +186,7 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         services: &[NpcService::ProfessionTrainer],
         vendor_stock: &[],
         trains: &["herbalism", "alchemy", "enchanting"],
+        faction: Some("eastbrook_watch"),
     },
     NpcDef {
         id: "innkeeper_mara",
@@ -187,6 +195,47 @@ pub static ZONE1_NPCS: &[NpcDef] = &[
         services: &[NpcService::Innkeeper],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("eastbrook_watch"),
+    },
+    NpcDef {
+        id: "stable_master_ross",
+        name: "Stable Master Ross",
+        greeting: "A horse knows the road better than most maps.",
+        services: &[NpcService::RidingTrainer, NpcService::Vendor],
+        vendor_stock: &[
+            VendorOffer::stack("brown_pony", 1),
+            VendorOffer::stack("swift_bay_steed", 1),
+            VendorOffer::stack("tawny_gryphon", 1),
+        ],
+        trains: &[],
+        faction: Some("eastbrook_watch"),
+    },
+    NpcDef {
+        id: "auctioneer_lise",
+        name: "Auctioneer Lise",
+        greeting: "List it. The house takes its cut.",
+        services: &[NpcService::Auctioneer],
+        vendor_stock: &[],
+        trains: &[],
+        faction: Some("eastbrook_watch"),
+    },
+    NpcDef {
+        id: "banker_holme",
+        name: "Banker Holme",
+        greeting: "Your coin is safer with me.",
+        services: &[NpcService::Banker],
+        vendor_stock: &[],
+        trains: &[],
+        faction: Some("eastbrook_watch"),
+    },
+    NpcDef {
+        id: "mailbox_post",
+        name: "Eastbrook Post",
+        greeting: "Leave it. We'll see it through.",
+        services: &[NpcService::Mailbox],
+        vendor_stock: &[],
+        trains: &[],
+        faction: Some("eastbrook_watch"),
     },
 ];
 

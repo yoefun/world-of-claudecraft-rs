@@ -13,8 +13,14 @@ pub type EntityId = u32;
 /// `protocol_rev` / `rewrite_version` identity; omitting them is valid JSON and
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
-/// Rev 8: quest abandon/share, optional turn-in reward choice.
-pub const PROTOCOL_REV: u32 = 8;
+/// Rev 8: quest abandon/share, optional turn-in reward choice. Additive
+/// reputation snapshot / vendor discount_pct / ReputationChanged (1.14.0);
+/// also `finger2` / `main_hand_enchant` / stack `enchant_id` (1.13.0);
+/// gear-more slots (`off_hand_enchant`, stack `quality`); auction bid/bound fields.
+/// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs (1.17.0–1.18.0).
+/// Rev 10: guild snapshot / invite + guild client verbs (1.19.0); mail postage / MailReturn (1.20.0).
+/// Riding snapshot + TrainRiding + mounted fields (1.21.0) are additive on rev 10.
+pub const PROTOCOL_REV: u32 = 10;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -53,6 +59,13 @@ pub enum EquipSlot {
     Neck,
     Finger,
     Finger2,
+    Shoulder,
+    Back,
+    Wrist,
+    Hands,
+    Waist,
+    Trinket,
+    Trinket2,
 }
 
 /// Stable profession denial id. Sim never emits English copy for these.
@@ -200,15 +213,28 @@ pub enum InteractAction {
     MailCollect {
         mail_id: u32,
     },
+    /// Return uncollected mail to sender (postage refund rules in sim).
+    MailReturn {
+        mail_id: u32,
+    },
     /// List a bag stack on the auction house.
     MarketList {
         bag_slot: u8,
         count: u32,
         price: u32,
+        #[serde(default)]
+        start_bid: u32,
+        #[serde(default)]
+        duration_hours: u32,
     },
-    /// Buy an auction listing by id.
+    /// Buy an auction listing by id (buyout).
     MarketBuy {
         listing_id: u32,
+    },
+    /// Bid on an auction listing.
+    MarketBid {
+        listing_id: u32,
+        amount: u32,
     },
     /// Cancel own listing.
     MarketCancel {
@@ -242,6 +268,8 @@ pub enum InteractAction {
     CycleStance,
     /// Toggle shaman/druid form (F).
     ToggleForm,
+    /// Train the next riding rank at a riding trainer.
+    TrainRiding,
     /// Need roll on pending party loot.
     LootNeed {
         loot_id: EntityId,
@@ -316,6 +344,9 @@ pub struct EntitySnapshot {
     /// Treading / submerged in a lake body.
     #[serde(default)]
     pub swimming: bool,
+    /// Active mount id when the player is mounted.
+    #[serde(default)]
+    pub mounted: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -333,6 +364,10 @@ pub struct InvSlotSnapshot {
     pub durability: Option<u32>,
     #[serde(default)]
     pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -353,7 +388,23 @@ pub struct EquipmentSnapshot {
     #[serde(default)]
     pub finger2: Option<String>,
     #[serde(default)]
+    pub shoulder: Option<String>,
+    #[serde(default)]
+    pub back: Option<String>,
+    #[serde(default)]
+    pub wrist: Option<String>,
+    #[serde(default)]
+    pub hands: Option<String>,
+    #[serde(default)]
+    pub waist: Option<String>,
+    #[serde(default)]
+    pub trinket: Option<String>,
+    #[serde(default)]
+    pub trinket2: Option<String>,
+    #[serde(default)]
     pub main_hand_enchant: Option<String>,
+    #[serde(default)]
+    pub off_hand_enchant: Option<String>,
     #[serde(default)]
     pub main_hand_durability: Option<u32>,
     #[serde(default)]
@@ -366,6 +417,48 @@ pub struct EquipmentSnapshot {
     pub legs_durability: Option<u32>,
     #[serde(default)]
     pub feet_durability: Option<u32>,
+    #[serde(default)]
+    pub shoulder_durability: Option<u32>,
+    #[serde(default)]
+    pub back_durability: Option<u32>,
+    #[serde(default)]
+    pub wrist_durability: Option<u32>,
+    #[serde(default)]
+    pub hands_durability: Option<u32>,
+    #[serde(default)]
+    pub waist_durability: Option<u32>,
+    #[serde(default)]
+    pub main_hand_quality: Option<String>,
+    #[serde(default)]
+    pub off_hand_quality: Option<String>,
+    #[serde(default)]
+    pub head_quality: Option<String>,
+    #[serde(default)]
+    pub chest_quality: Option<String>,
+    #[serde(default)]
+    pub legs_quality: Option<String>,
+    #[serde(default)]
+    pub feet_quality: Option<String>,
+    #[serde(default)]
+    pub neck_quality: Option<String>,
+    #[serde(default)]
+    pub finger_quality: Option<String>,
+    #[serde(default)]
+    pub finger2_quality: Option<String>,
+    #[serde(default)]
+    pub shoulder_quality: Option<String>,
+    #[serde(default)]
+    pub back_quality: Option<String>,
+    #[serde(default)]
+    pub wrist_quality: Option<String>,
+    #[serde(default)]
+    pub hands_quality: Option<String>,
+    #[serde(default)]
+    pub waist_quality: Option<String>,
+    #[serde(default)]
+    pub trinket_quality: Option<String>,
+    #[serde(default)]
+    pub trinket2_quality: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +481,8 @@ pub struct VendorSnapshot {
     pub npc_id: EntityId,
     pub npc_name: String,
     pub stock: Vec<VendorOfferSnapshot>,
+    #[serde(default)]
+    pub discount_pct: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -418,6 +513,17 @@ pub struct NpcSessionSnapshot {
     pub can_bind: bool,
     #[serde(default)]
     pub buyback: Vec<BuybackSnapshot>,
+    #[serde(default)]
+    pub train_riding: bool,
+    #[serde(default)]
+    pub can_auction: bool,
+    #[serde(default)]
+    pub can_bank: bool,
+    #[serde(default)]
+    pub can_mail: bool,
+    /// Vendor buy discount percent from the viewer's standing (0 if none).
+    #[serde(default)]
+    pub discount_pct: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -512,6 +618,16 @@ pub struct TickSnapshot {
     /// Party membership, if any.
     #[serde(default)]
     pub party_id: Option<u32>,
+    #[serde(default)]
+    pub party_leader_id: Option<EntityId>,
+    #[serde(default)]
+    pub party_kind: String,
+    #[serde(default)]
+    pub party_members: Vec<PartyMemberSnapshot>,
+    #[serde(default)]
+    pub pending_invite_from: String,
+    #[serde(default)]
+    pub ready_check: Option<ReadyCheckSnapshot>,
     /// Current overworld / instance zone id.
     #[serde(default)]
     pub zone_id: String,
@@ -575,6 +691,33 @@ pub struct TickSnapshot {
     /// Derived spell power from gear and stats.
     #[serde(default)]
     pub spell_power: f32,
+    #[serde(default)]
+    pub riding_rank: u8,
+    #[serde(default)]
+    pub known_mounts: Vec<String>,
+    #[serde(default)]
+    pub mounted: Option<String>,
+    /// Postage in copper the sim will charge for player-to-player mail.
+    #[serde(default)]
+    pub mail_postage: u32,
+    /// Guild roster for the viewing player, if any.
+    #[serde(default)]
+    pub guild: Option<GuildSnapshot>,
+    /// Pending guild invite for the viewing player, if any.
+    #[serde(default)]
+    pub guild_invite: Option<GuildInviteSnapshot>,
+    /// Per-faction standing for the local player (all known factions).
+    #[serde(default)]
+    pub reputation: Vec<ReputationSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ReputationSnapshot {
+    pub faction_id: String,
+    pub name: String,
+    pub value: i32,
+    /// `hated` … `exalted`
+    pub standing: String,
 }
 
 /// A party loot roll awaiting Need / Greed / Pass.
@@ -586,6 +729,33 @@ pub struct PendingLootSnapshot {
     /// True when the local player already submitted a roll.
     #[serde(default)]
     pub rolled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PartyMemberSnapshot {
+    pub id: EntityId,
+    pub name: String,
+    #[serde(default)]
+    pub class_id: String,
+    #[serde(default)]
+    pub hp: f32,
+    #[serde(default)]
+    pub hp_max: f32,
+    #[serde(default)]
+    pub online: bool,
+    #[serde(default)]
+    pub raid_group: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ReadyCheckSnapshot {
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub you_responded: bool,
+    #[serde(default)]
+    pub ready_count: u32,
+    #[serde(default)]
+    pub total: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -602,6 +772,42 @@ pub struct MailSnapshot {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildMemberSnapshot {
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+    pub rank: String,
+    pub online: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildSnapshot {
+    pub id: u32,
+    pub name: String,
+    pub rank: String,
+    pub motd: String,
+    pub motd_set_by: String,
+    #[serde(default)]
+    pub members: Vec<GuildMemberSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildInviteSnapshot {
+    pub from_name: String,
+    pub guild_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -614,6 +820,22 @@ pub struct MarketListingSnapshot {
     /// True when this listing belongs to the viewing player.
     #[serde(default)]
     pub mine: bool,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub start_bid: u32,
+    #[serde(default)]
+    pub current_bid: u32,
+    #[serde(default)]
+    pub bidder: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -664,6 +886,11 @@ impl Default for TickSnapshot {
             auto_attack: false,
             is_dead: false,
             party_id: None,
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: String::new(),
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
@@ -685,6 +912,13 @@ impl Default for TickSnapshot {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            mounted: None,
+            mail_postage: 0,
+            guild: None,
+            guild_invite: None,
+            reputation: Vec::new(),
         }
     }
 }
@@ -872,6 +1106,13 @@ pub enum SimEvent {
         reward_copper: u32,
         reward_item: Option<String>,
     },
+    ReputationChanged {
+        player: EntityId,
+        faction_id: String,
+        delta: i32,
+        total: i32,
+        standing: String,
+    },
 }
 
 /// Host facade shared by offline Bevy and online server.
@@ -915,6 +1156,43 @@ pub enum WsClientMsg {
     },
     PartyAccept,
     PartyLeave,
+    PartyDecline,
+    PartyKick {
+        name: String,
+    },
+    PartyPromote {
+        name: String,
+    },
+    PartyDisband,
+    PartyReadyCheck,
+    PartyReadyRespond {
+        ready: bool,
+    },
+    ConvertToRaid,
+    ConvertToParty,
+    GuildCreate {
+        name: String,
+    },
+    GuildInvite {
+        name: String,
+    },
+    GuildAccept,
+    GuildDecline,
+    GuildLeave,
+    GuildKick {
+        name: String,
+    },
+    GuildSetRank {
+        name: String,
+        rank: String,
+    },
+    GuildTransferLeader {
+        name: String,
+    },
+    GuildDisband,
+    GuildSetMotd {
+        text: String,
+    },
     Chat {
         channel: String,
         text: String,
@@ -1115,6 +1393,7 @@ mod tests {
         assert!(!snap.stealthed);
         assert!(snap.stance_id.is_empty());
         assert_eq!(snap.absorb, 0.0);
+        assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
     }
 
@@ -1164,6 +1443,11 @@ mod tests {
             auto_attack: true,
             is_dead: true,
             party_id: Some(3),
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: "eastbrook".into(),
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
@@ -1193,6 +1477,13 @@ mod tests {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            mounted: None,
+            mail_postage: 0,
+            guild: None,
+            guild_invite: None,
+            reputation: Vec::new(),
         };
         let s = serde_json::to_string(&snap).unwrap();
         let back: TickSnapshot = serde_json::from_str(&s).unwrap();
@@ -1219,6 +1510,40 @@ mod tests {
         assert!(back.stealthed);
         assert_eq!(back.stance_id, "battle");
         assert!((back.absorb - 25.0).abs() < f32::EPSILON);
+        assert!(back.party_members.is_empty());
+    }
+
+    #[test]
+    fn party_roster_snapshot_defaults() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0},"target_id":null,"ability_ready":false,"ability_cooldown":0.0}"#,
+        )
+        .unwrap();
+        assert!(snap.party_members.is_empty());
+        assert!(snap.pending_invite_from.is_empty());
+        assert!(snap.party_kind.is_empty());
+        assert!(snap.party_leader_id.is_none());
+        assert!(snap.ready_check.is_none());
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn party_depth_ws_msg_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::PartyDecline,
+            WsClientMsg::PartyKick { name: "Bob".into() },
+            WsClientMsg::PartyPromote { name: "Bob".into() },
+            WsClientMsg::PartyDisband,
+            WsClientMsg::PartyReadyCheck,
+            WsClientMsg::PartyReadyRespond { ready: true },
+            WsClientMsg::ConvertToRaid,
+            WsClientMsg::ConvertToParty,
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
     }
 
     #[test]
@@ -1234,6 +1559,13 @@ mod tests {
             SimEvent::ProfessionDenied {
                 player: 9,
                 reason: ProfessionDeny::MissingTool,
+            },
+            SimEvent::ReputationChanged {
+                player: 1,
+                faction_id: "eastbrook_watch".into(),
+                delta: 150,
+                total: 150,
+                standing: "neutral".into(),
             },
         ];
         for e in events {
@@ -1288,6 +1620,14 @@ mod tests {
             WsClientMsg::PartyInvite { name: "Bob".into() },
             WsClientMsg::PartyAccept,
             WsClientMsg::PartyLeave,
+            WsClientMsg::PartyDecline,
+            WsClientMsg::PartyKick { name: "Bob".into() },
+            WsClientMsg::PartyPromote { name: "Bob".into() },
+            WsClientMsg::PartyDisband,
+            WsClientMsg::PartyReadyCheck,
+            WsClientMsg::PartyReadyRespond { ready: true },
+            WsClientMsg::ConvertToRaid,
+            WsClientMsg::ConvertToParty,
             WsClientMsg::Chat {
                 channel: "say".into(),
                 text: "hello".into(),
@@ -1357,12 +1697,19 @@ mod tests {
                 count: 1,
             },
             InteractAction::MailCollect { mail_id: 7 },
+            InteractAction::MailReturn { mail_id: 9 },
             InteractAction::MarketList {
                 bag_slot: 0,
                 count: 1,
                 price: 100,
+                start_bid: 0,
+                duration_hours: 0,
             },
             InteractAction::MarketBuy { listing_id: 3 },
+            InteractAction::MarketBid {
+                listing_id: 3,
+                amount: 12,
+            },
             InteractAction::MarketCancel { listing_id: 3 },
             InteractAction::DuelChallenge,
             InteractAction::DuelAccept,
@@ -1480,9 +1827,115 @@ mod tests {
             serde_json::from_str(r#"{"main_hand":null,"off_hand":null,"chest":null}"#).unwrap();
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
+        assert!(eq.off_hand_enchant.is_none());
+        assert!(eq.back.is_none());
         let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
-        assert_eq!(PROTOCOL_REV, 8);
+        assert!(!slot.bound);
+        assert!(slot.quality.is_none());
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn market_mail_auction_fields_default_when_omitted() {
+        let listing: MarketListingSnapshot =
+            serde_json::from_str(r#"{"id":1,"seller":"Ada","item_id":"x","count":1,"price":2}"#)
+                .unwrap();
+        assert!(listing.durability.is_none());
+        assert!(listing.enchant_id.is_none());
+        assert_eq!(listing.expires_tick, 0);
+        assert!(!listing.mine);
+        assert_eq!(listing.start_bid, 0);
+        assert_eq!(listing.current_bid, 0);
+        assert!(listing.bidder.is_none());
+        assert!(listing.quality.is_none());
+        assert!(!listing.bound);
+
+        let mail: MailSnapshot = serde_json::from_str(
+            r#"{"id":1,"from":"AH","subject":"Sold","copper":40,"item_id":null,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(mail.durability.is_none());
+        assert!(mail.enchant_id.is_none());
+        assert!(mail.quality.is_none());
+        assert!(!mail.bound);
+
+        let session: NpcSessionSnapshot =
+            serde_json::from_str(r#"{"npc_id":1,"npc_name":"Lise"}"#).unwrap();
+        assert!(!session.can_auction);
+        assert!(!session.can_bank);
+        assert!(!session.can_mail);
+        assert_eq!(PROTOCOL_REV, 10);
+
+        let list: InteractAction =
+            serde_json::from_str(r#"{"type":"market_list","bag_slot":0,"count":1,"price":12}"#)
+                .unwrap();
+        assert_eq!(
+            list,
+            InteractAction::MarketList {
+                bag_slot: 0,
+                count: 1,
+                price: 12,
+                start_bid: 0,
+                duration_hours: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn protocol_rev_is_ten() {
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn guild_snapshot_defaults_when_omitted() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0}}"#,
+        )
+        .unwrap();
+        assert!(snap.guild.is_none());
+        assert!(snap.guild_invite.is_none());
+    }
+
+    #[test]
+    fn guild_ws_client_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::GuildCreate {
+                name: "Vale Watch".into(),
+            },
+            WsClientMsg::GuildInvite { name: "Bob".into() },
+            WsClientMsg::GuildAccept,
+            WsClientMsg::GuildDecline,
+            WsClientMsg::GuildLeave,
+            WsClientMsg::GuildKick { name: "Bob".into() },
+            WsClientMsg::GuildSetRank {
+                name: "Bob".into(),
+                rank: "officer".into(),
+            },
+            WsClientMsg::GuildTransferLeader { name: "Bob".into() },
+            WsClientMsg::GuildDisband,
+            WsClientMsg::GuildSetMotd { text: "hi".into() },
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
+    }
+
+    #[test]
+    fn unequip_shoulder_roundtrip() {
+        let a = InteractAction::Unequip {
+            equip_slot: EquipSlot::Shoulder,
+        };
+        let v = serde_json::to_value(&a).unwrap();
+        let back: InteractAction = serde_json::from_value(v).unwrap();
+        assert!(matches!(
+            back,
+            InteractAction::Unequip {
+                equip_slot: EquipSlot::Shoulder
+            }
+        ));
     }
 
     #[test]
@@ -1509,8 +1962,9 @@ mod tests {
         assert_eq!(snap.attack_power, 0.0);
         assert_eq!(snap.armor, 0.0);
         assert_eq!(snap.spell_power, 0.0);
+        assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
-        assert_eq!(PROTOCOL_REV, 8);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
@@ -1526,5 +1980,57 @@ mod tests {
                 equip_slot: EquipSlot::Neck
             }
         ));
+    }
+
+    #[test]
+    fn train_riding_roundtrip() {
+        let json = serde_json::to_string(&InteractAction::TrainRiding).unwrap();
+        assert!(json.contains("train_riding"));
+        let back: InteractAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, InteractAction::TrainRiding);
+    }
+
+    #[test]
+    fn mounted_fields_default_when_omitted() {
+        let snap: EntitySnapshot = serde_json::from_str(
+            r#"{"id":1,"kind":"player","x":0.0,"y":0.0,"z":0.0,"yaw":0.0,"hp":1.0,"hp_max":1.0,"level":1,"name":"A","resource":0.0,"resource_max":0.0,"alive":true}"#,
+        )
+        .unwrap();
+        assert!(snap.mounted.is_none());
+        let tick: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0}}"#,
+        )
+        .unwrap();
+        assert_eq!(tick.riding_rank, 0);
+        assert!(tick.known_mounts.is_empty());
+        assert!(tick.mounted.is_none());
+    }
+
+    #[test]
+    fn mail_return_roundtrip() {
+        let a = InteractAction::MailReturn { mail_id: 9 };
+        let back: InteractAction =
+            serde_json::from_value(serde_json::to_value(&a).unwrap()).unwrap();
+        assert!(matches!(back, InteractAction::MailReturn { mail_id: 9 }));
+    }
+
+    #[test]
+    fn mail_snapshot_omitted_instance_fields_default() {
+        let mail: MailSnapshot = serde_json::from_str(
+            r#"{"id":1,"from":"AH","subject":"Sold","copper":40,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(mail.durability.is_none());
+        assert!(mail.enchant_id.is_none());
+        assert_eq!(mail.expires_tick, 0);
+        assert!(mail.quality.is_none());
+        assert!(!mail.bound);
+    }
+
+    #[test]
+    fn tick_snapshot_mail_postage_defaults_zero() {
+        let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
+        assert_eq!(snap.mail_postage, 0);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 }

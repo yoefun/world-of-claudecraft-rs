@@ -1,6 +1,6 @@
 //! Zone 2 (Eastfen Marsh) item definitions.
 
-use crate::items::{ArmorClass, ItemDef, ItemEquipSlot, ItemKind};
+use crate::items::{ArmorClass, ItemBind, ItemDef, ItemEquipSlot, ItemKind};
 
 pub static ZONE2_ITEMS: &[ItemDef] = &[
     ItemDef {
@@ -23,6 +23,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnPickup,
     },
     ItemDef {
         id: "toad_bile",
@@ -44,6 +45,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnPickup,
     },
     ItemDef {
         id: "wisp_ember",
@@ -65,6 +67,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnPickup,
     },
     ItemDef {
         id: "fen_tonic",
@@ -86,6 +89,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::None,
     },
     ItemDef {
         id: "marsh_wraps",
@@ -107,6 +111,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Uncommon,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     },
     ItemDef {
         id: "reedwalk_boots",
@@ -128,6 +133,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Uncommon,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     },
     ItemDef {
         id: "leech_ichor",
@@ -149,6 +155,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnPickup,
     },
     ItemDef {
         id: "rotcap_spore",
@@ -170,6 +177,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnPickup,
     },
     ItemDef {
         id: "terror_scale",
@@ -191,6 +199,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnPickup,
     },
     ItemDef {
         id: "deepfen_draught",
@@ -212,6 +221,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::None,
     },
     ItemDef {
         id: "mireguard_hood",
@@ -233,6 +243,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Uncommon,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     },
     ItemDef {
         id: "hag_claw",
@@ -254,6 +265,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 0.0,
         quality: crate::items::ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::None,
     },
     ItemDef {
         id: "fen_staff",
@@ -280,6 +292,7 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 6.0,
         quality: crate::items::ItemQuality::Rare,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     },
     ItemDef {
         id: "hag_focus",
@@ -301,5 +314,6 @@ pub static ZONE2_ITEMS: &[ItemDef] = &[
         spell_power: 8.0,
         quality: crate::items::ItemQuality::Rare,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     },
 ];

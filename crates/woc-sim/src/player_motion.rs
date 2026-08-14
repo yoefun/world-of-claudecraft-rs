@@ -1,10 +1,10 @@
 //! Player movement kernel (wish-vector + ground clamp + jump / swim / flight).
 //!
 //! Vertical state machine is aligned with upstream `src/sim/player_motion.ts`
-//! (gravity, coyote jump, swim tread, fall damage). Travel flight is a rewrite
-//! convenience mode (toggle) rather than a full mount/form system.
+//! (gravity, coyote jump, swim tread, fall damage). Flight kinematics apply when
+//! `Motion.flying` is set (e.g. by a flying mount via `mount::summon_mount`).
 
-use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Transform};
+use crate::ecs::components::{Health, Identity, InstanceAt, Motion, Riding, Transform};
 use crate::ecs::World;
 use crate::physics::{eastbrook_buildings, sweep_character_xz};
 use crate::types::{
@@ -30,6 +30,7 @@ pub const MAX_GROUND_STEP: f32 = 0.85;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MotionEffect {
     pub fall_damage: f32,
+    pub dismount: bool,
 }
 
 fn clamp_to_world_padded(x: f32, z: f32) -> (f32, f32) {
@@ -352,28 +353,6 @@ pub fn step_player_motion(
 
     t.yaw = intent.facing;
 
-    if intent.fly_toggle && health.alive {
-        m.flying = !m.flying;
-        if m.flying {
-            m.on_ground = false;
-            m.jumping = false;
-            m.vy = 0.0;
-            t.y = t.y.max(ground_height(t.x, t.z, WORLD_SEED) + 1.5);
-            m.fall_start_y = t.y;
-        } else {
-            // Drop out of flight into a fall / land.
-            m.vy = 0.0;
-            m.fall_start_y = t.y;
-            let ground = ground_height(t.x, t.z, WORLD_SEED);
-            if (t.y - ground).abs() < 0.75 {
-                t.y = ground;
-                m.on_ground = true;
-            } else {
-                m.on_ground = false;
-            }
-        }
-    }
-
     let swimming = is_swimming_at(t.x, t.y, t.z);
     let speed = if m.flying {
         RUN_SPEED * FLY_SPEED_MULT
@@ -382,6 +361,13 @@ pub fn step_player_motion(
     } else {
         RUN_SPEED
     } * crate::combat::move_speed_mult(world, player_id);
+    let mount_mult = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_deref())
+        .and_then(woc_content::mount)
+        .map(|m| m.speed_mult)
+        .unwrap_or(1.0);
+    let speed = speed * mount_mult;
 
     let grounded = m.on_ground && !m.flying;
     apply_horizontal_wish(
@@ -394,7 +380,25 @@ pub fn step_player_motion(
         grounded,
     );
 
+    let flying_mount = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_deref())
+        .and_then(woc_content::mount)
+        .is_some_and(|def| def.kind == woc_content::MountKind::Flying);
+    if flying_mount && !m.flying && intent.jump && m.on_ground {
+        m.flying = true;
+        m.on_ground = false;
+        m.jumping = false;
+    }
+
     let fall = vertical_pass(&mut t, &mut m, health.hp_max, &intent, speed);
+
+    let swim_dismount = world
+        .get::<Riding>(player_id)
+        .and_then(|r| r.active_id.as_ref())
+        .is_some()
+        && !m.flying
+        && is_swimming_at(t.x, t.y, t.z);
 
     if !in_instance {
         if let Some(ident) = world.get_mut::<Identity>(player_id) {
@@ -408,7 +412,15 @@ pub fn step_player_motion(
         *slot = m;
     }
 
-    fall.map(|fall_damage| MotionEffect { fall_damage })
+    let fall_damage = fall.unwrap_or(0.0);
+    if fall_damage > 0.0 || swim_dismount {
+        Some(MotionEffect {
+            fall_damage,
+            dismount: swim_dismount,
+        })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -492,24 +504,17 @@ mod tests {
     }
 
     #[test]
-    fn fly_toggle_enables_vertical_ascend() {
-        let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Flyer", PlayerClass::Mage, 0.0, 0.0);
-        let start_y = world.get::<Transform>(1).unwrap().y;
-        let toggle = PlayerIntent {
-            fly_toggle: true,
-            ..Default::default()
-        };
-        let _ = step_player_motion(&mut world, 1, &toggle);
-        assert!(world.get::<Motion>(1).unwrap().flying);
-        let up = PlayerIntent {
-            jump: true,
-            ..Default::default()
-        };
-        for _ in 0..10 {
-            let _ = step_player_motion(&mut world, 1, &up);
-        }
-        assert!(world.get::<Transform>(1).unwrap().y > start_y + 2.0);
+    fn fly_toggle_ignored_by_motion_kernel() {
+        let mut world = player_at(0.0, 0.0);
+        let _ = step_player_motion(
+            &mut world,
+            1,
+            &PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        assert!(!world.get::<Motion>(1).unwrap().flying);
     }
 
     #[test]
@@ -533,6 +538,45 @@ mod tests {
         }
         assert!(world.get::<Motion>(1).unwrap().on_ground);
         assert!(hit.map(|e| e.fall_damage > 0.0).unwrap_or(false));
+    }
+
+    #[test]
+    fn landed_gryphon_swim_dismounts() {
+        let mut world = player_at(0.0, 0.0);
+        let id = 1;
+        world.get_mut::<Riding>(id).unwrap().rank = 3;
+        world
+            .get_mut::<Riding>(id)
+            .unwrap()
+            .known
+            .insert("tawny_gryphon".into());
+        let mut events = Vec::new();
+        assert!(crate::mount::summon_mount(
+            &mut world,
+            id,
+            "tawny_gryphon",
+            &mut events
+        ));
+        {
+            let m = world.get_mut::<Motion>(id).unwrap();
+            m.flying = false;
+            m.on_ground = true;
+            m.vy = 0.0;
+        }
+        let x = -92.0;
+        let z = 88.0;
+        let y = swim_surface_y(x, z);
+        if let Some(t) = world.get_mut::<Transform>(id) {
+            t.x = x;
+            t.z = z;
+            t.y = y;
+        }
+        assert!(is_swimming_at(x, y, z));
+        let effect = step_player_motion(&mut world, id, &PlayerIntent::default());
+        assert!(
+            effect.map(|e| e.dismount).unwrap_or(false),
+            "landed flying mount in water should request dismount"
+        );
     }
 
     #[test]

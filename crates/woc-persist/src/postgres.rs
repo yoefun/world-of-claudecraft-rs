@@ -261,6 +261,16 @@ impl PostgresStore {
         self.save_character(character_id, save).await
     }
 
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        let rows = sqlx::query("SELECT name, id FROM characters")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| (row.get::<String, _>("name"), row.get::<Uuid, _>("id")))
+            .collect())
+    }
+
     pub async fn load_economy(&self) -> PersistResult<crate::economy::RealmEconomy> {
         let row = sqlx::query("SELECT data::text AS data FROM realm_economy WHERE id = 1")
             .fetch_optional(&self.pool)
@@ -331,6 +341,10 @@ fn row_to_character(row: sqlx::postgres::PgRow) -> PersistResult<Character> {
         hearth_z: completion.hearth_z,
         hearth_ready_tick: completion.hearth_ready_tick,
         stance_id: completion.stance_id,
+        riding_rank: completion.riding_rank,
+        known_mounts: completion.known_mounts,
+        last_mount: completion.last_mount,
+        reputation: completion.reputation,
     })
 }
 
@@ -393,6 +407,8 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
+                bound: false,
             })],
             bank_copper: 0,
             honor: 125,

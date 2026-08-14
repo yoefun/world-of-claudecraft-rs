@@ -37,6 +37,7 @@ pub mod mail;
 pub mod map_view;
 pub mod market;
 pub mod mob;
+pub mod mount;
 pub mod persist_state;
 pub mod pet;
 pub mod physics;
@@ -44,6 +45,7 @@ pub mod player_motion;
 pub mod professions;
 pub mod pvp;
 pub mod quests;
+pub mod reputation;
 pub mod rng;
 pub mod sim;
 pub mod social;
@@ -72,9 +74,10 @@ pub use persist_state::{
 pub use physics::{eastbrook_buildings, Aabb};
 pub use rng::{fbm2, hash2, noise2, Rng};
 pub use sim::{Sim, MAX_REALM_PLAYERS, SNAPSHOT_AOI_RADIUS};
+pub use social::GuildDelivery;
 pub use visual_catalog::{
-    scene_markers, visual_key, visual_spec, zone_atmosphere, PartRole, PartShape, SceneMarker,
-    SceneMarkerKind, VisualFamily, VisualPart, VisualSpec, ZoneAtmosphere,
+    mount_visual_spec, scene_markers, visual_key, visual_spec, zone_atmosphere, PartRole,
+    PartShape, SceneMarker, SceneMarkerKind, VisualFamily, VisualPart, VisualSpec, ZoneAtmosphere,
 };
 pub use woc_content::PlayerClass;
 pub use world::{

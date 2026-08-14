@@ -10,6 +10,7 @@ pub static ZONE3_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("highwatch"),
     },
     NpcDef {
         id: "pathfinder_toren",
@@ -18,6 +19,7 @@ pub static ZONE3_NPCS: &[NpcDef] = &[
         services: &[NpcService::QuestGiver],
         vendor_stock: &[],
         trains: &[],
+        faction: Some("highwatch"),
     },
     NpcDef {
         id: "quartermaster_bren",
@@ -25,19 +27,11 @@ pub static ZONE3_NPCS: &[NpcDef] = &[
         greeting: "Cold climbs fast up here. Stock your pack before you leave the watchfires.",
         services: &[NpcService::Vendor, NpcService::Repair],
         vendor_stock: &[
-            VendorOffer {
-                item_id: "travelers_ration",
-                count: 20,
-            },
-            VendorOffer {
-                item_id: "baked_bread",
-                count: 40,
-            },
-            VendorOffer {
-                item_id: "spring_water",
-                count: 40,
-            },
+            VendorOffer::stack("travelers_ration", 20),
+            VendorOffer::stack("baked_bread", 40),
+            VendorOffer::stack("spring_water", 40),
         ],
         trains: &[],
+        faction: Some("highwatch"),
     },
 ];

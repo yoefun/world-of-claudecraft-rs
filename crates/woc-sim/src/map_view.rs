@@ -102,6 +102,7 @@ pub fn pixel_to_world(px: f32, py: f32, region: MapRegion, width: u32, height: u
 pub enum MapMarkerKind {
     Player,
     Ally,
+    Party,
     Hub,
     QuestAvailable,
     QuestReady,
@@ -225,6 +226,9 @@ pub fn paint_map_frame(
                 fill_disc(data, width, height, mx, my, 3.0, [255, 230, 120, 255]);
             }
             MapMarkerKind::Ally => fill_disc(data, width, height, mx, my, 3.0, [90, 180, 255, 255]),
+            MapMarkerKind::Party => {
+                fill_disc(data, width, height, mx, my, 3.5, [70, 140, 255, 255])
+            }
             MapMarkerKind::Hub => fill_disc(data, width, height, mx, my, 4.0, [210, 170, 90, 255]),
             MapMarkerKind::QuestAvailable => {
                 draw_glyph_dot(data, width, height, mx, my, [255, 210, 60, 255])

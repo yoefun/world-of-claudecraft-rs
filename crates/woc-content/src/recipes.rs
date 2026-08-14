@@ -402,5 +402,7 @@ pub const CRAFT_GOLD_SINK_COPPER_PER_BUDGET: u32 = 2;
 pub const CRAFT_BATCH_MAX: u32 = 50;
 
 pub fn craft_fee(recipe: &RecipeDef) -> u32 {
-    recipe.item_level_budget.saturating_mul(CRAFT_GOLD_SINK_COPPER_PER_BUDGET)
+    recipe
+        .item_level_budget
+        .saturating_mul(CRAFT_GOLD_SINK_COPPER_PER_BUDGET)
 }

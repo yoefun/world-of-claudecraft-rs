@@ -2,6 +2,7 @@
 
 use std::sync::LazyLock;
 
+use crate::factions::RepAward;
 use crate::mobs_zone2::ZONE2_MOBS;
 use crate::mobs_zone3::ZONE3_MOBS;
 
@@ -26,6 +27,7 @@ pub struct MobTemplate {
     pub loot: &'static [LootEntry],
     pub respawn_seconds: f32,
     pub ability_id: Option<&'static str>,
+    pub kill_reputation: Option<RepAward>,
 }
 
 const SCARRED_WOLF_LOOT: &[LootEntry] = &[
@@ -37,6 +39,11 @@ const SCARRED_WOLF_LOOT: &[LootEntry] = &[
     LootEntry {
         item_id: "fang_pendant",
         chance: 0.12,
+        count: 1,
+    },
+    LootEntry {
+        item_id: "work_gloves",
+        chance: 0.08,
         count: 1,
     },
 ];
@@ -77,6 +84,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("eastbrook_watch", 25)),
     },
     MobTemplate {
         id: "scarred_wolf",
@@ -90,6 +98,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         loot: SCARRED_WOLF_LOOT,
         respawn_seconds: 30.0,
         ability_id: Some("wolf_bite"),
+        kill_reputation: Some(RepAward::new("eastbrook_watch", 35)),
     },
     MobTemplate {
         id: "young_boar",
@@ -103,6 +112,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         loot: YOUNG_BOAR_LOOT,
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("eastbrook_watch", 20)),
     },
     MobTemplate {
         id: "crypt_warden",
@@ -116,6 +126,7 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         loot: CRYPT_WARDEN_LOOT,
         respawn_seconds: 30.0,
         ability_id: Some("warden_smash"),
+        kill_reputation: Some(RepAward::new("eastbrook_watch", 50)),
     },
 ];
 

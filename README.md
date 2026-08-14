@@ -1,32 +1,35 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.14.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.22.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.14.0`** is pinned to upstream **`0.31.0`**
+**Rewrite `1.22.0`** is pinned to upstream **`0.31.0`**
 (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`kill-loop`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.14.0 (kill-loop)
+## What works in 1.22.0 (kill-loop)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
 - Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; Eastbrook Crypt + Mirefen Barrow + 3-room delve
-- Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), vendor buyback, repair, trainers, hearth, combat, party/chat, Need/Greed loot (1/2/3 rolls; [ ] loot mode)
-- Bank (items + copper vault), mail, auction house (list/buy/cancel; durable across restart); herbalism → alchemy; mining → blacksmithing
+- Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), vendor buyback, repair, trainers, hearth, combat, party/raid/chat (**G** invite · **P** party · **=** convert 5→raid · **G1/G2** frames · ready check · park-safe roster · classic XP split), Need/Greed loot (1/2/3 rolls; [ ] loot mode)
+- Guilds: **J** panel types the guild name / chat / `/motd` / `/o` / `/invite Name`; verbs also via Ctrl+key; **Esc** closes; persist across relog
+- Hub reputation (Watch / Circle / Ferry / Highwatch); Friendly vendor discounts and gated Watch Signet; **C** sheet lists standing
+- Bank (Banker Holme; **G** any non-quest stack), mail (Eastbrook Post; offline send **S**/**Y**, numbered collect **1–9**, return **X**), auction house (Auctioneer Lise; bids; 12/24/48 h; soulbound; instance listings; 5% cut; mail proceeds); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
-- Client panels: talents / bank / mail / market / bags (equip·use·sell); **character sheet** (C: 9 slots, quality, MH enchant, AP/armor/SP); **minimap** + **world map** (M)
-- Class armor caps, two-hand occupancy, warrior/rogue dual-wield, two rings, catalog quality, MH oils; stamina → HP, spell power on heals/spells; independent loot piles with stack counts and 120 s TTL
+- Client panels: talents / bank / mail / market / bags (equip·use·sell); **character sheet** (C: extra slots, quality, MH/OH enchant, AP/armor/SP, riding rank); **minimap** + **world map** (M)
+- Class armor caps, two-hand occupancy, warrior/rogue/hunter dual-wield, two rings, two trinkets, catalog + instance loot quality, MH/OH oils; stamina → HP, spell power on heals/spells; independent loot piles with stack counts and 120 s TTL
 - Per-template mob respawn (instance trash never); leash HP reset; `MobSpot` packs; pet last-hit credits owner; mob abilities (`wolf_bite`, `warden_smash`, `terror_slam`); 1.1× threat switch
+- Riding ranks at Stable Master Ross; learn Brown Pony / Swift Bay Steed / Tawny Gryphon; **V** toggles last mount (training + known mount required); Expert gryphon flying replaces free travel flight; combat/instance dismount
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
-- Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.14.0 · upstream 0.31.0`
+- Jump (Space), lake swim; flying mounts use Space/Ctrl vertical
+- Version footer: `WoC-rs 1.22.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -88,7 +91,7 @@ Online IO uses dedicated OS threads + sync `tungstenite` / `ureq` bridged via `s
 DATABASE_URL=postgres://woc:woc@127.0.0.1:5432/woc cargo run -p woc-server
 ```
 
-Controls: **WASD** move, **Space** jump / swim hop / fly up, **Ctrl** descend (swim/fly), **V** travel flight toggle, **mouse** look (hold right), **left click** / **F** attack, **Tab** cycle target, **1–5** abilities (or Need/Greed/Pass while rolling), **T** pet summon/dismiss (hunter/warlock), **Esc** clear target / stop attack / release cursor, **E** interact/loot, **B** bags (**Q** equip / **F** use / **V** sell junk at vendor), **L** quests, **C** character, **N** talents (**1–3** spend / Y first available / R respec), **K** bank (**G** deposit junk / **H**/**1–9** withdraw / **J**/**Y** copper vault), **I** mail (**P** collect), **M** world map, **U** market (**L** list / **O** buy / **X** cancel), **[**/**]** party loot mode. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
+Controls: **WASD** move, **Space** jump / swim hop / fly up (flying mount), **Ctrl** descend (swim/fly), **V** mount toggle (requires training + known mount), **mouse** look (hold right), **left click** / **F** attack, **Tab** cycle target, **G** invite (player target), **P** party (**O** accept / **X** leave / **Y** promote / **-** kick / **R** ready / **=** raid convert) · party/raid frames (G1/G2), **1–5** abilities (or Need/Greed/Pass while rolling), **T** pet summon/dismiss (hunter/warlock), **Esc** clear target / stop attack / release cursor, **E** interact/loot, **B** bags (**Q** equip / **F** use / **V** sell junk at vendor), **L** quests, **C** character, **N** talents (**1–3** spend / Y first available / R respec), **K** bank (**G** deposit junk / **H**/**1–9** withdraw / **J**/**Y** copper vault), **I** mail (**P** collect), **M** world map, **U** market (**L** list / **O** buy / **X** cancel), **[**/**]** party loot mode. Title: **1/2** or click Offline|Online, **Enter**/Continue. Offline create: **click** or **←/→** class grid, type name, **Enter**. Online login: **Tab** field, **F2**/tabs login|register, **Enter**/Sign in (register asks for password confirm). Char select: click roster or **↑/↓**, **Enter world**, **N**/New character (class grid), **D**/Delete (confirm twice), **Esc** logout.
 
 ## Architecture
 
@@ -101,7 +104,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.14.0` / `kill-loop`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.22.0` / `kill-loop` (after `1.21.0` / `mounts` and `1.20.0` / `parcel-bank`). Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 

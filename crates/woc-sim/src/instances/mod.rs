@@ -80,6 +80,7 @@ pub fn enter_dungeon(
         inst.instance_id = Some(instance_key);
         inst.delve_room = None;
     }
+    crate::mount::dismount(world, player_id, events);
     if let Some(combat) = world.get_mut::<Combat>(player_id) {
         combat.target = None;
         combat.auto_attack = false;
@@ -357,6 +358,51 @@ mod tests {
     }
 
     #[test]
+    fn enter_dungeon_dismounts_active_mount() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Rider", PlayerClass::Warrior, 2.0, 4.0);
+        world
+            .get_mut::<crate::ecs::components::Health>(1)
+            .unwrap()
+            .level = 10;
+        world
+            .get_mut::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .rank = 1;
+        world
+            .get_mut::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .known
+            .insert("brown_pony".into());
+        let mut events = Vec::new();
+        assert!(crate::mount::summon_mount(
+            &mut world,
+            1,
+            "brown_pony",
+            &mut events
+        ));
+        assert!(world
+            .get::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .active_id
+            .is_some());
+
+        let parties = PartyRoster::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        assert!(world
+            .get::<crate::ecs::components::Riding>(1)
+            .unwrap()
+            .active_id
+            .is_none());
+    }
+
+    #[test]
     fn enter_preserves_overworld_and_uses_unique_instance() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
@@ -415,7 +461,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         let mut parties = PartyRoster::new();
-        let _ = parties.invite(1, "B", &world);
+        let _ = parties.invite(1, "B", &world, 0);
         let _ = parties.accept(2, &world);
         let mut events = Vec::new();
         assert!(enter_dungeon(
@@ -521,7 +567,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         let mut parties = PartyRoster::new();
-        let _ = parties.invite(1, "B", &world);
+        let _ = parties.invite(1, "B", &world, 0);
         let _ = parties.accept(2, &world);
         let mut events = Vec::new();
         assert!(enter_dungeon(

@@ -1,5 +1,6 @@
 //! Zone 2 (Eastfen Marsh and Mirefen) mob templates.
 
+use crate::factions::RepAward;
 use crate::mobs::{LootEntry, MobTemplate};
 
 const BOG_WISP_LOOT: &[LootEntry] = &[
@@ -45,6 +46,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("eastfen_circle", 20)),
     },
     MobTemplate {
         id: "mire_toad",
@@ -62,6 +64,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("eastfen_circle", 20)),
     },
     MobTemplate {
         id: "bog_wisp",
@@ -75,6 +78,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         loot: BOG_WISP_LOOT,
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("eastfen_circle", 25)),
     },
     MobTemplate {
         id: "mire_leech",
@@ -92,6 +96,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 25)),
     },
     MobTemplate {
         id: "rotcap_shambler",
@@ -109,6 +114,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 30)),
     },
     MobTemplate {
         id: "mire_terror",
@@ -126,6 +132,7 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         }],
         respawn_seconds: 300.0,
         ability_id: Some("terror_slam"),
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 100)),
     },
     MobTemplate {
         id: "barrow_hag",
@@ -139,5 +146,6 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         loot: BARROW_HAG_LOOT,
         respawn_seconds: 30.0,
         ability_id: None,
+        kill_reputation: Some(RepAward::new("mirefen_ferry", 75)),
     },
 ];

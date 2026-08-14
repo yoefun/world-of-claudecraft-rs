@@ -29,13 +29,13 @@ mod password;
 pub mod postgres;
 mod store;
 
-pub use economy::{MailDto, MarketListingDto, RealmEconomy};
+pub use economy::{GuildDto, GuildMemberDto, MailDto, MarketListingDto, RealmEconomy};
 pub use error::{PersistError, PersistResult};
 pub use memory::MemoryStore;
 pub use models::{
     equipment_from_json, equipment_to_json, inventory_from_json, inventory_to_json,
     quests_from_json, quests_to_json, Character, CharacterSave, CharacterSummary, EquipmentDto,
-    InvStackDto, ProfessionSkillDto, QuestProgressDto, TalentRankDto,
+    InvStackDto, ProfessionSkillDto, QuestProgressDto, ReputationDto, TalentRankDto,
 };
 pub use password::{hash_password, verify_password};
 pub use store::{validate_character_name, validate_username};
@@ -101,6 +101,14 @@ impl Persist {
             Self::Memory(s) => s.list_characters(account_id).await,
             #[cfg(feature = "postgres")]
             Self::Postgres(s) => s.list_characters(account_id).await,
+        }
+    }
+
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        match self {
+            Self::Memory(s) => s.list_mailbox_directory().await,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(s) => s.list_mailbox_directory().await,
         }
     }
 
@@ -211,6 +219,7 @@ mod serialize_tests {
         assert!(eq.finger2.is_none());
         assert!(eq.main_hand_enchant.is_none());
         assert!(eq.off_hand_enchant.is_none());
+        assert!(eq.back.is_none());
     }
 
     #[test]
@@ -221,6 +230,8 @@ mod serialize_tests {
                 count: 3,
                 durability: None,
                 enchant_id: None,
+                quality: None,
+                bound: false,
             }),
             None,
         ];

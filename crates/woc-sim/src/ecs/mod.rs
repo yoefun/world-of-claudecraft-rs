@@ -225,6 +225,7 @@ mod tests {
                 item: None,
                 count: 1,
                 expires_tick: 0,
+                quality: None,
             },
         );
         w.insert(
@@ -234,6 +235,7 @@ mod tests {
                 equipment: crate::ecs::components::Equipment::default(),
                 equipment_wear: crate::ecs::components::EquipmentWear::default(),
                 equipment_enchants: crate::ecs::components::EquipmentEnchants::default(),
+                equipment_qualities: crate::ecs::components::EquipmentQualities::default(),
                 open_vendor_npc: None,
                 buyback: Vec::new(),
             },
@@ -252,6 +254,26 @@ mod tests {
         assert!(w.ids::<crate::ecs::components::Bags>().is_empty());
         assert!(w.ids::<crate::ecs::components::Hearth>().is_empty());
         assert!(!w.contains(id));
+    }
+
+    #[test]
+    fn create_player_inserts_riding_column() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Ada",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        let r = world
+            .get::<crate::ecs::components::Riding>(1)
+            .expect("riding");
+        assert_eq!(r.rank, 0);
+        assert!(r.known.is_empty());
+        assert!(r.last_id.is_none());
+        assert!(r.active_id.is_none());
     }
 
     #[test]

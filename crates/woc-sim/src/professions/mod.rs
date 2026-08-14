@@ -17,11 +17,10 @@ use duration::{
 use skill::{gain_skill, masterwork_proc_chance, tier_for_skill};
 use woc_content::{
     base_of, craft_fee, disenchant_yield, fine_substitute_for, gather_node, in_station_range, item,
-    npc, profession, profession_enchant, recipe, GatherNodeDef, ItemKind, RecipeDef, CRAFT_BATCH_MAX,
+    npc, profession, profession_enchant, recipe, GatherNodeDef, ItemKind, RecipeDef,
+    CRAFT_BATCH_MAX,
 };
-use woc_protocol::{
-    EntityId, EntityKind, InteractAction, ProfessionDeny, SimEvent, TICK_RATE,
-};
+use woc_protocol::{EntityId, EntityKind, InteractAction, ProfessionDeny, SimEvent, TICK_RATE};
 
 pub type ProfessionResult = Result<(), ProfessionDeny>;
 
@@ -61,13 +60,7 @@ pub fn handle_interact(
             enchant_id,
             confirm,
         } => start_apply_enchant_cast(
-            world,
-            player_id,
-            *bag_slot,
-            enchant_id,
-            *confirm,
-            tick,
-            events,
+            world, player_id, *bag_slot, enchant_id, *confirm, tick, events,
         ),
         _ => return false,
     };
@@ -397,11 +390,9 @@ fn evaluate_craft(
         .get::<Bags>(player_id)
         .map(|b| &b.inventory)
         .ok_or(ProfessionDeny::NotPlayer)?;
-    if definition
-        .reagents
-        .iter()
-        .any(|reagent| available_count(inventory, reagent.item_id) < reagent.count.saturating_mul(count))
-    {
+    if definition.reagents.iter().any(|reagent| {
+        available_count(inventory, reagent.item_id) < reagent.count.saturating_mul(count)
+    }) {
         return Err(ProfessionDeny::MissingReagents);
     }
     let fee = craft_fee(definition).saturating_mul(count);
@@ -834,7 +825,7 @@ fn remove_reagents(inv: &mut [Option<InvStack>], recipe: &RecipeDef) -> bool {
         .all(|r| remove_reagent(inv, r.item_id, r.count))
 }
 
-fn can_fit_craft(trial: &mut Vec<Option<InvStack>>, recipe: &RecipeDef) -> bool {
+fn can_fit_craft(trial: &mut [Option<InvStack>], recipe: &RecipeDef) -> bool {
     if !remove_reagents(trial, recipe) {
         return false;
     }
@@ -1109,10 +1100,7 @@ mod tests {
         tick_profession_casts(&mut world, 50, &mut rng, &mut events);
         assert!(
             count_item(&world.get::<Bags>(1).unwrap().inventory, "silverleaf")
-                + count_item(
-                    &world.get::<Bags>(1).unwrap().inventory,
-                    "fine_silverleaf"
-                )
+                + count_item(&world.get::<Bags>(1).unwrap().inventory, "fine_silverleaf")
                 >= 1
         );
     }
@@ -1204,7 +1192,10 @@ mod tests {
         );
         complete_disenchant(&mut world, 1, slot, &mut events).unwrap();
         assert_eq!(
-            count_item(&world.get::<Bags>(1).unwrap().inventory, "copper_shortsword"),
+            count_item(
+                &world.get::<Bags>(1).unwrap().inventory,
+                "copper_shortsword"
+            ),
             0
         );
         assert!(count_item(&world.get::<Bags>(1).unwrap().inventory, "arcane_dust") >= 1);

@@ -11,6 +11,18 @@ pub struct MailDto {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
+    #[serde(default)]
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub return_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -22,6 +34,41 @@ pub struct MarketListingDto {
     pub count: u32,
     pub price: u32,
     pub expires_tick: u64,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
+    #[serde(default)]
+    pub start_bid: u32,
+    #[serde(default)]
+    pub current_bid: u32,
+    #[serde(default)]
+    pub bidder_durable: Option<String>,
+    #[serde(default)]
+    pub bidder_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuildMemberDto {
+    pub durable_id: String,
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+    pub rank: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuildDto {
+    pub id: u32,
+    pub name: String,
+    pub motd: String,
+    pub motd_set_by: String,
+    #[serde(default)]
+    pub members: Vec<GuildMemberDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -30,10 +77,14 @@ pub struct RealmEconomy {
     pub mail: Vec<MailDto>,
     #[serde(default)]
     pub market: Vec<MarketListingDto>,
+    #[serde(default)]
+    pub guilds: Vec<GuildDto>,
     #[serde(default = "default_next_id")]
     pub next_mail_id: u32,
     #[serde(default = "default_next_id")]
     pub next_listing_id: u32,
+    #[serde(default = "default_next_id")]
+    pub next_guild_id: u32,
 }
 
 fn default_next_id() -> u32 {
@@ -53,6 +104,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mail_dto_omitted_keys_default() {
+        let m: MailDto = serde_json::from_str(
+            r#"{"id":1,"from":"AH","to_durable":"ada","subject":"Sold","copper":40,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(m.durability.is_none());
+        assert!(m.enchant_id.is_none());
+        assert_eq!(m.expires_tick, 0);
+        assert!(m.return_to.is_none());
+        assert!(m.quality.is_none());
+        assert!(!m.bound);
+    }
+
+    #[test]
+    fn guilds_default_when_omitted() {
+        let eco: RealmEconomy = serde_json::from_str(r#"{"mail":[],"market":[]}"#).unwrap();
+        assert!(eco.guilds.is_empty());
+        assert_eq!(eco.next_guild_id, 1);
+    }
+
+    #[test]
     fn economy_roundtrip() {
         let eco = RealmEconomy {
             mail: vec![MailDto {
@@ -63,6 +135,7 @@ mod tests {
                 copper: 40,
                 item_id: None,
                 item_count: 0,
+                ..Default::default()
             }],
             market: vec![MarketListingDto {
                 id: 2,
@@ -72,11 +145,29 @@ mod tests {
                 count: 1,
                 price: 12,
                 expires_tick: 100,
+                ..Default::default()
             }],
             next_mail_id: 3,
             next_listing_id: 4,
+            guilds: Vec::new(),
+            next_guild_id: 1,
         };
         let back = economy_from_json(&economy_to_json(&eco).unwrap()).unwrap();
         assert_eq!(back, eco);
+    }
+
+    #[test]
+    fn economy_omitted_instance_fields_default() {
+        let eco: RealmEconomy = serde_json::from_str(
+            r#"{"mail":[{"id":1,"from":"AH","to_durable":"ada","subject":"Sold","copper":40,"item_id":null,"item_count":0}],"market":[{"id":2,"seller_durable":"bob","seller_name":"Bob","item_id":"worn_sword","count":1,"price":12,"expires_tick":100}],"next_mail_id":3,"next_listing_id":4}"#,
+        )
+        .unwrap();
+        assert!(eco.mail[0].durability.is_none());
+        assert!(eco.market[0].enchant_id.is_none());
+        assert!(eco.mail[0].quality.is_none());
+        assert!(eco.market[0].quality.is_none());
+        assert!(!eco.mail[0].bound);
+        assert_eq!(eco.market[0].start_bid, 0);
+        assert!(eco.market[0].bidder_durable.is_none());
     }
 }

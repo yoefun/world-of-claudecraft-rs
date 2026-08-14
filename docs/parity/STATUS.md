@@ -1,9 +1,9 @@
 # Parity status
 
-**Current rewrite:** `1.14.0` / `kill-loop`.  
+**Current rewrite:** `1.22.0` / `kill-loop` (PROTOCOL_REV=10).  
 **Next:** TBD (post–kill-loop depth).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots is `1.13.0`; kill loop shipped as `1.14.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill loop shipped as `1.22.0` (planned as `1.14.0`, renumbered past the parallel develop landings).
 
 ## Kill loop (`kill-loop`) — done
 
@@ -24,7 +24,114 @@ Plan: [`../superpowers/plans/2026-08-13-kill-loop.md`](../superpowers/plans/2026
 | Mob abilities | done | `wolf_bite` / `warden_smash` / `terror_slam` |
 | Threat switch | done | 1.1× ratio |
 | Portal zone seed | done | Tag bytes, not `tag.len()` |
-| Protocol | done | Rev 8; additive `SimEvent::Loot.count` |
+| Protocol | done | Rev 10; additive `SimEvent::Loot.count` |
+
+## Mounts / riding (`mounts`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Riding ranks | done | Apprentice L2 / Journeyman L5 / Expert L8 at Ross |
+| Mount items | done | Pony 1.6, steed 2.0, gryphon flying 2.0; learn-on-use |
+| **V** toggle | done | Replaces free travel flight; `fly_toggle` wire bit reused |
+| Combat / instance dismount | done | Hit, ability, death, dungeon/delve, swim |
+| Persist | done | Additive completion JSON; load dismounted |
+| Client | done | Mount child mesh; riding rank on sheet; train button |
+| Protocol | done | Rev 10; `TrainRiding` + `mounted` / `riding_rank` |
+
+## Parcel and bank (`parcel-bank`) — done
+
+Design: [`../superpowers/specs/2026-08-13-parcel-bank-design.md`](../superpowers/specs/2026-08-13-parcel-bank-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-parcel-bank.md`](../superpowers/plans/2026-08-13-parcel-bank.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Offline parcels | done | `CharacterDirectory` on `Sim`; realm-boot load |
+| Client send / numbered collect / return | done | **S**/**Y**/**1–9**/**X**; compose field |
+| Postage / inbox cap / expiry | done | 1c, 20, 24h ticks; system mail uncapped |
+| Bank any non-quest stack | done | Client **G** deposits first non-quest bag stack |
+| Repair includes warehouse | done | `repair_cost` sums `Bank.bank` |
+| NPC gates | kept | Banker Holme / Eastbrook Post from `1.16.0` |
+
+## Guilds (`guilds`) — done
+
+Design: [`../superpowers/specs/2026-08-13-guilds-design.md`](../superpowers/specs/2026-08-13-guilds-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-guilds.md`](../superpowers/plans/2026-08-13-guilds.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| create/invite/leave | done | durable id; tick TTL 1200 |
+| ranks / kick / transfer / disband | done | leader/officer/member |
+| guild + officer chat | done | member-only fan-out |
+| MOTD | done | officer+; max 240 |
+| persist | done | `RealmEconomy.guilds` |
+| client J panel | done | compose A-Z/digits/`/`; `/invite` by name; Ctrl+verbs; Esc closes |
+| protocol | done | rev 10 |
+| Guild bank / calendar / friends | n/a | Explicit non-goals |
+
+## Party depth (`party-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-party-raid-design.md`](../superpowers/specs/2026-08-13-party-raid-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-party-raid.md`](../superpowers/plans/2026-08-13-party-raid.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Client invite / accept / decline | done | **G** on player target; **O**/**P** prompts |
+| Kick / promote / disband | done | Leader verbs; panel **Y** / **Minus** / **Backspace** |
+| Invite TTL | done | 600 ticks; pending dropped silently |
+| Snapshot roster + frames | done | `party_members` even when mate is outside AOI |
+| Park-safe membership | done | `park_player` must not `on_despawn` |
+| Classic XP split | done | `group_xp`; n=2 → 75% each |
+| Ready check | done | 300 ticks; parked do not block early complete |
+| Protocol rev 9 | done | New WS verbs + additive-looking snapshot fields with a rev bump |
+
+## Raid (`raid`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Convert 5-man → raid | done | Leader **Equals**; two groups of 5 |
+| Realm cap 10 | done | `MAX_REALM_PLAYERS` 8 → 10 |
+| Raid chat | done | `raid` channel; notices still realm-broadcast |
+| Raid frames | done | `G1` / `G2` prefixes |
+| 10-man encounter content | n/a | Explicit non-goal |
+
+## Economy depth (`economy-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-economy-depth-design.md`](../superpowers/specs/2026-08-13-economy-depth-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Auctioneer Lise | done | Eastbrook `(4, 6)`; Talk opens session; `[U]` |
+| Instance listings | done | Slot take; durability + enchant persist |
+| Bidding | done | `MarketBid`; outbid mail; expire-win mails item + proceeds |
+| Duration 12/24/48h | done | Fees 5/10/20c; ticks 864k / 1.728M / 3.456M |
+| Search / pages | done | Client filter `/`; `[` `]` pages of 8 |
+| Soulbound | done | OnEquip gear / OnPickup quest; blocks list + mail |
+| Banker Holme | done | Eastbrook `(6, 6)`; `[K]`; `"Talk to a banker first."` |
+| Eastbrook Post | done | Eastbrook `(0, 8)`; `[I]`; `"Talk to a mailbox first."` |
+| Protocol | done | Rev 8 additive bid/bound/`can_bank`/`can_mail` |
+
+## Gear more (`gear-more`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Extra slots | done | Shoulder/Back/Wrist/Hands/Waist + Trinket/Trinket2 |
+| Hunter dual-wield | done | Warrior/Rogue/Hunter; shaman still no |
+| OH enchant | done | Second oil → OH; full AP/SP; sheet `[enchant]` |
+| Loot quality | done | Stack quality; `max(catalog, roll)` after drop list |
+| Client sheet | done | Extra lines; unequip `0-=[]\;` |
+| Protocol | done | Rev 8; additive extra slots / `off_hand_enchant` / `quality` |
+
+## Reputation (`reputation`) — done
+
+Design: [`../superpowers/specs/2026-08-13-reputation-design.md`](../superpowers/specs/2026-08-13-reputation-design.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Faction table + standing ladder | done | Watch / Circle / Ferry / Highwatch; Neutral 0 |
+| Quest + kill grants | done | Party-shared on kills; `Reputation` column |
+| Vendor discount / gates | done | Friendly 5%…Exalted 20%; Unfriendly refuse; `watch_signet` |
+| Snapshot + persist | done | Additive `reputation` on rev **8**; completion JSON |
+| Client sheet | done | **C** lists standing |
 
 ## Gear slots (`gear-slots`) — done
 
@@ -175,7 +282,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.14.0` / kill-loop (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.22.0` / kill-loop (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
@@ -201,7 +308,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Dungeons / instances | done | unique instance keys; party share; overworld preserved; crypt/barrow trash |
 | Delves | done | eastbrook_hollow 3-room loop + reward |
 | Bank + mail | done | durable character bank + copper vault; mail keyed by character UUID |
-| Auction market | done | durable listings; list/buy/cancel from client; offline proceed/return via mail |
+| Auction market | done | Auctioneer Lise; instance listings; 5% cut; mail-always proceeds |
 | Professions gather/craft | done | herbalism → alchemy; mining → blacksmithing sword |
 | Duel + PvP honor | done | |
 | World boss + deeds | done | one-shot deed completion persisted |
@@ -210,7 +317,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Procedural character / scene visuals | done | Class/template mesh recipes; buildings, portals, zone atmosphere; create preview |
 | In-world NPC/mob scene load | done | Nameplates, quest/vendor markers, target ring, gather herbs, spawn lifecycle |
 | Entity walk / remove presentation | done | Locomotion hysteresis, procedural gait limbs, corpse tip, soft despawn fade |
-| Jump / swim / travel flight | done | Coyote jump, gravity + fall damage, lake tread, V-toggle flight |
+| Jump / swim / travel flight | done | Coyote jump, gravity + fall damage, lake tread; mounts replace free V flight |
 | Sim typed ECS columns | done | Sparse `World` in `woc-sim`; Bevy stays presentation-only |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 | Minimap / world map UI | done | Functional Bevy paint (not full DESIGN.md chrome) |

@@ -4,9 +4,13 @@ use bevy::prelude::*;
 use woc_content::npc;
 use woc_protocol::{EntityId, EntityKind, EntitySnapshot};
 use woc_sim::{
-    eastbrook_buildings, scene_markers, terrain_height, visual_spec, zone_atmosphere, Aabb,
-    PartRole, PartShape, SceneMarkerKind, VisualPart, VisualSpec, WORLD_SEED,
+    eastbrook_buildings, mount_visual_spec, scene_markers, terrain_height, visual_spec,
+    zone_atmosphere, Aabb, PartRole, PartShape, SceneMarkerKind, VisualPart, VisualSpec,
+    WORLD_SEED,
 };
+
+/// Y offset applied to the rider mesh while mounted.
+const MOUNT_RIDER_LIFT: f32 = 0.55;
 
 use crate::anim::{GaitLimb, VisualMotion};
 
@@ -15,6 +19,7 @@ use crate::anim::{GaitLimb, VisualMotion};
 pub(crate) struct SimVisual {
     pub(crate) id: EntityId,
     pub(crate) key: &'static str,
+    pub(crate) mounted: Option<String>,
     pub(crate) bob: bool,
 }
 
@@ -48,11 +53,13 @@ pub(crate) fn spawn_entity_visual(
 ) {
     let spec = visual_spec(snap.kind, snap.template_id.as_deref());
     let alive = snap.alive;
+    let mounted = snap.mounted.clone();
     let root = commands
         .spawn((
             SimVisual {
                 id: snap.id,
                 key: spec.key,
+                mounted: mounted.clone(),
                 bob: spec.bob,
             },
             VisualMotion::default(),
@@ -62,7 +69,16 @@ pub(crate) fn spawn_entity_visual(
             ViewVisibility::default(),
         ))
         .id();
-    spawn_parts(commands, meshes, materials, root, &spec, alive);
+    let rider_lift = if mounted.is_some() {
+        MOUNT_RIDER_LIFT
+    } else {
+        0.0
+    };
+    spawn_parts(commands, meshes, materials, root, &spec, alive, rider_lift);
+    if let Some(mount_id) = mounted.as_deref() {
+        let mount_spec = mount_visual_spec(mount_id);
+        spawn_parts(commands, meshes, materials, root, &mount_spec, alive, 0.0);
+    }
     spawn_overhead_markers(
         commands,
         meshes,
@@ -81,6 +97,7 @@ fn spawn_parts(
     parent: Entity,
     spec: &VisualSpec,
     alive: bool,
+    y_lift: f32,
 ) {
     for part in spec.parts {
         let mesh = mesh_for_part(meshes, part);
@@ -101,7 +118,7 @@ fn spawn_parts(
                 part.color[2] * spec.emissive * 4.0,
             ));
         }
-        let translation = Vec3::new(part.offset[0], part.offset[1], part.offset[2]);
+        let translation = Vec3::new(part.offset[0], part.offset[1] + y_lift, part.offset[2]);
         let mut entity = commands.spawn((
             VisualPartMesh,
             Mesh3d(mesh),
@@ -145,6 +162,9 @@ fn spawn_overhead_markers(
         Repair,
         Trainer,
         Hearth,
+        Auction,
+        Bank,
+        Mail,
     }
     let mut cues = Vec::new();
     if def.is_quest_giver() {
@@ -161,6 +181,15 @@ fn spawn_overhead_markers(
     }
     if def.is_innkeeper() {
         cues.push(Cue::Hearth);
+    }
+    if def.is_auctioneer() {
+        cues.push(Cue::Auction);
+    }
+    if def.is_banker() {
+        cues.push(Cue::Bank);
+    }
+    if def.is_mailbox() {
+        cues.push(Cue::Mail);
     }
     let total = cues.len() as f32;
     for (idx, cue) in cues.into_iter().enumerate() {
@@ -255,6 +284,54 @@ fn spawn_overhead_markers(
                     .id();
                 commands.entity(parent).add_child(hearth);
             }
+            Cue::Auction => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.92, 0.78, 0.28),
+                    emissive: LinearRgba::from(Color::srgb(0.45, 0.32, 0.05)),
+                    ..default()
+                });
+                let gavel = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.32, 0.26, 0.22))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(gavel);
+            }
+            Cue::Bank => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.35, 0.55, 0.85),
+                    emissive: LinearRgba::from(Color::srgb(0.08, 0.16, 0.32)),
+                    ..default()
+                });
+                let vault = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.28, 0.22, 0.22))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(vault);
+            }
+            Cue::Mail => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.82, 0.62, 0.32),
+                    emissive: LinearRgba::from(Color::srgb(0.28, 0.16, 0.04)),
+                    ..default()
+                });
+                let post = commands
+                    .spawn((
+                        OverheadMarker,
+                        Mesh3d(meshes.add(Cuboid::new(0.30, 0.16, 0.20))),
+                        MeshMaterial3d(mat),
+                        Transform::from_xyz(x, y, 0.0),
+                    ))
+                    .id();
+                commands.entity(parent).add_child(post);
+            }
         }
     }
 }
@@ -269,7 +346,7 @@ fn mesh_for_part(meshes: &mut ResMut<Assets<Mesh>>, part: &VisualPart) -> Handle
     }
 }
 
-/// Rebuild mesh parts when an entity's visual key changes (class swap / template).
+/// Rebuild mesh parts when an entity's visual key or mount state changes.
 pub(crate) fn respawn_parts_if_needed(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -280,7 +357,8 @@ pub(crate) fn respawn_parts_if_needed(
     children: Option<&Children>,
 ) {
     let spec = visual_spec(snap.kind, snap.template_id.as_deref());
-    if vis.key == spec.key {
+    let mounted = snap.mounted.clone();
+    if vis.key == spec.key && vis.mounted == mounted {
         return;
     }
     if let Some(children) = children {
@@ -290,8 +368,28 @@ pub(crate) fn respawn_parts_if_needed(
         }
     }
     vis.key = spec.key;
+    vis.mounted = mounted.clone();
     vis.bob = spec.bob;
-    spawn_parts(commands, meshes, materials, entity, &spec, snap.alive);
+    let rider_lift = if mounted.is_some() {
+        MOUNT_RIDER_LIFT
+    } else {
+        0.0
+    };
+    spawn_parts(
+        commands, meshes, materials, entity, &spec, snap.alive, rider_lift,
+    );
+    if let Some(mount_id) = mounted.as_deref() {
+        let mount_spec = mount_visual_spec(mount_id);
+        spawn_parts(
+            commands,
+            meshes,
+            materials,
+            entity,
+            &mount_spec,
+            snap.alive,
+            0.0,
+        );
+    }
     spawn_overhead_markers(
         commands,
         meshes,
@@ -540,6 +638,6 @@ pub(crate) fn spawn_class_preview(
             ViewVisibility::default(),
         ))
         .id();
-    spawn_parts(commands, meshes, materials, root, &spec, true);
+    spawn_parts(commands, meshes, materials, root, &spec, true, 0.0);
     root
 }

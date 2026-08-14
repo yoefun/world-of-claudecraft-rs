@@ -19,9 +19,9 @@ use crate::anim::{
 use crate::char_create::{CharName, SelectedClass};
 use crate::hud::{
     ChromePanelKind, HudActionBarText, HudBagText, HudCastFill, HudCastPanel, HudCastText,
-    HudCharPanel, HudCharText, HudChromePanel, HudChromeText, HudHpText, HudNetText, HudQuestText,
-    HudRoot, HudTargetText, HudToastText, HudVendorOffers, HudVendorPanel, HudVendorTitle,
-    HudXpText,
+    HudCharPanel, HudCharText, HudChromePanel, HudChromeText, HudHpText, HudNetText,
+    HudPartyFrames, HudPartyPanel, HudPartyText, HudQuestText, HudRoot, HudTargetText,
+    HudToastText, HudVendorOffers, HudVendorPanel, HudVendorTitle, HudXpText,
 };
 use crate::map;
 use crate::online;
@@ -293,6 +293,12 @@ fn setup_world(
                     TextColor(Color::srgb(0.85, 0.9, 0.95)),
                 ));
                 top.spawn((
+                    HudPartyFrames,
+                    Text::new(""),
+                    TextFont::from_font_size(15.0),
+                    TextColor(Color::srgb(0.55, 0.85, 0.7)),
+                ));
+                top.spawn((
                     HudQuestText,
                     Text::new("Quest: —"),
                     TextFont::from_font_size(15.0),
@@ -306,7 +312,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB/F attack · Tab target · 1–5 abilities · T pet · E interact/loot · B bags (Q/F) · L quests · C sheet · N talents · K bank (G/H/J/Y) · I mail · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
+                        "LMB/F attack · Tab target · G invite · P party · O accept · J guild · 1–5 abilities · T pet · E interact/loot · B bags (Q/F) · L quests · C sheet (rep) · N talents · K bank (G/H/J/Y) · I mail (Enter To, S/Y send, 1–9/P collect, X return) · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),
@@ -321,7 +327,7 @@ fn setup_world(
                     position_type: PositionType::Absolute,
                     left: Val::Px(12.0),
                     top: Val::Px(200.0),
-                    width: Val::Px(280.0),
+                    width: Val::Px(300.0),
                     padding: UiRect::all(Val::Px(12.0)),
                     flex_direction: FlexDirection::Column,
                     ..default()
@@ -334,6 +340,30 @@ fn setup_world(
                     Text::new(""),
                     TextFont::from_font_size(15.0),
                     TextColor(Color::srgb(0.9, 0.92, 0.85)),
+                ));
+            });
+
+            // Party roster overlay (toggle P)
+            root.spawn((
+                HudPartyPanel,
+                Visibility::Hidden,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(12.0),
+                    top: Val::Px(180.0),
+                    width: Val::Px(280.0),
+                    padding: UiRect::all(Val::Px(12.0)),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.04, 0.08, 0.06, 0.88)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    HudPartyText,
+                    Text::new(""),
+                    TextFont::from_font_size(15.0),
+                    TextColor(Color::srgb(0.85, 0.95, 0.88)),
                 ));
             });
 
@@ -422,6 +452,25 @@ fn setup_world(
                             Text::new(""),
                             TextFont::from_font_size(15.0),
                             TextColor(Color::srgb(0.82, 0.96, 0.8)),
+                        ));
+                    });
+                    row.spawn((
+                        HudChromePanel(ChromePanelKind::Guild),
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(300.0),
+                            padding: UiRect::all(Val::Px(12.0)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.1, 0.06, 0.12, 0.92)),
+                    ))
+                    .with_children(|panel| {
+                        panel.spawn((
+                            HudChromeText(ChromePanelKind::Guild),
+                            Text::new(""),
+                            TextFont::from_font_size(15.0),
+                            TextColor(Color::srgb(0.92, 0.82, 0.98)),
                         ));
                     });
                 });

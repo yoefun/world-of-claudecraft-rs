@@ -422,7 +422,15 @@ fn legend_text(markers: &[MapMarker], px: f32, pz: f32) -> String {
                 lines.push(format!("NPC · {} ({:.0}, {:.0})", m.label, m.x, m.z));
                 npcs += 1;
             }
-            _ => {}
+            MapMarkerKind::Player
+            | MapMarkerKind::Ally
+            | MapMarkerKind::Party
+            | MapMarkerKind::Mob
+            | MapMarkerKind::Hub
+            | MapMarkerKind::Portal
+            | MapMarkerKind::QuestAvailable
+            | MapMarkerKind::QuestReady
+            | MapMarkerKind::Npc => {}
         }
     }
     lines.join("\n")
@@ -448,6 +456,15 @@ fn npc_service_tags(template_id: Option<&str>) -> String {
     if def.is_innkeeper() {
         tags.push_str("[H]");
     }
+    if def.is_auctioneer() {
+        tags.push_str("[A]");
+    }
+    if def.is_banker() {
+        tags.push_str("[B]");
+    }
+    if def.is_mailbox() {
+        tags.push_str("[M]");
+    }
     tags
 }
 
@@ -460,7 +477,7 @@ fn npc_map_label(name: &str, template_id: Option<&str>) -> String {
     }
 }
 
-fn collect_dynamic_markers(
+pub(crate) fn collect_dynamic_markers(
     snap: &TickSnapshot,
     region: MapRegion,
     player_id: EntityId,
@@ -472,12 +489,19 @@ fn collect_dynamic_markers(
         }
         match entity.kind {
             EntityKind::Player if entity.id == player_id => {}
-            EntityKind::Player => out.push(MapMarker {
-                x: entity.x,
-                z: entity.z,
-                kind: MapMarkerKind::Ally,
-                label: entity.name.clone(),
-            }),
+            EntityKind::Player => {
+                let party = snap.party_members.iter().any(|m| m.id == entity.id);
+                out.push(MapMarker {
+                    x: entity.x,
+                    z: entity.z,
+                    kind: if party {
+                        MapMarkerKind::Party
+                    } else {
+                        MapMarkerKind::Ally
+                    },
+                    label: entity.name.clone(),
+                });
+            }
             EntityKind::Npc => {
                 let quest_kind = npc_quest_marker(snap, entity.template_id.as_deref());
                 out.push(MapMarker {
@@ -519,7 +543,7 @@ fn npc_quest_marker(snap: &TickSnapshot, template_id: Option<&str>) -> Option<Ma
 #[cfg(test)]
 mod tests {
     use super::npc_quest_marker;
-    use woc_protocol::{QuestLogEntry, TickSnapshot};
+    use woc_protocol::{EntityKind, EntitySnapshot, QuestLogEntry, TickSnapshot};
     use woc_sim::map_view::MapMarkerKind;
 
     #[test]
@@ -540,5 +564,44 @@ mod tests {
             npc_quest_marker(&snap, Some("captain_alden")),
             Some(MapMarkerKind::QuestAvailable)
         );
+    }
+
+    #[test]
+    fn party_member_uses_party_marker() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.party_members.push(woc_protocol::PartyMemberSnapshot {
+            id: 2,
+            name: "Bob".into(),
+            class_id: "mage".into(),
+            hp: 1.0,
+            hp_max: 1.0,
+            online: true,
+            raid_group: 0,
+        });
+        snap.entities.push(EntitySnapshot {
+            id: 2,
+            kind: EntityKind::Player,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            yaw: 0.0,
+            hp: 1.0,
+            hp_max: 1.0,
+            level: 1,
+            name: "Bob".into(),
+            resource: 0.0,
+            resource_max: 0.0,
+            alive: true,
+            template_id: None,
+            on_ground: true,
+            flying: false,
+            swimming: false,
+        });
+        let region = woc_sim::map_view::MapRegion::around(0.0, 0.0, 50.0);
+        let markers = super::collect_dynamic_markers(&snap, region, 1);
+        assert!(markers
+            .iter()
+            .any(|m| m.kind == MapMarkerKind::Party && m.label == "Bob"));
     }
 }

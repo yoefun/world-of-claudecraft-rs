@@ -342,7 +342,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         crate::ecs::spawn::create_loot(&mut world, 50, 0.5, 0.0, 4, Some("wolf_fang".into()));
         let mut roster = PartyRoster::new();
-        roster.invite(1, "B", &world);
+        roster.invite(1, "B", &world, 0);
         roster.accept(2, &world);
         assert!(roster.set_loot_mode(1, LootMode::NeedGreed));
         let mut rules = LootRules::default();
@@ -363,7 +363,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         crate::ecs::spawn::create_loot(&mut world, 50, 0.5, 0.0, 4, Some("boar_tusk".into()));
         let mut roster = PartyRoster::new();
-        roster.invite(1, "B", &world);
+        roster.invite(1, "B", &world, 0);
         roster.accept(2, &world);
         assert!(roster.set_loot_mode(1, LootMode::NeedGreed));
         let mut rules = LootRules::default();
@@ -380,7 +380,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
         crate::ecs::spawn::create_loot(&mut world, 50, 0.5, 0.0, 4, Some("wolf_fang".into()));
         let mut roster = PartyRoster::new();
-        roster.invite(1, "B", &world);
+        roster.invite(1, "B", &world, 0);
         roster.accept(2, &world);
         let mut rules = LootRules::default();
         let mut events = Vec::new();

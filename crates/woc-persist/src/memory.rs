@@ -132,6 +132,10 @@ impl MemoryStore {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
+            reputation: Vec::new(),
         };
         g.characters.insert(character.id, character.clone());
         Ok(character)
@@ -223,6 +227,14 @@ impl MemoryStore {
             .find(|c| c.name.eq_ignore_ascii_case(name))
             .cloned())
     }
+
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        let g = self.inner.lock().expect("memory store lock");
+        Ok(g.characters
+            .values()
+            .map(|c| (c.name.clone(), c.id))
+            .collect())
+    }
 }
 
 fn mint_token(inner: &mut Inner, account_id: Uuid) -> String {
@@ -263,6 +275,8 @@ mod tests {
                 count: 2,
                 durability: None,
                 enchant_id: None,
+                quality: None,
+                bound: false,
             })],
             equipment: EquipmentDto {
                 main_hand: Some("rusty_sword".into()),
@@ -285,6 +299,8 @@ mod tests {
                 count: 8,
                 durability: None,
                 enchant_id: None,
+                quality: None,
+                bound: false,
             })],
             bank_copper: 0,
             honor: 125,
@@ -299,6 +315,10 @@ mod tests {
             hearth_z: 34.0,
             hearth_ready_tick: 77,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
+            reputation: vec![],
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();
         assert_eq!(saved.to_save(), save);
@@ -306,6 +326,18 @@ mod tests {
         let entered = store.enter_character(aid, c.id).await.unwrap();
         assert_eq!(entered.xp, 450);
         assert_eq!(store.list_characters(aid).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn list_mailbox_directory_returns_created_names() {
+        let store = MemoryStore::new();
+        let (aid, _) = store.register("hero_one", "secret1").await.unwrap();
+        let c = store
+            .create_character(aid, "Aldric", "warrior")
+            .await
+            .unwrap();
+        let dir = store.list_mailbox_directory().await.unwrap();
+        assert!(dir.iter().any(|(n, id)| n == "Aldric" && *id == c.id));
     }
 
     #[tokio::test]
