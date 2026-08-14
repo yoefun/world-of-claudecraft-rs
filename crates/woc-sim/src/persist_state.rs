@@ -384,16 +384,19 @@ fn default_hearth_zone_id() -> String {
 }
 
 fn eject_instance_zone(zone_id: &str) -> (String, Option<(f32, f32)>) {
-    let content_id = zone_id
-        .split(':')
-        .nth(1)
-        .unwrap_or(zone_id);
+    let content_id = zone_id.split(':').nth(1).unwrap_or(zone_id);
     let content_id = crate::instances::dungeon_id_from_instance(content_id);
     if let Some(def) = woc_content::dungeon(content_id) {
-        return (canonical_parent_zone(def.zone_id), Some((def.entrance_x, def.entrance_z)));
+        return (
+            canonical_parent_zone(def.zone_id),
+            Some((def.entrance_x, def.entrance_z)),
+        );
     }
     if let Some(def) = woc_content::delve(content_id) {
-        return (canonical_parent_zone(def.zone_id), Some((def.entrance_x, def.entrance_z)));
+        return (
+            canonical_parent_zone(def.zone_id),
+            Some((def.entrance_x, def.entrance_z)),
+        );
     }
     ("eastbrook".into(), None)
 }

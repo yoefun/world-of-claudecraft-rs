@@ -28,11 +28,7 @@ pub fn release_spirit(world: &mut World, player_id: EntityId, events: &mut Vec<S
         .as_deref()
         .and_then(crate::instances::parent_zone_for_instance_key)
         .map(|s| s.to_string())
-        .or_else(|| {
-            world
-                .get::<Identity>(player_id)
-                .map(|i| i.zone_id.clone())
-        })
+        .or_else(|| world.get::<Identity>(player_id).map(|i| i.zone_id.clone()))
         .unwrap_or_else(|| "eastbrook".into());
 
     if instance_key.is_some() {
@@ -87,7 +83,14 @@ mod tests {
     #[test]
     fn release_in_barrow_uses_mirefen_graveyard() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 25.0, 430.0);
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Delver",
+            PlayerClass::Warrior,
+            25.0,
+            430.0,
+        );
         if let Some(h) = world.get_mut::<Health>(1) {
             h.level = 3;
         }
@@ -118,7 +121,13 @@ mod tests {
         let t = world.get::<Transform>(1).unwrap();
         assert!((t.x - gy.x).abs() < 1e-3);
         assert!((t.z - gy.z).abs() < 1e-3);
-        assert_eq!(world.get::<crate::ecs::components::Identity>(1).unwrap().zone_id, "mirefen");
+        assert_eq!(
+            world
+                .get::<crate::ecs::components::Identity>(1)
+                .unwrap()
+                .zone_id,
+            "mirefen"
+        );
     }
 
     #[test]

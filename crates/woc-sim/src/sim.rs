@@ -267,8 +267,7 @@ impl Sim {
             .unwrap_or_default();
         let ejected_instance_save =
             state.zone_id.starts_with("instance:") || state.zone_id.starts_with("delve:");
-        let virgin_hub_spawn =
-            state.is_virgin() && zone == "eastbrook" && !ejected_instance_save;
+        let virgin_hub_spawn = state.is_virgin() && zone == "eastbrook" && !ejected_instance_save;
         if virgin_hub_spawn
             || (!state.is_virgin()
                 && zone == "eastbrook"
@@ -3243,17 +3242,16 @@ mod tests {
             &mut events
         ));
         let snap = sim.snapshot_for_player(b);
-        assert!(snap
+        assert!(snap.entities.iter().all(|e| e.id != sim.player_id
+            || e.kind != woc_protocol::EntityKind::Player
+            || {
+                // B is overworld: must not see A's instanced body
+                !snap.entities.iter().any(|e| e.id == sim.player_id)
+            }));
+        assert!(!snap
             .entities
             .iter()
-            .all(|e| e.id != sim.player_id || e.kind != woc_protocol::EntityKind::Player
-                || {
-                    // B is overworld: must not see A's instanced body
-                    !snap.entities.iter().any(|e| e.id == sim.player_id)
-                }));
-        assert!(!snap.entities.iter().any(|e| {
-            e.template_id.as_deref() == Some("crypt_warden")
-        }));
+            .any(|e| { e.template_id.as_deref() == Some("crypt_warden") }));
     }
 
     #[test]

@@ -784,10 +784,7 @@ mod tests {
             .unwrap();
         let loot_id = world.next_id();
         crate::ecs::spawn::create_loot(&mut world, loot_id, 0.0, 0.0, 5, None);
-        world
-            .get_mut::<InstanceAt>(loot_id)
-            .unwrap()
-            .instance_id = Some(key.clone());
+        world.get_mut::<InstanceAt>(loot_id).unwrap().instance_id = Some(key.clone());
         let populated = instance_non_players(&world, &key);
         assert!(populated > 0);
 

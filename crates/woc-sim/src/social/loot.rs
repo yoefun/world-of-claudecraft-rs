@@ -253,8 +253,7 @@ fn eligible_near_loot(
         };
         let dx = mate.x - loot_t.x;
         let dz = mate.z - loot_t.z;
-        (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
-            && same_instance_space(world, *id, loot_id)
+        (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE && same_instance_space(world, *id, loot_id)
     });
     if !members.contains(&killer) {
         members.push(killer);

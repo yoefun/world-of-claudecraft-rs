@@ -297,7 +297,9 @@ mod tests {
         let mut events = Vec::new();
         assert!(summon_pet(&mut world, 1, &mut events));
         let pet = find_pet(&world, 1).unwrap();
-        assert!(world.get::<crate::ecs::components::InstanceAt>(pet).is_some());
+        assert!(world
+            .get::<crate::ecs::components::InstanceAt>(pet)
+            .is_some());
     }
 
     #[test]
