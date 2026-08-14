@@ -1,16 +1,59 @@
 # Changelog
 
-## 1.22.0 — 2026-08-14
+## 1.25.0 — 2026-08-14
 
 ### Added
 
-- **1.22.0 `friends`:** Friend book and ignore list on `Sim.friends` (`FriendRoster`), keyed by durable character id.
+- **1.25.0 `friends`:** Friend book and ignore list on `Sim.friends` (`FriendRoster`), keyed by durable character id.
 - Unidirectional `/add` via `CharacterDirectory` (offline names work); ignore kicks a friend; caps 50/50.
 - Whisper (`/w Name text`) fans out through `player_tx`, never realm `notices`. Ignore filters whisper only.
 - Online = intent slot (parked friends show offline). Presence toasts `{name} has come/gone online.`
 - Persist `RealmEconomy.social`. Character delete sweeps every book.
 - Bevy **O** panel: `/add` `/remove` `/ignore` `/unignore` `/w` `/invite`; party accept and AH buyout still win **O**. `/invite Name` (or `/invite` with a targeted player) sends the existing party invite.
 - Protocol rev **11** (`Chat.target`, friend WS verbs, snapshot `friends` / `ignored`).
+
+### Notes
+
+- Planned as `1.22.0` while develop shipped kill-loop / dungeon-depth / delve-depth as `1.22.0`–`1.24.0`; the theme lands as `1.25.0`.
+
+## 1.24.0 — 2026-08-14
+
+### Added
+
+- **1.24.0 `delve-depth`:** Eastbrook Hollow uses `{id}#{seq}` keys and no longer despawns the overworld.
+- Two players get two Hollows. Room clears auto-advance on the kill tick.
+- Hollow entrance moved to `(8, -6)`. **E** enters; Leave / Hearth / release abort with no reward.
+
+## 1.23.0 — 2026-08-14
+
+### Added
+
+- **1.23.0 `dungeon-depth`:** Bevy **E** at a dungeon entrance enters; **E** at the same point inside leaves to that entrance.
+- Sim 5-yard enter gate; leave lands on the portal, not the zone spawn.
+- Snapshot hides cross-instance players/mobs; pets copy `InstanceAt` and follow.
+- Death release uses the parent-zone graveyard; persist ejects `instance:` saves to the parent entrance.
+- Additive `instance_id` / `instance_name` / `delve_room` on rev **10**.
+
+### Notes
+
+- Dungeon/delve were renumbered from `1.22.0`/`1.23.0` to `1.23.0`/`1.24.0` because develop shipped kill-loop as `1.22.0`.
+
+## 1.22.0 — 2026-08-14
+
+### Added
+
+- **1.22.0 `kill-loop`:** Per-template `Respawn.delay_sec` (wolves 30 s; `mire_terror` 300 s); instance/delve trash and bosses never revive (`delay_sec = 0`).
+- Leash reset restores full HP and clears auras/threat when mobs return home.
+- `MobSpot` `count` + `radius` packs; Wolf Run spawns ≥5 young wolves.
+- Loot honors `LootEntry.count`; piles expire after 2_400 ticks (120 s); `create_loot_ex` stamps the correct zone.
+- Quest `ItemKind::Quest` piles skip Need/Greed rolls (FFA pickup).
+- Pet last-hit credits the `Owner` for XP/quest/party share via `collect_pending_mob_kills`.
+- Mob abilities: `wolf_bite`, `warden_smash`, `terror_slam`; threat switches at 1.1× ratio.
+- Protocol rev stays **10** (additive `SimEvent::Loot.count`).
+
+### Notes
+
+- Planned as `1.14.0` while develop shipped `1.14.0` … `1.21.0` in parallel; the theme lands as `1.22.0`.
 
 ## 1.21.0 — 2026-08-14
 

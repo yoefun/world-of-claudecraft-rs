@@ -3,6 +3,7 @@
 use crate::ecs::components::{Bags, Combat, Hearth, Identity, InstanceAt, Threat, Transform};
 use crate::ecs::World;
 use crate::types::HEARTH_COOLDOWN_TICKS;
+use crate::world::WORLD_SEED;
 use woc_content::{ZoneLayout, EASTBROOK, EASTFEN, GATHER_NODES, MIREFEN, THORNPEAK};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
@@ -24,6 +25,18 @@ fn layout_zone_tag(zone_id: &str) -> &'static str {
         "mirefen" => "mirefen",
         "thornpeak" | "thornpeak_heights" | "highwatch" => "thornpeak",
         _ => "unknown",
+    }
+}
+
+fn zone_population_seed(tag: &str) -> u32 {
+    let mut h = WORLD_SEED;
+    for b in tag.as_bytes() {
+        h = h.wrapping_mul(16777619) ^ u32::from(*b);
+    }
+    if h == 0 {
+        0x9e3779b9
+    } else {
+        h
     }
 }
 
@@ -73,9 +86,13 @@ pub(crate) fn load_overworld_zone_at(
     if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
         return false;
     }
+    let old_instance_id = world
+        .get::<InstanceAt>(player_id)
+        .and_then(|instance| instance.instance_id.clone());
 
     let tag = layout_zone_tag(zone_id);
-    ensure_zone_population(world, layout, tag);
+    let mut rng = crate::rng::Rng::new(zone_population_seed(tag));
+    ensure_zone_population(world, layout, tag, &mut rng);
 
     let y = crate::ecs::spawn::ground_at(x, z);
     if let Some(t) = world.get_mut::<Transform>(player_id) {
@@ -101,6 +118,10 @@ pub(crate) fn load_overworld_zone_at(
     }
     if let Some(threat) = world.get_mut::<Threat>(player_id) {
         threat.threat.clear();
+    }
+    crate::instances::follow_owner_into_instance(world, player_id);
+    if let Some(instance_id) = old_instance_id {
+        crate::instances::despawn_instance_if_empty(world, &instance_id);
     }
     true
 }
@@ -129,7 +150,12 @@ pub(crate) fn use_hearthstone(
     true
 }
 
-fn ensure_zone_population(world: &mut World, layout: &ZoneLayout, tag: &str) {
+fn ensure_zone_population(
+    world: &mut World,
+    layout: &ZoneLayout,
+    tag: &str,
+    rng: &mut crate::rng::Rng,
+) {
     let has_zone_npc = world.ids::<Identity>().into_iter().any(|id| {
         world.get::<Identity>(id).is_some_and(|identity| {
             identity.kind == EntityKind::Npc
@@ -151,12 +177,21 @@ fn ensure_zone_population(world: &mut World, layout: &ZoneLayout, tag: &str) {
         }
     }
     for spot in layout.mobs {
-        let id = world.next_id();
-        if let Some(mid) =
-            crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, spot.x, spot.z)
-        {
-            if let Some(identity) = world.get_mut::<Identity>(mid) {
-                identity.zone_id = tag.to_string();
+        for i in 0..spot.count {
+            let id = world.next_id();
+            let (x, z) = if spot.radius > 0.0 {
+                let ox = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                let oz = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                (spot.x + ox, spot.z + oz)
+            } else {
+                (spot.x + i as f32 * 1.2, spot.z)
+            };
+            if let Some(mid) =
+                crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, z)
+            {
+                if let Some(identity) = world.get_mut::<Identity>(mid) {
+                    identity.zone_id = tag.to_string();
+                }
             }
         }
     }
@@ -181,20 +216,21 @@ pub fn populate_all_overworld(world: &mut World, rng: &mut crate::rng::Rng) {
             }
         }
         for spot in layout.mobs {
-            let id = world.next_id();
-            let ox = (rng.next_f32() - 0.5) * 1.5;
-            let oz = (rng.next_f32() - 0.5) * 1.5;
-            let x = spot.x + ox;
-            let z = spot.z + oz;
-            if let Some(mid) =
-                crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, z)
-            {
-                if let Some(identity) = world.get_mut::<Identity>(mid) {
-                    identity.zone_id = tag.to_string();
-                }
-                if let Some(home) = world.get_mut::<crate::ecs::components::Home>(mid) {
-                    home.home_x = x;
-                    home.home_z = z;
+            for i in 0..spot.count {
+                let id = world.next_id();
+                let (x, z) = if spot.radius > 0.0 {
+                    let ox = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                    let oz = (rng.next_f32() - 0.5) * 2.0 * spot.radius;
+                    (spot.x + ox, spot.z + oz)
+                } else {
+                    (spot.x + i as f32 * 1.2, spot.z)
+                };
+                if let Some(mid) =
+                    crate::ecs::spawn::create_mob_from_template(world, id, spot.mob_id, x, z)
+                {
+                    if let Some(identity) = world.get_mut::<Identity>(mid) {
+                        identity.zone_id = tag.to_string();
+                    }
                 }
             }
         }
@@ -323,6 +359,26 @@ mod tests {
     }
 
     #[test]
+    fn populate_spawns_wolf_run_pack() {
+        let mut world = World::new();
+        let mut rng = crate::rng::Rng::new(1);
+        populate_all_overworld(&mut world, &mut rng);
+        let n = world
+            .ids::<Identity>()
+            .into_iter()
+            .filter(|&id| {
+                world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some("young_wolf")
+                    && world.get::<Identity>(id).map(|i| i.zone_id.as_str()) == Some("eastbrook")
+                    && world.get::<Health>(id).is_some_and(|h| h.alive)
+            })
+            .count();
+        assert!(n >= 5, "eastbrook young_wolf count={n}");
+    }
+
+    #[test]
     fn gather_nodes_spawn_once() {
         let mut world = World::new();
         let mut rng = crate::rng::Rng::new(1);
@@ -352,5 +408,16 @@ mod tests {
             })
             .count();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn zone_population_seed_differs_for_equal_length_tags() {
+        let a = zone_population_seed("eastfen");
+        let b = zone_population_seed("mirefen");
+        assert_ne!(
+            a, b,
+            "equal-length zone tags must not share a portal population seed"
+        );
+        assert_ne!(zone_population_seed("eastbrook"), a);
     }
 }

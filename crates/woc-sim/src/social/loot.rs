@@ -2,10 +2,9 @@
 
 use std::collections::HashMap;
 
-use crate::ecs::components::{
-    Bags, ClassKit, Health, Identity, InstanceAt, LootPile, Progress, Transform,
-};
+use crate::ecs::components::{Bags, ClassKit, Health, Identity, LootPile, Progress, Transform};
 use crate::ecs::World;
+use crate::instances::same_instance_space;
 use crate::inventory::grant_into;
 use crate::rng::Rng;
 use crate::social::party::{PartyRoster, PARTY_CREDIT_RANGE};
@@ -46,6 +45,7 @@ pub struct PendingLoot {
     pub loot_id: EntityId,
     pub item_id: String,
     pub copper: u32,
+    pub count: u32,
     pub eligible: Vec<EntityId>,
     pub rolls: HashMap<EntityId, (RollChoice, u32)>,
 }
@@ -68,6 +68,12 @@ impl LootRules {
 
     pub fn is_pending(&self, loot_id: EntityId) -> bool {
         self.pending.iter().any(|p| p.loot_id == loot_id)
+    }
+
+    pub fn drop_pending(&mut self, loot_id: EntityId) -> bool {
+        let before = self.pending.len();
+        self.pending.retain(|p| p.loot_id != loot_id);
+        before != self.pending.len()
     }
 
     /// Snapshot pending rolls relevant to `player` (eligible only).
@@ -111,7 +117,11 @@ impl LootRules {
         };
         let item_id = pile.item.clone().unwrap_or_default();
         let copper = pile.copper;
+        let count = pile.count;
         if item_id.is_empty() && copper == 0 {
+            return;
+        }
+        if woc_content::item(&item_id).map(|d| d.kind) == Some(woc_content::ItemKind::Quest) {
             return;
         }
         let eligible = eligible_near_loot(parties, world, killer, loot_id);
@@ -129,7 +139,7 @@ impl LootRules {
                 copper
             ),
         });
-        self.start_roll(loot_id, item_id, copper, eligible);
+        self.start_roll(loot_id, item_id, copper, count, eligible);
     }
 
     /// Start a Need/Greed roll for a loot entity among eligible party members.
@@ -138,6 +148,7 @@ impl LootRules {
         loot_id: EntityId,
         item_id: String,
         copper: u32,
+        count: u32,
         eligible: Vec<EntityId>,
     ) {
         if eligible.is_empty() {
@@ -147,6 +158,7 @@ impl LootRules {
             loot_id,
             item_id,
             copper,
+            count,
             eligible,
             rolls: HashMap::new(),
         });
@@ -206,7 +218,7 @@ impl LootRules {
         };
         if !pending.item_id.is_empty() {
             if let Some(bags) = world.get_mut::<Bags>(winner) {
-                let _ = grant_into(&mut bags.inventory, &pending.item_id, 1);
+                let _ = grant_into(&mut bags.inventory, &pending.item_id, pending.count.max(1));
             }
         }
         if let Some(progress) = world.get_mut::<Progress>(winner) {
@@ -239,9 +251,6 @@ fn eligible_near_loot(
         return vec![killer];
     };
     let loot_t = world.get::<Transform>(loot_id);
-    let loot_inst = world
-        .get::<InstanceAt>(loot_id)
-        .and_then(|i| i.instance_id.clone());
     members.retain(|id| {
         if world.get::<ClassKit>(*id).is_none() {
             return false;
@@ -257,11 +266,7 @@ fn eligible_near_loot(
         };
         let dx = mate.x - loot_t.x;
         let dz = mate.z - loot_t.z;
-        let same_instance = world
-            .get::<InstanceAt>(*id)
-            .and_then(|i| i.instance_id.clone())
-            == loot_inst;
-        (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE && same_instance
+        (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE && same_instance_space(world, *id, loot_id)
     });
     if !members.contains(&killer) {
         members.push(killer);
@@ -307,7 +312,7 @@ mod tests {
     #[test]
     fn need_beats_greed() {
         let mut rules = LootRules::default();
-        rules.start_roll(99, "wolf_fang".into(), 5, vec![1, 2]);
+        rules.start_roll(99, "wolf_fang".into(), 5, 1, vec![1, 2]);
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
@@ -341,6 +346,23 @@ mod tests {
         let snap = rules.snapshot_for(1);
         assert_eq!(snap.len(), 1);
         assert!(!snap[0].rolled);
+    }
+
+    #[test]
+    fn quest_item_skips_need_greed() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
+        crate::ecs::spawn::create_loot(&mut world, 50, 0.5, 0.0, 4, Some("boar_tusk".into()));
+        let mut roster = PartyRoster::new();
+        roster.invite(1, "B", &world, 0);
+        roster.accept(2, &world);
+        assert!(roster.set_loot_mode(1, LootMode::NeedGreed));
+        let mut rules = LootRules::default();
+        let mut events = Vec::new();
+        rules.maybe_start_party_roll(&roster, &world, 1, 50, &mut events);
+        assert!(rules.pending.is_empty());
+        assert!(!rules.is_pending(50));
     }
 
     #[test]

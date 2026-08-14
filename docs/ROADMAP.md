@@ -29,7 +29,10 @@
 | **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
 | **1.20.0** (shipped) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
 | **1.21.0** (shipped) | `mounts` | Riding ranks, learnable mounts, **V** toggle, Expert flying |
-| **1.22.0** (this branch) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
+| **1.22.0** (shipped) | `kill-loop` | Per-template respawn, leash reset, loot count/TTL, pet credit, mob abilities |
+| **1.23.0** (shipped) | `dungeon-depth` | Playable Crypt/Barrow enter/leave, isolation, parent GY |
+| **1.24.0** (shipped) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
+| **1.25.0** (shipped) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
 
 ## Completion program (closed)
 
@@ -73,6 +76,13 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
 
+## Kill loop (shipped as `1.22.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-kill-loop-design.md`](superpowers/specs/2026-08-13-kill-loop-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-kill-loop.md`](superpowers/plans/2026-08-13-kill-loop.md)
+
+Close spawn → fight → loot → respawn: per-template respawn (instance trash never), leash HP reset, `MobSpot` packs, loot `count` + 120 s TTL, pet last-hit credits the owner, three mob abilities, 1.1× threat switch. Planned as `1.14.0`; renumbered to `1.22.0` after develop shipped `1.14.0`–`1.21.0` in parallel. Protocol rev stays **10**. No new tick phase.
+
 ## Gear more (shipped as `1.15.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-more-design.md`](superpowers/specs/2026-08-13-gear-more-design.md)  
@@ -80,12 +90,19 @@ Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then F
 
 Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
 
-## Friends (this branch as `1.22.0`)
+## Friends (shipped as `1.25.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-14-friends-design.md`](superpowers/specs/2026-08-14-friends-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-14-friends.md`](superpowers/plans/2026-08-14-friends.md)
 
-`FriendRoster` on `Sim`, keyed by durable character id (like mail/guilds). Unidirectional add via `CharacterDirectory`. Ignore filters whisper only. Protocol rev **11**. Bevy **O** panel. Friends stay off `World` columns and `CharacterSave`.
+`FriendRoster` on `Sim`, keyed by durable character id (like mail/guilds). Unidirectional add via `CharacterDirectory`. Ignore filters whisper only. Protocol rev **11**. Bevy **O** panel. Friends stay off `World` columns and `CharacterSave`. Planned as `1.22.0`; lands as `1.25.0` after kill-loop / dungeon / delve took `1.22.0`–`1.24.0`.
+
+## Instance depth (shipped as `1.23.0` + `1.24.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-instance-depth-design.md`](superpowers/specs/2026-08-13-instance-depth-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-instance-depth.md`](superpowers/plans/2026-08-13-instance-depth.md)
+
+`1.23.0` makes 5-man dungeons playable (Bevy **E** at the portal, 5-yard sim gate, leave-to-entrance, snapshot isolation, pet follow, parent-zone graveyard, persist eject). `1.24.0` gives Eastbrook Hollow unique `{id}#{seq}` keys so it stops wiping the overworld, auto-advances cleared rooms, and moves the entrance to `(8, -6)` with client **E** enter and room HUD. These milestones were renumbered past kill-loop `1.22.0`. Protocol rev stays **10**. Dungeon Finder, lockouts, and 10-man raid encounters stay out of scope.
 
 ## Mounts and riding (shipped as `1.21.0`)
 

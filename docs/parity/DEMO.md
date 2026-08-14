@@ -6,7 +6,7 @@ Manual. Requires a GPU client. CI does not run this.
 2. Create chars, quit, re-login — same HP/bag/position (park/resume); gear/quests/talents restored (memory or Postgres).
 3. Spend talents, cast 3+ abilities, summon a hunter or warlock pet (T). Rogue: **Z** stealth → Cheap Shot opener → Sinister Strike → Eviscerate. Druid/shaman **F** Travel Form / Ghost Wolf; warlock Fear; warrior **F** stance.
 4. Travel Eastbrook → Eastfen, die, release, respawn at a graveyard.
-5. Party Eastbrook Crypt (trash + boss) or Mirefen Barrow → Need/Greed loot (1/2/3).
+5. Walk to Eastbrook Crypt portal, **E** enter (trash + boss); **E** at the entrance inside to leave at the overworld portal (not zone spawn). Two clients in party share one `eastbrook_crypt#N` key. Mirefen Barrow works the same; Need/Greed loot (1/2/3). Walk southeast of spawn to Eastbrook Hollow at `(8, -6)`, **E** enter, clear three rooms (auto-advance on kill tick), **E** at the entrance inside to abort to `(8, -6)`; a second client still sees Eastbrook wolves.
 5b. Two clients: target + **G** invite, **O** accept; party frames show HP; **P** panel **R** ready check; disconnect shows AFK; **X** leave.
 5c. Five players **=** convert to raid; invite a sixth; frames show G2; convert back fails until size ≤ 5.
 6. Bank a worn enchanted sword at Banker Holme (K, G) and copper; mail a herb to an offline name at Eastbrook Post (I, type, S); collect (P); Talk to Auctioneer Lise [A], list (`,`/`.` duration), bid **B** or buyout **O**, cancel **X**; wear/enchant/bind survive; gather + craft a salve or copper shortsword.
@@ -23,9 +23,10 @@ Manual. Requires a GPU client. CI does not run this.
 17. Hunter: replace the bow with a hatchet, equip a second hatchet into OffHand. Wear a Wool Cloak and two Lucky Pebbles. Use a second whetstone so Off shows `[Coarse Sharpening]`.
 18. Two clients: Alice **J** types `Vale Watch` (Shift for capitals) Enter — the opening **J** must not leave a stray `j`. `/invite Bob` Enter; Bob Enter. Billboard `/motd Kill wolves at dusk` Enter; guild chat by typing + Enter; `/o hello` for officer chat. Relog still in guild. `/transfer Bob` Enter, `/kick` or **Ctrl+Q** leave, **Ctrl+D** disband (every online member sees `<Vale Watch> has been disbanded.`). **Esc** closes the panel (J types `j` while it is open). While the panel is open no key moves, attacks, or hearths.
 19. Stable Master Ross: train Apprentice Riding (L2), buy Brown Pony, use it to learn, press **V** to mount/dismount; enter combat and confirm dismount; train Expert, buy Tawny Gryphon, **V** to fly (Space/Ctrl vertical); Eastbrook Crypt refuses mount entry.
-20. Two clients: Alice **O**, `/add Bob` Enter — toast `Bob has been added to your friends list.`; Bob shows `*`. `/invite Bob` Enter — Bob sees the party invite (O accept). `/w Bob pull west` Enter — Bob sees `[whisper] Alice: pull west`. Bob `/ignore Alice` — Alice's next whisper is `Bob is ignoring you.` Unignore, `/add Alice`, both Alt-F4 and log in: lists persist; online toast `{name} has come online.` Delete Bob's character: Alice's list no longer has Bob.
+20. Kill a Young Wolf; wait 30s — it revives at Home full HP. Leave loot 2 minutes — the pile is gone. Crypt trash does not revive. Hunter pet last-hit still grants owner XP. Scarred Wolf uses Wolf Bite.
+21. Two clients: Alice **O**, `/add Bob` Enter — toast `Bob has been added to your friends list.`; Bob shows `*`. `/invite Bob` Enter — Bob sees the party invite (O accept). `/w Bob pull west` Enter — Bob sees `[whisper] Alice: pull west`. Bob `/ignore Alice` — Alice's next whisper is `Bob is ignoring you.` Unignore, `/add Alice`, both Alt-F4 and log in: lists persist; online toast `{name} has come online.` Delete Bob's character: Alice's list no longer has Bob.
 
-Footer reads `WoC-rs 1.22.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
+Footer reads `WoC-rs 1.25.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 

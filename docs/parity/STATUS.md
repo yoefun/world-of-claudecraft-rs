@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.22.0` / `friends` (PROTOCOL_REV=11).  
+**Current rewrite:** `1.25.0` / `friends` (PROTOCOL_REV=11).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; friends shipped as `1.22.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill-loop shipped as `1.22.0`; dungeon-depth shipped as `1.23.0`; delve-depth shipped as `1.24.0`; friends shipped as `1.25.0`. Dungeon/delve were renumbered past kill-loop `1.22.0`.
 
 ## Friends (`friends`) — done
 
@@ -18,6 +18,57 @@ Plan: [`../superpowers/plans/2026-08-14-friends.md`](../superpowers/plans/2026-0
 | persist | done | `RealmEconomy.social` |
 | client O panel | done | `/add` `/w` `/ignore` `/invite`; party/market O still win |
 | protocol | done | rev 11 |
+
+## Kill loop (`kill-loop`) — done
+
+Design: [`../superpowers/specs/2026-08-13-kill-loop-design.md`](../superpowers/specs/2026-08-13-kill-loop-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-kill-loop.md`](../superpowers/plans/2026-08-13-kill-loop.md) · Polish: [`../superpowers/plans/2026-08-14-kill-loop-polish.md`](../superpowers/plans/2026-08-14-kill-loop-polish.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Per-template respawn | done | `Respawn.delay_sec`; wolves 30 s; `mire_terror` 300 s |
+| Instance never-revive | done | Crypt/barrow/delve `delay_sec = 0` |
+| Leash reset | done | Restore HP, clear auras/threat |
+| Leash evade | done | No re-aggro until Home |
+| `MobSpot` packs | done | `count` + `radius`; Wolf Run ≥5 |
+| Loot `count` + TTL | done | Honor `LootEntry.count`; piles expire at 2400 ticks |
+| Victim instance loot | done | Killer `InstanceAt` else victim |
+| Quest skip Need/Greed | done | `ItemKind::Quest` piles stay FFA |
+| Pet kill credit | done | `Owner` rewrite in `collect_pending_mob_kills` |
+| Mob abilities | done | `wolf_bite` / `warden_smash` / `terror_slam` |
+| Threat switch | done | 1.1× ratio |
+| Portal zone seed | done | Tag bytes, not `tag.len()` |
+| Protocol | done | Rev 10; additive `SimEvent::Loot.count` |
+
+## Dungeon depth (`dungeon-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-instance-depth.md`](../superpowers/plans/2026-08-13-instance-depth.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Client **E** enter/leave | done | Bevy **E** at Crypt/Barrow portal in and out |
+| 5-yard sim gate + leave-to-entrance | done | Leave lands on portal, not zone spawn |
+| Snapshot isolation | done | Cross-instance players/mobs hidden from `entities` |
+| Pet `InstanceAt` follow | done | Pets copy owner instance; summon in-instance works |
+| Parent-zone graveyard | done | Death release uses Eastbrook/Mirefen GY by parent zone |
+| Persist eject | done | `instance:` saves load at parent entrance coords |
+| Client | done | `EnterInstance` / `LeaveInstance` from `input.rs` |
+| Protocol | done | Rev 10; additive `instance_id` / `instance_name` / `delve_room` |
+
+## Delve depth (`delve-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-instance-depth.md`](../superpowers/plans/2026-08-13-instance-depth.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Unique `{id}#{seq}` keys / no overworld despawn | done | Two players get two Hollows; Eastbrook wolves/NPCs stay |
+| Auto-advance on kill tick | done | Room clears advance on the kill tick |
+| Hollow entrance `(8, -6)` | done | Off spawn; **E** within 5 yards enters |
+| Client **E** enter + room HUD | done | `EnterDelve` at portal; HUD shows `Eastbrook Hollow — Room N` |
+| Leave / Hearth / release abort | done | No reward; lands on entrance coords |
+| Dungeon Finder / lockout / raid boss | n/a | Explicit non-goals |
 
 ## Mounts / riding (`mounts`) — done
 
@@ -275,7 +326,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.22.0` / friends (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.25.0` / friends (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

@@ -20,7 +20,8 @@ pub type EntityId = u32;
 /// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs (1.17.0–1.18.0).
 /// Rev 10: guild snapshot / invite + guild client verbs (1.19.0); mail postage / MailReturn (1.20.0).
 /// Riding snapshot + TrainRiding + mounted fields (1.21.0) are additive on rev 10.
-/// Rev 11: friend / ignore snapshots, friend WS verbs, Chat.target for whisper (1.22.0).
+/// Instance snapshot fields (1.22.0–1.24.0) are additive on rev 10.
+/// Rev 11: friend / ignore snapshots, friend WS verbs, Chat.target for whisper (1.25.0).
 pub const PROTOCOL_REV: u32 = 11;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
@@ -632,6 +633,15 @@ pub struct TickSnapshot {
     /// Current overworld / instance zone id.
     #[serde(default)]
     pub zone_id: String,
+    /// Unique instance key (`eastbrook_crypt#12`). Empty when overworld.
+    #[serde(default)]
+    pub instance_id: String,
+    /// Content display name (`Eastbrook Crypt`). Empty when overworld.
+    #[serde(default)]
+    pub instance_name: String,
+    /// 0-based delve room when inside a delve.
+    #[serde(default)]
+    pub delve_room: Option<u32>,
     /// Tick when hearthstone becomes usable again.
     #[serde(default)]
     pub hearth_ready_tick: u64,
@@ -914,6 +924,9 @@ impl Default for TickSnapshot {
             pending_invite_from: String::new(),
             ready_check: None,
             zone_id: String::new(),
+            instance_id: String::new(),
+            instance_name: String::new(),
+            delve_room: None,
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
             talent_points: 0,
@@ -965,6 +978,8 @@ pub enum SimEvent {
         player: EntityId,
         copper: u32,
         item: Option<String>,
+        #[serde(default)]
+        count: u32,
     },
     LevelUp {
         player: EntityId,
@@ -1430,7 +1445,29 @@ mod tests {
         assert!(snap.stance_id.is_empty());
         assert_eq!(snap.absorb, 0.0);
         assert!(snap.reputation.is_empty());
+        assert!(snap.instance_id.is_empty());
+        assert!(snap.instance_name.is_empty());
+        assert!(snap.delve_room.is_none());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
+    }
+
+    #[test]
+    fn instance_snapshot_fields_default_and_roundtrip() {
+        let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
+        assert!(snap.instance_id.is_empty());
+        assert!(snap.instance_name.is_empty());
+        assert!(snap.delve_room.is_none());
+        assert_eq!(PROTOCOL_REV, 11);
+
+        let mut filled = snap.clone();
+        filled.instance_id = "eastbrook_crypt#3".into();
+        filled.instance_name = "Eastbrook Crypt".into();
+        filled.delve_room = Some(1);
+        let s = serde_json::to_string(&filled).unwrap();
+        let back: TickSnapshot = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.instance_id, "eastbrook_crypt#3");
+        assert_eq!(back.instance_name, "Eastbrook Crypt");
+        assert_eq!(back.delve_room, Some(1));
     }
 
     #[test]
@@ -1485,6 +1522,9 @@ mod tests {
             pending_invite_from: String::new(),
             ready_check: None,
             zone_id: "eastbrook".into(),
+            instance_id: String::new(),
+            instance_name: String::new(),
+            delve_room: None,
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
             talent_points: 2,

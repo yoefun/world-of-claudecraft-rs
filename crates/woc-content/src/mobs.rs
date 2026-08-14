@@ -25,6 +25,8 @@ pub struct MobTemplate {
     pub copper_max: u32,
     pub attack_damage: f32,
     pub loot: &'static [LootEntry],
+    pub respawn_seconds: f32,
+    pub ability_id: Option<&'static str>,
     pub kill_reputation: Option<RepAward>,
 }
 
@@ -77,9 +79,11 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         attack_damage: 6.0,
         loot: &[LootEntry {
             item_id: "wolf_fang",
-            chance: 0.55,
-            count: 1,
+            chance: 1.0,
+            count: 2,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("eastbrook_watch", 25)),
     },
     MobTemplate {
@@ -92,6 +96,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_max: 14,
         attack_damage: 9.0,
         loot: SCARRED_WOLF_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: Some("wolf_bite"),
         kill_reputation: Some(RepAward::new("eastbrook_watch", 35)),
     },
     MobTemplate {
@@ -104,6 +110,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_max: 10,
         attack_damage: 7.0,
         loot: YOUNG_BOAR_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("eastbrook_watch", 20)),
     },
     MobTemplate {
@@ -116,6 +124,8 @@ pub static ZONE1_MOBS: &[MobTemplate] = &[
         copper_max: 40,
         attack_damage: 14.0,
         loot: CRYPT_WARDEN_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: Some("warden_smash"),
         kill_reputation: Some(RepAward::new("eastbrook_watch", 50)),
     },
 ];

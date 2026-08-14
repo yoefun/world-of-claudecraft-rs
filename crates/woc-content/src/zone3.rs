@@ -1,6 +1,6 @@
 //! Zone 3 — Thornpeak Heights (Highwatch hub).
 
-use crate::zone1::{MobSpot, NpcSpot, ZoneLayout};
+use crate::zone1::{mob, NpcSpot, ZoneLayout};
 
 pub static THORNPEAK: ZoneLayout = ZoneLayout {
     name: "Thornpeak Heights",
@@ -24,50 +24,14 @@ pub static THORNPEAK: ZoneLayout = ZoneLayout {
         },
     ],
     mobs: &[
-        MobSpot {
-            mob_id: "ridge_stalker",
-            x: -70.0,
-            z: 590.0,
-        },
-        MobSpot {
-            mob_id: "ridge_stalker",
-            x: -48.0,
-            z: 604.0,
-        },
-        MobSpot {
-            mob_id: "ridge_stalker",
-            x: 55.0,
-            z: 610.0,
-        },
-        MobSpot {
-            mob_id: "cragback_boar",
-            x: -95.0,
-            z: 700.0,
-        },
-        MobSpot {
-            mob_id: "cragback_boar",
-            x: -75.0,
-            z: 720.0,
-        },
-        MobSpot {
-            mob_id: "cragback_boar",
-            x: 88.0,
-            z: 695.0,
-        },
-        MobSpot {
-            mob_id: "gale_harpy",
-            x: 25.0,
-            z: 760.0,
-        },
-        MobSpot {
-            mob_id: "gale_harpy",
-            x: -25.0,
-            z: 780.0,
-        },
-        MobSpot {
-            mob_id: "gale_harpy",
-            x: 70.0,
-            z: 745.0,
-        },
+        mob("ridge_stalker", -70.0, 590.0),
+        mob("ridge_stalker", -48.0, 604.0),
+        mob("ridge_stalker", 55.0, 610.0),
+        mob("cragback_boar", -95.0, 700.0),
+        mob("cragback_boar", -75.0, 720.0),
+        mob("cragback_boar", 88.0, 695.0),
+        mob("gale_harpy", 25.0, 760.0),
+        mob("gale_harpy", -25.0, 780.0),
+        mob("gale_harpy", 70.0, 745.0),
     ],
 };

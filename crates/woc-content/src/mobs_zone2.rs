@@ -44,6 +44,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.70,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("eastfen_circle", 20)),
     },
     MobTemplate {
@@ -60,6 +62,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.80,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("eastfen_circle", 20)),
     },
     MobTemplate {
@@ -72,6 +76,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         copper_max: 24,
         attack_damage: 14.0,
         loot: BOG_WISP_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("eastfen_circle", 25)),
     },
     MobTemplate {
@@ -88,6 +94,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.75,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("mirefen_ferry", 25)),
     },
     MobTemplate {
@@ -104,6 +112,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 0.70,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("mirefen_ferry", 30)),
     },
     MobTemplate {
@@ -120,6 +130,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
             chance: 1.0,
             count: 1,
         }],
+        respawn_seconds: 300.0,
+        ability_id: Some("terror_slam"),
         kill_reputation: Some(RepAward::new("mirefen_ferry", 100)),
     },
     MobTemplate {
@@ -132,6 +144,8 @@ pub static ZONE2_MOBS: &[MobTemplate] = &[
         copper_max: 40,
         attack_damage: 18.0,
         loot: BARROW_HAG_LOOT,
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("mirefen_ferry", 75)),
     },
 ];

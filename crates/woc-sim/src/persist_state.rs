@@ -242,9 +242,26 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     }
 
     if state.is_virgin() {
-        if !state.zone_id.is_empty() {
+        if state.zone_id.starts_with("instance:") || state.zone_id.starts_with("delve:") {
+            let (zone_id, entrance) = eject_instance_zone(&state.zone_id);
             if let Some(i) = world.get_mut::<Identity>(player_id) {
-                i.zone_id = state.zone_id.clone();
+                i.zone_id = zone_id;
+            }
+            if let Some((x, z)) = entrance {
+                let y = crate::ecs::spawn::ground_at(x, z);
+                if let Some(transform) = world.get_mut::<Transform>(player_id) {
+                    transform.x = x;
+                    transform.z = z;
+                    transform.y = y;
+                }
+            }
+            if let Some(instance) = world.get_mut::<InstanceAt>(player_id) {
+                instance.instance_id = None;
+                instance.delve_room = None;
+            }
+        } else if !state.zone_id.is_empty() {
+            if let Some(identity) = world.get_mut::<Identity>(player_id) {
+                identity.zone_id = state.zone_id.clone();
             }
         }
         recalc_player_stats(world, player_id);
@@ -265,8 +282,15 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     } else {
         state.zone_id.clone()
     };
+    let mut pos_x = state.pos_x;
+    let mut pos_z = state.pos_z;
     if zone_id.starts_with("instance:") || zone_id.starts_with("delve:") {
-        zone_id = "eastbrook".into();
+        let (parent, entrance) = eject_instance_zone(&zone_id);
+        zone_id = parent;
+        if let Some((x, z)) = entrance {
+            pos_x = x;
+            pos_z = z;
+        }
     }
     if let Some(i) = world.get_mut::<Identity>(player_id) {
         i.zone_id = zone_id;
@@ -288,10 +312,10 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         bank.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
         bank.bank_copper = state.bank_copper;
     }
-    let y = crate::ecs::spawn::ground_at(state.pos_x, state.pos_z);
+    let y = crate::ecs::spawn::ground_at(pos_x, pos_z);
     if let Some(t) = world.get_mut::<Transform>(player_id) {
-        t.x = state.pos_x;
-        t.z = state.pos_z;
+        t.x = pos_x;
+        t.z = pos_z;
         t.y = y;
     }
     if let Some(s) = world.get_mut::<Spirit>(player_id) {
@@ -359,6 +383,34 @@ fn default_hearth_zone_id() -> String {
     "eastbrook".into()
 }
 
+fn eject_instance_zone(zone_id: &str) -> (String, Option<(f32, f32)>) {
+    let content_id = zone_id.split(':').nth(1).unwrap_or(zone_id);
+    let content_id = crate::instances::dungeon_id_from_instance(content_id);
+    if let Some(def) = woc_content::dungeon(content_id) {
+        return (
+            canonical_parent_zone(def.zone_id),
+            Some((def.entrance_x, def.entrance_z)),
+        );
+    }
+    if let Some(def) = woc_content::delve(content_id) {
+        return (
+            canonical_parent_zone(def.zone_id),
+            Some((def.entrance_x, def.entrance_z)),
+        );
+    }
+    ("eastbrook".into(), None)
+}
+
+fn canonical_parent_zone(zone_id: &str) -> String {
+    match zone_id {
+        "eastbrook" | "eastbrook_vale" => "eastbrook".into(),
+        "mirefen" => "mirefen".into(),
+        "eastfen" | "fenbridge" | "mirefen_marsh" => "eastfen".into(),
+        "thornpeak" | "thornpeak_heights" | "highwatch" => "thornpeak".into(),
+        other => other.to_string(),
+    }
+}
+
 /// Spawn a player from class + durable state into `world`.
 pub fn create_player_from_state(
     world: &mut World,
@@ -402,9 +454,8 @@ mod tests {
     use super::*;
     use woc_content::PlayerClass;
 
-    #[test]
-    fn virgin_keeps_starter_kit() {
-        let state = PlayerPersistentState {
+    fn virgin_state(zone_id: &str) -> PlayerPersistentState {
+        PlayerPersistentState {
             durable_id: Some("abc".into()),
             level: 1,
             xp: 0,
@@ -417,7 +468,7 @@ mod tests {
             equipment_enchants: Default::default(),
             equipment_qualities: Default::default(),
             quests: vec![],
-            zone_id: "eastbrook".into(),
+            zone_id: zone_id.into(),
             talent_points: 0,
             talents: Default::default(),
             bank: vec![],
@@ -435,11 +486,55 @@ mod tests {
             known_mounts: Default::default(),
             last_mount: String::new(),
             reputation: Default::default(),
-        };
+        }
+    }
+
+    #[test]
+    fn virgin_keeps_starter_kit() {
+        let state = virgin_state("eastbrook");
         assert!(state.is_virgin());
         let mut world = World::new();
         create_player_from_state(&mut world, 1, "Ada", PlayerClass::Warrior, &state);
         assert!(world.get::<Bags>(1).unwrap().equipment.main_hand.is_some());
+    }
+
+    #[test]
+    fn final_review_virgin_barrow_save_ejects_to_mirefen_entrance() {
+        let state = virgin_state("instance:mirefen_barrow");
+        let mut sim = crate::Sim::new_empty_eastbrook();
+        let id = sim
+            .spawn_player_with_state("Ada", PlayerClass::Warrior, &state)
+            .unwrap();
+        let def = woc_content::dungeon("mirefen_barrow").unwrap();
+        let transform = sim.world.get::<Transform>(id).unwrap();
+
+        assert_eq!(sim.world.get::<Identity>(id).unwrap().zone_id, "mirefen");
+        assert!((transform.x - def.entrance_x).abs() < 1e-3);
+        assert!((transform.z - def.entrance_z).abs() < 1e-3);
+        assert!(sim
+            .world
+            .get::<InstanceAt>(id)
+            .and_then(|instance| instance.instance_id.as_ref())
+            .is_none());
+    }
+
+    #[test]
+    fn final_review_virgin_hollow_save_ejects_to_hollow_entrance() {
+        let state = virgin_state("delve:eastbrook_hollow");
+        let mut sim = crate::Sim::new_empty_eastbrook();
+        let id = sim
+            .spawn_player_with_state("Ada", PlayerClass::Warrior, &state)
+            .unwrap();
+        let transform = sim.world.get::<Transform>(id).unwrap();
+
+        assert_eq!(sim.world.get::<Identity>(id).unwrap().zone_id, "eastbrook");
+        assert!((transform.x - 8.0).abs() < 1e-3);
+        assert!((transform.z - -6.0).abs() < 1e-3);
+        assert!(sim
+            .world
+            .get::<InstanceAt>(id)
+            .and_then(|instance| instance.instance_id.as_ref())
+            .is_none());
     }
 
     /// Ports base's `non_virgin_restore_roundtrip` forward. Every field here had
@@ -573,6 +668,28 @@ mod tests {
         assert!(r.known.contains("brown_pony"));
         assert_eq!(r.last_id.as_deref(), Some("brown_pony"));
         assert!(r.active_id.is_none(), "load starts dismounted");
+    }
+
+    #[test]
+    fn apply_barrow_zone_ejects_to_mirefen_entrance() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
+        let mut state = crate::persist_state::export_player_state(&world, 1).unwrap();
+        state.zone_id = "instance:mirefen_barrow".into();
+        state.pos_x = 40.0;
+        state.pos_z = 445.0;
+        state.level = 3;
+        state.xp = 10;
+        crate::persist_state::apply_player_state(&mut world, 1, &state);
+        assert_eq!(world.get::<Identity>(1).unwrap().zone_id, "mirefen");
+        let def = woc_content::dungeon("mirefen_barrow").unwrap();
+        let t = world.get::<Transform>(1).unwrap();
+        assert!((t.x - def.entrance_x).abs() < 1e-3);
+        assert!((t.z - def.entrance_z).abs() < 1e-3);
+        assert!(world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.as_ref())
+            .is_none());
     }
 
     #[test]

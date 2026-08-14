@@ -31,8 +31,8 @@ pub static DELVES: &[DelveDef] = &[DelveDef {
     name: "Eastbrook Hollow",
     zone_id: "eastbrook",
     min_level: 1,
-    entrance_x: 0.0,
-    entrance_z: 0.0,
+    entrance_x: 8.0,
+    entrance_z: -6.0,
     rooms: &[
         DelveRoomDef {
             mob_template: "young_wolf",
@@ -81,5 +81,15 @@ mod tests {
         let item_id = hollow.reward.item_id.expect("item reward");
         assert!(item(item_id).is_some(), "missing reward item {item_id}");
         assert!(hollow.reward.item_count > 0);
+    }
+
+    #[test]
+    fn hollow_entrance_is_away_from_eastbrook_spawn() {
+        let hollow = delve("eastbrook_hollow").unwrap();
+        let dx = hollow.entrance_x - 2.0;
+        let dz = hollow.entrance_z - 4.0;
+        assert!((dx * dx + dz * dz).sqrt() > 5.0);
+        assert!((hollow.entrance_x - 8.0).abs() < 1e-3);
+        assert!((hollow.entrance_z + 6.0).abs() < 1e-3);
     }
 }

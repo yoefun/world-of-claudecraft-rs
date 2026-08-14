@@ -247,6 +247,9 @@ pub fn create_mob_from_template(
         },
     );
     world.insert(id, Respawn::default());
+    if let Some(r) = world.get_mut::<Respawn>(id) {
+        r.delay_sec = t.respawn_seconds;
+    }
     world.insert(id, InstanceAt::default());
     Some(id)
 }
@@ -274,14 +277,32 @@ pub fn create_loot(
     copper: u32,
     item: Option<String>,
 ) -> EntityId {
+    create_loot_ex(world, id, x, z, copper, item, 1, 0, "eastbrook")
+}
+
+#[allow(clippy::too_many_arguments)] // YAGNI: late kill-loop helper; no new param struct
+pub fn create_loot_ex(
+    world: &mut World,
+    id: EntityId,
+    x: f32,
+    z: f32,
+    copper: u32,
+    item: Option<String>,
+    count: u32,
+    expires_tick: u64,
+    zone_id: &str,
+) -> EntityId {
     adopt_fresh_id(world, id);
-    insert_identity(world, id, EntityKind::Loot, "Loot", None, "eastbrook");
+    insert_identity(world, id, EntityKind::Loot, "Loot", None, zone_id);
     insert_transform(world, id, x, z, 0.0);
+    let count = if count == 0 { 1 } else { count };
     world.insert(
         id,
         LootPile {
             copper,
             item,
+            count,
+            expires_tick,
             quality: None,
         },
     );
@@ -325,6 +346,17 @@ pub fn create_pet(
     );
     world.insert(id, Auras { auras: Vec::new() });
     world.insert(id, Owner { owner_id });
+    world.insert(id, InstanceAt::default());
+    if let Some(owner_inst) = world.get::<InstanceAt>(owner_id).cloned() {
+        if let Some(slot) = world.get_mut::<InstanceAt>(id) {
+            *slot = owner_inst;
+        }
+    }
+    if let Some(zone) = world.get::<Identity>(owner_id).map(|i| i.zone_id.clone()) {
+        if let Some(identity) = world.get_mut::<Identity>(id) {
+            identity.zone_id = zone;
+        }
+    }
     id
 }
 
@@ -349,6 +381,8 @@ pub fn create_gather_node(
         LootPile {
             copper: 0,
             item: Some(node.item_id.to_string()),
+            count: 1,
+            expires_tick: 0,
             quality: None,
         },
     );

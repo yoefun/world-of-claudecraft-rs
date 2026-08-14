@@ -17,8 +17,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::combat::{
-    collect_pending_mob_kills, grant_xp, spawn_mob_loot, tick_auras, try_pickup_loot,
-    update_mob_combat, update_player_combat,
+    collect_pending_mob_kills, grant_xp, spawn_mob_loot, tick_auras, tick_loot_expiry,
+    try_pickup_loot, update_mob_combat, update_player_combat,
 };
 use crate::context::SimContext;
 use crate::ecs::components::{
@@ -27,7 +27,7 @@ use crate::ecs::components::{
 };
 use crate::ecs::World;
 use crate::interaction::{npc_session_snapshot, vendor_snapshot};
-use crate::mob::{tick_mob_respawns, update_mob_ai};
+use crate::mob::{at_home, tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
 use crate::player_motion::step_player_motion;
 use crate::quests::{
@@ -273,8 +273,14 @@ impl Sim {
             .get::<Identity>(id)
             .map(|i| i.zone_id.clone())
             .unwrap_or_default();
-        if state.is_virgin()
-            || (zone == "eastbrook" && state.pos_x.abs() < 0.01 && state.pos_z.abs() < 0.01)
+        let ejected_instance_save =
+            state.zone_id.starts_with("instance:") || state.zone_id.starts_with("delve:");
+        let virgin_hub_spawn = state.is_virgin() && zone == "eastbrook" && !ejected_instance_save;
+        if virgin_hub_spawn
+            || (!state.is_virgin()
+                && zone == "eastbrook"
+                && state.pos_x.abs() < 0.01
+                && state.pos_z.abs() < 0.01)
         {
             let offset = players as f32 * 1.5;
             let x = EASTBROOK.player_spawn_x + offset;
@@ -871,9 +877,15 @@ impl Sim {
                 .world
                 .get::<Combat>(*mid)
                 .and_then(|c| c.target)
-                .or_else(|| nearest_alive_player(&self.world, *mid, 40.0));
+                .or_else(|| {
+                    if at_home(&self.world, *mid) {
+                        nearest_alive_player(&self.world, *mid, 40.0)
+                    } else {
+                        None
+                    }
+                });
             if let Some(pid) = focus {
-                update_mob_combat(*mid, pid, &mut self.world, &mut self.events);
+                update_mob_combat(*mid, pid, &mut self.world, &mut self.rng, &mut self.events);
             }
         }
 
@@ -882,6 +894,53 @@ impl Sim {
         tick_mob_respawns(&mut self.world, DT);
 
         // Phase 6: kill_rewards → killer (+ party share)
+        self.grant_pending_kill_rewards();
+        // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
+        crate::death::on_player_death_check(&mut self.world, &mut self.events);
+
+        for &pid in &player_ids {
+            if sim_player_in_delve(&self.world, pid) {
+                let _ = crate::delves::try_advance_delve(&mut self.world, pid, &mut self.events);
+            }
+        }
+
+        // Phase 7: pvp_and_market
+        crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
+        self.market
+            .tick_expire(self.tick, &mut self.world, &mut self.mail);
+        self.mail.tick_expire(self.tick, &mut self.events);
+
+        // Phase 8: loot_pickup
+        tick_loot_expiry(
+            &mut self.world,
+            self.tick,
+            &mut self.loot_rules,
+            &mut self.events,
+        );
+        for &pid in &player_ids {
+            try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
+        }
+
+        // Phase 9: profession_casts
+        crate::professions::tick_profession_casts(
+            &mut self.world,
+            self.tick,
+            &mut self.rng,
+            &mut self.events,
+        );
+
+        // Phase 10: build_snapshot
+        let viewer = if self.player_id != 0 {
+            self.player_id
+        } else {
+            player_ids.first().copied().unwrap_or(0)
+        };
+        let snapshot = self.snapshot_for_player(viewer);
+        let events = self.events.clone();
+        (snapshot, events)
+    }
+
+    pub(crate) fn grant_pending_kill_rewards(&mut self) {
         let rewards = collect_pending_mob_kills(&self.events, &self.world);
         for reward in rewards {
             let mut recipients = vec![reward.killer];
@@ -911,69 +970,58 @@ impl Sim {
                     }
                 }
             }
-            let loot_before: HashSet<EntityId> = self.world.ids::<LootPile>().into_iter().collect();
-            let _first = spawn_mob_loot(
-                &mut self.world,
-                &mut self.rng,
-                reward.template_id.as_deref(),
-                reward.x,
-                reward.z,
-            );
-            let killer_inst = self
+            let zone = self
                 .world
-                .get::<InstanceAt>(reward.killer)
-                .and_then(|i| i.instance_id.clone());
-            for loot_id in self
+                .get::<Identity>(reward.victim)
+                .map(|i| i.zone_id.clone())
+                .unwrap_or_else(|| "eastbrook".into());
+            let killer_drops_loot = self
                 .world
-                .ids::<LootPile>()
-                .into_iter()
-                .filter(|id| !loot_before.contains(id))
-            {
-                if let Some(ref inst) = killer_inst {
-                    if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
-                        loot.instance_id = Some(inst.clone());
-                    }
-                }
-                self.loot_rules.maybe_start_party_roll(
-                    &self.parties,
-                    &self.world,
-                    reward.killer,
-                    loot_id,
-                    &mut self.events,
+                .get::<Identity>(reward.killer)
+                .is_some_and(|i| matches!(i.kind, EntityKind::Player | EntityKind::Pet));
+            if killer_drops_loot {
+                let expires = self.tick.saturating_add(crate::types::LOOT_PILE_TTL_TICKS);
+                let loot_before: HashSet<EntityId> =
+                    self.world.ids::<LootPile>().into_iter().collect();
+                let _first = spawn_mob_loot(
+                    &mut self.world,
+                    &mut self.rng,
+                    reward.template_id.as_deref(),
+                    reward.x,
+                    reward.z,
+                    &zone,
+                    expires,
                 );
+                let inst = self
+                    .world
+                    .get::<InstanceAt>(reward.killer)
+                    .and_then(|i| i.instance_id.clone())
+                    .or_else(|| {
+                        self.world
+                            .get::<InstanceAt>(reward.victim)
+                            .and_then(|i| i.instance_id.clone())
+                    });
+                for loot_id in self
+                    .world
+                    .ids::<LootPile>()
+                    .into_iter()
+                    .filter(|id| !loot_before.contains(id))
+                {
+                    if let Some(ref inst) = inst {
+                        if let Some(loot) = self.world.get_mut::<InstanceAt>(loot_id) {
+                            loot.instance_id = Some(inst.clone());
+                        }
+                    }
+                    self.loot_rules.maybe_start_party_roll(
+                        &self.parties,
+                        &self.world,
+                        reward.killer,
+                        loot_id,
+                        &mut self.events,
+                    );
+                }
             }
         }
-        // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
-        crate::death::on_player_death_check(&mut self.world, &mut self.events);
-
-        // Phase 7: pvp_and_market
-        crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
-        self.market
-            .tick_expire(self.tick, &mut self.world, &mut self.mail);
-        self.mail.tick_expire(self.tick, &mut self.events);
-
-        // Phase 8: loot_pickup
-        for &pid in &player_ids {
-            try_pickup_loot(pid, &mut self.world, &mut self.events, &self.loot_rules);
-        }
-
-        // Phase 9: profession_casts
-        crate::professions::tick_profession_casts(
-            &mut self.world,
-            self.tick,
-            &mut self.rng,
-            &mut self.events,
-        );
-
-        // Phase 10: build_snapshot
-        let viewer = if self.player_id != 0 {
-            self.player_id
-        } else {
-            player_ids.first().copied().unwrap_or(0)
-        };
-        let snapshot = self.snapshot_for_player(viewer);
-        let events = self.events.clone();
-        (snapshot, events)
     }
 
     pub fn snapshot(&self) -> TickSnapshot {
@@ -1149,6 +1197,24 @@ impl Sim {
                 .get::<Identity>(player_id)
                 .map(|i| i.zone_id.clone())
                 .unwrap_or_else(|| "eastbrook".into()),
+            instance_id: world
+                .get::<InstanceAt>(player_id)
+                .and_then(|i| i.instance_id.clone())
+                .unwrap_or_default(),
+            instance_name: {
+                let key = world
+                    .get::<InstanceAt>(player_id)
+                    .and_then(|i| i.instance_id.clone())
+                    .unwrap_or_default();
+                let content_id = crate::instances::dungeon_id_from_instance(&key);
+                woc_content::dungeon(content_id)
+                    .map(|d| d.name.to_string())
+                    .or_else(|| woc_content::delve(content_id).map(|d| d.name.to_string()))
+                    .unwrap_or_default()
+            },
+            delve_room: world
+                .get::<InstanceAt>(player_id)
+                .and_then(|i| i.delve_room),
             hearth_ready_tick,
             hearth_zone_id,
             talent_points: world
@@ -1367,8 +1433,7 @@ fn snapshot_includes_entity(world: &World, viewer_instance: Option<&str>, id: En
     match (viewer_instance, entity_instance) {
         (None, None) => true,
         (Some(a), Some(b)) => a == b,
-        (Some(_), None) => identity.kind == EntityKind::Player,
-        (None, Some(_)) => identity.kind == EntityKind::Player,
+        _ => false,
     }
 }
 
@@ -1556,6 +1621,9 @@ fn nearest_mob(world: &World, from: EntityId, max_range: f32) -> Option<EntityId
     let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
     for id in world.ids::<LootTable>() {
+        if !crate::instances::same_instance_space(world, from, id) {
+            continue;
+        }
         if world.get::<Owner>(id).is_some() || world.get::<ClassKit>(id).is_some() {
             continue;
         }
@@ -1585,6 +1653,9 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
     let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
     for id in world.ids::<ClassKit>() {
+        if !crate::instances::same_instance_space(world, from, id) {
+            continue;
+        }
         let Some(h) = world.get::<Health>(id) else {
             continue;
         };
@@ -1607,13 +1678,20 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
     best.map(|(id, _)| id)
 }
 
+fn sim_player_in_delve(world: &World, pid: EntityId) -> bool {
+    world
+        .get::<InstanceAt>(pid)
+        .and_then(|i| i.delve_room)
+        .is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Motion, Owner, Progress,
-        QuestLog, QuestState, Reputation, Riding, Threat, Transform,
+        Bags, Bank, ClassKit, EquipmentWear, Health, Home, InvStack, LootPile, Motion, Owner,
+        Progress, QuestLog, QuestState, Reputation, Riding, Threat, Transform,
     };
     use crate::ecs::spawn;
     use crate::instances::enter_dungeon;
@@ -1651,6 +1729,26 @@ mod tests {
             t.z = z;
             t.y = y;
         }
+    }
+
+    #[test]
+    fn final_review_nearest_targets_stay_in_instance_space() {
+        let mut world = World::new();
+        spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
+        spawn::create_player(&mut world, 2, "B", PlayerClass::Warrior, 0.0, 0.0);
+        spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.0, 0.0).unwrap();
+        spawn::create_mob_from_template(&mut world, 4, "young_wolf", 0.0, 0.0).unwrap();
+        for id in [1, 4] {
+            world.get_mut::<InstanceAt>(id).unwrap().instance_id =
+                Some("eastbrook_hollow#a".into());
+        }
+        for id in [2, 3] {
+            world.get_mut::<InstanceAt>(id).unwrap().instance_id =
+                Some("eastbrook_hollow#b".into());
+        }
+
+        assert_eq!(nearest_mob(&world, 1, 30.0), Some(4));
+        assert_eq!(nearest_alive_player(&world, 3, 40.0), Some(2));
     }
 
     #[test]
@@ -1739,6 +1837,93 @@ mod tests {
         assert_eq!(TICK_PHASES[8], "profession_casts");
         assert_eq!(TICK_PHASES[9], "build_snapshot");
         assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+    }
+
+    #[test]
+    fn tick_returning_mob_does_not_reaggro_until_home() {
+        let mut sim = Sim::new_eastbrook("Evader", PlayerClass::Warrior);
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "young_wolf", 0.0, 0.0)
+            .expect("young_wolf");
+        if let Some(t) = sim.world.get_mut::<Transform>(mob_id) {
+            t.x = 10.0;
+            t.z = 0.0;
+            t.y = spawn::ground_at(t.x, t.z);
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(mob_id) {
+            c.target = None;
+        }
+        place_player_at(&mut sim, 2.5, 0.0);
+
+        let _ = sim.tick(PlayerIntent::default());
+
+        assert!(
+            sim.world.get::<Combat>(mob_id).unwrap().target.is_none(),
+            "tick must not reacquire aggro while the wolf returns Home"
+        );
+
+        if let Some(t) = sim.world.get_mut::<Transform>(mob_id) {
+            t.x = 0.0;
+            t.z = 0.0;
+            t.y = spawn::ground_at(t.x, t.z);
+        }
+
+        let _ = sim.tick(PlayerIntent::default());
+
+        assert_eq!(
+            sim.world.get::<Combat>(mob_id).unwrap().target,
+            Some(sim.player_id)
+        );
+    }
+
+    #[test]
+    fn kill_loop_wolf_loot_zone_and_respawn() {
+        let mut sim = Sim::new_eastbrook("Ada", woc_content::PlayerClass::Warrior);
+        let pid = sim.player_id;
+        let mob_id = sim.world.next_id();
+        let mob = crate::ecs::spawn::create_mob_from_template(
+            &mut sim.world,
+            mob_id,
+            "young_wolf",
+            1.0,
+            0.0,
+        )
+        .unwrap();
+        if let Some(id) = sim.world.get_mut::<Identity>(mob) {
+            id.zone_id = "eastfen".into();
+        }
+        if let Some(h) = sim.world.get_mut::<Health>(mob) {
+            h.hp = 1.0;
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(pid) {
+            c.target = Some(mob);
+            c.auto_attack = true;
+        }
+        let mut saw_kill = false;
+        for _ in 0..80 {
+            let (_snap, ev) = sim.tick_all();
+            if ev
+                .iter()
+                .any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob))
+            {
+                saw_kill = true;
+                break;
+            }
+        }
+        assert!(saw_kill);
+        let pile_zone = sim
+            .world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| sim.world.get::<Identity>(id).map(|i| i.zone_id.clone()))
+            .find(|z| z == "eastfen");
+        assert_eq!(pile_zone.as_deref(), Some("eastfen"));
+        assert!(!sim.world.get::<Health>(mob).unwrap().alive);
+        let ticks = (30.0 / DT).ceil() as u32 + 2;
+        for _ in 0..ticks {
+            let _ = sim.tick_all();
+        }
+        assert!(sim.world.get::<Health>(mob).unwrap().alive);
     }
 
     #[test]
@@ -2972,6 +3157,10 @@ mod tests {
             t.z = pz;
             t.y = crate::ecs::spawn::ground_at(t.x, t.z);
         }
+        if let Some(h) = sim.world.get_mut::<Home>(mob_id) {
+            h.home_x = px + 1.5;
+            h.home_z = pz;
+        }
         sim.interact(pid, InteractAction::SummonPet);
         let pet_id = sim
             .world
@@ -3174,6 +3363,100 @@ mod tests {
     }
 
     #[test]
+    fn loot_inherits_victim_instance_when_killer_has_none() {
+        let mut sim = Sim::new_eastbrook("NoInst", PlayerClass::Warrior);
+        let instance_id = "eastbrook_crypt#victim-loot".to_string();
+        if let Some(i) = sim.world.get_mut::<InstanceAt>(sim.player_id) {
+            i.instance_id = None;
+        }
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "barrow_hag", 0.0, 0.0)
+            .expect("barrow_hag");
+        if let Some(i) = sim.world.get_mut::<InstanceAt>(mob_id) {
+            i.instance_id = Some(instance_id.clone());
+        }
+        if let Some(h) = sim.world.get_mut::<Health>(mob_id) {
+            h.alive = false;
+            h.hp = 0.0;
+        }
+        sim.events.push(SimEvent::Kill {
+            killer: sim.player_id,
+            victim: mob_id,
+            victim_name: "Barrow Hag".into(),
+        });
+        sim.grant_pending_kill_rewards();
+        let piles: Vec<Option<String>> = sim
+            .world
+            .ids::<LootPile>()
+            .into_iter()
+            .filter_map(|id| {
+                let item = sim.world.get::<LootPile>(id)?.item.clone();
+                if matches!(item.as_deref(), Some("hag_claw") | Some("hag_focus")) {
+                    Some(sim.world.get::<InstanceAt>(id)?.instance_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!piles.is_empty(), "player kill must still drop loot");
+        assert!(
+            piles.iter().all(|inst| inst.as_ref() == Some(&instance_id)),
+            "piles must inherit the victim's instance when the killer has none"
+        );
+    }
+
+    #[test]
+    fn pet_last_hit_without_owner_still_spawns_loot() {
+        let mut sim = Sim::new_eastbrook("Orphan", PlayerClass::Hunter);
+        assert!(crate::pet::summon_pet(
+            &mut sim.world,
+            sim.player_id,
+            &mut sim.events
+        ));
+        let pet = crate::pet::find_pet(&sim.world, sim.player_id).expect("pet");
+        if let Some(owner) = sim.world.get_mut::<crate::ecs::components::Owner>(pet) {
+            owner.owner_id = 999_999;
+        }
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "young_wolf", 0.0, 0.0)
+            .expect("young_wolf");
+        if let Some(h) = sim.world.get_mut::<Health>(mob_id) {
+            h.hp = 1.0;
+            h.hp_max = 1.0;
+        }
+        let piles_before = sim.world.ids::<LootPile>().len();
+        let xp_before = sim
+            .world
+            .get::<Progress>(sim.player_id)
+            .expect("progress")
+            .xp;
+        crate::combat::deal_damage(
+            &mut sim.world,
+            pet,
+            mob_id,
+            50.0,
+            None,
+            true,
+            &mut sim.events,
+        );
+        // Drive the same kill_rewards helper tick_all uses (do not copy the if-player guard into the test).
+        sim.grant_pending_kill_rewards();
+        let piles_after = sim.world.ids::<LootPile>().len();
+        assert!(
+            piles_after > piles_before,
+            "pet last-hit must still spawn corpse loot when the owner entity is missing"
+        );
+        assert_eq!(
+            sim.world
+                .get::<Progress>(sim.player_id)
+                .expect("progress")
+                .xp,
+            xp_before,
+            "living hunter is not the credited killer; XP path stays skipped"
+        );
+    }
+
+    #[test]
     fn fly_toggle_wiring_untrained_then_pony() {
         let mut sim = Sim::new_eastbrook("MountWire", PlayerClass::Warrior);
         let pid = sim.player_id;
@@ -3258,6 +3541,37 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_hides_other_instance_players_and_mobs() {
+        let mut sim = Sim::new_eastbrook("A", PlayerClass::Warrior);
+        let b = sim.spawn_player("B", PlayerClass::Mage).unwrap();
+        let parties = crate::social::party::PartyRoster::new();
+        let mut events = Vec::new();
+        let crypt = woc_content::dungeon("eastbrook_crypt").unwrap();
+        if let Some(t) = sim.world.get_mut::<Transform>(sim.player_id) {
+            t.x = crypt.entrance_x;
+            t.z = crypt.entrance_z;
+        }
+        assert!(crate::instances::enter_dungeon(
+            &mut sim.world,
+            &parties,
+            sim.player_id,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        let snap = sim.snapshot_for_player(b);
+        assert!(snap.entities.iter().all(|e| e.id != sim.player_id
+            || e.kind != woc_protocol::EntityKind::Player
+            || {
+                // B is overworld: must not see A's instanced body
+                !snap.entities.iter().any(|e| e.id == sim.player_id)
+            }));
+        assert!(!snap
+            .entities
+            .iter()
+            .any(|e| { e.template_id.as_deref() == Some("crypt_warden") }));
+    }
+
+    #[test]
     fn enter_dungeon_dismounts_mounted_player() {
         let mut sim = Sim::new_eastbrook("InstDismount", PlayerClass::Warrior);
         let pid = sim.player_id;
@@ -3278,6 +3592,11 @@ mod tests {
         sim.tick_all();
         assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_some());
 
+        let def = woc_content::dungeon("eastbrook_crypt").unwrap();
+        if let Some(t) = sim.world.get_mut::<Transform>(pid) {
+            t.x = def.entrance_x;
+            t.z = def.entrance_z;
+        }
         let mut events = Vec::new();
         assert!(enter_dungeon(
             &mut sim.world,
@@ -3427,5 +3746,48 @@ mod tests {
             SocialDelivery::To { player, msg: WsServerMsg::Chat { text, .. } }
                 if *player == alice && text == "Bob is not online."
         )));
+    }
+
+    #[test]
+    fn tick_all_auto_advances_cleared_delve_room() {
+        let mut sim = Sim::new_eastbrook("Delver", PlayerClass::Warrior);
+        let def = woc_content::delve("eastbrook_hollow").unwrap();
+        if let Some(t) = sim.world.get_mut::<Transform>(sim.player_id) {
+            t.x = def.entrance_x;
+            t.z = def.entrance_z;
+        }
+        let mut events = Vec::new();
+        assert!(crate::delves::enter_delve(
+            &mut sim.world,
+            sim.player_id,
+            "eastbrook_hollow",
+            &mut events
+        ));
+        let key = sim
+            .world
+            .get::<InstanceAt>(sim.player_id)
+            .and_then(|i| i.instance_id.clone())
+            .unwrap();
+        for id in sim.world.ids::<Identity>() {
+            if sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                && sim
+                    .world
+                    .get::<InstanceAt>(id)
+                    .and_then(|i| i.instance_id.as_deref())
+                    == Some(key.as_str())
+            {
+                if let Some(h) = sim.world.get_mut::<Health>(id) {
+                    h.hp = 0.0;
+                    h.alive = false;
+                }
+            }
+        }
+        let _ = sim.tick_all();
+        assert_eq!(
+            sim.world
+                .get::<InstanceAt>(sim.player_id)
+                .and_then(|i| i.delve_room),
+            Some(1)
+        );
     }
 }

@@ -312,7 +312,7 @@ fn setup_world(
                 ));
                 top.spawn((
                     Text::new(
-                        "LMB/F attack · Tab target · G invite · P party · O accept · J guild · 1–5 abilities · T pet · E interact/loot · B bags (Q/F) · L quests · C sheet (rep) · N talents · K bank (G/H/J/Y) · I mail (Enter To, S/Y send, 1–9/P collect, X return) · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
+                        "LMB/F attack · Tab target · G invite · P party · O accept · J guild · 1–5 abilities · T pet · E interact/loot/dungeon/delve · B bags (Q/F) · L quests · C sheet (rep) · N talents · K bank (G/H/J/Y) · I mail (Enter To, S/Y send, 1–9/P collect, X return) · M map · U market (L/O/X) · [ ] loot mode · RMB look · Esc clear",
                     ),
                     TextFont::from_font_size(14.0),
                     TextColor(Color::srgb(0.7, 0.75, 0.8)),

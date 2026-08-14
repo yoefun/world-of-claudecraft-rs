@@ -314,11 +314,17 @@ pub(crate) fn cycle_duration_hours(hours: u32, next: bool) -> u32 {
     }
 }
 
-fn zone_name(snap: &TickSnapshot) -> &str {
+fn zone_name(snap: &TickSnapshot) -> String {
+    if !snap.instance_name.is_empty() {
+        if let Some(room) = snap.delve_room {
+            return format!("{} — Room {}", snap.instance_name, room + 1);
+        }
+        return snap.instance_name.clone();
+    }
     if snap.zone_id.is_empty() {
-        "—"
+        "—".into()
     } else {
-        &snap.zone_id
+        snap.zone_id.clone()
     }
 }
 
@@ -2147,6 +2153,15 @@ mod tests {
         let text = party_frames_text(&snap);
         assert!(text.contains("G2"));
         assert!(text.contains("P6"));
+    }
+
+    #[test]
+    fn zone_name_shows_delve_room_when_in_instance() {
+        let mut snap = TickSnapshot::default();
+        snap.instance_name = "Eastbrook Hollow".into();
+        snap.delve_room = Some(0);
+        let text = talent_panel_text(&snap);
+        assert!(text.contains("Zone: Eastbrook Hollow — Room 1"));
     }
 
     #[test]
