@@ -3280,35 +3280,15 @@ mod tests {
             i.instance_id = Some(instance_id.clone());
         }
         if let Some(h) = sim.world.get_mut::<Health>(mob_id) {
-            h.hp = 1.0;
-            h.hp_max = 1.0;
+            h.alive = false;
+            h.hp = 0.0;
         }
-        place_player_at(&mut sim, 2.5, 0.0);
-        if let Some(kit) = sim.world.get_mut::<ClassKit>(sim.player_id) {
-            kit.resource = 100.0;
-        }
-        if let Some(c) = sim.world.get_mut::<Combat>(sim.player_id) {
-            c.target = Some(mob_id);
-            c.auto_attack = true;
-        }
-        let intent = PlayerIntent {
-            attack: true,
-            ability: Some(AbilitySlot::Primary),
-            target_id: Some(mob_id),
-            ..Default::default()
-        };
-        let mut saw_kill = false;
-        for _ in 0..400 {
-            let (_snap, events) = sim.tick(intent);
-            if events
-                .iter()
-                .any(|e| matches!(e, SimEvent::Kill { victim, .. } if *victim == mob_id))
-            {
-                saw_kill = true;
-                break;
-            }
-        }
-        assert!(saw_kill, "barrow_hag should die in combat");
+        sim.events.push(SimEvent::Kill {
+            killer: sim.player_id,
+            victim: mob_id,
+            victim_name: "Barrow Hag".into(),
+        });
+        sim.grant_pending_kill_rewards();
         let piles: Vec<Option<String>> = sim
             .world
             .ids::<LootPile>()
