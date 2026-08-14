@@ -31,7 +31,7 @@ pub(crate) fn grab_cursor(
     };
     if keys.just_pressed(KeyCode::Escape) {
         // Close map / guild first; otherwise clear combat target / stop AA and release cursor.
-        if ui.show_map || ui.show_guild {
+        if ui.show_map || ui.show_guild || ui.show_friends {
             // panel close handled in handle_interact_keys
         } else {
             host.pending_intent.clear_target = true;
@@ -111,7 +111,7 @@ pub(crate) fn collect_intent(
         ..default()
     };
     // Compose/search fields own the keyboard.
-    let typing = ui.mail_compose || ui.show_guild || ui.market_searching;
+    let typing = ui.mail_compose || ui.show_guild || ui.show_friends || ui.market_searching;
     let mut mx = 0.0;
     let mut mz = 0.0;
     if !typing {
@@ -149,6 +149,7 @@ pub(crate) fn collect_intent(
         && !ui.show_bank
         && !ui.show_mail
         && !ui.show_guild
+        && !ui.show_friends
         && !loot_rolling
         && !ui.show_bags
         && !ui.show_character
@@ -460,6 +461,26 @@ fn market_search_keys() -> impl Iterator<Item = (KeyCode, char)> {
     .into_iter()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OKeyClosedAction {
+    PartyAccept,
+    ReadyRespond,
+    MarketBuyout,
+    OpenFriends,
+}
+
+fn o_key_closed_action(pending: bool, ready_prompt: bool, show_market: bool) -> OKeyClosedAction {
+    if pending {
+        OKeyClosedAction::PartyAccept
+    } else if ready_prompt {
+        OKeyClosedAction::ReadyRespond
+    } else if show_market {
+        OKeyClosedAction::MarketBuyout
+    } else {
+        OKeyClosedAction::OpenFriends
+    }
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
@@ -539,6 +560,8 @@ pub(crate) fn handle_interact_keys(
     }
     if !ui.show_bank && !ui.show_guild && keys.just_pressed(KeyCode::KeyJ) {
         ui.show_guild = true;
+        ui.show_friends = false;
+        ui.friend_compose.clear();
         ui.show_character = false;
         ui.show_map = false;
         ui.show_bank = false;
@@ -565,6 +588,10 @@ pub(crate) fn handle_interact_keys(
             ui.market_page = 0;
         }
     }
+    if keys.just_pressed(KeyCode::Escape) && ui.show_friends {
+        ui.show_friends = false;
+        ui.friend_compose.clear();
+    }
     if keys.just_pressed(KeyCode::Escape) && ui.show_guild {
         ui.show_guild = false;
         ui.guild_compose.clear();
@@ -575,6 +602,10 @@ pub(crate) fn handle_interact_keys(
 
     // Compose owns the keyboard while the guild panel is open: no gameplay,
     // no other panel's hotkeys.
+    if ui.show_friends {
+        handle_friends_panel_keys(&keys, &mut host, &mut ui);
+        return;
+    }
     if ui.show_guild {
         handle_guild_panel_keys(&keys, &mut host, &mut ui);
         return;
@@ -586,11 +617,48 @@ pub(crate) fn handle_interact_keys(
         .ready_check
         .as_ref()
         .is_some_and(|r| !r.you_responded);
+    let player_id = host.snapshot.player_id;
 
-    if pending && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
-        host.send_party(WsClientMsg::PartyAccept);
-    } else if ready_prompt && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
-        host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
+    if keys.just_pressed(KeyCode::KeyO) {
+        match o_key_closed_action(pending, ready_prompt, ui.show_market) {
+            OKeyClosedAction::PartyAccept => {
+                host.send_party(WsClientMsg::PartyAccept);
+            }
+            OKeyClosedAction::ReadyRespond => {
+                host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
+            }
+            OKeyClosedAction::MarketBuyout => {
+                if let Some(listing) = host
+                    .snapshot
+                    .market
+                    .iter()
+                    .find(|l| !l.mine && l.price <= host.snapshot.progress.copper)
+                    .cloned()
+                {
+                    host.interact(
+                        player_id,
+                        InteractAction::MarketBuy {
+                            listing_id: listing.id,
+                        },
+                    );
+                    host.recent_toasts.push((
+                        format!("Buying listing #{} for {}c.", listing.id, listing.price),
+                        2.0,
+                    ));
+                } else {
+                    host.recent_toasts
+                        .push(("No affordable market listings.".into(), 2.0));
+                }
+            }
+            OKeyClosedAction::OpenFriends => {
+                ui.show_friends = true;
+                ui.show_guild = false;
+                ui.guild_compose.clear();
+                ui.show_character = false;
+                ui.show_map = false;
+                ui.show_market = false;
+            }
+        }
     }
 
     if pending && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
@@ -647,7 +715,6 @@ pub(crate) fn handle_interact_keys(
         }
     }
 
-    let player_id = host.snapshot.player_id;
     if ui.show_quests && !ui.show_talents {
         if keys.just_pressed(KeyCode::KeyX) {
             if let Some(qid) = tracked_quest_id(&host.snapshot.quest_log).map(str::to_string) {
@@ -960,29 +1027,6 @@ pub(crate) fn handle_interact_keys(
     }
     if ui.show_market && keys.just_pressed(KeyCode::Period) {
         ui.market_duration_hours = cycle_duration_hours(ui.market_duration_hours, true);
-    }
-    if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
-        if let Some(listing) = host
-            .snapshot
-            .market
-            .iter()
-            .find(|l| !l.mine && l.price <= host.snapshot.progress.copper)
-            .cloned()
-        {
-            host.interact(
-                player_id,
-                InteractAction::MarketBuy {
-                    listing_id: listing.id,
-                },
-            );
-            host.recent_toasts.push((
-                format!("Buying listing #{} for {}c.", listing.id, listing.price),
-                2.0,
-            ));
-        } else {
-            host.recent_toasts
-                .push(("No affordable market listings.".into(), 2.0));
-        }
     }
     if ui.show_market && keys.just_pressed(KeyCode::KeyL) {
         if let Some((bag_slot, count, item_id, price)) = first_listable_bag_stack(&host.snapshot) {
@@ -1431,6 +1475,7 @@ fn guild_enter_msg(compose: &str, snap: &TickSnapshot) -> WsClientMsg {
         return WsClientMsg::Chat {
             channel: "officer".into(),
             text: rest.to_string(),
+            target: String::new(),
         };
     }
     if let Some(rest) = compose.strip_prefix("/invite ") {
@@ -1463,6 +1508,7 @@ fn guild_enter_msg(compose: &str, snap: &TickSnapshot) -> WsClientMsg {
     WsClientMsg::Chat {
         channel: "guild".into(),
         text: compose.to_string(),
+        target: String::new(),
     }
 }
 
@@ -1541,6 +1587,109 @@ fn handle_guild_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui:
             }
         }
     }
+}
+
+fn handle_friends_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui: &mut UiFlags) {
+    if keys.just_pressed(KeyCode::Enter) {
+        let compose = ui.friend_compose.clone();
+        let target = targeted_player_name(&host.snapshot);
+        if let Some(msg) = friend_enter_msg(&compose, target.as_deref()) {
+            match msg {
+                WsClientMsg::PartyInvite { .. } => host.send_party(msg),
+                other => host.social_msg(other),
+            }
+        }
+        ui.friend_compose.clear();
+        return;
+    }
+    if keys.just_pressed(KeyCode::Backspace) {
+        ui.friend_compose.pop();
+    }
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    for key in GUILD_COMPOSE_KEYS {
+        if keys.just_pressed(key) {
+            if let Some(ch) = guild_compose_char_from_key(key, shift) {
+                ui.friend_compose.push(ch);
+            }
+        }
+    }
+}
+
+fn friend_enter_msg(compose: &str, target_name: Option<&str>) -> Option<WsClientMsg> {
+    let compose = compose.trim();
+    if compose.is_empty() {
+        return None;
+    }
+    let lower = compose.to_ascii_lowercase();
+    if lower == "/add" {
+        return target_name.map(|name| WsClientMsg::FriendAdd {
+            name: name.to_string(),
+        });
+    }
+    if lower == "/ignore" {
+        return target_name.map(|name| WsClientMsg::FriendIgnore {
+            name: name.to_string(),
+        });
+    }
+    if lower == "/invite" {
+        return target_name.map(|name| WsClientMsg::PartyInvite {
+            name: name.to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/add ") {
+        return Some(WsClientMsg::FriendAdd {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/remove ") {
+        return Some(WsClientMsg::FriendRemove {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/ignore ") {
+        return Some(WsClientMsg::FriendIgnore {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/unignore ") {
+        return Some(WsClientMsg::FriendUnignore {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/invite ") {
+        return Some(WsClientMsg::PartyInvite {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/whisper ") {
+        return whisper_from_rest(rest);
+    }
+    if let Some(rest) = strip_cmd(compose, "/w ") {
+        return whisper_from_rest(rest);
+    }
+    None
+}
+
+fn strip_cmd<'a>(compose: &'a str, prefix: &str) -> Option<&'a str> {
+    if compose.len() >= prefix.len() && compose[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        Some(&compose[prefix.len()..])
+    } else {
+        None
+    }
+}
+
+fn whisper_from_rest(rest: &str) -> Option<WsClientMsg> {
+    let rest = rest.trim();
+    let (name, text) = rest.split_once(char::is_whitespace)?;
+    let text = text.trim();
+    if name.is_empty() || text.is_empty() {
+        return None;
+    }
+    Some(WsClientMsg::Chat {
+        channel: "whisper".into(),
+        target: name.to_string(),
+        text: text.to_string(),
+    })
 }
 
 const GUILD_COMPOSE_KEYS: [KeyCode; 40] = [
@@ -1946,7 +2095,7 @@ mod tests {
         ));
         assert!(matches!(
             guild_enter_msg("hello", &snap),
-            WsClientMsg::Chat { channel, text } if channel == "guild" && text == "hello"
+            WsClientMsg::Chat { channel, text, .. } if channel == "guild" && text == "hello"
         ));
     }
 
@@ -1957,6 +2106,55 @@ mod tests {
             guild_enter_msg("  Vale Watch  ", &snap),
             WsClientMsg::GuildCreate { name } if name == "Vale Watch"
         ));
+    }
+
+    #[test]
+    fn friend_enter_parses_add_and_whisper() {
+        let add = friend_enter_msg("/add Bob", None).unwrap();
+        assert!(matches!(add, WsClientMsg::FriendAdd { name } if name == "Bob"));
+        let w = friend_enter_msg("/w Bob pull west", None).unwrap();
+        assert!(matches!(
+            w,
+            WsClientMsg::Chat { channel, target, text }
+                if channel == "whisper" && target == "Bob" && text == "pull west"
+        ));
+        let whisper = friend_enter_msg("/whisper Bob pull west", None).unwrap();
+        assert!(matches!(
+            whisper,
+            WsClientMsg::Chat { channel, target, text }
+                if channel == "whisper" && target == "Bob" && text == "pull west"
+        ));
+        let add_tgt = friend_enter_msg("/add", Some("Carol")).unwrap();
+        assert!(matches!(add_tgt, WsClientMsg::FriendAdd { name } if name == "Carol"));
+        let ign = friend_enter_msg("/ignore", Some("Carol")).unwrap();
+        assert!(matches!(ign, WsClientMsg::FriendIgnore { name } if name == "Carol"));
+        let rem = friend_enter_msg("/remove Bob", None).unwrap();
+        assert!(matches!(rem, WsClientMsg::FriendRemove { name } if name == "Bob"));
+        let unign = friend_enter_msg("/unignore Bob", None).unwrap();
+        assert!(matches!(unign, WsClientMsg::FriendUnignore { name } if name == "Bob"));
+        let invite = friend_enter_msg("/invite Bob", None).unwrap();
+        assert!(matches!(invite, WsClientMsg::PartyInvite { name } if name == "Bob"));
+        let invite_tgt = friend_enter_msg("/invite", Some("Carol")).unwrap();
+        assert!(matches!(invite_tgt, WsClientMsg::PartyInvite { name } if name == "Carol"));
+        assert!(friend_enter_msg("/invite", None).is_none());
+    }
+
+    #[test]
+    fn o_key_priority_matches_spec() {
+        use OKeyClosedAction::*;
+        assert_eq!(
+            o_key_closed_action(true, false, true),
+            PartyAccept,
+            "pending invite beats market buyout"
+        );
+        assert_eq!(
+            o_key_closed_action(false, true, true),
+            ReadyRespond,
+            "ready check beats market buyout"
+        );
+        assert_eq!(o_key_closed_action(false, false, true), MarketBuyout);
+        assert_eq!(o_key_closed_action(false, false, false), OpenFriends);
+        assert_eq!(o_key_closed_action(true, true, false), PartyAccept);
     }
 
     #[test]

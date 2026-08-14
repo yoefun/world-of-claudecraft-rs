@@ -24,9 +24,10 @@ Manual. Requires a GPU client. CI does not run this.
 18. Two clients: Alice **J** types `Vale Watch` (Shift for capitals) Enter — the opening **J** must not leave a stray `j`. `/invite Bob` Enter; Bob Enter. Billboard `/motd Kill wolves at dusk` Enter; guild chat by typing + Enter; `/o hello` for officer chat. Relog still in guild. `/transfer Bob` Enter, `/kick` or **Ctrl+Q** leave, **Ctrl+D** disband (every online member sees `<Vale Watch> has been disbanded.`). **Esc** closes the panel (J types `j` while it is open). While the panel is open no key moves, attacks, or hearths.
 19. Stable Master Ross: train Apprentice Riding (L2), buy Brown Pony, use it to learn, press **V** to mount/dismount; enter combat and confirm dismount; train Expert, buy Tawny Gryphon, **V** to fly (Space/Ctrl vertical); Eastbrook Crypt refuses mount entry.
 20. Kill a Young Wolf; wait 30s — it revives at Home full HP. Leave loot 2 minutes — the pile is gone. Crypt trash does not revive. Hunter pet last-hit still grants owner XP. Scarred Wolf uses Wolf Bite.
-21. Rogue energy fills in ~10 s; **5** Sprint. Paladin **F** Devotion ↔ Retribution. Hunter pet Bites; warlock imp Firebolts from 14 yd. Mage **3** Counterspell. Footer `WoC-rs 1.25.0 · upstream 0.31.0`.
+21. Two clients: Alice **O**, `/add Bob` Enter — toast `Bob has been added to your friends list.`; Bob shows `*`. `/invite Bob` Enter — Bob sees the party invite (O accept). `/w Bob pull west` Enter — Bob sees `[whisper] Alice: pull west`. Bob `/ignore Alice` — Alice's next whisper is `Bob is ignoring you.` Unignore, `/add Alice`, both Alt-F4 and log in: lists persist; online toast `{name} has come online.` Delete Bob's character: Alice's list no longer has Bob.
+22. Rogue energy fills in ~10 s; **5** Sprint. Paladin **F** Devotion ↔ Retribution. Hunter pet Bites; warlock imp Firebolts from 14 yd. Mage **3** Counterspell. Footer `WoC-rs 1.26.0 · upstream 0.31.0`.
 
-Footer reads `WoC-rs 1.25.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
+Footer reads `WoC-rs 1.26.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 

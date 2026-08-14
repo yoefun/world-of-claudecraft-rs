@@ -1,10 +1,10 @@
 # 职业系统完善设计 — `1.25.0` / `class-depth`
 
-**Status:** Implemented (2026-08-14).  
+**Status:** Implemented (2026-08-14). Landed as rewrite **`1.26.0`** after `friends` took `1.25.0` on `develop`.  
 **Baseline:** rewrite `1.24.0` / `delve-depth` on `develop` (ECS `World`; class-engine/identity/forms shipped as `1.6.0`–`1.8.0`).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `class-depth`.  
-**Protocol:** stays **10**. No new `InteractAction` / snapshot fields. Paladin **F** reuses `CycleStance`. HUD already has `stance_id`.
+**Protocol:** remains **11** (friends). No new `InteractAction` / snapshot fields. Paladin **F** reuses `CycleStance`. HUD already has `stance_id`.
 
 If another depth wave lands on `develop` before this tag, shift the number by one. Do not reuse a shipped label (`1.24.0` is `delve-depth`).
 
@@ -93,10 +93,11 @@ Do not add a 6th `AbilitySlot`. Do not add `CycleAura` to the wire — paladin r
 | Rewrite | Parity | Theme |
 | --- | --- | --- |
 | **1.6.0–1.8.0** | `class-engine` → `class-forms` | Engine + one signature / class (shipped) |
-| **1.24.0** | `delve-depth` | Isolated Hollow (shipped; current tag) |
-| **1.25.0** | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet ability, HUD stance |
+| **1.24.0** | `delve-depth` | Isolated Hollow (shipped) |
+| **1.25.0** | `friends` | Friend book (shipped on develop first) |
+| **1.26.0** | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet ability, HUD stance |
 
-`PROTOCOL_REV` stays **10**. Tick fingerprint stays `3214741777866168171u64`. No new named phase. Resource regen stays inside `player_combat` (`update_player_combat`). Pet ability stays inside `pet_ai` (`tick_pets`). Planning commit does not bump `VERSION.toml`; the implementation wave tags `1.25.0`.
+`PROTOCOL_REV` remains **11**. Tick fingerprint stays `3214741777866168171u64`. No new named phase. Resource regen stays inside `player_combat` (`update_player_combat`). Pet ability stays inside `pet_ai` (`tick_pets`). Planned as `1.25.0`; lands as `1.26.0` after friends took the tag.
 
 ## 5. Architecture
 

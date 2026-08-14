@@ -32,16 +32,17 @@
 | **1.22.0** (shipped) | `kill-loop` | Per-template respawn, leash reset, loot count/TTL, pet credit, mob abilities |
 | **1.23.0** (shipped) | `dungeon-depth` | Playable Crypt/Barrow enter/leave, isolation, parent GY |
 | **1.24.0** (shipped) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
-| **1.25.0** (shipped) | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet Bite/Firebolt, HUD stance |
+| **1.25.0** (shipped) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
+| **1.26.0** (shipped) | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet Bite/Firebolt, HUD stance |
 
-## Class depth (shipped as `1.25.0`)
+## Class depth (shipped as `1.26.0`)
 
 **Audit (2026-08-14):** playable class system **68%** vs this program’s scorecard. `1.6.0`–`1.8.0` identity DoD is ~95% shipped; remaining work is depth, not a second spellbook port.
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-14-class-depth-design.md`](superpowers/specs/2026-08-14-class-depth-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-14-class-depth.md`](superpowers/plans/2026-08-14-class-depth.md)
 
-Energy 10/s, mana 8/2 s, rage decay OOC; rogue Sprint + hunter Multi-Shot + priest SW:P + mage Counterspell on the 1–5 bar; paladin **F** Devotion/Retribution; HUD paints `stance_id`; hunter Bite / warlock Firebolt. Protocol rev stays **10**. Ability ranks, 3 talent specs, bear/cat, and pet bars stay out of scope. If another wave takes `1.25.0` first, shift by one.
+Energy 10/s, mana 8/2 s, rage decay OOC; rogue Sprint + hunter Multi-Shot + priest SW:P + mage Counterspell on the 1–5 bar; paladin **F** Devotion/Retribution; HUD paints `stance_id`; hunter Bite / warlock Firebolt. Protocol rev stays **11**. Ability ranks, 3 talent specs, bear/cat, and pet bars stay out of scope. Planned as `1.25.0`; lands as `1.26.0` after friends took `1.25.0`.
 
 ## Completion program (closed)
 
@@ -98,6 +99,13 @@ Close spawn → fight → loot → respawn: per-template respawn (instance trash
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
 
 Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
+
+## Friends (shipped as `1.25.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-14-friends-design.md`](superpowers/specs/2026-08-14-friends-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-14-friends.md`](superpowers/plans/2026-08-14-friends.md)
+
+`FriendRoster` on `Sim`, keyed by durable character id (like mail/guilds). Unidirectional add via `CharacterDirectory`. Ignore filters whisper only. Protocol rev **11**. Bevy **O** panel. Friends stay off `World` columns and `CharacterSave`. Planned as `1.22.0`; lands as `1.25.0` after kill-loop / dungeon / delve took `1.22.0`–`1.24.0`.
 
 ## Instance depth (shipped as `1.23.0` + `1.24.0`)
 

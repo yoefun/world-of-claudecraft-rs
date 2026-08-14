@@ -35,6 +35,7 @@ use crate::quests::{
 };
 use crate::rng::Rng;
 use crate::social::chat::{handle_chat, ChatEffect};
+use crate::social::friends::{FriendRoster, SocialDelivery, SocialEffect};
 use crate::social::guild::{GuildDelivery, GuildEffect, GuildRank, GuildRoster};
 use crate::social::party::{kill_credit_share, PartyEffect, PartyRoster};
 use crate::types::xp_to_next;
@@ -146,12 +147,16 @@ pub struct Sim {
     pub parties: PartyRoster,
     /// Persistent guild roster for this realm.
     pub guilds: GuildRoster,
+    /// Persistent friend / ignore books for this realm.
+    pub friends: FriendRoster,
     pub mail: crate::mail::Mailbox,
     /// Realm character name → durable mailbox key, for offline `MailSend`.
     pub directory: crate::mail::CharacterDirectory,
     pub market: crate::market::AuctionHouse,
     pub loot_rules: crate::social::LootRules,
     pub pvp: crate::pvp::PvpState,
+    /// Presence / whisper deliveries queued from spawn, park, and resume.
+    pending_social: Vec<SocialDelivery>,
 }
 
 impl Sim {
@@ -178,11 +183,13 @@ impl Sim {
             intents: HashMap::new(),
             parties: PartyRoster::new(),
             guilds: GuildRoster::new(),
+            friends: FriendRoster::new(),
             mail: crate::mail::Mailbox::new(),
             directory: crate::mail::CharacterDirectory::default(),
             market: crate::market::AuctionHouse::new(),
             loot_rules: crate::social::LootRules::default(),
             pvp: crate::pvp::PvpState::default(),
+            pending_social: Vec::new(),
         }
     }
 
@@ -221,6 +228,7 @@ impl Sim {
         }
         let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
         self.directory.register(name, key);
+        self.push_presence(id, true);
         Some(id)
     }
 
@@ -291,6 +299,7 @@ impl Sim {
         }
         let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
         self.directory.register(name, key);
+        self.push_presence(id, true);
         Some(id)
     }
 
@@ -324,6 +333,7 @@ impl Sim {
             combat.target = None;
             combat.cast = None;
         }
+        self.push_presence(player_id, false);
     }
 
     /// Resume a parked player by durable character id. Returns `None` if missing
@@ -337,6 +347,8 @@ impl Sim {
         if self.player_id == 0 {
             self.player_id = id;
         }
+        self.guilds.refresh_member(&self.world, id);
+        self.push_presence(id, true);
         Some(id)
     }
 
@@ -572,6 +584,56 @@ impl Sim {
             &self.guilds,
             &self.world,
         )
+    }
+
+    pub fn friend_add(&mut self, player_id: EntityId, name: &str) -> Vec<SocialDelivery> {
+        map_social_effects(
+            self.friends
+                .add(player_id, name, &self.world, &self.directory),
+        )
+    }
+
+    pub fn friend_remove(&mut self, player_id: EntityId, name: &str) -> Vec<SocialDelivery> {
+        map_social_effects(
+            self.friends
+                .remove(player_id, name, &self.world, &self.directory),
+        )
+    }
+
+    pub fn friend_ignore(&mut self, player_id: EntityId, name: &str) -> Vec<SocialDelivery> {
+        map_social_effects(
+            self.friends
+                .ignore(player_id, name, &self.world, &self.directory),
+        )
+    }
+
+    pub fn friend_unignore(&mut self, player_id: EntityId, name: &str) -> Vec<SocialDelivery> {
+        map_social_effects(
+            self.friends
+                .unignore(player_id, name, &self.world, &self.directory),
+        )
+    }
+
+    pub fn whisper(&mut self, player_id: EntityId, name: &str, text: &str) -> Vec<SocialDelivery> {
+        map_social_effects(self.friends.whisper(
+            player_id,
+            name,
+            text,
+            &self.world,
+            &self.directory,
+            &self.intents,
+        ))
+    }
+
+    pub fn take_social(&mut self) -> Vec<SocialDelivery> {
+        std::mem::take(&mut self.pending_social)
+    }
+
+    fn push_presence(&mut self, player_id: EntityId, online: bool) {
+        let effects = self
+            .friends
+            .presence(player_id, online, &self.world, &self.intents);
+        self.pending_social.extend(map_social_effects(effects));
     }
 
     pub fn live_guild_recipients(&self, guild_id: u32, officer_only: bool) -> Vec<EntityId> {
@@ -1077,6 +1139,7 @@ impl Sim {
             .filter(|&id| self.snapshot_visible(player_id, viewer_instance.as_deref(), id))
             .filter_map(|id| entity_snapshot(world, id))
             .collect();
+        let (friends, ignored) = self.friends.snapshot_for(player_id, world, &self.intents);
 
         TickSnapshot {
             tick: self.tick,
@@ -1247,6 +1310,8 @@ impl Sim {
             },
             guild: self.guilds.snapshot_for(player_id, world),
             guild_invite: self.guilds.invite_snapshot_for(player_id, world),
+            friends,
+            ignored,
             reputation: crate::reputation::snapshot(world, player_id),
         }
     }
@@ -1511,6 +1576,37 @@ fn map_guild_effects(
             } => GuildDelivery::Guild {
                 guild_id,
                 officer_only,
+                msg: WsServerMsg::Chat {
+                    channel,
+                    from,
+                    text,
+                },
+            },
+        })
+        .collect()
+}
+
+fn map_social_effects(effects: Vec<SocialEffect>) -> Vec<SocialDelivery> {
+    effects
+        .into_iter()
+        .map(|e| match e {
+            SocialEffect::Error { to, message } | SocialEffect::Notice { to, message } => {
+                SocialDelivery::To {
+                    player: to,
+                    msg: WsServerMsg::Chat {
+                        channel: "system".into(),
+                        from: "Friends".into(),
+                        text: message,
+                    },
+                }
+            }
+            SocialEffect::Chat {
+                to,
+                channel,
+                from,
+                text,
+            } => SocialDelivery::To {
+                player: to,
                 msg: WsServerMsg::Chat {
                     channel,
                     from,
@@ -3586,6 +3682,70 @@ mod tests {
             sim.snapshot_for_player(a).guild.as_ref().unwrap().members[0].level,
             9
         );
+    }
+
+    #[test]
+    fn friend_list_survives_park_and_resume() {
+        let mut sim = Sim::new_eastbrook("Alice", PlayerClass::Warrior);
+        let alice = sim.player_id;
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(bob) {
+            d.durable_id = Some("bob-uuid".into());
+        }
+        sim.directory.register("Bob", "bob-uuid");
+        let _ = sim.friend_add(alice, "Bob");
+        sim.park_player(bob);
+        let snap = sim.snapshot_for_player(alice);
+        assert_eq!(snap.friends.len(), 1);
+        assert!(!snap.friends[0].online);
+        let _ = sim.resume_player("bob-uuid");
+        let snap = sim.snapshot_for_player(alice);
+        assert!(snap.friends[0].online);
+    }
+
+    #[test]
+    fn park_and_resume_queue_presence_notices() {
+        let mut sim = Sim::new_eastbrook("Alice", PlayerClass::Warrior);
+        let alice = sim.player_id;
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(d) = sim.world.get_mut::<crate::ecs::components::Durable>(bob) {
+            d.durable_id = Some("bob-uuid".into());
+        }
+        sim.directory.register("Bob", "bob-uuid");
+        let _ = sim.take_social();
+        let _ = sim.friend_add(alice, "Bob");
+        sim.park_player(bob);
+        let gone = sim.take_social();
+        assert!(gone.iter().any(|d| matches!(
+            d,
+            SocialDelivery::To {
+                player,
+                msg: WsServerMsg::Chat { text, from, .. }
+            } if *player == alice && from == "Friends" && text == "Bob has gone offline."
+        )));
+        let _ = sim.resume_player("bob-uuid");
+        let came = sim.take_social();
+        assert!(came.iter().any(|d| matches!(
+            d,
+            SocialDelivery::To {
+                player,
+                msg: WsServerMsg::Chat { text, from, .. }
+            } if *player == alice && from == "Friends" && text == "Bob has come online."
+        )));
+    }
+
+    #[test]
+    fn whisper_offline_after_park() {
+        let mut sim = Sim::new_eastbrook("Alice", PlayerClass::Warrior);
+        let alice = sim.player_id;
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        sim.park_player(bob);
+        let outs = sim.whisper(alice, "Bob", "hi");
+        assert!(outs.iter().any(|d| matches!(
+            d,
+            SocialDelivery::To { player, msg: WsServerMsg::Chat { text, .. } }
+                if *player == alice && text == "Bob is not online."
+        )));
     }
 
     #[test]

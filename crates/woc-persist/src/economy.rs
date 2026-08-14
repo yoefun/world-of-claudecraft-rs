@@ -85,6 +85,23 @@ pub struct RealmEconomy {
     pub next_listing_id: u32,
     #[serde(default = "default_next_id")]
     pub next_guild_id: u32,
+    #[serde(default)]
+    pub social: Vec<SocialBookDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SocialEntryDto {
+    pub durable_id: String,
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SocialBookDto {
+    pub owner_durable: String,
+    pub friends: Vec<SocialEntryDto>,
+    pub ignored: Vec<SocialEntryDto>,
 }
 
 fn default_next_id() -> u32 {
@@ -122,6 +139,32 @@ mod tests {
         let eco: RealmEconomy = serde_json::from_str(r#"{"mail":[],"market":[]}"#).unwrap();
         assert!(eco.guilds.is_empty());
         assert_eq!(eco.next_guild_id, 1);
+        assert!(eco.social.is_empty());
+    }
+
+    #[test]
+    fn social_defaults_when_omitted() {
+        let eco: RealmEconomy = serde_json::from_str(r#"{"mail":[],"market":[]}"#).unwrap();
+        assert!(eco.social.is_empty());
+    }
+
+    #[test]
+    fn social_roundtrip() {
+        let eco = RealmEconomy {
+            social: vec![SocialBookDto {
+                owner_durable: "alice".into(),
+                friends: vec![SocialEntryDto {
+                    durable_id: "bob".into(),
+                    name: "Bob".into(),
+                    class_id: "mage".into(),
+                    level: 2,
+                }],
+                ignored: vec![],
+            }],
+            ..Default::default()
+        };
+        let back = economy_from_json(&economy_to_json(&eco).unwrap()).unwrap();
+        assert_eq!(back.social, eco.social);
     }
 
     #[test]
@@ -151,6 +194,7 @@ mod tests {
             next_listing_id: 4,
             guilds: Vec::new(),
             next_guild_id: 1,
+            social: Vec::new(),
         };
         let back = economy_from_json(&economy_to_json(&eco).unwrap()).unwrap();
         assert_eq!(back, eco);

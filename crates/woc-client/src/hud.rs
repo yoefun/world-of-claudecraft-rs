@@ -84,6 +84,7 @@ pub(crate) enum ChromePanelKind {
     Mail,
     Market,
     Guild,
+    Friends,
 }
 
 #[derive(Component)]
@@ -109,6 +110,8 @@ pub(crate) struct UiFlags {
     pub(crate) show_party: bool,
     pub(crate) show_guild: bool,
     pub(crate) guild_compose: String,
+    pub(crate) show_friends: bool,
+    pub(crate) friend_compose: String,
     pub(crate) market_filter: String,
     pub(crate) market_page: usize,
     pub(crate) market_duration_hours: u32,
@@ -131,6 +134,8 @@ impl Default for UiFlags {
             show_party: false,
             show_guild: false,
             guild_compose: String::new(),
+            show_friends: false,
+            friend_compose: String::new(),
             market_filter: String::new(),
             market_page: 0,
             market_duration_hours: 12,
@@ -809,6 +814,36 @@ fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
     lines.join("\n")
 }
 
+fn friends_panel_text(snap: &TickSnapshot, compose: &str) -> String {
+    let mut lines = vec!["Friends  [O]".into()];
+    if snap.friends.is_empty() && snap.ignored.is_empty() {
+        lines.push("No friends yet. /add Name · /invite Name".into());
+    } else {
+        lines.push("Friends".into());
+        for f in &snap.friends {
+            let star = if f.online { "*" } else { " " };
+            let zone = if f.online && !f.zone_id.is_empty() {
+                format!("  {}", f.zone_id)
+            } else {
+                String::new()
+            };
+            lines.push(format!(
+                "{star}{}  {}  {}{}",
+                f.name, f.class_id, f.level, zone
+            ));
+        }
+        if !snap.ignored.is_empty() {
+            lines.push("Ignored".into());
+            for i in &snap.ignored {
+                lines.push(format!(" {}", i.name));
+            }
+        }
+    }
+    lines.push("/invite Name  party".into());
+    lines.push(format!("> {compose}_"));
+    lines.join("\n")
+}
+
 pub(crate) fn party_frames_text(snap: &TickSnapshot) -> String {
     let mut lines = Vec::new();
     if !snap.pending_invite_from.is_empty() {
@@ -902,6 +937,7 @@ pub(crate) fn update_chrome_panels(
             ChromePanelKind::Mail => ui.show_mail,
             ChromePanelKind::Market => ui.show_market,
             ChromePanelKind::Guild => ui.show_guild,
+            ChromePanelKind::Friends => ui.show_friends,
         };
         *visibility = if shown {
             Visibility::Visible
@@ -923,6 +959,7 @@ pub(crate) fn update_chrome_panels(
             }
             ChromePanelKind::Market => market_panel_text(&host.snapshot, &ui),
             ChromePanelKind::Guild => guild_panel_text(&host.snapshot, &ui.guild_compose),
+            ChromePanelKind::Friends => friends_panel_text(&host.snapshot, &ui.friend_compose),
         };
     }
 }
@@ -2177,5 +2214,43 @@ mod tests {
             equipment_label(Some("wool_cloak"), None, None),
             "Uncommon Wool Cloak 30/30"
         );
+    }
+
+    #[test]
+    fn friends_panel_empty_shows_add_hint() {
+        let text = friends_panel_text(&TickSnapshot::default(), "");
+        assert!(text.contains("No friends yet. /add Name · /invite Name"));
+        assert!(text.contains("/invite Name  party"));
+        assert!(text.contains("> _"));
+    }
+
+    #[test]
+    fn friends_panel_lists_online_star_and_ignored() {
+        let mut snap = TickSnapshot::default();
+        snap.friends.push(woc_protocol::FriendSnapshot {
+            name: "Bob".into(),
+            class_id: "mage".into(),
+            level: 8,
+            online: true,
+            zone_id: "eastbrook".into(),
+        });
+        snap.friends.push(woc_protocol::FriendSnapshot {
+            name: "Carol".into(),
+            class_id: "rogue".into(),
+            level: 3,
+            online: false,
+            zone_id: String::new(),
+        });
+        snap.ignored.push(woc_protocol::IgnoredSnapshot {
+            name: "Dave".into(),
+        });
+        let text = friends_panel_text(&snap, "/w Bob hi");
+        assert!(text.contains("*Bob  mage  8  eastbrook"));
+        assert!(text.contains(" Carol  rogue  3"));
+        assert!(text.contains("Ignored"));
+        assert!(text.contains(" Dave"));
+        assert!(text.contains("> /w Bob hi_"));
+        assert!(text.contains("/invite Name  party"));
+        assert!(!text.contains("No friends yet"));
     }
 }
