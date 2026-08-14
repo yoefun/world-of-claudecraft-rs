@@ -2629,7 +2629,11 @@ mod tests {
             h.hp_max = 1.0;
         }
         let piles_before = sim.world.ids::<LootPile>().len();
-        let xp_before = sim.world.get::<Progress>(sim.player_id).expect("progress").xp;
+        let xp_before = sim
+            .world
+            .get::<Progress>(sim.player_id)
+            .expect("progress")
+            .xp;
         crate::combat::deal_damage(
             &mut sim.world,
             pet,
@@ -2647,7 +2651,10 @@ mod tests {
             "pet last-hit must still spawn corpse loot when the owner entity is missing"
         );
         assert_eq!(
-            sim.world.get::<Progress>(sim.player_id).expect("progress").xp,
+            sim.world
+                .get::<Progress>(sim.player_id)
+                .expect("progress")
+                .xp,
             xp_before,
             "living hunter is not the credited killer; XP path stays skipped"
         );
