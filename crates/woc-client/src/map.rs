@@ -597,6 +597,7 @@ mod tests {
             on_ground: true,
             flying: false,
             swimming: false,
+            mounted: None,
         });
         let region = woc_sim::map_view::MapRegion::around(0.0, 0.0, 50.0);
         let markers = super::collect_dynamic_markers(&snap, region, 1);
