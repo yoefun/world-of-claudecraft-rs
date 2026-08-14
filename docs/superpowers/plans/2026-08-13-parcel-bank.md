@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship rewrite `1.17.0` / `parcel-bank`: slot-accurate bank and mail moves that preserve durability/enchant, offline parcels via a realm character directory, client send/collect/return, postage/inbox cap/expiry, and repair that includes banked gear.
+**Goal:** Ship rewrite `1.20.0` / `parcel-bank`: slot-accurate bank and mail moves that preserve durability/enchant, offline parcels via a realm character directory, client send/collect/return, postage/inbox cap/expiry, and repair that includes banked gear.
 
 **Architecture:** `take_from_slot` / `put_stack` in `inventory.rs` become the only economy *move* path. Bank stays the player `Bank` column. Mailbox stays a `Sim` resource. `CharacterDirectory` is a new `Sim` field (not a World column). Mail expiry hooks inside `pvp_and_market`. Protocol rev stays 8 with serde defaults. HUD **K**/**I** stay ungated.
 

@@ -1,7 +1,7 @@
-# Parcel and bank (warehouse) design — `1.17.0` / `parcel-bank`
+# Parcel and bank (warehouse) design — `1.20.0` / `parcel-bank`
 
-**Status:** Implemented (1.17.0, rebased onto `1.16.0` / `economy-depth`).  
-**Baseline:** rewrite `1.16.0` / `economy-depth` on `develop` (instance-preserving bank/AH/mail, soulbound, banker + mailbox NPCs).  
+**Status:** Implemented (1.20.0, rebased onto `1.16.0` / `economy-depth`).  
+**Baseline:** rewrite `1.19.0` / `guilds` on `develop` (instance-preserving bank/AH/mail, soulbound, banker + mailbox NPCs).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `parcel-bank`.
 

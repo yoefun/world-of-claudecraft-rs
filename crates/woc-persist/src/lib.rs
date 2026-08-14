@@ -29,7 +29,7 @@ mod password;
 pub mod postgres;
 mod store;
 
-pub use economy::{MailDto, MarketListingDto, RealmEconomy};
+pub use economy::{GuildDto, GuildMemberDto, MailDto, MarketListingDto, RealmEconomy};
 pub use error::{PersistError, PersistResult};
 pub use memory::MemoryStore;
 pub use models::{

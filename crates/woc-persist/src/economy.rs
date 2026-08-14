@@ -52,16 +52,39 @@ pub struct MarketListingDto {
     pub bidder_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuildMemberDto {
+    pub durable_id: String,
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+    pub rank: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GuildDto {
+    pub id: u32,
+    pub name: String,
+    pub motd: String,
+    pub motd_set_by: String,
+    #[serde(default)]
+    pub members: Vec<GuildMemberDto>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RealmEconomy {
     #[serde(default)]
     pub mail: Vec<MailDto>,
     #[serde(default)]
     pub market: Vec<MarketListingDto>,
+    #[serde(default)]
+    pub guilds: Vec<GuildDto>,
     #[serde(default = "default_next_id")]
     pub next_mail_id: u32,
     #[serde(default = "default_next_id")]
     pub next_listing_id: u32,
+    #[serde(default = "default_next_id")]
+    pub next_guild_id: u32,
 }
 
 fn default_next_id() -> u32 {
@@ -95,6 +118,13 @@ mod tests {
     }
 
     #[test]
+    fn guilds_default_when_omitted() {
+        let eco: RealmEconomy = serde_json::from_str(r#"{"mail":[],"market":[]}"#).unwrap();
+        assert!(eco.guilds.is_empty());
+        assert_eq!(eco.next_guild_id, 1);
+    }
+
+    #[test]
     fn economy_roundtrip() {
         let eco = RealmEconomy {
             mail: vec![MailDto {
@@ -119,6 +149,8 @@ mod tests {
             }],
             next_mail_id: 3,
             next_listing_id: 4,
+            guilds: Vec::new(),
+            next_guild_id: 1,
         };
         let back = economy_from_json(&economy_to_json(&eco).unwrap()).unwrap();
         assert_eq!(back, eco);

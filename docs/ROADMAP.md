@@ -24,7 +24,11 @@
 | **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
 | **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
 | **1.16.0** (shipped) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
-| **1.17.0** (this branch) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
+| **1.17.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
+| **1.18.0** (shipped) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
+| **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
+| **1.20.0** (this branch) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
+
 ## Completion program (closed)
 
 **Definition of done:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](superpowers/specs/2026-07-28-rust-rewrite-completion-design.md)  
@@ -53,6 +57,13 @@ Four hub factions on a player `Reputation` column. Quest and kill grants; Friend
 
 Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services.
 
+## Guilds (this branch as `1.16.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-guilds-design.md`](superpowers/specs/2026-08-13-guilds-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-guilds.md`](superpowers/plans/2026-08-13-guilds.md)
+
+`GuildRoster` on `Sim`, keyed by durable character id (like mail). Parties stay ephemeral. Protocol rev **9**. Guild bank, calendar, friends/ignore stay out of scope.
+
 ## Gear slots (shipped as `1.13.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-gear-slots-design.md`](superpowers/specs/2026-08-13-gear-slots-design.md)  
@@ -73,12 +84,20 @@ Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Inst
 
 Auctioneer Lise, instance listings, 5% cut, mail-always proceeds, then bids, 12/24/48 h, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
 
-## Parcel and bank (shipped as `1.17.0`)
+## Parcel and bank (shipped as `1.20.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-parcel-bank-design.md`](superpowers/specs/2026-08-13-parcel-bank-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-13-parcel-bank.md`](superpowers/plans/2026-08-13-parcel-bank.md)
 
-Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the first non-quest bag stack. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. Banker/mailbox NPC gates from `1.16.0` stay. Protocol rev **8**.
+Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the first non-quest bag stack. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. Banker/mailbox NPC gates from `1.16.0` stay. Additive on protocol rev **10**.
+
+
+## Party depth (shipped as `1.17.0`) + raid (shipped as `1.18.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-party-raid-design.md`](superpowers/specs/2026-08-13-party-raid-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-party-raid.md`](superpowers/plans/2026-08-13-party-raid.md)
+
+`1.17.0` makes 5-man parties playable (invite/decline/kick/promote/disband, snapshot frames, classic XP split, park-safe membership, ready check). `1.18.0` converts a full party into a 10-player raid of two groups and raises `MAX_REALM_PLAYERS` to 10. Protocol rev **9**. Guilds and Dungeon Finder stay out of scope.
 
 ## Client version gate (current)
 

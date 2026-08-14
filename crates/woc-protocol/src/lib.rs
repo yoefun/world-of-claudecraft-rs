@@ -14,9 +14,12 @@ pub type EntityId = u32;
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
 /// Rev 8: quest abandon/share, optional turn-in reward choice. Additive
-/// reputation snapshot / vendor discount_pct / ReputationChanged (1.14.0);
-/// also `finger2` / `main_hand_enchant` / stack `enchant_id` (1.13.0).
-pub const PROTOCOL_REV: u32 = 8;
+/// reputation snapshot / vendor discount_pct / ReputationChanged;
+/// `finger2` / `main_hand_enchant` / stack `enchant_id`; gear-more slots
+/// (`off_hand_enchant`, stack `quality`); auction bid/bound fields.
+/// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs (1.18.0).
+/// Rev 10: guild snapshot / invite + guild client verbs (1.19.0).
+pub const PROTOCOL_REV: u32 = 10;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -607,6 +610,16 @@ pub struct TickSnapshot {
     /// Party membership, if any.
     #[serde(default)]
     pub party_id: Option<u32>,
+    #[serde(default)]
+    pub party_leader_id: Option<EntityId>,
+    #[serde(default)]
+    pub party_kind: String,
+    #[serde(default)]
+    pub party_members: Vec<PartyMemberSnapshot>,
+    #[serde(default)]
+    pub pending_invite_from: String,
+    #[serde(default)]
+    pub ready_check: Option<ReadyCheckSnapshot>,
     /// Current overworld / instance zone id.
     #[serde(default)]
     pub zone_id: String,
@@ -673,6 +686,12 @@ pub struct TickSnapshot {
     /// Postage in copper the sim will charge for player-to-player mail.
     #[serde(default)]
     pub mail_postage: u32,
+    /// Guild roster for the viewing player, if any.
+    #[serde(default)]
+    pub guild: Option<GuildSnapshot>,
+    /// Pending guild invite for the viewing player, if any.
+    #[serde(default)]
+    pub guild_invite: Option<GuildInviteSnapshot>,
     /// Per-faction standing for the local player (all known factions).
     #[serde(default)]
     pub reputation: Vec<ReputationSnapshot>,
@@ -699,6 +718,33 @@ pub struct PendingLootSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PartyMemberSnapshot {
+    pub id: EntityId,
+    pub name: String,
+    #[serde(default)]
+    pub class_id: String,
+    #[serde(default)]
+    pub hp: f32,
+    #[serde(default)]
+    pub hp_max: f32,
+    #[serde(default)]
+    pub online: bool,
+    #[serde(default)]
+    pub raid_group: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ReadyCheckSnapshot {
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub you_responded: bool,
+    #[serde(default)]
+    pub ready_count: u32,
+    #[serde(default)]
+    pub total: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct TalentRankSnapshot {
     pub talent_id: String,
     pub rank: u32,
@@ -722,6 +768,32 @@ pub struct MailSnapshot {
     pub quality: Option<String>,
     #[serde(default)]
     pub bound: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildMemberSnapshot {
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+    pub rank: String,
+    pub online: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildSnapshot {
+    pub id: u32,
+    pub name: String,
+    pub rank: String,
+    pub motd: String,
+    pub motd_set_by: String,
+    #[serde(default)]
+    pub members: Vec<GuildMemberSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildInviteSnapshot {
+    pub from_name: String,
+    pub guild_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -800,6 +872,11 @@ impl Default for TickSnapshot {
             auto_attack: false,
             is_dead: false,
             party_id: None,
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: String::new(),
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
@@ -822,6 +899,8 @@ impl Default for TickSnapshot {
             armor: 0.0,
             spell_power: 0.0,
             mail_postage: 0,
+            guild: None,
+            guild_invite: None,
             reputation: Vec::new(),
         }
     }
@@ -1058,6 +1137,43 @@ pub enum WsClientMsg {
     },
     PartyAccept,
     PartyLeave,
+    PartyDecline,
+    PartyKick {
+        name: String,
+    },
+    PartyPromote {
+        name: String,
+    },
+    PartyDisband,
+    PartyReadyCheck,
+    PartyReadyRespond {
+        ready: bool,
+    },
+    ConvertToRaid,
+    ConvertToParty,
+    GuildCreate {
+        name: String,
+    },
+    GuildInvite {
+        name: String,
+    },
+    GuildAccept,
+    GuildDecline,
+    GuildLeave,
+    GuildKick {
+        name: String,
+    },
+    GuildSetRank {
+        name: String,
+        rank: String,
+    },
+    GuildTransferLeader {
+        name: String,
+    },
+    GuildDisband,
+    GuildSetMotd {
+        text: String,
+    },
     Chat {
         channel: String,
         text: String,
@@ -1308,6 +1424,11 @@ mod tests {
             auto_attack: true,
             is_dead: true,
             party_id: Some(3),
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: "eastbrook".into(),
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
@@ -1338,6 +1459,8 @@ mod tests {
             armor: 0.0,
             spell_power: 0.0,
             mail_postage: 0,
+            guild: None,
+            guild_invite: None,
             reputation: Vec::new(),
         };
         let s = serde_json::to_string(&snap).unwrap();
@@ -1365,6 +1488,40 @@ mod tests {
         assert!(back.stealthed);
         assert_eq!(back.stance_id, "battle");
         assert!((back.absorb - 25.0).abs() < f32::EPSILON);
+        assert!(back.party_members.is_empty());
+    }
+
+    #[test]
+    fn party_roster_snapshot_defaults() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0},"target_id":null,"ability_ready":false,"ability_cooldown":0.0}"#,
+        )
+        .unwrap();
+        assert!(snap.party_members.is_empty());
+        assert!(snap.pending_invite_from.is_empty());
+        assert!(snap.party_kind.is_empty());
+        assert!(snap.party_leader_id.is_none());
+        assert!(snap.ready_check.is_none());
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn party_depth_ws_msg_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::PartyDecline,
+            WsClientMsg::PartyKick { name: "Bob".into() },
+            WsClientMsg::PartyPromote { name: "Bob".into() },
+            WsClientMsg::PartyDisband,
+            WsClientMsg::PartyReadyCheck,
+            WsClientMsg::PartyReadyRespond { ready: true },
+            WsClientMsg::ConvertToRaid,
+            WsClientMsg::ConvertToParty,
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
     }
 
     #[test]
@@ -1441,6 +1598,14 @@ mod tests {
             WsClientMsg::PartyInvite { name: "Bob".into() },
             WsClientMsg::PartyAccept,
             WsClientMsg::PartyLeave,
+            WsClientMsg::PartyDecline,
+            WsClientMsg::PartyKick { name: "Bob".into() },
+            WsClientMsg::PartyPromote { name: "Bob".into() },
+            WsClientMsg::PartyDisband,
+            WsClientMsg::PartyReadyCheck,
+            WsClientMsg::PartyReadyRespond { ready: true },
+            WsClientMsg::ConvertToRaid,
+            WsClientMsg::ConvertToParty,
             WsClientMsg::Chat {
                 channel: "say".into(),
                 text: "hello".into(),
@@ -1646,7 +1811,7 @@ mod tests {
         assert!(slot.enchant_id.is_none());
         assert!(!slot.bound);
         assert!(slot.quality.is_none());
-        assert_eq!(PROTOCOL_REV, 8);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
@@ -1678,7 +1843,7 @@ mod tests {
         assert!(!session.can_auction);
         assert!(!session.can_bank);
         assert!(!session.can_mail);
-        assert_eq!(PROTOCOL_REV, 8);
+        assert_eq!(PROTOCOL_REV, 10);
 
         let list: InteractAction =
             serde_json::from_str(r#"{"type":"market_list","bag_slot":0,"count":1,"price":12}"#)
@@ -1693,6 +1858,47 @@ mod tests {
                 duration_hours: 0,
             }
         );
+    }
+
+    #[test]
+    fn protocol_rev_is_ten() {
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn guild_snapshot_defaults_when_omitted() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0}}"#,
+        )
+        .unwrap();
+        assert!(snap.guild.is_none());
+        assert!(snap.guild_invite.is_none());
+    }
+
+    #[test]
+    fn guild_ws_client_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::GuildCreate {
+                name: "Vale Watch".into(),
+            },
+            WsClientMsg::GuildInvite { name: "Bob".into() },
+            WsClientMsg::GuildAccept,
+            WsClientMsg::GuildDecline,
+            WsClientMsg::GuildLeave,
+            WsClientMsg::GuildKick { name: "Bob".into() },
+            WsClientMsg::GuildSetRank {
+                name: "Bob".into(),
+                rank: "officer".into(),
+            },
+            WsClientMsg::GuildTransferLeader { name: "Bob".into() },
+            WsClientMsg::GuildDisband,
+            WsClientMsg::GuildSetMotd { text: "hi".into() },
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
     }
 
     #[test]
@@ -1736,7 +1942,7 @@ mod tests {
         assert_eq!(snap.spell_power, 0.0);
         assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
-        assert_eq!(PROTOCOL_REV, 8);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
@@ -1779,6 +1985,6 @@ mod tests {
     fn tick_snapshot_mail_postage_defaults_zero() {
         let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
         assert_eq!(snap.mail_postage, 0);
-        assert_eq!(PROTOCOL_REV, 8);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 }

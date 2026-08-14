@@ -1,8 +1,8 @@
 # Parity status
 
-**Current rewrite:** `1.17.0` / `parcel-bank`.  
+**Current rewrite:** `1.19.0` / `guilds` (PROTOCOL_REV=10).
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; parcel-bank shipped as `1.17.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`.
 
 ## Parcel and bank (`parcel-bank`) — done
 
@@ -17,6 +17,48 @@ Plan: [`../superpowers/plans/2026-08-13-parcel-bank.md`](../superpowers/plans/20
 | Bank any non-quest stack | done | Client **G** deposits first non-quest bag stack |
 | Repair includes warehouse | done | `repair_cost` sums `Bank.bank` |
 | NPC gates | kept | Banker Holme / Eastbrook Post from `1.16.0` |
+
+## Guilds (`guilds`) — done
+
+Design: [`../superpowers/specs/2026-08-13-guilds-design.md`](../superpowers/specs/2026-08-13-guilds-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-guilds.md`](../superpowers/plans/2026-08-13-guilds.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| create/invite/leave | done | durable id; tick TTL 1200 |
+| ranks / kick / transfer / disband | done | leader/officer/member |
+| guild + officer chat | done | member-only fan-out |
+| MOTD | done | officer+; max 240 |
+| persist | done | `RealmEconomy.guilds` |
+| client J panel | done | compose A-Z/digits/`/`; `/invite` by name; Ctrl+verbs; Esc closes |
+| protocol | done | rev 10 |
+| Guild bank / calendar / friends | n/a | Explicit non-goals |
+
+## Party depth (`party-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-13-party-raid-design.md`](../superpowers/specs/2026-08-13-party-raid-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-party-raid.md`](../superpowers/plans/2026-08-13-party-raid.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Client invite / accept / decline | done | **G** on player target; **O**/**P** prompts |
+| Kick / promote / disband | done | Leader verbs; panel **Y** / **Minus** / **Backspace** |
+| Invite TTL | done | 600 ticks; pending dropped silently |
+| Snapshot roster + frames | done | `party_members` even when mate is outside AOI |
+| Park-safe membership | done | `park_player` must not `on_despawn` |
+| Classic XP split | done | `group_xp`; n=2 → 75% each |
+| Ready check | done | 300 ticks; parked do not block early complete |
+| Protocol rev 9 | done | New WS verbs + additive-looking snapshot fields with a rev bump |
+
+## Raid (`raid`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Convert 5-man → raid | done | Leader **Equals**; two groups of 5 |
+| Realm cap 10 | done | `MAX_REALM_PLAYERS` 8 → 10 |
+| Raid chat | done | `raid` channel; notices still realm-broadcast |
+| Raid frames | done | `G1` / `G2` prefixes |
+| 10-man encounter content | n/a | Explicit non-goal |
 
 ## Economy depth (`economy-depth`) — done
 
@@ -206,7 +248,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.17.0` / parcel-bank (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.20.0` / parcel-bank (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
