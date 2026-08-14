@@ -18,6 +18,8 @@ pub static ZONE3_MOBS: &[MobTemplate] = &[
             chance: 0.80,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("highwatch", 30)),
     },
     MobTemplate {
@@ -34,6 +36,8 @@ pub static ZONE3_MOBS: &[MobTemplate] = &[
             chance: 0.75,
             count: 1,
         }],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("highwatch", 25)),
     },
     MobTemplate {
@@ -46,6 +50,8 @@ pub static ZONE3_MOBS: &[MobTemplate] = &[
         copper_max: 50,
         attack_damage: 27.0,
         loot: &[],
+        respawn_seconds: 30.0,
+        ability_id: None,
         kill_reputation: Some(RepAward::new("highwatch", 35)),
     },
 ];

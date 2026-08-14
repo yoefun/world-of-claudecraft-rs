@@ -1,7 +1,7 @@
 //! Dedicated multi-room delve lifecycle.
 
 use crate::ecs::components::{
-    Bags, Combat, Health, Identity, InstanceAt, Progress, Threat, Transform,
+    Bags, Combat, Health, Identity, InstanceAt, Progress, Respawn, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::instances::{
@@ -230,6 +230,9 @@ fn spawn_room(
         }
         if let Some(inst) = world.get_mut::<InstanceAt>(mid) {
             inst.instance_id = Some(instance_key.to_string());
+        }
+        if let Some(r) = world.get_mut::<Respawn>(mid) {
+            r.delay_sec = 0.0;
         }
     }
 }

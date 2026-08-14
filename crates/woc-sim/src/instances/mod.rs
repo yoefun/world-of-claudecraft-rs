@@ -339,6 +339,9 @@ fn spawn_boss_shell(world: &mut World, id: EntityId, def: &DungeonDef, instance_
         },
     );
     world.insert(id, Respawn::default());
+    if let Some(r) = world.get_mut::<Respawn>(id) {
+        r.delay_sec = 0.0;
+    }
     world.insert(
         id,
         InstanceAt {
@@ -384,6 +387,9 @@ fn spawn_trash_spot(world: &mut World, spot: &DungeonTrashSpot, instance_key: &s
         if let Some(inst) = world.get_mut::<InstanceAt>(spawned) {
             inst.instance_id = Some(instance_key.to_string());
         }
+        if let Some(r) = world.get_mut::<Respawn>(spawned) {
+            r.delay_sec = 0.0;
+        }
     }
 }
 
@@ -405,7 +411,9 @@ pub fn same_instance_space(world: &World, a: EntityId, b: EntityId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use woc_content::PlayerClass;
+    use crate::mob::tick_mob_respawns;
+    use woc_content::{PlayerClass, EASTBROOK, MIREFEN};
+    use woc_protocol::DT;
 
     fn place_at_dungeon(world: &mut World, player_id: EntityId, dungeon_id: &str) {
         let def = woc_content::dungeon(dungeon_id).unwrap();
@@ -548,6 +556,53 @@ mod tests {
                 .as_deref(),
             Some(key.as_str())
         );
+    }
+
+    #[test]
+    fn crypt_trash_does_not_respawn_inside_instance() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Tank",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        let parties = PartyRoster::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut Vec::new()
+        ));
+        let trash: Vec<_> = world
+            .ids::<LootTable>()
+            .into_iter()
+            .filter(|&id| {
+                world.get::<Respawn>(id).is_some()
+                    && world
+                        .get::<Identity>(id)
+                        .and_then(|i| i.template_id.as_deref())
+                        == Some("young_wolf")
+            })
+            .collect();
+        assert!(!trash.is_empty());
+        for id in &trash {
+            assert_eq!(world.get::<Respawn>(*id).unwrap().delay_sec, 0.0);
+            if let Some(h) = world.get_mut::<Health>(*id) {
+                h.alive = false;
+                h.hp = 0.0;
+            }
+        }
+        for _ in 0..700 {
+            tick_mob_respawns(&mut world, DT);
+        }
+        for id in trash {
+            assert!(!world.get::<Health>(id).unwrap().alive);
+        }
     }
 
     #[test]
@@ -701,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    fn leave_returns_to_overworld_spawn_and_removes_boss() {
+    fn leave_returns_to_overworld_entrance_and_removes_boss() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
         place_at_dungeon(&mut world, 1, "eastbrook_crypt");
@@ -727,6 +782,7 @@ mod tests {
         let def = woc_content::dungeon("eastbrook_crypt").unwrap();
         assert_eq!(t.x, def.entrance_x);
         assert_eq!(t.z, def.entrance_z);
+        assert_ne!((t.x, t.z), (EASTBROOK.player_spawn_x, EASTBROOK.player_spawn_z));
         assert!(!world.ids::<Identity>().into_iter().any(|id| {
             world
                 .get::<Identity>(id)
@@ -918,6 +974,7 @@ mod tests {
         let def = woc_content::dungeon("mirefen_barrow").unwrap();
         assert_eq!(t.x, def.entrance_x);
         assert_eq!(t.z, def.entrance_z);
+        assert_ne!((t.x, t.z), (MIREFEN.player_spawn_x, MIREFEN.player_spawn_z));
         assert!(living_instance_loot(&world, &key, "barrow_hag").is_empty());
     }
 }

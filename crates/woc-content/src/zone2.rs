@@ -1,6 +1,6 @@
 //! Zone 2 / 3 spawn layouts — absolute strip coordinates (Fenbridge / Highwatch).
 
-use crate::zone1::{MobSpot, NpcSpot, ZoneLayout};
+use crate::zone1::{mob, NpcSpot, ZoneLayout};
 
 /// Eastfen Marsh alias layout — Fenbridge hub (upstream mirefen_marsh).
 pub static EASTFEN: ZoneLayout = ZoneLayout {
@@ -26,56 +26,16 @@ pub static EASTFEN: ZoneLayout = ZoneLayout {
     ],
     mobs: &[
         // Prowler Reeds ~(-40, 230).
-        MobSpot {
-            mob_id: "fen_crawler",
-            x: -40.0,
-            z: 230.0,
-        },
-        MobSpot {
-            mob_id: "fen_crawler",
-            x: -35.0,
-            z: 235.0,
-        },
-        MobSpot {
-            mob_id: "fen_crawler",
-            x: 35.0,
-            z: 225.0,
-        },
-        MobSpot {
-            mob_id: "fen_crawler",
-            x: 30.0,
-            z: 228.0,
-        },
-        MobSpot {
-            mob_id: "mire_toad",
-            x: -82.0,
-            z: 273.0,
-        },
-        MobSpot {
-            mob_id: "mire_toad",
-            x: -120.0,
-            z: 350.0,
-        },
-        MobSpot {
-            mob_id: "mire_toad",
-            x: -110.0,
-            z: 310.0,
-        },
-        MobSpot {
-            mob_id: "bog_wisp",
-            x: 70.0,
-            z: 300.0,
-        },
-        MobSpot {
-            mob_id: "bog_wisp",
-            x: 95.0,
-            z: 340.0,
-        },
-        MobSpot {
-            mob_id: "bog_wisp",
-            x: 80.0,
-            z: 315.0,
-        },
+        mob("fen_crawler", -40.0, 230.0),
+        mob("fen_crawler", -35.0, 235.0),
+        mob("fen_crawler", 35.0, 225.0),
+        mob("fen_crawler", 30.0, 228.0),
+        mob("mire_toad", -82.0, 273.0),
+        mob("mire_toad", -120.0, 350.0),
+        mob("mire_toad", -110.0, 310.0),
+        mob("bog_wisp", 70.0, 300.0),
+        mob("bog_wisp", 95.0, 340.0),
+        mob("bog_wisp", 80.0, 315.0),
     ],
 };
 
@@ -97,35 +57,11 @@ pub static MIREFEN: ZoneLayout = ZoneLayout {
         },
     ],
     mobs: &[
-        MobSpot {
-            mob_id: "mire_toad",
-            x: 90.0,
-            z: 420.0,
-        },
-        MobSpot {
-            mob_id: "mire_toad",
-            x: 115.0,
-            z: 450.0,
-        },
-        MobSpot {
-            mob_id: "fen_crawler",
-            x: -80.0,
-            z: 420.0,
-        },
-        MobSpot {
-            mob_id: "fen_crawler",
-            x: -105.0,
-            z: 455.0,
-        },
-        MobSpot {
-            mob_id: "bog_wisp",
-            x: 15.0,
-            z: 470.0,
-        },
-        MobSpot {
-            mob_id: "mire_terror",
-            x: 149.5,
-            z: 295.0,
-        },
+        mob("mire_toad", 90.0, 420.0),
+        mob("mire_toad", 115.0, 450.0),
+        mob("fen_crawler", -80.0, 420.0),
+        mob("fen_crawler", -105.0, 455.0),
+        mob("bog_wisp", 15.0, 470.0),
+        mob("mire_terror", 149.5, 295.0),
     ],
 };

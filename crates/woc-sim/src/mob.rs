@@ -33,10 +33,13 @@ pub fn tick_mob_respawns(world: &mut World, dt: f32) {
             .get::<Respawn>(id)
             .map(|r| r.respawn_timer)
             .unwrap_or(0.0);
+        let delay = world.get::<Respawn>(id).map(|r| r.delay_sec).unwrap_or(0.0);
+        if delay <= 0.0 {
+            continue;
+        }
         if timer <= 0.0 {
-            // First observation of death: arm the timer (full duration).
             if let Some(r) = world.get_mut::<Respawn>(id) {
-                r.respawn_timer = MOB_RESPAWN_SEC;
+                r.respawn_timer = delay;
             }
             continue;
         }
@@ -46,6 +49,22 @@ pub fn tick_mob_respawns(world: &mut World, dt: f32) {
         } else if let Some(r) = world.get_mut::<Respawn>(id) {
             r.respawn_timer = remaining;
         }
+    }
+}
+
+fn reset_mob_combat(world: &mut World, id: EntityId) {
+    if let Some(c) = world.get_mut::<Combat>(id) {
+        c.target = None;
+        c.cast = None;
+        c.swing_timer = 0.0;
+        c.ability_cd = 0.0;
+        c.gcd = 0.0;
+    }
+    if let Some(th) = world.get_mut::<Threat>(id) {
+        th.threat.clear();
+    }
+    if let Some(a) = world.get_mut::<Auras>(id) {
+        a.auras.clear();
     }
 }
 
@@ -63,19 +82,7 @@ fn revive_mob(world: &mut World, id: EntityId) {
             t.y = ground_height(t.x, t.z, WORLD_SEED);
         }
     }
-    if let Some(c) = world.get_mut::<Combat>(id) {
-        c.target = None;
-        c.cast = None;
-        c.swing_timer = 0.0;
-        c.ability_cd = 0.0;
-        c.gcd = 0.0;
-    }
-    if let Some(th) = world.get_mut::<Threat>(id) {
-        th.threat.clear();
-    }
-    if let Some(a) = world.get_mut::<Auras>(id) {
-        a.auras.clear();
-    }
+    reset_mob_combat(world, id);
     if let Some(r) = world.get_mut::<Respawn>(id) {
         r.respawn_timer = 0.0;
     }
@@ -131,6 +138,16 @@ fn dist_xz(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
+pub(crate) fn at_home(world: &World, id: EntityId) -> bool {
+    let Some(t) = world.get::<Transform>(id) else {
+        return false;
+    };
+    let Some(home) = world.get::<Home>(id) else {
+        return false;
+    };
+    dist_xz(t.x, t.z, home.home_x, home.home_z) <= 0.2
+}
+
 pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
     if !is_living_mob(world, mob_id) {
         return;
@@ -162,11 +179,9 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
 
     // Leash: too far from home → drop combat and return.
     if d_home > LEASH_RANGE {
-        if let Some(c) = world.get_mut::<Combat>(mob_id) {
-            c.target = None;
-        }
-        if let Some(th) = world.get_mut::<Threat>(mob_id) {
-            th.threat.clear();
+        reset_mob_combat(world, mob_id);
+        if let Some(h) = world.get_mut::<Health>(mob_id) {
+            h.hp = h.hp_max;
         }
         move_toward_home(world, mob_id);
         return;
@@ -176,7 +191,7 @@ pub fn update_mob_ai(world: &mut World, mob_id: EntityId, player_id: EntityId) {
     let current_target = world.get::<Combat>(mob_id).and_then(|c| c.target);
     let stealthed = crate::combat::is_stealthed(world, player_id);
     let can_see = !(stealthed && d_player > MELEE_RANGE);
-    if current_target.is_none() && d_player <= AGGRO_RANGE && can_see {
+    if current_target.is_none() && at_home(world, mob_id) && d_player <= AGGRO_RANGE && can_see {
         if let Some(c) = world.get_mut::<Combat>(mob_id) {
             c.target = Some(player_id);
         }
@@ -222,10 +237,35 @@ fn move_toward_home(world: &mut World, mob_id: EntityId) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::{Combat, Health, Home, Respawn, Threat, Transform};
+    use crate::ecs::components::{Auras, Combat, Health, Home, Respawn, Threat, Transform};
     use crate::types::LEASH_RANGE;
     use woc_content::PlayerClass;
     use woc_protocol::DT;
+
+    #[test]
+    fn young_wolf_delay_matches_template() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        let delay = world.get::<Respawn>(2).unwrap().delay_sec;
+        assert!((delay - 30.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn zero_delay_never_revives() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(r) = world.get_mut::<Respawn>(2) {
+            r.delay_sec = 0.0;
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.alive = false;
+            h.hp = 0.0;
+        }
+        for _ in 0..700 {
+            tick_mob_respawns(&mut world, DT);
+        }
+        assert!(!world.get::<Health>(2).unwrap().alive);
+    }
 
     #[test]
     fn dead_mob_respawns_after_timer() {
@@ -257,6 +297,86 @@ mod tests {
         update_mob_ai(&mut world, 2, 1);
         assert!(world.get::<Transform>(2).unwrap().x > before);
         assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
+    }
+
+    #[test]
+    fn returning_mob_does_not_reaggro_until_home() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hero", PlayerClass::Warrior, 2.0, 0.0);
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        // Place the wolf inside leash, not at Home, with no target.
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 10.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = None;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert!(
+            world.get::<Combat>(2).unwrap().target.is_none(),
+            "must not acquire aggro while returning to Home"
+        );
+        // Snap to Home — now it may aggro.
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 0.0;
+            t.z = 0.0;
+            t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+        }
+        update_mob_ai(&mut world, 2, 1);
+        assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
+    }
+
+    #[test]
+    fn leash_restores_hp_and_clears_auras() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Kite",
+            woc_content::PlayerClass::Warrior,
+            80.0,
+            0.0,
+        );
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 5.0;
+        }
+        if let Some(a) = world.get_mut::<Auras>(2) {
+            a.auras.push(crate::ecs::components::AuraInstance {
+                id: "rend".into(),
+                remaining: 9.0,
+                stacks: 1,
+                tick_timer: 3.0,
+                tick_interval: 3.0,
+                tick_damage: 4.0,
+                tick_heal: 0.0,
+                source: 1,
+                stun: false,
+                move_mult: 1.0,
+                absorb: 0.0,
+                breaks_on_damage: false,
+                damage_mult: 1.0,
+                thorns: 0.0,
+                armor_flat: 0.0,
+            });
+        }
+        if let Some(c) = world.get_mut::<Combat>(2) {
+            c.target = Some(1);
+        }
+        if let Some(t) = world.get_mut::<Transform>(2) {
+            t.x = 80.0;
+        }
+        update_mob_ai(&mut world, 2, 1);
+        let h = world.get::<Health>(2).unwrap();
+        assert!(
+            (h.hp - h.hp_max).abs() < 0.1,
+            "leash must heal, hp={}",
+            h.hp
+        );
+        assert!(world.get::<Combat>(2).unwrap().target.is_none());
+        assert!(world.get::<Auras>(2).unwrap().auras.is_empty());
     }
 
     #[test]
@@ -322,7 +442,7 @@ mod tests {
         crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 0.0, 0.0).unwrap();
         crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 4.0, 0.0).unwrap();
         if let Some(t) = world.get_mut::<Transform>(2) {
-            t.x = 2.0;
+            t.x = 0.0;
             t.z = 0.0;
             t.y = crate::ecs::spawn::ground_at(t.x, t.z);
         }
@@ -420,7 +540,8 @@ mod tests {
         update_mob_ai(&mut world, 2, 1);
         assert_eq!(world.get::<Combat>(2).unwrap().target, Some(1));
         let mut events = Vec::new();
-        crate::combat::update_mob_combat(2, 1, &mut world, &mut events);
+        let mut rng = crate::rng::Rng::new(1);
+        crate::combat::update_mob_combat(2, 1, &mut world, &mut rng, &mut events);
         assert!(
             !world
                 .get::<crate::ecs::components::ClassKit>(1)
