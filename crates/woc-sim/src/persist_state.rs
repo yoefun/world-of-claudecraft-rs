@@ -265,8 +265,15 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     } else {
         state.zone_id.clone()
     };
+    let mut pos_x = state.pos_x;
+    let mut pos_z = state.pos_z;
     if zone_id.starts_with("instance:") || zone_id.starts_with("delve:") {
-        zone_id = "eastbrook".into();
+        let (parent, entrance) = eject_instance_zone(&zone_id);
+        zone_id = parent;
+        if let Some((x, z)) = entrance {
+            pos_x = x;
+            pos_z = z;
+        }
     }
     if let Some(i) = world.get_mut::<Identity>(player_id) {
         i.zone_id = zone_id;
@@ -288,10 +295,10 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
         bank.bank = pad_slots(state.bank.clone(), BANK_SLOTS);
         bank.bank_copper = state.bank_copper;
     }
-    let y = crate::ecs::spawn::ground_at(state.pos_x, state.pos_z);
+    let y = crate::ecs::spawn::ground_at(pos_x, pos_z);
     if let Some(t) = world.get_mut::<Transform>(player_id) {
-        t.x = state.pos_x;
-        t.z = state.pos_z;
+        t.x = pos_x;
+        t.z = pos_z;
         t.y = y;
     }
     if let Some(s) = world.get_mut::<Spirit>(player_id) {
@@ -357,6 +364,31 @@ fn pad_slots(mut slots: Vec<Option<InvStack>>, size: usize) -> Vec<Option<InvSta
 
 fn default_hearth_zone_id() -> String {
     "eastbrook".into()
+}
+
+fn eject_instance_zone(zone_id: &str) -> (String, Option<(f32, f32)>) {
+    let content_id = zone_id
+        .split(':')
+        .nth(1)
+        .unwrap_or(zone_id);
+    let content_id = crate::instances::dungeon_id_from_instance(content_id);
+    if let Some(def) = woc_content::dungeon(content_id) {
+        return (canonical_parent_zone(def.zone_id), Some((def.entrance_x, def.entrance_z)));
+    }
+    if let Some(def) = woc_content::delve(content_id) {
+        return (canonical_parent_zone(def.zone_id), Some((def.entrance_x, def.entrance_z)));
+    }
+    ("eastbrook".into(), None)
+}
+
+fn canonical_parent_zone(zone_id: &str) -> String {
+    match zone_id {
+        "eastbrook" | "eastbrook_vale" => "eastbrook".into(),
+        "mirefen" => "mirefen".into(),
+        "eastfen" | "fenbridge" | "mirefen_marsh" => "eastfen".into(),
+        "thornpeak" | "thornpeak_heights" | "highwatch" => "thornpeak".into(),
+        other => other.to_string(),
+    }
 }
 
 /// Spawn a player from class + durable state into `world`.
@@ -573,6 +605,28 @@ mod tests {
         assert!(r.known.contains("brown_pony"));
         assert_eq!(r.last_id.as_deref(), Some("brown_pony"));
         assert!(r.active_id.is_none(), "load starts dismounted");
+    }
+
+    #[test]
+    fn apply_barrow_zone_ejects_to_mirefen_entrance() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
+        let mut state = crate::persist_state::export_player_state(&world, 1).unwrap();
+        state.zone_id = "instance:mirefen_barrow".into();
+        state.pos_x = 40.0;
+        state.pos_z = 445.0;
+        state.level = 3;
+        state.xp = 10;
+        crate::persist_state::apply_player_state(&mut world, 1, &state);
+        assert_eq!(world.get::<Identity>(1).unwrap().zone_id, "mirefen");
+        let def = woc_content::dungeon("mirefen_barrow").unwrap();
+        let t = world.get::<Transform>(1).unwrap();
+        assert!((t.x - def.entrance_x).abs() < 1e-3);
+        assert!((t.z - def.entrance_z).abs() < 1e-3);
+        assert!(world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.as_ref())
+            .is_none());
     }
 
     #[test]
