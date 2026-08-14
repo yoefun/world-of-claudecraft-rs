@@ -206,17 +206,27 @@ pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<S
         return false;
     };
     let dungeon_id = dungeon_id_from_instance(&instance_id);
-    let Some(def) = dungeon(dungeon_id) else {
-        return false;
-    };
-
-    if !crate::zones::load_overworld_zone_at(
-        world,
-        player_id,
-        def.zone_id,
-        def.entrance_x,
-        def.entrance_z,
-    ) {
+    if let Some(def) = dungeon(dungeon_id) {
+        if !crate::zones::load_overworld_zone_at(
+            world,
+            player_id,
+            def.zone_id,
+            def.entrance_x,
+            def.entrance_z,
+        ) {
+            return false;
+        }
+    } else if let Some(def) = woc_content::delve(dungeon_id) {
+        if !crate::zones::load_overworld_zone_at(
+            world,
+            player_id,
+            def.zone_id,
+            def.entrance_x,
+            def.entrance_z,
+        ) {
+            return false;
+        }
+    } else {
         return false;
     }
 
