@@ -25,7 +25,8 @@
 | **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
 | **1.16.0** (shipped) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
 | **1.17.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
-| **1.18.0** (this branch) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
+| **1.18.0** (shipped) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
+| **1.19.0** (this branch) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
 
 ## Completion program (closed)
 
@@ -54,6 +55,13 @@ Four hub factions on a player `Reputation` column. Quest and kill grants; Friend
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-depth.md`](superpowers/plans/2026-08-13-gear-depth.md)
 
 Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two-hand and ranged weapons occupy the off-hand. Neck + one Finger. Stamina and spell power are sim-authoritative. Gear-depth shipped as `1.12.0` because `1.9.0` was taken by quest-loop. Durability/repair is in shipped NPC services.
+
+## Guilds (this branch as `1.16.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-guilds-design.md`](superpowers/specs/2026-08-13-guilds-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-guilds.md`](superpowers/plans/2026-08-13-guilds.md)
+
+`GuildRoster` on `Sim`, keyed by durable character id (like mail). Parties stay ephemeral. Protocol rev **9**. Guild bank, calendar, friends/ignore stay out of scope.
 
 ## Gear slots (shipped as `1.13.0`)
 

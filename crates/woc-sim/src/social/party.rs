@@ -806,7 +806,9 @@ mod tests {
             PartyEffect::Notice { message } if message == "Bob declined the invite."
         )));
         let effects = roster.accept(2, &world);
-        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You have no pending party invite."));
+        assert!(
+            matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You have no pending party invite.")
+        );
     }
 
     #[test]
@@ -816,7 +818,9 @@ mod tests {
         let _ = roster.invite(1, "Bob", &world, 10);
         roster.expire_invites(10 + INVITE_TTL_TICKS);
         let effects = roster.accept(2, &world);
-        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You have no pending party invite."));
+        assert!(
+            matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You have no pending party invite.")
+        );
     }
 
     #[test]
@@ -827,7 +831,9 @@ mod tests {
         let _ = roster.invite(1, "Carol", &world, 0);
         let _ = roster.accept(3, &world);
         let effects = roster.kick(2, "Carol", &world);
-        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You are not the party leader."));
+        assert!(
+            matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You are not the party leader.")
+        );
         let effects = roster.kick(1, "Carol", &world);
         assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Carol was removed from the party.")));
         assert_eq!(roster.members_of(1).unwrap().len(), 2);
@@ -840,7 +846,9 @@ mod tests {
         let mut roster = PartyRoster::new();
         form_party(&mut roster, &world, 1, 2);
         let effects = roster.promote(1, "Bob", &world);
-        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Bob is now the leader.")));
+        assert!(effects.iter().any(
+            |e| matches!(e, PartyEffect::Notice { message } if message == "Bob is now the leader.")
+        ));
         assert_eq!(roster.leader_of(1), Some(2));
         assert!(roster.set_loot_mode(1, crate::social::loot::LootMode::NeedGreed) == false);
         assert!(roster.set_loot_mode(2, crate::social::loot::LootMode::NeedGreed));
@@ -852,7 +860,9 @@ mod tests {
         let mut roster = PartyRoster::new();
         form_party(&mut roster, &world, 1, 2);
         let effects = roster.disband(1);
-        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Update { members } if members.is_empty())));
+        assert!(effects
+            .iter()
+            .any(|e| matches!(e, PartyEffect::Update { members } if members.is_empty())));
         assert!(roster.party_id(1).is_none());
         assert!(roster.party_id(2).is_none());
     }
@@ -865,7 +875,9 @@ mod tests {
         let _ = roster.ready_check(1, 0);
         let _ = roster.ready_respond(1, true, &world, &[1, 2]);
         let effects = roster.ready_respond(2, true, &world, &[1, 2]);
-        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Everyone is ready.")));
+        assert!(effects.iter().any(
+            |e| matches!(e, PartyEffect::Notice { message } if message == "Everyone is ready.")
+        ));
     }
 
     #[test]
@@ -890,17 +902,23 @@ mod tests {
             let _ = roster.accept(other, &world);
         }
         let effects = roster.convert_to_raid(1);
-        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Converted to a raid.")));
+        assert!(effects.iter().any(
+            |e| matches!(e, PartyEffect::Notice { message } if message == "Converted to a raid.")
+        ));
         assert_eq!(roster.kind_of(1), Some(GroupKind::Raid));
         let _ = roster.invite(1, "Frank", &world, 0);
         let _ = roster.accept(6, &world);
         assert_eq!(roster.members_of(1).unwrap().len(), 6);
         assert_eq!(roster.raid_group_of(6), 1);
         let effects = roster.convert_to_party(1);
-        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "Too many members to convert to a party."));
+        assert!(
+            matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "Too many members to convert to a party.")
+        );
         let _ = roster.leave(6);
         let effects = roster.convert_to_party(1);
-        assert!(effects.iter().any(|e| matches!(e, PartyEffect::Notice { message } if message == "Converted to a party.")));
+        assert!(effects.iter().any(
+            |e| matches!(e, PartyEffect::Notice { message } if message == "Converted to a party.")
+        ));
     }
 
     #[test]
@@ -909,6 +927,8 @@ mod tests {
         let mut roster = PartyRoster::new();
         form_party(&mut roster, &world, 1, 2);
         let effects = roster.convert_to_raid(1);
-        assert!(matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You need a full party of 5 to convert to a raid."));
+        assert!(
+            matches!(effects.as_slice(), [PartyEffect::Error { message }] if message == "You need a full party of 5 to convert to a raid.")
+        );
     }
 }

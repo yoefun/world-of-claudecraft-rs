@@ -15,10 +15,11 @@ pub type EntityId = u32;
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
 /// Rev 8: quest abandon/share, optional turn-in reward choice. Additive
 /// reputation snapshot / vendor discount_pct / ReputationChanged;
-/// `finger2` / `main_hand_enchant` / stack `enchant_id`; gear-more slots;
-/// auction bid/bound fields.
-/// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs.
-pub const PROTOCOL_REV: u32 = 9;
+/// `finger2` / `main_hand_enchant` / stack `enchant_id`; gear-more slots
+/// (`off_hand_enchant`, stack `quality`); auction bid/bound fields.
+/// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs (1.18.0).
+/// Rev 10: guild snapshot / invite + guild client verbs (1.19.0).
+pub const PROTOCOL_REV: u32 = 10;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -678,6 +679,12 @@ pub struct TickSnapshot {
     /// Derived spell power from gear and stats.
     #[serde(default)]
     pub spell_power: f32,
+    /// Guild roster for the viewing player, if any.
+    #[serde(default)]
+    pub guild: Option<GuildSnapshot>,
+    /// Pending guild invite for the viewing player, if any.
+    #[serde(default)]
+    pub guild_invite: Option<GuildInviteSnapshot>,
     /// Per-faction standing for the local player (all known factions).
     #[serde(default)]
     pub reputation: Vec<ReputationSnapshot>,
@@ -752,6 +759,32 @@ pub struct MailSnapshot {
     pub quality: Option<String>,
     #[serde(default)]
     pub bound: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildMemberSnapshot {
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+    pub rank: String,
+    pub online: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildSnapshot {
+    pub id: u32,
+    pub name: String,
+    pub rank: String,
+    pub motd: String,
+    pub motd_set_by: String,
+    #[serde(default)]
+    pub members: Vec<GuildMemberSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct GuildInviteSnapshot {
+    pub from_name: String,
+    pub guild_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -856,6 +889,8 @@ impl Default for TickSnapshot {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            guild: None,
+            guild_invite: None,
             reputation: Vec::new(),
         }
     }
@@ -1106,6 +1141,29 @@ pub enum WsClientMsg {
     },
     ConvertToRaid,
     ConvertToParty,
+    GuildCreate {
+        name: String,
+    },
+    GuildInvite {
+        name: String,
+    },
+    GuildAccept,
+    GuildDecline,
+    GuildLeave,
+    GuildKick {
+        name: String,
+    },
+    GuildSetRank {
+        name: String,
+        rank: String,
+    },
+    GuildTransferLeader {
+        name: String,
+    },
+    GuildDisband,
+    GuildSetMotd {
+        text: String,
+    },
     Chat {
         channel: String,
         text: String,
@@ -1390,6 +1448,8 @@ mod tests {
             attack_power: 0.0,
             armor: 0.0,
             spell_power: 0.0,
+            guild: None,
+            guild_invite: None,
             reputation: Vec::new(),
         };
         let s = serde_json::to_string(&snap).unwrap();
@@ -1431,7 +1491,7 @@ mod tests {
         assert!(snap.party_kind.is_empty());
         assert!(snap.party_leader_id.is_none());
         assert!(snap.ready_check.is_none());
-        assert_eq!(PROTOCOL_REV, 9);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
@@ -1739,7 +1799,7 @@ mod tests {
         assert!(slot.enchant_id.is_none());
         assert!(!slot.bound);
         assert!(slot.quality.is_none());
-        assert_eq!(PROTOCOL_REV, 9);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
@@ -1771,7 +1831,7 @@ mod tests {
         assert!(!session.can_auction);
         assert!(!session.can_bank);
         assert!(!session.can_mail);
-        assert_eq!(PROTOCOL_REV, 9);
+        assert_eq!(PROTOCOL_REV, 10);
 
         let list: InteractAction =
             serde_json::from_str(r#"{"type":"market_list","bag_slot":0,"count":1,"price":12}"#)
@@ -1786,6 +1846,47 @@ mod tests {
                 duration_hours: 0,
             }
         );
+    }
+
+    #[test]
+    fn protocol_rev_is_ten() {
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn guild_snapshot_defaults_when_omitted() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0}}"#,
+        )
+        .unwrap();
+        assert!(snap.guild.is_none());
+        assert!(snap.guild_invite.is_none());
+    }
+
+    #[test]
+    fn guild_ws_client_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::GuildCreate {
+                name: "Vale Watch".into(),
+            },
+            WsClientMsg::GuildInvite { name: "Bob".into() },
+            WsClientMsg::GuildAccept,
+            WsClientMsg::GuildDecline,
+            WsClientMsg::GuildLeave,
+            WsClientMsg::GuildKick { name: "Bob".into() },
+            WsClientMsg::GuildSetRank {
+                name: "Bob".into(),
+                rank: "officer".into(),
+            },
+            WsClientMsg::GuildTransferLeader { name: "Bob".into() },
+            WsClientMsg::GuildDisband,
+            WsClientMsg::GuildSetMotd { text: "hi".into() },
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
     }
 
     #[test]
@@ -1829,7 +1930,7 @@ mod tests {
         assert_eq!(snap.spell_power, 0.0);
         assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
-        assert_eq!(PROTOCOL_REV, 9);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]

@@ -22,7 +22,7 @@ use uuid::Uuid;
 use woc_protocol::{
     EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg, WsServerMsg,
 };
-use woc_sim::Sim;
+use woc_sim::{GuildDelivery, Sim};
 use woc_version::{footer, VersionInfo};
 
 fn main() {
@@ -285,6 +285,60 @@ impl GameHost {
                             self.recent_toasts.push((text, 4.0));
                         }
                     }
+                }
+            }
+            PlayMode::Online => {
+                if let Some(tx) = &self.to_net {
+                    let _ = tx.send(msg);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn guild_msg(&mut self, msg: WsClientMsg) {
+        match self.play_mode {
+            PlayMode::Offline => {
+                if let Some(sim) = self.sim.as_mut() {
+                    let pid = self.snapshot.player_id;
+                    let outs = match &msg {
+                        WsClientMsg::GuildCreate { name } => sim.guild_create(pid, name),
+                        WsClientMsg::GuildInvite { name } => sim.guild_invite(pid, name),
+                        WsClientMsg::GuildAccept => sim.guild_accept(pid),
+                        WsClientMsg::GuildDecline => sim.guild_decline(pid),
+                        WsClientMsg::GuildLeave => sim.guild_leave(pid),
+                        WsClientMsg::GuildKick { name } => sim.guild_kick(pid, name),
+                        WsClientMsg::GuildSetRank { name, rank } => {
+                            sim.guild_set_rank(pid, name, rank)
+                        }
+                        WsClientMsg::GuildTransferLeader { name } => {
+                            sim.guild_transfer_leader(pid, name)
+                        }
+                        WsClientMsg::GuildDisband => sim.guild_disband(pid),
+                        WsClientMsg::GuildSetMotd { text } => sim.guild_set_motd(pid, text),
+                        WsClientMsg::Chat { channel, text } => {
+                            if channel == "guild" || channel == "officer" {
+                                sim.guild_chat(pid, channel, text)
+                            } else {
+                                Vec::new()
+                            }
+                        }
+                        _ => Vec::new(),
+                    };
+                    for d in outs {
+                        let chat = match d {
+                            GuildDelivery::To { msg, .. } | GuildDelivery::Guild { msg, .. } => msg,
+                        };
+                        if let WsServerMsg::Chat {
+                            channel,
+                            from,
+                            text,
+                        } = chat
+                        {
+                            self.recent_toasts
+                                .push((format!("[{channel}] {from}: {text}"), 4.0));
+                        }
+                    }
+                    self.snapshot = sim.snapshot_for_player(pid);
                 }
             }
             PlayMode::Online => {
