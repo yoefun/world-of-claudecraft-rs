@@ -1,20 +1,20 @@
 # Changelog
 
-## 1.15.0 — 2026-08-13
+## 1.18.0 — 2026-08-14
 
 ### Added
 
-- **1.15.0 `raid`:** Convert a full 5-man party into a 10-player raid of two groups.
+- **1.18.0 `raid`:** Convert a full 5-man party into a 10-player raid of two groups.
 - Leader **Equals** converts party → raid (`Converted to a raid.`); convert back when size ≤ 5 (`Too many members to convert to a party.` at 6+).
 - `MAX_RAID_SIZE` **10**; `MAX_REALM_PLAYERS` **10**.
 - `raid` chat channel (error `You are not in a raid.` when not in a raid).
 - Client frames prefix other members with **G1** / **G2** (`raid_group + 1`). Local player still omitted.
 
-## 1.14.0 — 2026-08-13
+## 1.17.0 — 2026-08-14
 
 ### Added
 
-- **1.14.0 `party-depth`:** Playable 5-man parties in the Bevy client.
+- **1.17.0 `party-depth`:** Playable 5-man parties in the Bevy client.
 - Client **G** invite (player target), **O** accept / **P** decline, **P** party panel, snapshot frames with HP.
 - Leader kick / promote / disband (panel **Y** / **-** / **Backspace**); **X** leave; **R** ready check.
 - Invite TTL **600** ticks (pending dropped silently).
@@ -22,7 +22,35 @@
 - Park-safe membership: `park_player` keeps the roster; resume restores the same party.
 - Classic-era `group_xp` split (2-man = 75% each).
 - Ready check (300 ticks; parked members do not block early complete).
-- Protocol rev **9** (roster snapshot fields + kick/promote/disband/ready/raid-convert verbs). Raid convert stays planned for `1.15.0`.
+- Protocol rev **9** (roster snapshot fields + kick/promote/disband/ready/raid-convert verbs).
+
+## 1.16.0 — 2026-08-13
+
+### Added
+
+- **1.16.0 `economy-depth`:** Auctioneer Lise, instance-preserving listings, 5% house cut, mail-always proceeds.
+- Auction bids, 12/24/48 hour listings, client search/pagination, soulbound, banker and mailbox NPCs.
+- Bid copper is held; outbid mail returns it. Expire with a bid mails `"Auction won"` and sale proceeds. Buyout still instant.
+- Weapons/armor bind on equip; quest items bind on pickup. Bound stacks cannot list or mail.
+- Eastbrook Banker Holme and Eastbrook Post gate **K** / **I** actions. Protocol rev stays **8**.
+
+## 1.15.0 — 2026-08-13
+
+### Added
+
+- **1.15.0 `gear-more`:** Extra doll slots (Shoulder, Back, Wrist, Hands, Waist, Trinket + Trinket2).
+- Hunter dual-wield (with Warrior/Rogue). Worn Hatchet at Wilkes; Hunter can equip copper shortsword.
+- Off-hand weapon enchants: second oil applies to OH at full AP/SP; C-sheet Off line shows `[enchant]`.
+- Instance loot quality on Weapon/Armor piles (`max(catalog, roll)`); persist roundtrips stack quality.
+- Protocol rev stays **8** (additive extra slots, `off_hand_enchant`, per-stack `quality`).
+
+## 1.14.0 — 2026-08-13
+
+### Added
+
+- **1.14.0 `reputation`:** four hub factions (Eastbrook Watch, Eastfen Circle, Mirefen Ferry, Highwatch) with a Neutral→Exalted ladder on a player `Reputation` column.
+- Quest turn-in and mob kills grant standing (party-shared on kills). Friendly+ vendor discounts; Unfriendly vendors refuse trade.
+- Wilkes sells `watch_signet` at Friendly Watch. Character sheet **C** lists standing. Additive on protocol rev **8**.
 
 ## 1.13.0 — 2026-08-13
 

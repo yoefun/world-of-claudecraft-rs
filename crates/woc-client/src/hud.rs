@@ -102,6 +102,30 @@ pub(crate) struct UiFlags {
     pub(crate) show_market: bool,
     pub(crate) show_map: bool,
     pub(crate) show_party: bool,
+    pub(crate) market_filter: String,
+    pub(crate) market_page: usize,
+    pub(crate) market_duration_hours: u32,
+    pub(crate) market_searching: bool,
+}
+
+impl Default for UiFlags {
+    fn default() -> Self {
+        Self {
+            show_bags: false,
+            show_quests: false,
+            show_character: false,
+            show_talents: false,
+            show_bank: false,
+            show_mail: false,
+            show_market: false,
+            show_map: false,
+            show_party: false,
+            market_filter: String::new(),
+            market_page: 0,
+            market_duration_hours: 12,
+            market_searching: false,
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -110,18 +134,8 @@ pub(crate) struct VendorUiCache {
 }
 
 pub(crate) fn plugin(app: &mut App) {
-    app.insert_resource(UiFlags {
-        show_bags: false,
-        show_quests: false,
-        show_character: false,
-        show_talents: false,
-        show_bank: false,
-        show_mail: false,
-        show_market: false,
-        show_map: false,
-        show_party: false,
-    })
-    .init_resource::<VendorUiCache>();
+    app.insert_resource(UiFlags::default())
+        .init_resource::<VendorUiCache>();
 }
 
 fn npc_session_stock(snap: &TickSnapshot) -> Vec<VendorOfferSnapshot> {
@@ -198,18 +212,66 @@ pub(crate) fn first_consumable_bag_stack(snap: &TickSnapshot) -> Option<(u8, Str
 pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String, u32)> {
     snap.inventory.iter().find_map(|stack| {
         let def = item(&stack.item_id)?;
-        if matches!(def.kind, ItemKind::Junk | ItemKind::Consumable) {
-            let price = def.vendor_sell.max(1).saturating_mul(5);
-            Some((
-                stack.slot,
-                stack.count.min(1).max(1),
-                stack.item_id.clone(),
-                price,
-            ))
-        } else {
-            None
+        if matches!(def.kind, ItemKind::Quest) || stack.bound {
+            return None;
         }
+        let price = def.vendor_sell.max(1).saturating_mul(5);
+        Some((
+            stack.slot,
+            stack.count.min(1).max(1),
+            stack.item_id.clone(),
+            price,
+        ))
     })
+}
+
+pub(crate) const MARKET_PAGE_SIZE: usize = 8;
+
+pub(crate) fn filtered_market<'a>(
+    snap: &'a TickSnapshot,
+    filter: &str,
+) -> Vec<&'a woc_protocol::MarketListingSnapshot> {
+    let needle = filter.trim().to_ascii_lowercase();
+    snap.market
+        .iter()
+        .filter(|listing| {
+            if needle.is_empty() {
+                return true;
+            }
+            let id = listing.item_id.to_ascii_lowercase();
+            let name = item(&listing.item_id)
+                .map(|d| d.name.to_ascii_lowercase())
+                .unwrap_or_default();
+            id.contains(&needle) || name.contains(&needle)
+        })
+        .collect()
+}
+
+pub(crate) fn listing_min_bid(listing: &woc_protocol::MarketListingSnapshot) -> Option<u32> {
+    if listing.start_bid == 0 && listing.current_bid == 0 {
+        return None;
+    }
+    if listing.bidder.is_none() {
+        return Some(listing.start_bid.max(1));
+    }
+    Some(
+        listing
+            .current_bid
+            .saturating_add((listing.current_bid / 20).max(1)),
+    )
+}
+
+pub(crate) fn cycle_duration_hours(hours: u32, next: bool) -> u32 {
+    match (hours, next) {
+        (12, true) | (0, true) => 24,
+        (24, true) => 48,
+        (48, true) => 12,
+        (12, false) | (0, false) => 48,
+        (24, false) => 12,
+        (48, false) => 24,
+        (_, true) => 24,
+        (_, false) => 12,
+    }
 }
 
 fn zone_name(snap: &TickSnapshot) -> &str {
@@ -241,16 +303,49 @@ pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
         .map(|npc| npc.can_repair)
         .unwrap_or(false)
     {
-        parts.push("[R] Repair");
+        parts.push("[R] Repair".into());
     }
-    parts.push("[H] Hearthstone");
+    parts.push("[H] Hearthstone".into());
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.discount_pct > 0)
+        .unwrap_or(false)
+    {
+        let pct = snap.open_npc.as_ref().map(|n| n.discount_pct).unwrap_or(0);
+        parts.push(format!("[{pct}% off]"));
+    }
     if snap
         .open_npc
         .as_ref()
         .map(|npc| !npc.train_professions.is_empty())
         .unwrap_or(false)
     {
-        parts.push("[T] Train");
+        parts.push("[T] Train".into());
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_auction)
+        .unwrap_or(false)
+    {
+        parts.push("[U] Auction".into());
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_bank)
+        .unwrap_or(false)
+    {
+        parts.push("[K] Bank".into());
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_mail)
+        .unwrap_or(false)
+    {
+        parts.push("[I] Mail".into());
     }
     parts.join("   ")
 }
@@ -272,31 +367,77 @@ fn bag_stack_label(item_id: &str, count: u32, durability: Option<u32>) -> String
     format!("{count}×{item_id}")
 }
 
-fn equipment_label(item_id: Option<&str>, durability: Option<u32>) -> String {
+fn quality_prefix(instance: Option<&str>, item_id: Option<&str>) -> &'static str {
+    let q = instance
+        .and_then(ItemQuality::parse)
+        .or_else(|| item_id.and_then(item).map(|d| d.quality));
+    match q {
+        Some(ItemQuality::Uncommon) => "Uncommon ",
+        Some(ItemQuality::Rare) => "Rare ",
+        Some(ItemQuality::Poor) => "Poor ",
+        _ => "",
+    }
+}
+
+fn equipment_label(
+    item_id: Option<&str>,
+    durability: Option<u32>,
+    instance_quality: Option<&str>,
+) -> String {
     match item_id {
         Some(id) => {
             let base = gear_durability_text(id, durability)
                 .or_else(|| item(id).map(|d| d.name.to_string()))
                 .unwrap_or_else(|| id.to_string());
-            match item(id).map(|d| d.quality) {
-                Some(ItemQuality::Uncommon) => format!("Uncommon {base}"),
-                Some(ItemQuality::Rare) => format!("Rare {base}"),
-                Some(ItemQuality::Poor) => format!("Poor {base}"),
-                _ => base,
-            }
+            format!("{}{base}", quality_prefix(instance_quality, Some(id)))
         }
         None => "—".into(),
     }
 }
 
-fn main_hand_label(eq: &woc_protocol::EquipmentSnapshot) -> String {
-    let mut label = equipment_label(eq.main_hand.as_deref(), eq.main_hand_durability);
-    if let Some(eid) = eq.main_hand_enchant.as_deref() {
+fn weapon_label(
+    item_id: Option<&str>,
+    durability: Option<u32>,
+    instance_quality: Option<&str>,
+    enchant_id: Option<&str>,
+) -> String {
+    let mut label = equipment_label(item_id, durability, instance_quality);
+    if let Some(eid) = enchant_id {
         if let Some(def) = enchant(eid) {
             label = format!("{label} [{}]", def.name);
         }
     }
     label
+}
+
+fn standing_display(standing: &str) -> &str {
+    match standing {
+        "hated" => "Hated",
+        "hostile" => "Hostile",
+        "unfriendly" => "Unfriendly",
+        "neutral" => "Neutral",
+        "friendly" => "Friendly",
+        "honored" => "Honored",
+        "revered" => "Revered",
+        "exalted" => "Exalted",
+        other => other,
+    }
+}
+
+fn reputation_block(snap: &TickSnapshot) -> String {
+    if snap.reputation.is_empty() {
+        return "Reputation: —".into();
+    }
+    let mut lines = vec!["Reputation:".to_string()];
+    for row in &snap.reputation {
+        lines.push(format!(
+            "  {}  {} ({})",
+            row.name,
+            standing_display(&row.standing),
+            row.value
+        ));
+    }
+    lines.join("\n")
 }
 
 fn talent_panel_text(snap: &TickSnapshot) -> String {
@@ -501,7 +642,21 @@ fn mail_panel_text(snap: &TickSnapshot) -> String {
     lines.join("\n")
 }
 
-fn market_panel_text(snap: &TickSnapshot) -> String {
+fn market_panel_text(snap: &TickSnapshot, ui: &UiFlags) -> String {
+    let filtered = filtered_market(snap, &ui.market_filter);
+    let pages = filtered.len().div_ceil(MARKET_PAGE_SIZE).max(1);
+    let page = ui.market_page.min(pages.saturating_sub(1));
+    let start = page * MARKET_PAGE_SIZE;
+    let page_rows = filtered
+        .get(start..filtered.len().min(start + MARKET_PAGE_SIZE))
+        .unwrap_or(&[]);
+    let search = if ui.market_searching {
+        format!("Search> {}_", ui.market_filter)
+    } else if ui.market_filter.is_empty() {
+        "Filter: (all)   [/] search".into()
+    } else {
+        format!("Filter: {}   [/] search  [Esc] clear", ui.market_filter)
+    };
     let mut lines = vec![
         "Market [U]".to_string(),
         format!(
@@ -510,26 +665,38 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
             snap.progress.copper,
             snap.honor
         ),
+        format!(
+            "{search}   page {}/{}   duration {}h",
+            page + 1,
+            pages,
+            ui.market_duration_hours
+        ),
     ];
-    if snap.market.is_empty() {
+    if page_rows.is_empty() {
         lines.push("  (no listings)".into());
     } else {
-        lines.extend(snap.market.iter().map(|listing| {
-            let mine = if listing.mine { " [yours]" } else { "" };
-            format!(
-                "  #{} {}×{} — {}c ({}){mine}",
-                listing.id, listing.count, listing.item_id, listing.price, listing.seller
-            )
-        }));
+        lines.extend(page_rows.iter().copied().map(listing_line));
     }
     match first_listable_bag_stack(snap) {
         Some((_, _, item_id, price)) => {
-            lines.push(format!("[L] List 1×{item_id} for {price}c (+5c fee)"));
+            let name = item(&item_id)
+                .map(|d| d.name.to_string())
+                .unwrap_or(item_id);
+            let fee = match ui.market_duration_hours {
+                24 => 10,
+                48 => 20,
+                _ => 5,
+            };
+            let start_bid = (price / 2).max(1);
+            lines.push(format!(
+                "[L] List 1×{name} bid {start_bid}c buyout {price}c (+{fee}c {}h fee)",
+                ui.market_duration_hours
+            ));
         }
-        None => lines.push("[L] List first junk/consumable (none)".into()),
+        None => lines.push("[L] List first non-quest bag stack (none)".into()),
     }
-    lines.push("[O] Buy first affordable listing (not yours)".into());
-    lines.push("[X] Cancel your first listing".into());
+    lines.push("[O] Buyout first affordable   [B] Bid first filtered".into());
+    lines.push("[X] Cancel   [,][.] duration   [[][]] page".into());
     lines.join("\n")
 }
 
@@ -582,6 +749,37 @@ pub(crate) fn party_panel_text(snap: &TickSnapshot) -> String {
     lines.join("\n")
 }
 
+fn listing_line(listing: &woc_protocol::MarketListingSnapshot) -> String {
+    let mine = if listing.mine { " [yours]" } else { "" };
+    let name = item(&listing.item_id)
+        .map(|d| d.name.to_string())
+        .unwrap_or_else(|| listing.item_id.clone());
+    let mut extra = String::new();
+    if let Some(def) = item(&listing.item_id) {
+        if def.max_durability > 0 {
+            let dur = listing.durability.unwrap_or(def.max_durability);
+            extra.push_str(&format!(" {dur}/{}", def.max_durability));
+        }
+    }
+    if let Some(eid) = listing.enchant_id.as_deref() {
+        if let Some(edef) = enchant(eid) {
+            extra.push_str(&format!(" [{}]", edef.name));
+        }
+    }
+    let bid_bit = if listing.start_bid == 0 && listing.current_bid == 0 {
+        String::new()
+    } else if listing.current_bid > 0 {
+        let who = listing.bidder.as_deref().unwrap_or("?");
+        format!(" bid {}c ({who})", listing.current_bid)
+    } else {
+        format!(" start {}c", listing.start_bid)
+    };
+    format!(
+        "  #{} {}×{name}{extra} — buyout {}c{} ({}){mine}",
+        listing.id, listing.count, listing.price, bid_bit, listing.seller
+    )
+}
+
 pub(crate) fn update_chrome_panels(
     host: Res<GameHost>,
     ui: Res<UiFlags>,
@@ -606,7 +804,7 @@ pub(crate) fn update_chrome_panels(
             ChromePanelKind::Talents => talent_panel_text(&host.snapshot),
             ChromePanelKind::Bank => bank_panel_text(&host.snapshot),
             ChromePanelKind::Mail => mail_panel_text(&host.snapshot),
-            ChromePanelKind::Market => market_panel_text(&host.snapshot),
+            ChromePanelKind::Market => market_panel_text(&host.snapshot, &ui),
         };
     }
 }
@@ -905,25 +1103,47 @@ pub(crate) fn update_hud(
             snap.progress.class_id.as_str()
         };
         **t = format!(
-            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n[1-9] Unequip slot",
+            "Character\nClass: {class}\nLevel: {}\nXP: {}/{}\nCopper: {}\nTalents: {} pts · {}\nEquipment:\n  Main: {}\n  Off: {}\n  Head: {}\n  Chest: {}\n  Legs: {}\n  Feet: {}\n  Neck: {}\n  Finger: {}\n  Finger2: {}\n  Shoulder: {}\n  Back: {}\n  Wrist: {}\n  Hands: {}\n  Waist: {}\n  Trinket: {}\n  Trinket2: {}\nAP: {:.0}   Armor: {:.0}   SP: {:.0}\n{}\n[1-9] Unequip  [0-=[]';] Extra slots",
             snap.progress.level,
             snap.progress.xp,
             snap.progress.xp_to_level,
             snap.progress.copper,
             snap.talent_points,
             talent_bonus_summary(snap),
-            main_hand_label(eq),
-            equipment_label(eq.off_hand.as_deref(), eq.off_hand_durability),
-            equipment_label(eq.head.as_deref(), eq.head_durability),
-            equipment_label(eq.chest.as_deref(), eq.chest_durability),
-            equipment_label(eq.legs.as_deref(), eq.legs_durability),
-            equipment_label(eq.feet.as_deref(), eq.feet_durability),
-            equipment_label(eq.neck.as_deref(), None),
-            equipment_label(eq.finger.as_deref(), None),
-            equipment_label(eq.finger2.as_deref(), None),
+            weapon_label(
+                eq.main_hand.as_deref(),
+                eq.main_hand_durability,
+                eq.main_hand_quality.as_deref(),
+                eq.main_hand_enchant.as_deref(),
+            ),
+            weapon_label(
+                eq.off_hand.as_deref(),
+                eq.off_hand_durability,
+                eq.off_hand_quality.as_deref(),
+                eq.off_hand_enchant.as_deref(),
+            ),
+            equipment_label(eq.head.as_deref(), eq.head_durability, eq.head_quality.as_deref()),
+            equipment_label(eq.chest.as_deref(), eq.chest_durability, eq.chest_quality.as_deref()),
+            equipment_label(eq.legs.as_deref(), eq.legs_durability, eq.legs_quality.as_deref()),
+            equipment_label(eq.feet.as_deref(), eq.feet_durability, eq.feet_quality.as_deref()),
+            equipment_label(eq.neck.as_deref(), None, eq.neck_quality.as_deref()),
+            equipment_label(eq.finger.as_deref(), None, eq.finger_quality.as_deref()),
+            equipment_label(eq.finger2.as_deref(), None, eq.finger2_quality.as_deref()),
+            equipment_label(
+                eq.shoulder.as_deref(),
+                eq.shoulder_durability,
+                eq.shoulder_quality.as_deref(),
+            ),
+            equipment_label(eq.back.as_deref(), eq.back_durability, eq.back_quality.as_deref()),
+            equipment_label(eq.wrist.as_deref(), eq.wrist_durability, eq.wrist_quality.as_deref()),
+            equipment_label(eq.hands.as_deref(), eq.hands_durability, eq.hands_quality.as_deref()),
+            equipment_label(eq.waist.as_deref(), eq.waist_durability, eq.waist_quality.as_deref()),
+            equipment_label(eq.trinket.as_deref(), None, eq.trinket_quality.as_deref()),
+            equipment_label(eq.trinket2.as_deref(), None, eq.trinket2_quality.as_deref()),
             snap.attack_power,
             snap.armor,
             snap.spell_power,
+            reputation_block(snap),
         );
     }
 
@@ -1292,6 +1512,8 @@ mod tests {
             count: 3,
             durability: None,
             enchant_id: None,
+            quality: None,
+            bound: false,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
@@ -1299,6 +1521,8 @@ mod tests {
             count: 4,
             durability: None,
             enchant_id: None,
+            quality: None,
+            bound: false,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1307,6 +1531,10 @@ mod tests {
             copper: 9,
             item_id: Some("baked_bread".into()),
             item_count: 2,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
         });
         snap.market.push(MarketListingSnapshot {
             id: 11,
@@ -1315,6 +1543,14 @@ mod tests {
             count: 5,
             price: 30,
             mine: false,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            expires_tick: 0,
+            start_bid: 0,
+            current_bid: 0,
+            bidder: None,
+            bound: false,
         });
         snap
     }
@@ -1357,13 +1593,129 @@ mod tests {
 
     #[test]
     fn market_panel_formats_listings_wallet_and_buy_help() {
-        let text = market_panel_text(&chrome_snapshot());
+        let text = market_panel_text(&chrome_snapshot(), &UiFlags::default());
 
         assert!(text.contains("Copper: 75"));
-        assert!(text.contains("#11 5×peacebloom — 30c (Grace)"));
-        assert!(text.contains("[O] Buy first affordable listing"));
+        assert!(text.contains("#11 5×Peacebloom — buyout 30c (Grace)"));
+        assert!(text.contains("[O] Buyout first affordable"));
         assert!(text.contains("[L] List"));
         assert!(text.contains("[X] Cancel"));
+        assert!(text.contains("[B] Bid"));
+        assert!(text.contains("duration 12h"));
+    }
+
+    #[test]
+    fn first_listable_bag_stack_skips_quest_and_allows_weapons() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
+            item_id: "boar_tusk".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "worn_sword".into(),
+            count: 1,
+            durability: Some(7),
+            enchant_id: Some("coarse_sharpening".into()),
+            quality: None,
+            bound: false,
+        });
+        let listed = first_listable_bag_stack(&snap).unwrap();
+        assert_eq!(listed.0, 1);
+        assert_eq!(listed.2, "worn_sword");
+    }
+
+    #[test]
+    fn first_listable_bag_stack_skips_bound() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
+            item_id: "silverleaf".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: true,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "wolf_fang".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
+        });
+        let listed = first_listable_bag_stack(&snap).unwrap();
+        assert_eq!(listed.2, "wolf_fang");
+    }
+
+    #[test]
+    fn filtered_market_pages_by_name() {
+        let mut snap = chrome_snapshot();
+        snap.market.push(MarketListingSnapshot {
+            id: 12,
+            seller: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            price: 8,
+            mine: false,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            expires_tick: 0,
+            start_bid: 4,
+            current_bid: 0,
+            bidder: None,
+            bound: false,
+        });
+        let hits = filtered_market(&snap, "peace");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].item_id, "peacebloom");
+        assert_eq!(listing_min_bid(&snap.market[1]), Some(4));
+        assert_eq!(cycle_duration_hours(12, true), 24);
+        assert_eq!(cycle_duration_hours(48, true), 12);
+    }
+
+    #[test]
+    fn market_panel_shows_wear_and_enchant() {
+        let mut snap = chrome_snapshot();
+        snap.market[0].item_id = "worn_sword".into();
+        snap.market[0].count = 1;
+        snap.market[0].durability = Some(7);
+        snap.market[0].enchant_id = Some("coarse_sharpening".into());
+        let text = market_panel_text(&snap, &UiFlags::default());
+        assert!(text.contains("Worn Sword"));
+        assert!(text.contains("7/40"));
+        assert!(text.contains("Coarse Sharpening"));
+    }
+
+    #[test]
+    fn npc_session_help_mentions_auction_when_can_auction() {
+        let mut snap = TickSnapshot::default();
+        snap.open_npc = Some(NpcSessionSnapshot {
+            npc_id: 9,
+            npc_name: "Auctioneer Lise".into(),
+            greeting: String::new(),
+            services: vec!["auctioneer".into()],
+            stock: vec![],
+            train_professions: vec![],
+            can_repair: false,
+            repair_cost: 0,
+            can_bind: false,
+            buyback: vec![],
+            can_auction: true,
+            can_bank: false,
+            can_mail: false,
+            discount_pct: 0,
+        });
+        let text = npc_session_help(&snap);
+        assert!(text.contains("[U] Auction"));
     }
 
     #[test]
@@ -1380,11 +1732,30 @@ mod tests {
             repair_cost: 12,
             can_bind: false,
             buyback: vec![],
+            can_auction: false,
+            can_bank: false,
+            can_mail: false,
+            discount_pct: 0,
         });
 
         let text = npc_session_help(&snap);
 
         assert!(text.contains("[R] Repair"));
+    }
+
+    #[test]
+    fn reputation_block_lists_standing() {
+        let mut snap = TickSnapshot::default();
+        snap.reputation.push(woc_protocol::ReputationSnapshot {
+            faction_id: "eastbrook_watch".into(),
+            name: "Eastbrook Watch".into(),
+            value: 500,
+            standing: "friendly".into(),
+        });
+        let text = reputation_block(&snap);
+        assert!(text.contains("Eastbrook Watch"));
+        assert!(text.contains("Friendly"));
+        assert!(text.contains("500"));
     }
 
     #[test]
@@ -1482,6 +1853,14 @@ mod tests {
     fn warrior_and_druid_action_bar_hint_f_key() {
         let mut snap = chrome_snapshot();
         snap.progress.class_id = "warrior".into();
+        snap.ability_bar = vec![woc_protocol::AbilityBarSlot {
+            slot: 1,
+            ability_id: "heroic_strike".into(),
+            name: "Heroic Strike".into(),
+            known: true,
+            ready: true,
+            cooldown: 0.0,
+        }];
         assert!(format_action_bar(&snap).contains("[F] Stance"));
         snap.progress.class_id = "druid".into();
         assert!(format_action_bar(&snap).contains("[F] Form"));
@@ -1553,8 +1932,16 @@ mod tests {
     #[test]
     fn jewelry_equipment_label_uses_quality_and_name() {
         assert_eq!(
-            equipment_label(Some("fang_pendant"), None),
+            equipment_label(Some("fang_pendant"), None, None),
             "Uncommon Fang Pendant"
+        );
+        assert_eq!(
+            weapon_label(Some("worn_sword"), None, None, Some("coarse_sharpening"),),
+            "Worn Sword 40/40 [Coarse Sharpening]"
+        );
+        assert_eq!(
+            equipment_label(Some("wool_cloak"), None, None),
+            "Uncommon Wool Cloak 30/30"
         );
     }
 }

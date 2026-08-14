@@ -3,7 +3,7 @@
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Component, Durable, Escort, GatherNodeState, Health,
     Hearth, Home, Identity, InstanceAt, LootPile, LootTable, Motion, Owner, ProfessionCast,
-    Progress, QuestLog, Respawn, Skinnable, Spirit, Threat, Transform,
+    Progress, QuestLog, Reputation, Respawn, Skinnable, Spirit, Threat, Transform,
 };
 use crate::ecs::SparseSet;
 use woc_protocol::EntityId;
@@ -38,6 +38,7 @@ pub struct World {
     pub profession_cast: SparseSet<ProfessionCast>,
     pub gather_node_state: SparseSet<GatherNodeState>,
     pub skinnable: SparseSet<Skinnable>,
+    pub reputation: SparseSet<Reputation>,
 }
 
 impl World {
@@ -171,5 +172,6 @@ impl World {
         self.profession_cast.remove(id);
         self.gather_node_state.remove(id);
         self.skinnable.remove(id);
+        self.reputation.remove(id);
     }
 }
