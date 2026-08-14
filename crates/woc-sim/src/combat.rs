@@ -3863,6 +3863,28 @@ mod tests {
     }
 
     #[test]
+    fn rogue_sprint_buffs_move_speed() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        assert!(
+            world
+                .get::<Auras>(1)
+                .unwrap()
+                .auras
+                .iter()
+                .any(|a| a.id == "sprint"),
+            "rogue slot 5 should apply Sprint"
+        );
+        assert!(
+            (move_speed_mult(&world, 1) - 1.5).abs() < 1e-3,
+            "sprint should raise move speed"
+        );
+    }
+
+    #[test]
     fn loot_entry_count_is_granted() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(

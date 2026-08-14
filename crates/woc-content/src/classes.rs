@@ -141,7 +141,7 @@ const HUNTER_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 3,
-        ability_id: "aimed_shot",
+        ability_id: "multi_shot",
     },
     ClassKitEntry {
         slot: 4,
@@ -170,6 +170,10 @@ const ROGUE_KIT: &[ClassKitEntry] = &[
         slot: 4,
         ability_id: "kick",
     },
+    ClassKitEntry {
+        slot: 5,
+        ability_id: "sprint",
+    },
 ];
 
 const PRIEST_KIT: &[ClassKitEntry] = &[
@@ -183,7 +187,7 @@ const PRIEST_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 3,
-        ability_id: "mind_blast",
+        ability_id: "shadow_word_pain",
     },
     ClassKitEntry {
         slot: 4,
@@ -229,7 +233,7 @@ const MAGE_KIT: &[ClassKitEntry] = &[
     },
     ClassKitEntry {
         slot: 3,
-        ability_id: "arcane_missiles",
+        ability_id: "counterspell",
     },
     ClassKitEntry {
         slot: 4,

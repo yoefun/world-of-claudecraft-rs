@@ -678,7 +678,7 @@ pub static ABILITIES: &[AbilityDef] = &[
         effect: AbilityEffect::Heal { coefficient: 1.0 },
         flags: AbilityFlags::DEFAULT,
     },
-    // —— Class-engine stubs (off-kit; Charge/Blink/Shield/Life Tap/Aspect on 1.7 bars) ——
+    // —— Class-engine identity (Charge / Blink / Shield / Life Tap / Aspect) ——
     AbilityDef {
         id: "power_word_shield",
         name: "Power Word: Shield",
