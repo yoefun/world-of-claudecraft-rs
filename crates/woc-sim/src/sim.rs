@@ -884,6 +884,12 @@ impl Sim {
         // ws-death: finalize player deaths (corpse + PlayerDied) after kill rewards
         crate::death::on_player_death_check(&mut self.world, &mut self.events);
 
+        for &pid in &player_ids {
+            if sim_player_in_delve(&self.world, pid) {
+                let _ = crate::delves::try_advance_delve(&mut self.world, pid, &mut self.events);
+            }
+        }
+
         // Phase 7: pvp_and_market
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
@@ -1526,6 +1532,13 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
         }
     }
     best.map(|(id, _)| id)
+}
+
+fn sim_player_in_delve(world: &World, pid: EntityId) -> bool {
+    world
+        .get::<InstanceAt>(pid)
+        .and_then(|i| i.delve_room)
+        .is_some()
 }
 
 #[cfg(test)]
@@ -3320,6 +3333,49 @@ mod tests {
         assert_eq!(
             sim.snapshot_for_player(a).guild.as_ref().unwrap().members[0].level,
             9
+        );
+    }
+
+    #[test]
+    fn tick_all_auto_advances_cleared_delve_room() {
+        let mut sim = Sim::new_eastbrook("Delver", PlayerClass::Warrior);
+        let def = woc_content::delve("eastbrook_hollow").unwrap();
+        if let Some(t) = sim.world.get_mut::<Transform>(sim.player_id) {
+            t.x = def.entrance_x;
+            t.z = def.entrance_z;
+        }
+        let mut events = Vec::new();
+        assert!(crate::delves::enter_delve(
+            &mut sim.world,
+            sim.player_id,
+            "eastbrook_hollow",
+            &mut events
+        ));
+        let key = sim
+            .world
+            .get::<InstanceAt>(sim.player_id)
+            .and_then(|i| i.instance_id.clone())
+            .unwrap();
+        for id in sim.world.ids::<Identity>() {
+            if sim.world.get::<Identity>(id).map(|i| i.kind) == Some(EntityKind::Mob)
+                && sim
+                    .world
+                    .get::<InstanceAt>(id)
+                    .and_then(|i| i.instance_id.as_deref())
+                    == Some(key.as_str())
+            {
+                if let Some(h) = sim.world.get_mut::<Health>(id) {
+                    h.hp = 0.0;
+                    h.alive = false;
+                }
+            }
+        }
+        let _ = sim.tick_all();
+        assert_eq!(
+            sim.world
+                .get::<InstanceAt>(sim.player_id)
+                .and_then(|i| i.delve_room),
+            Some(1)
         );
     }
 }
