@@ -132,6 +132,9 @@ impl MemoryStore {
             hearth_z: 4.0,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
             reputation: Vec::new(),
         };
         g.characters.insert(character.id, character.clone());
@@ -312,6 +315,9 @@ mod tests {
             hearth_z: 34.0,
             hearth_ready_tick: 77,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Vec::new(),
+            last_mount: String::new(),
             reputation: vec![],
         };
         let saved = store.save_character(c.id, save.clone()).await.unwrap();

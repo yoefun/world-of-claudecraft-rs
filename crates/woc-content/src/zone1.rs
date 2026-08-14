@@ -59,6 +59,11 @@ pub static EASTBROOK: ZoneLayout = ZoneLayout {
             z: 8.0,
         },
         NpcSpot {
+            npc_id: "stable_master_ross",
+            x: 4.0,
+            z: 9.0,
+        },
+        NpcSpot {
             npc_id: "auctioneer_lise",
             x: 4.0,
             z: 6.0,

@@ -27,7 +27,8 @@
 | **1.17.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
 | **1.18.0** (shipped) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
 | **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
-| **1.20.0** (this branch) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
+| **1.20.0** (shipped) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
+| **1.21.0** (shipped) | `mounts` | Riding ranks, learnable mounts, **V** toggle, Expert flying |
 
 ## Completion program (closed)
 
@@ -77,6 +78,13 @@ Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then F
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-more.md`](superpowers/plans/2026-08-13-gear-more.md)
 
 Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
+
+## Mounts and riding (shipped as `1.21.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-mounts-riding-design.md`](superpowers/specs/2026-08-13-mounts-riding-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-mounts-riding.md`](superpowers/plans/2026-08-13-mounts-riding.md)
+
+Free **V** travel flight is replaced by a gated mount loop. Players train riding at Stable Master Ross, learn a mount item, and toggle with **V**. Combat/instance dismount. Protocol rev stays **10** (additive riding fields). Tick fingerprint unchanged.
 
 ## Economy depth (shipped as `1.16.0`)
 

@@ -15,6 +15,7 @@ pub mod items_zone2;
 pub mod mobs;
 pub mod mobs_zone2;
 pub mod mobs_zone3;
+pub mod mounts;
 pub mod npcs;
 pub mod npcs_zone2;
 pub mod npcs_zone3;
@@ -59,6 +60,10 @@ pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
 pub use mobs_zone2::ZONE2_MOBS;
 pub use mobs_zone3::ZONE3_MOBS;
+pub use mounts::{
+    mount, mount_by_item, riding_rank, riding_rank_by_n, MountDef, MountKind, RidingRankDef,
+    MOUNTS, RIDING_RANKS,
+};
 pub use npcs::{npc, NpcDef, NpcService, VendorOffer, NPCS};
 pub use npcs_zone2::ZONE2_NPCS;
 pub use npcs_zone3::ZONE3_NPCS;
@@ -565,6 +570,7 @@ mod tests {
         assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
+        assert!(npc("stable_master_ross").unwrap().is_riding_trainer());
         assert!(npc("auctioneer_lise").unwrap().is_auctioneer());
         assert!(npc("banker_holme").unwrap().is_banker());
         assert!(npc("mailbox_post").unwrap().is_mailbox());
@@ -577,6 +583,36 @@ mod tests {
             .vendor_stock
             .iter()
             .any(|o| o.item_id == "watch_signet" && o.min_standing == crate::Standing::Friendly));
+    }
+
+    #[test]
+    fn stable_master_ross_roster() {
+        let ross = npc("stable_master_ross").expect("ross");
+        assert!(ross.is_riding_trainer());
+        assert!(ross.is_vendor());
+        assert!(!ross.is_profession_trainer());
+        assert!(ross.trains.is_empty());
+        let stock: Vec<_> = ross.vendor_stock.iter().map(|o| o.item_id).collect();
+        assert!(stock.contains(&"brown_pony"));
+        assert!(stock.contains(&"swift_bay_steed"));
+        assert!(stock.contains(&"tawny_gryphon"));
+        assert!(EASTBROOK.npcs.iter().any(|s| {
+            s.npc_id == "stable_master_ross" && (s.x - 4.0).abs() < 1e-6 && (s.z - 9.0).abs() < 1e-6
+        }));
+    }
+
+    #[test]
+    fn riding_trainers_stock_mounts() {
+        for n in NPCS.iter() {
+            if n.services.contains(&NpcService::RidingTrainer) {
+                assert!(n.is_vendor(), "{} riding trainer must vendor", n.id);
+                assert!(!n.vendor_stock.is_empty(), "{} empty stock", n.id);
+                for offer in n.vendor_stock {
+                    let it = item(offer.item_id).unwrap();
+                    assert_eq!(it.kind, ItemKind::Mount, "{} stocks non-mount", n.id);
+                }
+            }
+        }
     }
 
     #[test]
@@ -1248,5 +1284,40 @@ mod tests {
             disenchant_yield("copper_shortsword")[0].item_id,
             "arcane_dust"
         );
+    }
+
+    #[test]
+    fn riding_ranks_locked() {
+        assert_eq!(RIDING_RANKS.len(), 3);
+        let a = riding_rank("apprentice").expect("apprentice");
+        assert_eq!(a.rank, 1);
+        assert_eq!(a.level_req, 2);
+        assert_eq!(a.copper, 10);
+        assert!((a.ground_speed_mult - 1.6).abs() < 1e-6);
+        assert_eq!(riding_rank_by_n(3).unwrap().id, "expert");
+        assert!(riding_rank_by_n(0).is_none());
+    }
+
+    #[test]
+    fn mount_table_matches_items() {
+        assert_eq!(MOUNTS.len(), 3);
+        for def in MOUNTS.iter() {
+            let it = item(def.item_id).unwrap_or_else(|| panic!("missing {}", def.item_id));
+            assert_eq!(it.kind, ItemKind::Mount, "{}", def.id);
+            assert_eq!(it.stack_size, 1);
+            assert_eq!(it.max_durability, 0);
+            assert!(it.equip_slot.is_none());
+            assert_eq!(mount_by_item(def.item_id).map(|m| m.id), Some(def.id));
+        }
+        let pony = mount("brown_pony").unwrap();
+        assert_eq!(pony.riding_rank, 1);
+        assert!(matches!(pony.kind, MountKind::Ground));
+        assert!((pony.speed_mult - 1.6).abs() < 1e-6);
+        let gryphon = mount("tawny_gryphon").unwrap();
+        assert!(matches!(gryphon.kind, MountKind::Flying));
+        assert_eq!(gryphon.riding_rank, 3);
+        assert_eq!(item("brown_pony").unwrap().vendor_buy, 25);
+        assert_eq!(item("swift_bay_steed").unwrap().vendor_buy, 150);
+        assert_eq!(item("tawny_gryphon").unwrap().vendor_buy, 300);
     }
 }

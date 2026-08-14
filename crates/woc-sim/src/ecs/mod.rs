@@ -255,6 +255,26 @@ mod tests {
     }
 
     #[test]
+    fn create_player_inserts_riding_column() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Ada",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        let r = world
+            .get::<crate::ecs::components::Riding>(1)
+            .expect("riding");
+        assert_eq!(r.rank, 0);
+        assert!(r.known.is_empty());
+        assert!(r.last_id.is_none());
+        assert!(r.active_id.is_none());
+    }
+
+    #[test]
     fn sim_does_not_store_a_homogeneous_entity_vec() {
         let src = include_str!("../sim.rs");
         assert!(

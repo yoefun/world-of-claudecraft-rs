@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.21.0 — 2026-08-14
+
+### Added
+
+- **1.21.0 `mounts`:** Riding ranks (Apprentice L2 / Journeyman L5 / Expert L8) at Stable Master Ross; three learn-on-use mounts (Brown Pony 1.6×, Swift Bay Steed 2.0×, Tawny Gryphon flying 2.0×).
+- **V** toggles the last known mount (requires training + learned mount); Expert gryphon replaces free travel flight.
+- Combat, death, dungeon/delve, and swim dismount; crypt refuses mounts.
+- `Riding` ECS column; `TrainRiding` interact; snapshot `mounted` / `riding_rank`; persist rank + known (load dismounted).
+- Protocol rev stays **10** (`TrainRiding`, `mounted`, `riding_rank` are additive).
+
 ## 1.20.0 — 2026-08-14
 
 ### Added

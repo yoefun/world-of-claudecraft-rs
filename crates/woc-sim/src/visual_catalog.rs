@@ -126,6 +126,16 @@ pub fn visual_spec(kind: EntityKind, template_id: Option<&str>) -> VisualSpec {
     spec_for_key(key)
 }
 
+/// Mount silhouette recipe by mount id (`brown_pony`, `swift_bay_steed`, `tawny_gryphon`).
+pub fn mount_visual_spec(mount_id: &str) -> VisualSpec {
+    match mount_id {
+        "brown_pony" => MOUNT_PONY,
+        "swift_bay_steed" => MOUNT_STEED,
+        "tawny_gryphon" => MOUNT_GRYPHON,
+        _ => MOUNT_PONY,
+    }
+}
+
 /// Upstream-style dispatch: players → `player_<class>`, mobs/NPCs/pets by template
 /// with family fallbacks.
 pub fn visual_key(kind: EntityKind, template_id: Option<&str>) -> &'static str {
@@ -1240,6 +1250,159 @@ const LOOT_SPARK: VisualSpec = VisualSpec {
     ],
 };
 
+const MOUNT_PONY: VisualSpec = VisualSpec {
+    key: "mount_pony",
+    family: VisualFamily::Boar,
+    y_offset: 0.0,
+    emissive: 0.0,
+    label_height: 1.15,
+    bob: false,
+    parts: parts![
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.0, 0.40, 0.0],
+            size: [0.70, 0.50, 1.05],
+            role: PartRole::Prop,
+            color: rgb(0.62, 0.48, 0.38),
+        },
+        VisualPart {
+            shape: PartShape::Sphere,
+            offset: [0.0, 0.48, 0.55],
+            size: [0.26, 0.0, 0.0],
+            role: PartRole::Prop,
+            color: rgb(0.55, 0.42, 0.32),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.18, 0.40, 0.72],
+            size: [0.06, 0.06, 0.28],
+            role: PartRole::Prop,
+            color: rgb(0.90, 0.88, 0.80),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [-0.18, 0.40, 0.72],
+            size: [0.06, 0.06, 0.28],
+            role: PartRole::Prop,
+            color: rgb(0.90, 0.88, 0.80),
+        },
+        leg(
+            PartRole::LegL,
+            [-0.22, 0.20, 0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.52, 0.40, 0.30)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.22, 0.20, 0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.52, 0.40, 0.30)
+        ),
+        leg(
+            PartRole::HindLegL,
+            [-0.22, 0.20, -0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.52, 0.40, 0.30)
+        ),
+        leg(
+            PartRole::HindLegR,
+            [0.22, 0.20, -0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.52, 0.40, 0.30)
+        ),
+    ],
+};
+
+const MOUNT_STEED: VisualSpec = VisualSpec {
+    key: "mount_steed",
+    family: VisualFamily::Boar,
+    y_offset: 0.0,
+    emissive: 0.0,
+    label_height: 1.15,
+    bob: false,
+    parts: parts![
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.0, 0.40, 0.0],
+            size: [0.70, 0.50, 1.05],
+            role: PartRole::Prop,
+            color: rgb(0.35, 0.22, 0.15),
+        },
+        VisualPart {
+            shape: PartShape::Sphere,
+            offset: [0.0, 0.48, 0.55],
+            size: [0.26, 0.0, 0.0],
+            role: PartRole::Prop,
+            color: rgb(0.30, 0.18, 0.12),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.18, 0.40, 0.72],
+            size: [0.06, 0.06, 0.28],
+            role: PartRole::Prop,
+            color: rgb(0.75, 0.72, 0.65),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [-0.18, 0.40, 0.72],
+            size: [0.06, 0.06, 0.28],
+            role: PartRole::Prop,
+            color: rgb(0.75, 0.72, 0.65),
+        },
+        leg(
+            PartRole::LegL,
+            [-0.22, 0.20, 0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.28, 0.18, 0.12)
+        ),
+        leg(
+            PartRole::LegR,
+            [0.22, 0.20, 0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.28, 0.18, 0.12)
+        ),
+        leg(
+            PartRole::HindLegL,
+            [-0.22, 0.20, -0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.28, 0.18, 0.12)
+        ),
+        leg(
+            PartRole::HindLegR,
+            [0.22, 0.20, -0.28],
+            [0.12, 0.38, 0.12],
+            rgb(0.28, 0.18, 0.12)
+        ),
+    ],
+};
+
+const MOUNT_GRYPHON: VisualSpec = VisualSpec {
+    key: "mount_gryphon",
+    family: VisualFamily::Harpy,
+    y_offset: 0.0,
+    emissive: 0.0,
+    label_height: 2.2,
+    bob: false,
+    parts: parts![
+        body(1.10, 0.28, 0.45, rgb(0.65, 0.52, 0.35)),
+        head(1.85, 0.20, rgb(0.85, 0.72, 0.45)),
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [0.55, 1.25, 0.0],
+            size: [0.85, 0.08, 0.35],
+            role: PartRole::Prop,
+            color: rgb(0.75, 0.60, 0.30),
+        },
+        VisualPart {
+            shape: PartShape::Cuboid,
+            offset: [-0.55, 1.25, 0.0],
+            size: [0.85, 0.08, 0.35],
+            role: PartRole::Prop,
+            color: rgb(0.75, 0.60, 0.30),
+        },
+    ],
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1351,6 +1514,19 @@ mod tests {
         assert_eq!(zone_atmosphere("eastbrook").zone_tag, "eastbrook");
         assert_eq!(zone_atmosphere("eastfen").zone_tag, "mirefen");
         assert_eq!(zone_atmosphere("thornpeak").zone_tag, "thornpeak");
+    }
+
+    #[test]
+    fn mount_visual_keys() {
+        assert_eq!(mount_visual_spec("brown_pony").key, "mount_pony");
+        assert_eq!(
+            mount_visual_spec("swift_bay_steed").family,
+            VisualFamily::Boar
+        );
+        assert_eq!(
+            mount_visual_spec("tawny_gryphon").family,
+            VisualFamily::Harpy
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@
 //! | `Skinnable` | beast loot piles |
 //! | `Owner` | pet |
 //! | `Escort` | escort NPC (quest follower; not Owner) |
-//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Reputation`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `ProfessionCast` | player |
+//! | `ClassKit`, `Bags`, `QuestLog`, `Progress`, `Reputation`, `Bank`, `Motion`, `Spirit`, `InstanceAt`, `Durable`, `Hearth`, `Riding`, `ProfessionCast` | player |
 //!
 //! Full field list: `docs/superpowers/specs/2026-08-13-sim-ecs-design.md` §4.4.
 
@@ -343,6 +343,14 @@ pub struct Hearth {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct Riding {
+    pub rank: u8,
+    pub known: BTreeSet<String>,
+    pub last_id: Option<String>,
+    pub active_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct QuestLog {
     pub quest_log: Vec<QuestProgress>,
 }
@@ -456,6 +464,7 @@ impl_component!(Escort, escort);
 impl_component!(ClassKit, class_kit);
 impl_component!(Bags, bags);
 impl_component!(Hearth, hearth);
+impl_component!(Riding, riding);
 impl_component!(QuestLog, quest_log);
 impl_component!(Progress, progress);
 impl_component!(Reputation, reputation);

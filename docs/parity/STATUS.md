@@ -1,8 +1,20 @@
 # Parity status
 
-**Current rewrite:** `1.19.0` / `guilds` (PROTOCOL_REV=10).
+**Current rewrite:** `1.21.0` / `mounts` (PROTOCOL_REV=10).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`.
+
+## Mounts / riding (`mounts`) — done
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Riding ranks | done | Apprentice L2 / Journeyman L5 / Expert L8 at Ross |
+| Mount items | done | Pony 1.6, steed 2.0, gryphon flying 2.0; learn-on-use |
+| **V** toggle | done | Replaces free travel flight; `fly_toggle` wire bit reused |
+| Combat / instance dismount | done | Hit, ability, death, dungeon/delve, swim |
+| Persist | done | Additive completion JSON; load dismounted |
+| Client | done | Mount child mesh; riding rank on sheet; train button |
+| Protocol | done | Rev 10; `TrainRiding` + `mounted` / `riding_rank` |
 
 ## Parcel and bank (`parcel-bank`) — done
 
@@ -248,7 +260,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.20.0` / parcel-bank (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.21.0` / mounts (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
@@ -283,7 +295,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | Procedural character / scene visuals | done | Class/template mesh recipes; buildings, portals, zone atmosphere; create preview |
 | In-world NPC/mob scene load | done | Nameplates, quest/vendor markers, target ring, gather herbs, spawn lifecycle |
 | Entity walk / remove presentation | done | Locomotion hysteresis, procedural gait limbs, corpse tip, soft despawn fade |
-| Jump / swim / travel flight | done | Coyote jump, gravity + fall damage, lake tread, V-toggle flight |
+| Jump / swim / travel flight | done | Coyote jump, gravity + fall damage, lake tread; mounts replace free V flight |
 | Sim typed ECS columns | done | Sparse `World` in `woc-sim`; Bevy stays presentation-only |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |
 | Minimap / world map UI | done | Functional Bevy paint (not full DESIGN.md chrome) |

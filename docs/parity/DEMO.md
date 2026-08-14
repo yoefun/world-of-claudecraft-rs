@@ -22,8 +22,9 @@ Manual. Requires a GPU client. CI does not run this.
 16. After Report + Wolves + Scout, Eastbrook Watch is Friendly; Wilkes sells Watch Signet (**C** sheet lists standing).
 17. Hunter: replace the bow with a hatchet, equip a second hatchet into OffHand. Wear a Wool Cloak and two Lucky Pebbles. Use a second whetstone so Off shows `[Coarse Sharpening]`.
 18. Two clients: Alice **J** types `Vale Watch` (Shift for capitals) Enter — the opening **J** must not leave a stray `j`. `/invite Bob` Enter; Bob Enter. Billboard `/motd Kill wolves at dusk` Enter; guild chat by typing + Enter; `/o hello` for officer chat. Relog still in guild. `/transfer Bob` Enter, `/kick` or **Ctrl+Q** leave, **Ctrl+D** disband (every online member sees `<Vale Watch> has been disbanded.`). **Esc** closes the panel (J types `j` while it is open). While the panel is open no key moves, attacks, or hearths.
+19. Stable Master Ross: train Apprentice Riding (L2), buy Brown Pony, use it to learn, press **V** to mount/dismount; enter combat and confirm dismount; train Expert, buy Tawny Gryphon, **V** to fly (Space/Ctrl vertical); Eastbrook Crypt refuses mount entry.
 
-Footer reads `WoC-rs 1.20.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
+Footer reads `WoC-rs 1.21.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 

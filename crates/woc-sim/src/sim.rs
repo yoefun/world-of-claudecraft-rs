@@ -23,7 +23,7 @@ use crate::combat::{
 use crate::context::SimContext;
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Health, Hearth, Identity, InstanceAt, LootPile, LootTable,
-    Motion, Owner, Progress, Transform,
+    Motion, Owner, Progress, Riding, Transform,
 };
 use crate::ecs::World;
 use crate::interaction::{npc_session_snapshot, vendor_snapshot};
@@ -723,21 +723,10 @@ impl Sim {
                     c.cast = None;
                 }
             }
-            let effect = step_player_motion(&mut self.world, pid, &intent);
-            if intent.fly_toggle {
-                let flying = self
-                    .world
-                    .get::<Motion>(pid)
-                    .map(|m| m.flying)
-                    .unwrap_or(false);
-                self.events.push(woc_protocol::SimEvent::Toast {
-                    message: if flying {
-                        "Travel flight engaged (Space up · Ctrl down · V land).".into()
-                    } else {
-                        "Travel flight disengaged.".into()
-                    },
-                });
+            if intent.fly_toggle && alive {
+                crate::mount::toggle_mount(&mut self.world, pid, &mut self.events);
             }
+            let effect = step_player_motion(&mut self.world, pid, &intent);
             if let Some(effect) = effect {
                 if effect.fall_damage > 0.0 {
                     let mut died = false;
@@ -751,6 +740,9 @@ impl Sim {
                     if died {
                         crate::death::on_player_death_check(&mut self.world, &mut self.events);
                     }
+                }
+                if effect.dismount {
+                    crate::mount::dismount(&mut self.world, pid, &mut self.events);
                 }
             }
             if let Some(tid) = intent.target_id {
@@ -775,6 +767,7 @@ impl Sim {
                         c.target = acquired;
                     }
                 }
+                crate::mount::dismount(&mut self.world, pid, &mut self.events);
             }
             credit_explore(&mut self.world, pid, &mut self.events);
         }
@@ -1173,6 +1166,14 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
+            riding_rank: world.get::<Riding>(player_id).map(|r| r.rank).unwrap_or(0),
+            known_mounts: world
+                .get::<Riding>(player_id)
+                .map(|r| r.known.iter().cloned().collect())
+                .unwrap_or_default(),
+            mounted: world
+                .get::<Riding>(player_id)
+                .and_then(|r| r.active_id.clone()),
             mail_postage: if world.get::<ClassKit>(player_id).is_some() {
                 crate::mail::MAIL_POSTAGE
             } else {
@@ -1283,6 +1284,7 @@ fn entity_snapshot(world: &World, id: EntityId) -> Option<EntitySnapshot> {
         on_ground: motion.map(|m| m.on_ground).unwrap_or(true),
         flying: motion.map(|m| m.flying).unwrap_or(false),
         swimming: crate::player_motion::is_swimming_at(t.x, t.y, t.z),
+        mounted: world.get::<Riding>(id).and_then(|r| r.active_id.clone()),
     })
 }
 
@@ -1514,10 +1516,11 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Owner, Progress, QuestLog,
-        QuestState, Reputation, Threat, Transform,
+        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Motion, Owner, Progress,
+        QuestLog, QuestState, Reputation, Riding, Threat, Transform,
     };
     use crate::ecs::spawn;
+    use crate::instances::enter_dungeon;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
 
     fn kind_count(sim: &Sim, kind: EntityKind) -> usize {
@@ -1602,6 +1605,33 @@ mod tests {
         let snap_ids: Vec<EntityId> = snap.entities.iter().map(|e| e.id).collect();
         assert_eq!(snap_ids, expected);
         assert_eq!(snap.entities.len(), expected.len());
+    }
+
+    #[test]
+    fn snapshot_includes_mounted() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let id = sim.spawn_player("Ada", PlayerClass::Warrior).unwrap();
+        {
+            let r = sim
+                .world
+                .get_mut::<crate::ecs::components::Riding>(id)
+                .unwrap();
+            r.rank = 1;
+            r.known.insert("brown_pony".into());
+        }
+        let mut events = Vec::new();
+        assert!(crate::mount::summon_mount(
+            &mut sim.world,
+            id,
+            "brown_pony",
+            &mut events
+        ));
+        let snap = sim.snapshot_for_player(id);
+        assert_eq!(snap.riding_rank, 1);
+        assert!(snap.known_mounts.iter().any(|m| m == "brown_pony"));
+        assert_eq!(snap.mounted.as_deref(), Some("brown_pony"));
+        let me = snap.entities.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(me.mounted.as_deref(), Some("brown_pony"));
     }
 
     #[test]
@@ -3045,6 +3075,122 @@ mod tests {
         );
         assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_claw")));
         assert!(piles.iter().any(|(i, _)| i.as_deref() == Some("hag_focus")));
+    }
+
+    #[test]
+    fn fly_toggle_wiring_untrained_then_pony() {
+        let mut sim = Sim::new_eastbrook("MountWire", PlayerClass::Warrior);
+        let pid = sim.player_id;
+
+        sim.push_intent(
+            pid,
+            PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        sim.tick_all();
+        assert!(!sim.world.get::<Motion>(pid).unwrap().flying);
+        assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_none());
+
+        {
+            let riding = sim.world.get_mut::<Riding>(pid).unwrap();
+            riding.rank = 1;
+            riding.known.insert("brown_pony".into());
+            riding.last_id = Some("brown_pony".into());
+        }
+
+        sim.push_intent(
+            pid,
+            PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        sim.tick_all();
+        assert_eq!(
+            sim.world.get::<Riding>(pid).unwrap().active_id.as_deref(),
+            Some("brown_pony")
+        );
+        assert!(!sim.world.get::<Motion>(pid).unwrap().flying);
+
+        sim.push_intent(
+            pid,
+            PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        sim.tick_all();
+        assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_none());
+    }
+
+    #[test]
+    fn pony_swim_dismount_wiring() {
+        let mut sim = Sim::new_eastbrook("SwimWire", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        {
+            let riding = sim.world.get_mut::<Riding>(pid).unwrap();
+            riding.rank = 1;
+            riding.known.insert("brown_pony".into());
+            riding.last_id = Some("brown_pony".into());
+        }
+
+        sim.push_intent(
+            pid,
+            PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        sim.tick_all();
+        assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_some());
+
+        let x = -92.0;
+        let z = 88.0;
+        let y = crate::player_motion::swim_surface_y(x, z);
+        if let Some(t) = sim.world.get_mut::<Transform>(pid) {
+            t.x = x;
+            t.z = z;
+            t.y = y;
+        }
+        assert!(crate::player_motion::is_swimming_at(x, y, z));
+
+        sim.push_intent(pid, PlayerIntent::default());
+        sim.tick_all();
+        assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_none());
+    }
+
+    #[test]
+    fn enter_dungeon_dismounts_mounted_player() {
+        let mut sim = Sim::new_eastbrook("InstDismount", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        sim.world.get_mut::<Health>(pid).unwrap().level = 10;
+        {
+            let riding = sim.world.get_mut::<Riding>(pid).unwrap();
+            riding.rank = 1;
+            riding.known.insert("brown_pony".into());
+            riding.last_id = Some("brown_pony".into());
+        }
+        sim.push_intent(
+            pid,
+            PlayerIntent {
+                fly_toggle: true,
+                ..Default::default()
+            },
+        );
+        sim.tick_all();
+        assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_some());
+
+        let mut events = Vec::new();
+        assert!(enter_dungeon(
+            &mut sim.world,
+            &sim.parties,
+            pid,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_none());
     }
 
     #[test]

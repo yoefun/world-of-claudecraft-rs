@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, Health, Hearth,
-    Identity, InstanceAt, InvStack, Progress, QuestLog, QuestProgress, QuestState, Spirit,
+    Identity, InstanceAt, InvStack, Progress, QuestLog, QuestProgress, QuestState, Riding, Spirit,
     Transform,
 };
 use crate::ecs::World;
@@ -45,6 +45,9 @@ pub struct PlayerPersistentState {
     pub hearth_z: f32,
     pub hearth_ready_tick: u64,
     pub stance_id: String,
+    pub riding_rank: u8,
+    pub known_mounts: BTreeSet<String>,
+    pub last_mount: String,
     pub reputation: HashMap<String, i32>,
 }
 
@@ -83,6 +86,8 @@ impl PlayerPersistentState {
             && self.honor == 0
             && self.reputation.is_empty()
             && !self.pvp_flagged
+            && self.riding_rank == 0
+            && self.known_mounts.is_empty()
     }
 }
 
@@ -186,6 +191,15 @@ pub fn export_player_state(world: &World, player_id: EntityId) -> Option<PlayerP
         stance_id: world
             .get::<ClassKit>(player_id)
             .and_then(|k| k.stance_id.clone())
+            .unwrap_or_default(),
+        riding_rank: world.get::<Riding>(player_id).map(|r| r.rank).unwrap_or(0),
+        known_mounts: world
+            .get::<Riding>(player_id)
+            .map(|r| r.known.clone())
+            .unwrap_or_default(),
+        last_mount: world
+            .get::<Riding>(player_id)
+            .and_then(|r| r.last_id.clone())
             .unwrap_or_default(),
         reputation: world
             .get::<crate::ecs::components::Reputation>(player_id)
@@ -299,6 +313,16 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
             Some(state.stance_id.clone())
         };
     }
+    if let Some(riding) = world.get_mut::<Riding>(player_id) {
+        riding.rank = state.riding_rank;
+        riding.known = state.known_mounts.clone();
+        riding.last_id = if state.last_mount.is_empty() {
+            None
+        } else {
+            Some(state.last_mount.clone())
+        };
+        riding.active_id = None;
+    }
     crate::ecs::spawn::refresh_known_abilities(world, player_id);
     recalc_player_stats(world, player_id);
     crate::combat::apply_spawn_identity(world, player_id);
@@ -407,6 +431,9 @@ mod tests {
             hearth_z: EASTBROOK.player_spawn_z,
             hearth_ready_tick: 0,
             stance_id: String::new(),
+            riding_rank: 0,
+            known_mounts: Default::default(),
+            last_mount: String::new(),
             reputation: Default::default(),
         };
         assert!(state.is_virgin());
@@ -522,6 +549,30 @@ mod tests {
         }));
         assert_eq!(restored.reputation.get("eastbrook_watch"), Some(&500));
         assert!(!restored.is_virgin());
+    }
+
+    #[test]
+    fn riding_round_trips() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        {
+            let r = world.get_mut::<crate::ecs::components::Riding>(1).unwrap();
+            r.rank = 2;
+            r.known.insert("brown_pony".into());
+            r.last_id = Some("brown_pony".into());
+            r.active_id = Some("brown_pony".into());
+        }
+        let state = export_player_state(&world, 1).unwrap();
+        assert_eq!(state.riding_rank, 2);
+        assert!(state.known_mounts.contains("brown_pony"));
+        assert_eq!(state.last_mount, "brown_pony");
+        let mut world2 = World::new();
+        create_player_from_state(&mut world2, 2, "Ada", PlayerClass::Warrior, &state);
+        let r = world2.get::<crate::ecs::components::Riding>(2).unwrap();
+        assert_eq!(r.rank, 2);
+        assert!(r.known.contains("brown_pony"));
+        assert_eq!(r.last_id.as_deref(), Some("brown_pony"));
+        assert!(r.active_id.is_none(), "load starts dismounted");
     }
 
     #[test]

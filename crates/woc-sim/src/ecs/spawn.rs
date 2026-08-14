@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ecs::components::{
     Auras, Bags, Bank, ClassKit, Combat, Durable, Equipment, EquipmentWear, GatherNodeState,
     Health, Hearth, Home, Identity, InstanceAt, LootPile, LootTable, Motion, Owner, Progress,
-    QuestLog, Reputation, Respawn, Skinnable, Spirit, Threat, Transform,
+    QuestLog, Reputation, Respawn, Riding, Skinnable, Spirit, Threat, Transform,
 };
 use crate::ecs::World;
 use crate::inventory::grant_into;
@@ -210,6 +210,7 @@ pub fn create_player(
             ready_tick: 0,
         },
     );
+    world.insert(id, Riding::default());
     refresh_known_abilities(world, id);
     crate::stats::recalc_player_stats(world, id);
     crate::combat::apply_spawn_identity(world, id);
