@@ -1,8 +1,24 @@
 # Parity status
 
 **Current rewrite:** `1.21.0` / `mounts` (PROTOCOL_REV=10).  
+**Next (planned):** `1.22.0` / `dungeon-depth` then `1.23.0` / `delve-depth` — [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`.
+
+## Instance depth (`dungeon-depth` → `delve-depth`) — planned
+
+Design: [`../superpowers/specs/2026-08-13-instance-depth-design.md`](../superpowers/specs/2026-08-13-instance-depth-design.md)  
+Plan: [`../superpowers/plans/2026-08-13-instance-depth.md`](../superpowers/plans/2026-08-13-instance-depth.md)
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Client **E** enter/leave dungeon | planned | Sim verbs exist; `input.rs` never sends them |
+| 5-yard sim gate + leave-to-entrance | planned | Leave currently snaps to zone spawn |
+| Snapshot isolation + pet `InstanceAt` | planned | Cross-instance players leak; pets have no column |
+| Parent-zone graveyard / persist eject | planned | Release always Eastbrook; load forces `eastbrook` |
+| Delve unique keys / no world wipe | planned | `enter_delve` despawns all Mob/Npc/Loot |
+| Hollow entrance + auto-advance | planned | Entrance `(0,0)` overlaps spawn **E** range |
+| Dungeon Finder / lockout / raid boss | n/a | Explicit non-goals |
 
 ## Mounts / riding (`mounts`) — done
 
