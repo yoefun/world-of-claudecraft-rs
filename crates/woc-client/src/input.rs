@@ -382,12 +382,12 @@ pub(crate) fn dungeon_interact_action(
     if !instance_id.is_empty() {
         let content_id = instance_id.split('#').next().unwrap_or(instance_id);
         if let Some(def) = woc_content::dungeon(content_id) {
-            if dist(def.entrance_x, def.entrance_z) < RANGE {
+            if dist(def.entrance_x, def.entrance_z) <= RANGE {
                 return Some(InteractAction::LeaveInstance);
             }
         }
         if let Some(def) = woc_content::delve(content_id) {
-            if dist(def.entrance_x, def.entrance_z) < RANGE {
+            if dist(def.entrance_x, def.entrance_z) <= RANGE {
                 return Some(InteractAction::LeaveInstance);
             }
         }
@@ -400,7 +400,7 @@ pub(crate) fn dungeon_interact_action(
         let zone_ok = def.zone_id == zone_id
             || (def.zone_id == "eastbrook" && zone_id == "eastbrook")
             || (def.zone_id == "mirefen" && zone_id == "mirefen");
-        if zone_ok && dist(def.entrance_x, def.entrance_z) < RANGE {
+        if zone_ok && dist(def.entrance_x, def.entrance_z) <= RANGE {
             return Some(InteractAction::EnterDungeon {
                 dungeon_id: def.id.to_string(),
             });
@@ -409,7 +409,7 @@ pub(crate) fn dungeon_interact_action(
     for def in woc_content::DELVES {
         let zone_ok =
             def.zone_id == zone_id || (def.zone_id == "eastbrook" && zone_id == "eastbrook");
-        if zone_ok && dist(def.entrance_x, def.entrance_z) < RANGE {
+        if zone_ok && dist(def.entrance_x, def.entrance_z) <= RANGE {
             return Some(InteractAction::EnterDelve {
                 delve_id: def.id.to_string(),
             });

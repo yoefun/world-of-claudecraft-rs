@@ -18,16 +18,24 @@ pub fn enter_delve(
     delve_id: &str,
     events: &mut Vec<SimEvent>,
 ) -> bool {
+    if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
+        return false;
+    }
+    let Some((alive, level)) = world
+        .get::<Health>(player_id)
+        .map(|health| (health.alive, health.level))
+    else {
+        return false;
+    };
+    if !alive {
+        return false;
+    }
     let Some(def) = delve(delve_id) else {
         events.push(SimEvent::Toast {
             message: "There is no such instance.".into(),
         });
         return false;
     };
-    if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
-        return false;
-    }
-    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     let in_instance = world
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.as_ref())

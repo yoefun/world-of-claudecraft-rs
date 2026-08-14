@@ -242,9 +242,26 @@ pub fn apply_player_state(world: &mut World, player_id: EntityId, state: &Player
     }
 
     if state.is_virgin() {
-        if !state.zone_id.is_empty() {
+        if state.zone_id.starts_with("instance:") || state.zone_id.starts_with("delve:") {
+            let (zone_id, entrance) = eject_instance_zone(&state.zone_id);
             if let Some(i) = world.get_mut::<Identity>(player_id) {
-                i.zone_id = state.zone_id.clone();
+                i.zone_id = zone_id;
+            }
+            if let Some((x, z)) = entrance {
+                let y = crate::ecs::spawn::ground_at(x, z);
+                if let Some(transform) = world.get_mut::<Transform>(player_id) {
+                    transform.x = x;
+                    transform.z = z;
+                    transform.y = y;
+                }
+            }
+            if let Some(instance) = world.get_mut::<InstanceAt>(player_id) {
+                instance.instance_id = None;
+                instance.delve_room = None;
+            }
+        } else if !state.zone_id.is_empty() {
+            if let Some(identity) = world.get_mut::<Identity>(player_id) {
+                identity.zone_id = state.zone_id.clone();
             }
         }
         recalc_player_stats(world, player_id);

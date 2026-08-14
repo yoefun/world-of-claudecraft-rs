@@ -2,6 +2,7 @@
 
 use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Owner, Transform};
 use crate::ecs::World;
+use crate::instances::same_instance_space;
 use woc_protocol::EntityId;
 
 /// Max range for tab-target candidates (same ballpark as combat acquire).
@@ -89,6 +90,7 @@ pub fn tab_target(world: &World, player_id: EntityId) -> Option<EntityId> {
         .ids::<LootTable>()
         .into_iter()
         .filter(|&id| is_living_hostile_mob(world, id))
+        .filter(|&id| same_instance_space(world, player_id, id))
         .filter_map(|id| {
             let tr = world.get::<Transform>(id)?;
             Some((id, tr.x, tr.z))

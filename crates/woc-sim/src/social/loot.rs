@@ -2,10 +2,9 @@
 
 use std::collections::HashMap;
 
-use crate::ecs::components::{
-    Bags, ClassKit, Health, Identity, InstanceAt, LootPile, Progress, Transform,
-};
+use crate::ecs::components::{Bags, ClassKit, Health, Identity, LootPile, Progress, Transform};
 use crate::ecs::World;
+use crate::instances::same_instance_space;
 use crate::inventory::grant_into;
 use crate::rng::Rng;
 use crate::social::party::{PartyRoster, PARTY_CREDIT_RANGE};
@@ -239,9 +238,6 @@ fn eligible_near_loot(
         return vec![killer];
     };
     let loot_t = world.get::<Transform>(loot_id);
-    let loot_inst = world
-        .get::<InstanceAt>(loot_id)
-        .and_then(|i| i.instance_id.clone());
     members.retain(|id| {
         if world.get::<ClassKit>(*id).is_none() {
             return false;
@@ -257,11 +253,8 @@ fn eligible_near_loot(
         };
         let dx = mate.x - loot_t.x;
         let dz = mate.z - loot_t.z;
-        let same_instance = world
-            .get::<InstanceAt>(*id)
-            .and_then(|i| i.instance_id.clone())
-            == loot_inst;
-        (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE && same_instance
+        (dx * dx + dz * dz).sqrt() <= PARTY_CREDIT_RANGE
+            && same_instance_space(world, *id, loot_id)
     });
     if !members.contains(&killer) {
         members.push(killer);

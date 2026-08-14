@@ -73,6 +73,9 @@ pub(crate) fn load_overworld_zone_at(
     if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
         return false;
     }
+    let old_instance_id = world
+        .get::<InstanceAt>(player_id)
+        .and_then(|instance| instance.instance_id.clone());
 
     let tag = layout_zone_tag(zone_id);
     ensure_zone_population(world, layout, tag);
@@ -103,6 +106,9 @@ pub(crate) fn load_overworld_zone_at(
         threat.threat.clear();
     }
     crate::instances::follow_owner_into_instance(world, player_id);
+    if let Some(instance_id) = old_instance_id {
+        crate::instances::despawn_instance_if_empty(world, &instance_id);
+    }
     true
 }
 

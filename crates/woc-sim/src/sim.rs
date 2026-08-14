@@ -265,8 +265,15 @@ impl Sim {
             .get::<Identity>(id)
             .map(|i| i.zone_id.clone())
             .unwrap_or_default();
-        if state.is_virgin()
-            || (zone == "eastbrook" && state.pos_x.abs() < 0.01 && state.pos_z.abs() < 0.01)
+        let ejected_instance_save =
+            state.zone_id.starts_with("instance:") || state.zone_id.starts_with("delve:");
+        let virgin_hub_spawn =
+            state.is_virgin() && zone == "eastbrook" && !ejected_instance_save;
+        if virgin_hub_spawn
+            || (!state.is_virgin()
+                && zone == "eastbrook"
+                && state.pos_x.abs() < 0.01
+                && state.pos_z.abs() < 0.01)
         {
             let offset = players as f32 * 1.5;
             let x = EASTBROOK.player_spawn_x + offset;
@@ -1483,6 +1490,9 @@ fn nearest_mob(world: &World, from: EntityId, max_range: f32) -> Option<EntityId
     let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
     for id in world.ids::<LootTable>() {
+        if !crate::instances::same_instance_space(world, from, id) {
+            continue;
+        }
         if world.get::<Owner>(id).is_some() || world.get::<ClassKit>(id).is_some() {
             continue;
         }
@@ -1512,6 +1522,9 @@ fn nearest_alive_player(world: &World, from: EntityId, max_range: f32) -> Option
     let from_t = world.get::<Transform>(from)?;
     let mut best: Option<(EntityId, f32)> = None;
     for id in world.ids::<ClassKit>() {
+        if !crate::instances::same_instance_space(world, from, id) {
+            continue;
+        }
         let Some(h) = world.get::<Health>(id) else {
             continue;
         };

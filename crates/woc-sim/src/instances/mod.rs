@@ -76,16 +76,24 @@ pub fn enter_dungeon(
     dungeon_id: &str,
     events: &mut Vec<SimEvent>,
 ) -> bool {
+    if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
+        return false;
+    }
+    let Some((alive, level)) = world
+        .get::<Health>(player_id)
+        .map(|health| (health.alive, health.level))
+    else {
+        return false;
+    };
+    if !alive {
+        return false;
+    }
     let Some(def) = dungeon(dungeon_id) else {
         events.push(SimEvent::Toast {
             message: "There is no such instance.".into(),
         });
         return false;
     };
-    if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
-        return false;
-    }
-    let level = world.get::<Health>(player_id).map(|h| h.level).unwrap_or(1);
     let in_instance = world
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.as_ref())
@@ -197,6 +205,35 @@ fn find_party_instance(
     None
 }
 
+pub(crate) fn despawn_instance_if_empty(world: &mut World, instance_id: &str) {
+    let others_inside = world.ids::<Identity>().into_iter().any(|id| {
+        world.get::<Identity>(id).is_some_and(|identity| {
+            identity.kind == EntityKind::Player
+                && world
+                    .get::<InstanceAt>(id)
+                    .and_then(|i| i.instance_id.as_deref())
+                    == Some(instance_id)
+        })
+    });
+    if !others_inside {
+        let to_despawn: Vec<EntityId> = world
+            .live_ids()
+            .filter(|&id| {
+                world.get::<Identity>(id).is_some_and(|identity| {
+                    identity.kind != EntityKind::Player
+                        && world
+                            .get::<InstanceAt>(id)
+                            .and_then(|i| i.instance_id.as_deref())
+                            == Some(instance_id)
+                })
+            })
+            .collect();
+        for id in to_despawn {
+            world.despawn(id);
+        }
+    }
+}
+
 /// Leave the active instance; only despawn boss if no players remain inside.
 pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) -> bool {
     let Some(instance_id) = world
@@ -230,32 +267,7 @@ pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<S
         return false;
     }
 
-    let others_inside = world.ids::<Identity>().into_iter().any(|id| {
-        world.get::<Identity>(id).is_some_and(|identity| {
-            identity.kind == EntityKind::Player
-                && world
-                    .get::<InstanceAt>(id)
-                    .and_then(|i| i.instance_id.as_deref())
-                    == Some(instance_id.as_str())
-        })
-    });
-    if !others_inside {
-        let to_despawn: Vec<EntityId> = world
-            .live_ids()
-            .filter(|&id| {
-                world.get::<Identity>(id).is_some_and(|identity| {
-                    identity.kind != EntityKind::Player
-                        && world
-                            .get::<InstanceAt>(id)
-                            .and_then(|i| i.instance_id.as_deref())
-                            == Some(instance_id.as_str())
-                })
-            })
-            .collect();
-        for id in to_despawn {
-            world.despawn(id);
-        }
-    }
+    despawn_instance_if_empty(world, &instance_id);
 
     events.push(SimEvent::InstanceLeft { player: player_id });
     events.push(SimEvent::Toast {

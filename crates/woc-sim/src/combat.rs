@@ -6,6 +6,7 @@ use crate::ecs::components::{
     Owner, Progress, Riding, Threat, Transform,
 };
 use crate::ecs::World;
+use crate::instances::same_instance_space;
 use crate::rng::Rng;
 use crate::stats::recalc_player_stats;
 use crate::types::{
@@ -418,7 +419,9 @@ pub fn add_threat(world: &mut World, mob_id: EntityId, source: EntityId, amount:
 /// Prefer current living target; else highest threat in range; else `None`.
 pub fn prefer_mob_target(world: &World, mob_id: EntityId, max_range: f32) -> Option<EntityId> {
     if let Some(tid) = world.get::<Combat>(mob_id).and_then(|c| c.target) {
-        if world.get::<ClassKit>(tid).is_some() && world.get::<Health>(tid).is_some_and(|h| h.alive)
+        if same_instance_space(world, mob_id, tid)
+            && world.get::<ClassKit>(tid).is_some()
+            && world.get::<Health>(tid).is_some_and(|h| h.alive)
         {
             return Some(tid);
         }
@@ -430,6 +433,9 @@ pub fn prefer_mob_target(world: &World, mob_id: EntityId, max_range: f32) -> Opt
             continue;
         }
         if !world.get::<Health>(id).is_some_and(|h| h.alive) {
+            continue;
+        }
+        if !same_instance_space(world, mob_id, id) {
             continue;
         }
         let d = dist2d_ids(world, mob_id, id);
@@ -453,6 +459,9 @@ pub fn deal_damage(
     events: &mut Vec<SimEvent>,
 ) {
     if world.get::<Health>(target).is_none_or(|h| !h.alive) {
+        return;
+    }
+    if source != target && !same_instance_space(world, source, target) {
         return;
     }
     if world
@@ -785,6 +794,7 @@ fn aoe_targets(
         .ids::<LootTable>()
         .into_iter()
         .filter(|&id| world.get::<Health>(id).is_some_and(|h| h.alive))
+        .filter(|&id| same_instance_space(world, src, id))
         .filter_map(|id| {
             let t = world.get::<Transform>(id)?;
             let d = dist2d_pose(origin.x, origin.z, t.x, t.z);
@@ -816,6 +826,9 @@ fn is_living_hostile(world: &World, src: EntityId, tid: EntityId) -> bool {
     if tid == src {
         return false;
     }
+    if !same_instance_space(world, src, tid) {
+        return false;
+    }
     if !world.get::<Health>(tid).is_some_and(|h| h.alive) {
         return false;
     }
@@ -842,6 +855,9 @@ fn is_living_friendly(world: &World, src: EntityId, tid: EntityId) -> bool {
     }
     if tid == src {
         return true;
+    }
+    if !same_instance_space(world, src, tid) {
+        return false;
     }
     if world.get::<Owner>(tid).is_some_and(|o| o.owner_id == src) {
         return true;
@@ -1185,6 +1201,9 @@ fn apply_direct_heal(
     coefficient: f32,
     events: &mut Vec<SimEvent>,
 ) {
+    if src != tid && !same_instance_space(world, src, tid) {
+        return;
+    }
     let hit = roll_player_hit(world, rng, src);
     let heal_mult = 1.0 + crate::talents::talent_bonus(world, src, "heal_pct");
     let sp = world
@@ -1431,6 +1450,9 @@ pub fn try_pickup_loot(
             if pending.is_pending(id) {
                 return false;
             }
+            if !same_instance_space(world, player_id, id) {
+                return false;
+            }
             let Some(identity) = world.get::<Identity>(id) else {
                 return false;
             };
@@ -1470,6 +1492,9 @@ pub fn claim_loot_target(
     }
 
     if world.get::<LootPile>(target_id).is_some() {
+        if !same_instance_space(world, player_id, target_id) {
+            return false;
+        }
         if crate::ecs::components::dist2d(world, player_id, target_id)
             .map(|d| d > crate::types::INTERACT_RANGE)
             .unwrap_or(true)
@@ -1499,6 +1524,7 @@ pub fn claim_loot_target(
     // Dead mob corpse: vacuum nearby loot piles.
     if world.get::<Identity>(target_id).map(|i| i.kind) != Some(EntityKind::Mob)
         || world.get::<Health>(target_id).is_some_and(|h| h.alive)
+        || !same_instance_space(world, player_id, target_id)
     {
         return false;
     }
@@ -1519,6 +1545,9 @@ pub fn claim_loot_target(
         .into_iter()
         .filter(|&id| {
             if pending.is_pending(id) {
+                return false;
+            }
+            if !same_instance_space(world, player_id, id) {
                 return false;
             }
             if world
@@ -1542,6 +1571,7 @@ pub fn claim_loot_target(
     if loot_ids.is_empty() {
         let pending_near = world.ids::<LootPile>().into_iter().any(|id| {
             pending.is_pending(id)
+                && same_instance_space(world, player_id, id)
                 && world
                     .get::<Transform>(id)
                     .map(|t| {
@@ -1575,6 +1605,9 @@ fn grant_loot_pile(
     lid: EntityId,
     events: &mut Vec<SimEvent>,
 ) -> bool {
+    if !same_instance_space(world, player_id, lid) {
+        return false;
+    }
     let Some(pile) = world.get::<LootPile>(lid).cloned() else {
         return false;
     };
