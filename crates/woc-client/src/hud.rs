@@ -2163,4 +2163,40 @@ mod tests {
             "Uncommon Wool Cloak 30/30"
         );
     }
+
+    #[test]
+    fn friends_panel_empty_shows_add_hint() {
+        let text = friends_panel_text(&TickSnapshot::default(), "");
+        assert!(text.contains("No friends yet. /add Name"));
+        assert!(text.contains("> _"));
+    }
+
+    #[test]
+    fn friends_panel_lists_online_star_and_ignored() {
+        let mut snap = TickSnapshot::default();
+        snap.friends.push(woc_protocol::FriendSnapshot {
+            name: "Bob".into(),
+            class_id: "mage".into(),
+            level: 8,
+            online: true,
+            zone_id: "eastbrook".into(),
+        });
+        snap.friends.push(woc_protocol::FriendSnapshot {
+            name: "Carol".into(),
+            class_id: "rogue".into(),
+            level: 3,
+            online: false,
+            zone_id: String::new(),
+        });
+        snap.ignored.push(woc_protocol::IgnoredSnapshot {
+            name: "Dave".into(),
+        });
+        let text = friends_panel_text(&snap, "/w Bob hi");
+        assert!(text.contains("*Bob  mage  8  eastbrook"));
+        assert!(text.contains(" Carol  rogue  3"));
+        assert!(text.contains("Ignored"));
+        assert!(text.contains(" Dave"));
+        assert!(text.contains("> /w Bob hi_"));
+        assert!(!text.contains("No friends yet"));
+    }
 }
