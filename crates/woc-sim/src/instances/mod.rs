@@ -8,7 +8,7 @@ use crate::ecs::components::{
 };
 use crate::ecs::World;
 use crate::social::party::PartyRoster;
-use woc_content::{dungeon, DungeonDef, DungeonTrashSpot};
+use woc_content::{delve, dungeon, DungeonDef, DungeonTrashSpot};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
 
 pub const INSTANCE_ENTER_RANGE: f32 = 5.0;
@@ -16,6 +16,13 @@ pub const INSTANCE_ENTER_RANGE: f32 = 5.0;
 /// Content dungeon id embedded in `instance_id` (`{dungeon}#{seq}`).
 pub fn dungeon_id_from_instance(instance_id: &str) -> &str {
     instance_id.split('#').next().unwrap_or(instance_id)
+}
+
+pub fn parent_zone_for_instance_key(instance_id: &str) -> Option<&'static str> {
+    let content_id = dungeon_id_from_instance(instance_id);
+    dungeon(content_id)
+        .map(|d| d.zone_id)
+        .or_else(|| delve(content_id).map(|d| d.zone_id))
 }
 
 pub fn follow_owner_into_instance(world: &mut World, player_id: EntityId) {
