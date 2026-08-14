@@ -223,6 +223,7 @@ mod serialize_tests {
                 durability: None,
                 enchant_id: None,
                 quality: None,
+                bound: false,
             }),
             None,
         ];

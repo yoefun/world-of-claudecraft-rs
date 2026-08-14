@@ -395,6 +395,7 @@ mod tests {
                 durability: None,
                 enchant_id: None,
                 quality: None,
+                bound: false,
             })],
             bank_copper: 0,
             honor: 125,

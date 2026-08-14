@@ -52,8 +52,8 @@ pub use gather_nodes::{gather_node, gather_nodes_for_zone, GatherNodeDef, GATHER
 pub use graveyards::{graveyard, graveyard_for_zone, GraveyardDef, GRAVEYARDS};
 pub use items::{
     base_of, can_dual_wield, can_equip, class_armor_cap, enchant, fine_substitute_for, item,
-    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny, ItemDef,
-    ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
+    item_is_gathered, quality_mult, reagent_unit_value, ArmorClass, EnchantDef, EquipDeny,
+    ItemBind, ItemDef, ItemEquipSlot, ItemKind, ItemQuality, WeaponStyle, ENCHANTS, ITEMS,
 };
 pub use items_zone2::ZONE2_ITEMS;
 pub use mobs::{mob, LootEntry, MobTemplate, MOBS};
@@ -565,6 +565,9 @@ mod tests {
         assert!(npc("innkeeper_mara").unwrap().is_innkeeper());
         assert!(npc("apothecary_vex").unwrap().trains_profession("alchemy"));
         assert!(npc("quartermaster_bren").unwrap().can_repair());
+        assert!(npc("auctioneer_lise").unwrap().is_auctioneer());
+        assert!(npc("banker_holme").unwrap().is_banker());
+        assert!(npc("mailbox_post").unwrap().is_mailbox());
         assert_eq!(
             npc("trader_wilkes").unwrap().faction,
             Some("eastbrook_watch")
@@ -574,6 +577,49 @@ mod tests {
             .vendor_stock
             .iter()
             .any(|o| o.item_id == "watch_signet" && o.min_standing == crate::Standing::Friendly));
+    }
+
+    #[test]
+    fn auctioneer_lise_is_eastbrook_auction_only() {
+        let lise = npc("auctioneer_lise").expect("auctioneer_lise");
+        assert!(lise.is_auctioneer());
+        assert!(!lise.is_vendor());
+        assert!(!lise.can_repair());
+        assert!(lise.vendor_stock.is_empty());
+        assert!(lise.trains.is_empty());
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "auctioneer_lise"
+            && (s.x - 4.0).abs() < f32::EPSILON
+            && (s.z - 6.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn banker_and_mailbox_are_eastbrook_only_services() {
+        let holme = npc("banker_holme").expect("banker_holme");
+        assert!(holme.is_banker());
+        assert!(!holme.is_auctioneer());
+        assert!(!holme.is_vendor());
+        assert_eq!(holme.greeting, "Your coin is safer with me.");
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "banker_holme"
+            && (s.x - 6.0).abs() < f32::EPSILON
+            && (s.z - 6.0).abs() < f32::EPSILON));
+
+        let post = npc("mailbox_post").expect("mailbox_post");
+        assert!(post.is_mailbox());
+        assert!(!post.is_banker());
+        assert_eq!(post.greeting, "Leave it. We'll see it through.");
+        assert!(EASTBROOK.npcs.iter().any(|s| s.npc_id == "mailbox_post"
+            && (s.x - 0.0).abs() < f32::EPSILON
+            && (s.z - 8.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn catalog_bind_rules() {
+        use crate::ItemBind;
+        assert_eq!(item("worn_sword").unwrap().bind, ItemBind::OnEquip);
+        assert_eq!(item("recruit_tunic").unwrap().bind, ItemBind::OnEquip);
+        assert_eq!(item("boar_tusk").unwrap().bind, ItemBind::OnPickup);
+        assert_eq!(item("silverleaf").unwrap().bind, ItemBind::None);
+        assert_eq!(item("travelers_ration").unwrap().bind, ItemBind::None);
     }
 
     #[test]

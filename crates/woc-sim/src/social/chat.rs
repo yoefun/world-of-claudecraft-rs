@@ -1,9 +1,9 @@
-//! Say, party, guild, and officer chat routing.
+//! Say, party, raid, guild, and officer chat routing.
 
 use crate::ecs::components::{ClassKit, Identity};
 use crate::ecs::World;
 use crate::social::guild::{GuildRank, GuildRoster, GUILD_MESSAGE_MAX};
-use crate::social::party::PartyRoster;
+use crate::social::party::{GroupKind, PartyRoster};
 use woc_protocol::EntityId;
 
 /// Chat delivery payload (host maps to `WsServerMsg::Chat`).
@@ -19,7 +19,7 @@ pub enum ChatEffect {
     },
 }
 
-/// Handle a chat request. Channels: `say`, `party`, `guild`, `officer`.
+/// Handle a chat request. Channels: `say`, `party`, `raid`, `guild`, `officer`.
 pub fn handle_chat(
     roster: &PartyRoster,
     guilds: &GuildRoster,
@@ -62,6 +62,16 @@ pub fn handle_chat(
                 text: trimmed.to_string(),
             }]
         }
+        "raid" => match roster.kind_of(speaker) {
+            Some(GroupKind::Raid) => vec![ChatEffect::Message {
+                channel: "raid".into(),
+                from,
+                text: trimmed.to_string(),
+            }],
+            _ => vec![ChatEffect::Error {
+                message: "You are not in a raid.".into(),
+            }],
+        },
         "guild" => {
             let key = GuildRoster::member_key(world, speaker);
             if guilds.guild_id_of(&key).is_none() {
@@ -124,7 +134,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
         let mut roster = PartyRoster::new();
-        let _ = roster.invite(1, "Bob", &world);
+        let _ = roster.invite(1, "Bob", &world, 0);
         let _ = roster.accept(2, &world);
         (roster, world)
     }
@@ -175,6 +185,46 @@ mod tests {
         let guilds = GuildRoster::new();
         let effects = handle_chat(&roster, &guilds, &world, 1, "say", "   ");
         assert!(matches!(effects.as_slice(), [ChatEffect::Error { .. }]));
+    }
+
+    #[test]
+    fn raid_channel_requires_raid() {
+        let (roster, world) = duo();
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&roster, &guilds, &world, 1, "raid", "hi");
+        assert!(
+            matches!(effects.as_slice(), [ChatEffect::Error { message }] if message == "You are not in a raid.")
+        );
+    }
+
+    #[test]
+    fn raid_channel_emits_after_convert() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
+        let mut roster = PartyRoster::new();
+        for (id, name) in [(2u32, "Bob"), (3, "Cara"), (4, "Dane"), (5, "Elin")] {
+            crate::ecs::spawn::create_player(
+                &mut world,
+                id,
+                name,
+                PlayerClass::Mage,
+                id as f32,
+                0.0,
+            );
+            let _ = roster.invite(1, name, &world, 0);
+            let _ = roster.accept(id, &world);
+        }
+        let _ = roster.convert_to_raid(1);
+        let guilds = GuildRoster::new();
+        let effects = handle_chat(&roster, &guilds, &world, 2, "raid", "pull");
+        assert_eq!(
+            effects,
+            vec![ChatEffect::Message {
+                channel: "raid".into(),
+                from: "Bob".into(),
+                text: "pull".into(),
+            }]
+        );
     }
 
     #[test]

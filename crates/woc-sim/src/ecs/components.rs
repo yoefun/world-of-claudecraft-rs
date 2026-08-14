@@ -84,6 +84,7 @@ pub struct InvStack {
     pub durability: Option<u32>,
     pub enchant_id: Option<String>,
     pub quality: Option<ItemQuality>,
+    pub bound: bool,
 }
 
 impl InvStack {
@@ -97,7 +98,15 @@ impl InvStack {
             durability,
             enchant_id: None,
             quality: None,
+            bound: false,
         }
+    }
+
+    pub fn with_loot_bind(mut self) -> Self {
+        if item(&self.item_id).is_some_and(|d| d.bind == woc_content::ItemBind::OnPickup) {
+            self.bound = true;
+        }
+        self
     }
 }
 

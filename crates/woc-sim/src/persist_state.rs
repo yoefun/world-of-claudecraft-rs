@@ -463,6 +463,7 @@ mod tests {
                     durability: Some(30),
                     enchant_id: None,
                     quality: Some(woc_content::ItemQuality::Rare),
+                    bound: false,
                 });
             }
         }

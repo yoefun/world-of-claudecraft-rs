@@ -14,11 +14,12 @@ pub type EntityId = u32;
 /// the server refuses those Hellos (policy, not a wire bump).
 /// Rev 7: combo / stealth / stance / absorb snapshot + identity interacts.
 /// Rev 8: quest abandon/share, optional turn-in reward choice. Additive
-/// reputation snapshot / vendor discount_pct / ReputationChanged (1.14.0);
-/// also `finger2` / `main_hand_enchant` / stack `enchant_id` (1.13.0);
-/// extra slots / `off_hand_enchant` / stack `quality` (1.15.0).
-/// Rev 9: guild snapshot / invite + guild client verbs (1.16.0).
-pub const PROTOCOL_REV: u32 = 9;
+/// reputation snapshot / vendor discount_pct / ReputationChanged;
+/// `finger2` / `main_hand_enchant` / stack `enchant_id`; gear-more slots
+/// (`off_hand_enchant`, stack `quality`); auction bid/bound fields.
+/// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs (1.18.0).
+/// Rev 10: guild snapshot / invite + guild client verbs (1.19.0).
+pub const PROTOCOL_REV: u32 = 10;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -216,10 +217,19 @@ pub enum InteractAction {
         bag_slot: u8,
         count: u32,
         price: u32,
+        #[serde(default)]
+        start_bid: u32,
+        #[serde(default)]
+        duration_hours: u32,
     },
-    /// Buy an auction listing by id.
+    /// Buy an auction listing by id (buyout).
     MarketBuy {
         listing_id: u32,
+    },
+    /// Bid on an auction listing.
+    MarketBid {
+        listing_id: u32,
+        amount: u32,
     },
     /// Cancel own listing.
     MarketCancel {
@@ -346,6 +356,8 @@ pub struct InvSlotSnapshot {
     pub enchant_id: Option<String>,
     #[serde(default)]
     pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -491,6 +503,12 @@ pub struct NpcSessionSnapshot {
     pub can_bind: bool,
     #[serde(default)]
     pub buyback: Vec<BuybackSnapshot>,
+    #[serde(default)]
+    pub can_auction: bool,
+    #[serde(default)]
+    pub can_bank: bool,
+    #[serde(default)]
+    pub can_mail: bool,
     /// Vendor buy discount percent from the viewer's standing (0 if none).
     #[serde(default)]
     pub discount_pct: u32,
@@ -588,6 +606,16 @@ pub struct TickSnapshot {
     /// Party membership, if any.
     #[serde(default)]
     pub party_id: Option<u32>,
+    #[serde(default)]
+    pub party_leader_id: Option<EntityId>,
+    #[serde(default)]
+    pub party_kind: String,
+    #[serde(default)]
+    pub party_members: Vec<PartyMemberSnapshot>,
+    #[serde(default)]
+    pub pending_invite_from: String,
+    #[serde(default)]
+    pub ready_check: Option<ReadyCheckSnapshot>,
     /// Current overworld / instance zone id.
     #[serde(default)]
     pub zone_id: String,
@@ -683,6 +711,33 @@ pub struct PendingLootSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PartyMemberSnapshot {
+    pub id: EntityId,
+    pub name: String,
+    #[serde(default)]
+    pub class_id: String,
+    #[serde(default)]
+    pub hp: f32,
+    #[serde(default)]
+    pub hp_max: f32,
+    #[serde(default)]
+    pub online: bool,
+    #[serde(default)]
+    pub raid_group: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ReadyCheckSnapshot {
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub you_responded: bool,
+    #[serde(default)]
+    pub ready_count: u32,
+    #[serde(default)]
+    pub total: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct TalentRankSnapshot {
     pub talent_id: String,
     pub rank: u32,
@@ -696,6 +751,14 @@ pub struct MailSnapshot {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -734,6 +797,22 @@ pub struct MarketListingSnapshot {
     /// True when this listing belongs to the viewing player.
     #[serde(default)]
     pub mine: bool,
+    #[serde(default)]
+    pub durability: Option<u32>,
+    #[serde(default)]
+    pub enchant_id: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub start_bid: u32,
+    #[serde(default)]
+    pub current_bid: u32,
+    #[serde(default)]
+    pub bidder: Option<String>,
+    #[serde(default)]
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -784,6 +863,11 @@ impl Default for TickSnapshot {
             auto_attack: false,
             is_dead: false,
             party_id: None,
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: String::new(),
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
@@ -1043,6 +1127,20 @@ pub enum WsClientMsg {
     },
     PartyAccept,
     PartyLeave,
+    PartyDecline,
+    PartyKick {
+        name: String,
+    },
+    PartyPromote {
+        name: String,
+    },
+    PartyDisband,
+    PartyReadyCheck,
+    PartyReadyRespond {
+        ready: bool,
+    },
+    ConvertToRaid,
+    ConvertToParty,
     GuildCreate {
         name: String,
     },
@@ -1316,6 +1414,11 @@ mod tests {
             auto_attack: true,
             is_dead: true,
             party_id: Some(3),
+            party_leader_id: None,
+            party_kind: String::new(),
+            party_members: Vec::new(),
+            pending_invite_from: String::new(),
+            ready_check: None,
             zone_id: "eastbrook".into(),
             hearth_ready_tick: 0,
             hearth_zone_id: String::new(),
@@ -1374,6 +1477,40 @@ mod tests {
         assert!(back.stealthed);
         assert_eq!(back.stance_id, "battle");
         assert!((back.absorb - 25.0).abs() < f32::EPSILON);
+        assert!(back.party_members.is_empty());
+    }
+
+    #[test]
+    fn party_roster_snapshot_defaults() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0},"target_id":null,"ability_ready":false,"ability_cooldown":0.0}"#,
+        )
+        .unwrap();
+        assert!(snap.party_members.is_empty());
+        assert!(snap.pending_invite_from.is_empty());
+        assert!(snap.party_kind.is_empty());
+        assert!(snap.party_leader_id.is_none());
+        assert!(snap.ready_check.is_none());
+        assert_eq!(PROTOCOL_REV, 10);
+    }
+
+    #[test]
+    fn party_depth_ws_msg_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::PartyDecline,
+            WsClientMsg::PartyKick { name: "Bob".into() },
+            WsClientMsg::PartyPromote { name: "Bob".into() },
+            WsClientMsg::PartyDisband,
+            WsClientMsg::PartyReadyCheck,
+            WsClientMsg::PartyReadyRespond { ready: true },
+            WsClientMsg::ConvertToRaid,
+            WsClientMsg::ConvertToParty,
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
     }
 
     #[test]
@@ -1450,6 +1587,14 @@ mod tests {
             WsClientMsg::PartyInvite { name: "Bob".into() },
             WsClientMsg::PartyAccept,
             WsClientMsg::PartyLeave,
+            WsClientMsg::PartyDecline,
+            WsClientMsg::PartyKick { name: "Bob".into() },
+            WsClientMsg::PartyPromote { name: "Bob".into() },
+            WsClientMsg::PartyDisband,
+            WsClientMsg::PartyReadyCheck,
+            WsClientMsg::PartyReadyRespond { ready: true },
+            WsClientMsg::ConvertToRaid,
+            WsClientMsg::ConvertToParty,
             WsClientMsg::Chat {
                 channel: "say".into(),
                 text: "hello".into(),
@@ -1523,8 +1668,14 @@ mod tests {
                 bag_slot: 0,
                 count: 1,
                 price: 100,
+                start_bid: 0,
+                duration_hours: 0,
             },
             InteractAction::MarketBuy { listing_id: 3 },
+            InteractAction::MarketBid {
+                listing_id: 3,
+                amount: 12,
+            },
             InteractAction::MarketCancel { listing_id: 3 },
             InteractAction::DuelChallenge,
             InteractAction::DuelAccept,
@@ -1646,13 +1797,60 @@ mod tests {
         assert!(eq.back.is_none());
         let slot: InvSlotSnapshot = serde_json::from_str(r#"{"item_id":"x","count":1}"#).unwrap();
         assert!(slot.enchant_id.is_none());
+        assert!(!slot.bound);
         assert!(slot.quality.is_none());
-        assert_eq!(PROTOCOL_REV, 9);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
-    fn protocol_rev_is_nine() {
-        assert_eq!(PROTOCOL_REV, 9);
+    fn market_mail_auction_fields_default_when_omitted() {
+        let listing: MarketListingSnapshot =
+            serde_json::from_str(r#"{"id":1,"seller":"Ada","item_id":"x","count":1,"price":2}"#)
+                .unwrap();
+        assert!(listing.durability.is_none());
+        assert!(listing.enchant_id.is_none());
+        assert_eq!(listing.expires_tick, 0);
+        assert!(!listing.mine);
+        assert_eq!(listing.start_bid, 0);
+        assert_eq!(listing.current_bid, 0);
+        assert!(listing.bidder.is_none());
+        assert!(listing.quality.is_none());
+        assert!(!listing.bound);
+
+        let mail: MailSnapshot = serde_json::from_str(
+            r#"{"id":1,"from":"AH","subject":"Sold","copper":40,"item_id":null,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(mail.durability.is_none());
+        assert!(mail.enchant_id.is_none());
+        assert!(mail.quality.is_none());
+        assert!(!mail.bound);
+
+        let session: NpcSessionSnapshot =
+            serde_json::from_str(r#"{"npc_id":1,"npc_name":"Lise"}"#).unwrap();
+        assert!(!session.can_auction);
+        assert!(!session.can_bank);
+        assert!(!session.can_mail);
+        assert_eq!(PROTOCOL_REV, 10);
+
+        let list: InteractAction =
+            serde_json::from_str(r#"{"type":"market_list","bag_slot":0,"count":1,"price":12}"#)
+                .unwrap();
+        assert_eq!(
+            list,
+            InteractAction::MarketList {
+                bag_slot: 0,
+                count: 1,
+                price: 12,
+                start_bid: 0,
+                duration_hours: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn protocol_rev_is_ten() {
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]
@@ -1732,7 +1930,7 @@ mod tests {
         assert_eq!(snap.spell_power, 0.0);
         assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
-        assert_eq!(PROTOCOL_REV, 9);
+        assert_eq!(PROTOCOL_REV, 10);
     }
 
     #[test]

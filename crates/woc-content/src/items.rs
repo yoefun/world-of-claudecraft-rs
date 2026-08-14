@@ -64,6 +64,23 @@ pub enum ItemQuality {
     Rare,
 }
 
+/// When a stack becomes soulbound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemBind {
+    None,
+    OnEquip,
+    OnPickup,
+}
+
+const fn bind_for_kind(kind: ItemKind) -> ItemBind {
+    match kind {
+        ItemKind::Quest => ItemBind::OnPickup,
+        ItemKind::Weapon | ItemKind::Armor => ItemBind::OnEquip,
+        ItemKind::Consumable | ItemKind::Junk => ItemBind::None,
+    }
+}
+
 pub fn quality_mult(q: ItemQuality) -> f32 {
     match q {
         ItemQuality::Poor => 0.9,
@@ -187,6 +204,7 @@ pub struct ItemDef {
     pub spell_power: f32,
     pub quality: ItemQuality,
     pub enchant_id: Option<&'static str>,
+    pub bind: ItemBind,
 }
 
 const fn with_quality(mut def: ItemDef, quality: ItemQuality) -> ItemDef {
@@ -308,6 +326,7 @@ const fn weapon_gear(
         spell_power,
         quality: ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     }
 }
 
@@ -344,6 +363,7 @@ const fn jewelry(
         spell_power,
         quality: ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     }
 }
 
@@ -378,6 +398,7 @@ const fn armor(
         spell_power: 0.0,
         quality: ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     }
 }
 
@@ -409,6 +430,7 @@ const fn shield(
         spell_power: 0.0,
         quality: ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::OnEquip,
     }
 }
 
@@ -439,6 +461,7 @@ const fn consumable(
         spell_power: 0.0,
         quality: ItemQuality::Common,
         enchant_id: None,
+        bind: ItemBind::None,
     }
 }
 
@@ -507,6 +530,7 @@ const fn valued_misc(
         spell_power: 0.0,
         quality: ItemQuality::Common,
         enchant_id: None,
+        bind: bind_for_kind(kind),
     }
 }
 

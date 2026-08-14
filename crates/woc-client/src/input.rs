@@ -4,7 +4,7 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
 use woc_content::talents::talents_for_class;
-use woc_content::{can_equip, item, ItemKind, PlayerClass};
+use woc_content::{can_equip, item, npc, ItemKind, PlayerClass};
 use woc_protocol::{
     AbilitySlot, EntityId, EntityKind, EquipSlot, InteractAction, PlayerIntent, QuestLogEntry,
     TickSnapshot, WsClientMsg,
@@ -13,8 +13,8 @@ use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
-    first_consumable_bag_stack, first_equippable_bag_stack, first_junk_bag_stack,
-    first_listable_bag_stack, UiFlags,
+    cycle_duration_hours, filtered_market, first_consumable_bag_stack, first_equippable_bag_stack,
+    first_junk_bag_stack, first_listable_bag_stack, listing_min_bid, UiFlags, MARKET_PAGE_SIZE,
 };
 use crate::GameHost;
 
@@ -109,11 +109,11 @@ pub(crate) fn collect_intent(
         clear_target,
         ..default()
     };
-    // The guild panel's compose line owns the keyboard while it is open.
-    let typing = ui.show_guild;
+    // The guild compose line and the market search field own the keyboard.
+    let typing = ui.show_guild || ui.market_searching;
+    let mut mx = 0.0;
+    let mut mz = 0.0;
     if !typing {
-        let mut mx = 0.0;
-        let mut mz = 0.0;
         if keys.pressed(KeyCode::KeyW) {
             mz += 1.0;
         }
@@ -126,8 +126,6 @@ pub(crate) fn collect_intent(
         if keys.pressed(KeyCode::KeyD) {
             mx += 1.0;
         }
-        intent.move_x = mx;
-        intent.move_z = mz;
         if keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space) {
             // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
             intent.jump = true;
@@ -139,6 +137,8 @@ pub(crate) fn collect_intent(
             intent.fly_toggle = true;
         }
     }
+    intent.move_x = mx;
+    intent.move_z = mz;
     // Digit keys: talents, loot rolls, bank withdraw, or abilities.
     let loot_rolling = host.snapshot.pending_loot.iter().any(|p| !p.rolled);
     let choice_turn_in = nearest_npc_template(&host.snapshot, 5.0)
@@ -170,10 +170,42 @@ pub(crate) fn collect_intent(
     let form_f = matches!(class_id, "warrior" | "shaman" | "druid")
         && keys.just_pressed(KeyCode::KeyF)
         && !bags_consume_f;
-    if !typing
-        && (mouse.just_pressed(MouseButton::Left)
-            || (keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f))
-    {
+    if !typing && mouse.just_pressed(MouseButton::Left) {
+        let player_pos = host.player_snap().map(|p| (p.x, p.z));
+        let player_id = host.snapshot.player_id;
+        let mut best: Option<(EntityId, EntityKind, f32)> = None;
+        if let Some((px, pz)) = player_pos {
+            for e in &host.snapshot.entities {
+                let is_other_player = e.kind == EntityKind::Player && e.id != player_id && e.alive;
+                let is_mob = e.kind == EntityKind::Mob && e.alive;
+                if !is_other_player && !is_mob {
+                    continue;
+                }
+                let dx = e.x - px;
+                let dz = e.z - pz;
+                let d = (dx * dx + dz * dz).sqrt();
+                if d < 25.0 && best.map(|(_, _, bd)| d < bd).unwrap_or(true) {
+                    best = Some((e.id, e.kind, d));
+                }
+            }
+        }
+        if let Some((id, kind, _)) = best {
+            intent.target_id = Some(id);
+            if kind == EntityKind::Player {
+                host.snapshot.target_id = Some(id);
+                host.local_auto_attack = false;
+                if let Some(sim) = host.sim.as_mut() {
+                    sim.set_player_target(Some(id));
+                }
+            } else {
+                intent.attack = true;
+                host.local_auto_attack = true;
+            }
+        } else {
+            intent.attack = true;
+            host.local_auto_attack = true;
+        }
+    } else if !typing && keys.pressed(KeyCode::KeyF) && !bags_consume_f && !form_f {
         intent.attack = true;
         host.local_auto_attack = true;
         if let Some(p) = host.player_snap() {
@@ -208,6 +240,14 @@ pub(crate) fn collect_intent(
         intent.target_id = intent.target_id.or(host.snapshot.target_id);
     }
     host.pending_intent = intent;
+}
+
+fn targeted_other_member_name(snap: &TickSnapshot) -> Option<String> {
+    let tid = snap.target_id?;
+    snap.party_members
+        .iter()
+        .find(|m| m.id == tid && m.id != snap.player_id)
+        .map(|m| m.name.clone())
 }
 
 fn first_available_talent_id(snap: &TickSnapshot) -> Option<String> {
@@ -325,12 +365,46 @@ pub(crate) fn quest_interact_actions(
     out
 }
 
+fn market_search_keys() -> impl Iterator<Item = (KeyCode, char)> {
+    [
+        (KeyCode::KeyA, 'a'),
+        (KeyCode::KeyB, 'b'),
+        (KeyCode::KeyC, 'c'),
+        (KeyCode::KeyD, 'd'),
+        (KeyCode::KeyE, 'e'),
+        (KeyCode::KeyF, 'f'),
+        (KeyCode::KeyG, 'g'),
+        (KeyCode::KeyH, 'h'),
+        (KeyCode::KeyI, 'i'),
+        (KeyCode::KeyJ, 'j'),
+        (KeyCode::KeyK, 'k'),
+        (KeyCode::KeyL, 'l'),
+        (KeyCode::KeyM, 'm'),
+        (KeyCode::KeyN, 'n'),
+        (KeyCode::KeyO, 'o'),
+        (KeyCode::KeyP, 'p'),
+        (KeyCode::KeyQ, 'q'),
+        (KeyCode::KeyR, 'r'),
+        (KeyCode::KeyS, 's'),
+        (KeyCode::KeyT, 't'),
+        (KeyCode::KeyU, 'u'),
+        (KeyCode::KeyV, 'v'),
+        (KeyCode::KeyW, 'w'),
+        (KeyCode::KeyX, 'x'),
+        (KeyCode::KeyY, 'y'),
+        (KeyCode::KeyZ, 'z'),
+        (KeyCode::Space, ' '),
+        (KeyCode::Minus, '-'),
+    ]
+    .into_iter()
+}
+
 pub(crate) fn handle_interact_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut host: ResMut<GameHost>,
     mut ui: ResMut<UiFlags>,
 ) {
-    if keys.just_pressed(KeyCode::KeyB) && !ui.show_guild {
+    if keys.just_pressed(KeyCode::KeyB) && !ui.show_market && !ui.show_guild {
         ui.show_bags = !ui.show_bags;
     }
     if keys.just_pressed(KeyCode::KeyL) && !ui.show_market && !ui.show_guild {
@@ -395,6 +469,17 @@ pub(crate) fn handle_interact_keys(
         if ui.show_market {
             ui.show_character = false;
             ui.show_map = false;
+            ui.market_page = 0;
+        } else {
+            ui.market_searching = false;
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::Escape) {
+        if ui.market_searching {
+            ui.market_searching = false;
+        } else if !ui.market_filter.is_empty() {
+            ui.market_filter.clear();
+            ui.market_page = 0;
         }
     }
     if keys.just_pressed(KeyCode::Escape) && ui.show_guild {
@@ -410,6 +495,73 @@ pub(crate) fn handle_interact_keys(
     if ui.show_guild {
         handle_guild_panel_keys(&keys, &mut host, &mut ui);
         return;
+    }
+
+    let pending = !host.snapshot.pending_invite_from.is_empty();
+    let ready_prompt = host
+        .snapshot
+        .ready_check
+        .as_ref()
+        .is_some_and(|r| !r.you_responded);
+
+    if pending && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+        host.send_party(WsClientMsg::PartyAccept);
+    } else if ready_prompt && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+        host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
+    }
+
+    if pending && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        host.send_party(WsClientMsg::PartyDecline);
+    } else if ready_prompt && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        host.send_party(WsClientMsg::PartyReadyRespond { ready: false });
+    } else if !pending && !ready_prompt && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
+        ui.show_party = !ui.show_party;
+        if ui.show_party {
+            ui.show_character = false;
+            ui.show_map = false;
+        }
+    }
+
+    if !ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
+        if let Some(tid) = host.snapshot.target_id {
+            let invite_name = host.snapshot.entities.iter().find_map(|e| {
+                if e.id == tid && e.kind == EntityKind::Player && e.id != host.snapshot.player_id {
+                    Some(e.name.clone())
+                } else {
+                    None
+                }
+            });
+            if let Some(name) = invite_name {
+                host.send_party(WsClientMsg::PartyInvite { name });
+            }
+        }
+    }
+
+    if ui.show_party && keys.just_pressed(KeyCode::KeyX) {
+        host.send_party(WsClientMsg::PartyLeave);
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::KeyY) {
+        if let Some(name) = targeted_other_member_name(&host.snapshot) {
+            host.send_party(WsClientMsg::PartyPromote { name });
+        }
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::Minus) {
+        if let Some(name) = targeted_other_member_name(&host.snapshot) {
+            host.send_party(WsClientMsg::PartyKick { name });
+        }
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::KeyR) {
+        host.send_party(WsClientMsg::PartyReadyCheck);
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::Backspace) {
+        host.send_party(WsClientMsg::PartyDisband);
+    }
+    if ui.show_party && keys.just_pressed(KeyCode::Equal) {
+        if host.snapshot.party_kind == "raid" {
+            host.send_party(WsClientMsg::ConvertToParty);
+        } else {
+            host.send_party(WsClientMsg::ConvertToRaid);
+        }
     }
 
     let player_id = host.snapshot.player_id;
@@ -463,7 +615,7 @@ pub(crate) fn handle_interact_keys(
         host.interact(player_id, InteractAction::RespecTalents);
         host.recent_toasts.push(("Respeccing talents.".into(), 2.0));
     }
-    if !ui.show_talents && keys.just_pressed(KeyCode::KeyR) {
+    if !ui.show_talents && !ui.show_party && keys.just_pressed(KeyCode::KeyR) {
         if let Some(npc) = host
             .snapshot
             .open_npc
@@ -601,7 +753,39 @@ pub(crate) fn handle_interact_keys(
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
         }
     }
-    if ui.show_market && !ui.show_guild && keys.just_pressed(KeyCode::KeyO) {
+    if ui.show_market && ui.market_searching {
+        if keys.just_pressed(KeyCode::Backspace) {
+            ui.market_filter.pop();
+            ui.market_page = 0;
+        } else {
+            for (code, ch) in market_search_keys() {
+                if keys.just_pressed(code) {
+                    ui.market_filter.push(ch);
+                    ui.market_page = 0;
+                }
+            }
+        }
+    }
+    if ui.show_market && !ui.market_searching && keys.just_pressed(KeyCode::Slash) {
+        ui.market_searching = true;
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::BracketLeft) {
+        ui.market_page = ui.market_page.saturating_sub(1);
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::BracketRight) {
+        let pages = filtered_market(&host.snapshot, &ui.market_filter)
+            .len()
+            .div_ceil(MARKET_PAGE_SIZE)
+            .max(1);
+        ui.market_page = (ui.market_page + 1).min(pages.saturating_sub(1));
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::Comma) {
+        ui.market_duration_hours = cycle_duration_hours(ui.market_duration_hours, false);
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::Period) {
+        ui.market_duration_hours = cycle_duration_hours(ui.market_duration_hours, true);
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::KeyO) {
         if let Some(listing) = host
             .snapshot
             .market
@@ -632,6 +816,8 @@ pub(crate) fn handle_interact_keys(
                     bag_slot,
                     count,
                     price,
+                    start_bid: (price / 2).max(1),
+                    duration_hours: ui.market_duration_hours,
                 },
             );
             host.recent_toasts
@@ -654,6 +840,31 @@ pub(crate) fn handle_interact_keys(
         } else {
             host.recent_toasts
                 .push(("You have no listings.".into(), 2.0));
+        }
+    }
+    if ui.show_market && keys.just_pressed(KeyCode::KeyB) {
+        if let Some(listing) = filtered_market(&host.snapshot, &ui.market_filter)
+            .into_iter()
+            .find(|l| {
+                !l.mine && listing_min_bid(l).is_some_and(|m| m <= host.snapshot.progress.copper)
+            })
+            .cloned()
+        {
+            let amount = listing_min_bid(&listing).unwrap_or(1);
+            host.interact(
+                player_id,
+                InteractAction::MarketBid {
+                    listing_id: listing.id,
+                    amount,
+                },
+            );
+            host.recent_toasts.push((
+                format!("Bidding {amount}c on listing #{}.", listing.id),
+                2.0,
+            ));
+        } else {
+            host.recent_toasts
+                .push(("No biddable market listings.".into(), 2.0));
         }
     }
 
@@ -948,6 +1159,34 @@ pub(crate) fn handle_interact_keys(
     };
 
     host.interact(nid, InteractAction::Talk);
+
+    if template_id
+        .as_deref()
+        .and_then(npc)
+        .is_some_and(|d| d.is_auctioneer())
+    {
+        ui.show_market = true;
+        ui.show_character = false;
+        ui.show_map = false;
+    }
+    if template_id
+        .as_deref()
+        .and_then(npc)
+        .is_some_and(|d| d.is_banker())
+    {
+        ui.show_bank = true;
+        ui.show_character = false;
+        ui.show_map = false;
+    }
+    if template_id
+        .as_deref()
+        .and_then(npc)
+        .is_some_and(|d| d.is_mailbox())
+    {
+        ui.show_mail = true;
+        ui.show_character = false;
+        ui.show_map = false;
+    }
 
     if let Some(template_id) = template_id.as_deref() {
         for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
@@ -1285,6 +1524,7 @@ mod tests {
             durability: None,
             enchant_id: None,
             quality: None,
+            bound: false,
         });
         snap.inventory.push(InvSlotSnapshot {
             slot: 1,
@@ -1293,6 +1533,7 @@ mod tests {
             durability: None,
             enchant_id: None,
             quality: None,
+            bound: false,
         });
 
         assert_eq!(

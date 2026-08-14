@@ -1,10 +1,10 @@
-# 公会系统完善设计 — `1.16.0` / `guilds`
+# 公会系统完善设计 — `1.19.0` / `guilds`
 
-**Status:** Implemented. Ships as rewrite `1.16.0` / `guilds` (`1.14.0` reputation and `1.15.0` gear-more landed on `develop` after this spec was written).  
+**Status:** Implemented. Ships as rewrite `1.19.0` / `guilds` (`1.14.0` reputation through `1.18.0` raid landed on `develop` after this spec was written; party claimed protocol rev 9).  
 **Baseline:** rewrite `1.13.0` / parity `gear-slots` on `develop` (ECS `World` actor store).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `guilds`.  
-**Protocol:** bump to rev **9**.
+**Protocol:** bump to rev **10**.
 
 Party (shipped): `crates/woc-sim/src/social/party.rs`.  
 Upstream guild verbs (server social, not sim): `server/social.ts` at the pin.  
@@ -54,9 +54,9 @@ Rust 重写目前只有**小队**（2–5 人、按 `EntityId`、下线即散）
 | **1.13.0** | `gear-slots` | Dual-wield / Finger2 / quality / MH enchant（shipped） |
 | **1.14.0** | `reputation` | Hub factions（shipped after this spec was written） |
 | **1.15.0** | `gear-more` | Extra slots / Hunter DW / OH enchant（shipped after this spec was written） |
-| **1.16.0** | `guilds` | 建会、邀请、职位、公会/官员聊天、MOTD、花名册、持久化 |
+| **1.19.0** | `guilds` | 建会、邀请、职位、公会/官员聊天、MOTD、花名册、持久化 |
 
-`PROTOCOL_REV` → **9**（新 `WsClientMsg` 公会动词 + snapshot 花名册）。上游钉仍是 **0.31.0**。实现波打标 `1.16.0`。
+`PROTOCOL_REV` → **10**（新 `WsClientMsg` 公会动词 + snapshot 花名册；rev 9 已被 develop 的队伍/团队动词占用）。上游钉仍是 **0.31.0**。实现波打标 `1.19.0`。
 
 ## 5. Architecture
 
@@ -77,7 +77,7 @@ durable character id
 woc-sim GuildRoster  ── create / invite / rank / motd / chat
         │
         ▼
-TickSnapshot.guild + guild_invite     protocol rev 9
+TickSnapshot.guild + guild_invite     protocol rev 10
         │
         ▼
 RealmEconomy.guilds (serde default)   persist like mail
@@ -206,7 +206,7 @@ pub enum GuildEffect {
 
 本波**不做**屏蔽/忽略列表（上游 friends/blocks 是另一套社交）。
 
-### 5.4 Protocol rev 9
+### 5.4 Protocol rev 10
 
 `TickSnapshot` 加法字段（`#[serde(default)]`）：
 
@@ -384,7 +384,7 @@ Membership **不**写入 `CharacterSave`。`GuildRoster` 是唯一来源，避�
 | 新 tick phase 改指纹 | 惰性过期，不改 `tick_all` |
 | `CharacterSave.guild_id` 与花名册不一致 | 不写角色行 |
 | 客户端无输入框导致无法建会 | J 面板 compose buffer |
-| Protocol 8 客户端撞上新变体 | 升 rev 9；title 已有 version gate |
+| Protocol 9 客户端撞上新变体 | 升 rev 10；title 已有 version gate |
 
 ## 9. Success demo (human)
 
@@ -398,4 +398,4 @@ Membership **不**写入 `CharacterSave`。`GuildRoster` 是唯一来源，避�
 6. 两人均 Alt-F4 再登入：仍在 `<Vale Watch>`，MOTD 仍在。
 7. Alice **T** 把会交给 Bob，**Q** 离会；Bob **D** 解散。
 
-Footer：`WoC-rs 1.16.0 · upstream 0.31.0`。
+Footer：`WoC-rs 1.19.0 · upstream 0.31.0`。

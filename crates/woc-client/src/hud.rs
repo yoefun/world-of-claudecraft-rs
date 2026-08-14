@@ -23,6 +23,15 @@ pub(crate) struct HudXpText;
 pub(crate) struct HudTargetText;
 
 #[derive(Component)]
+pub(crate) struct HudPartyFrames;
+
+#[derive(Component)]
+pub(crate) struct HudPartyPanel;
+
+#[derive(Component)]
+pub(crate) struct HudPartyText;
+
+#[derive(Component)]
 pub(crate) struct HudToastText;
 
 #[derive(Component)]
@@ -93,8 +102,35 @@ pub(crate) struct UiFlags {
     pub(crate) show_mail: bool,
     pub(crate) show_market: bool,
     pub(crate) show_map: bool,
+    pub(crate) show_party: bool,
     pub(crate) show_guild: bool,
     pub(crate) guild_compose: String,
+    pub(crate) market_filter: String,
+    pub(crate) market_page: usize,
+    pub(crate) market_duration_hours: u32,
+    pub(crate) market_searching: bool,
+}
+
+impl Default for UiFlags {
+    fn default() -> Self {
+        Self {
+            show_bags: false,
+            show_quests: false,
+            show_character: false,
+            show_talents: false,
+            show_bank: false,
+            show_mail: false,
+            show_market: false,
+            show_map: false,
+            show_party: false,
+            show_guild: false,
+            guild_compose: String::new(),
+            market_filter: String::new(),
+            market_page: 0,
+            market_duration_hours: 12,
+            market_searching: false,
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -103,19 +139,8 @@ pub(crate) struct VendorUiCache {
 }
 
 pub(crate) fn plugin(app: &mut App) {
-    app.insert_resource(UiFlags {
-        show_bags: false,
-        show_quests: false,
-        show_character: false,
-        show_talents: false,
-        show_bank: false,
-        show_mail: false,
-        show_market: false,
-        show_map: false,
-        show_guild: false,
-        guild_compose: String::new(),
-    })
-    .init_resource::<VendorUiCache>();
+    app.insert_resource(UiFlags::default())
+        .init_resource::<VendorUiCache>();
 }
 
 fn npc_session_stock(snap: &TickSnapshot) -> Vec<VendorOfferSnapshot> {
@@ -192,18 +217,66 @@ pub(crate) fn first_consumable_bag_stack(snap: &TickSnapshot) -> Option<(u8, Str
 pub(crate) fn first_listable_bag_stack(snap: &TickSnapshot) -> Option<(u8, u32, String, u32)> {
     snap.inventory.iter().find_map(|stack| {
         let def = item(&stack.item_id)?;
-        if matches!(def.kind, ItemKind::Junk | ItemKind::Consumable) {
-            let price = def.vendor_sell.max(1).saturating_mul(5);
-            Some((
-                stack.slot,
-                stack.count.min(1).max(1),
-                stack.item_id.clone(),
-                price,
-            ))
-        } else {
-            None
+        if matches!(def.kind, ItemKind::Quest) || stack.bound {
+            return None;
         }
+        let price = def.vendor_sell.max(1).saturating_mul(5);
+        Some((
+            stack.slot,
+            stack.count.min(1).max(1),
+            stack.item_id.clone(),
+            price,
+        ))
     })
+}
+
+pub(crate) const MARKET_PAGE_SIZE: usize = 8;
+
+pub(crate) fn filtered_market<'a>(
+    snap: &'a TickSnapshot,
+    filter: &str,
+) -> Vec<&'a woc_protocol::MarketListingSnapshot> {
+    let needle = filter.trim().to_ascii_lowercase();
+    snap.market
+        .iter()
+        .filter(|listing| {
+            if needle.is_empty() {
+                return true;
+            }
+            let id = listing.item_id.to_ascii_lowercase();
+            let name = item(&listing.item_id)
+                .map(|d| d.name.to_ascii_lowercase())
+                .unwrap_or_default();
+            id.contains(&needle) || name.contains(&needle)
+        })
+        .collect()
+}
+
+pub(crate) fn listing_min_bid(listing: &woc_protocol::MarketListingSnapshot) -> Option<u32> {
+    if listing.start_bid == 0 && listing.current_bid == 0 {
+        return None;
+    }
+    if listing.bidder.is_none() {
+        return Some(listing.start_bid.max(1));
+    }
+    Some(
+        listing
+            .current_bid
+            .saturating_add((listing.current_bid / 20).max(1)),
+    )
+}
+
+pub(crate) fn cycle_duration_hours(hours: u32, next: bool) -> u32 {
+    match (hours, next) {
+        (12, true) | (0, true) => 24,
+        (24, true) => 48,
+        (48, true) => 12,
+        (12, false) | (0, false) => 48,
+        (24, false) => 12,
+        (48, false) => 24,
+        (_, true) => 24,
+        (_, false) => 12,
+    }
 }
 
 fn zone_name(snap: &TickSnapshot) -> &str {
@@ -254,6 +327,30 @@ pub(crate) fn npc_session_help(snap: &TickSnapshot) -> String {
         .unwrap_or(false)
     {
         parts.push("[T] Train".into());
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_auction)
+        .unwrap_or(false)
+    {
+        parts.push("[U] Auction".into());
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_bank)
+        .unwrap_or(false)
+    {
+        parts.push("[K] Bank".into());
+    }
+    if snap
+        .open_npc
+        .as_ref()
+        .map(|npc| npc.can_mail)
+        .unwrap_or(false)
+    {
+        parts.push("[I] Mail".into());
     }
     parts.join("   ")
 }
@@ -550,7 +647,21 @@ fn mail_panel_text(snap: &TickSnapshot) -> String {
     lines.join("\n")
 }
 
-fn market_panel_text(snap: &TickSnapshot) -> String {
+fn market_panel_text(snap: &TickSnapshot, ui: &UiFlags) -> String {
+    let filtered = filtered_market(snap, &ui.market_filter);
+    let pages = filtered.len().div_ceil(MARKET_PAGE_SIZE).max(1);
+    let page = ui.market_page.min(pages.saturating_sub(1));
+    let start = page * MARKET_PAGE_SIZE;
+    let page_rows = filtered
+        .get(start..filtered.len().min(start + MARKET_PAGE_SIZE))
+        .unwrap_or(&[]);
+    let search = if ui.market_searching {
+        format!("Search> {}_", ui.market_filter)
+    } else if ui.market_filter.is_empty() {
+        "Filter: (all)   [/] search".into()
+    } else {
+        format!("Filter: {}   [/] search  [Esc] clear", ui.market_filter)
+    };
     let mut lines = vec![
         "Market [U]".to_string(),
         format!(
@@ -559,26 +670,38 @@ fn market_panel_text(snap: &TickSnapshot) -> String {
             snap.progress.copper,
             snap.honor
         ),
+        format!(
+            "{search}   page {}/{}   duration {}h",
+            page + 1,
+            pages,
+            ui.market_duration_hours
+        ),
     ];
-    if snap.market.is_empty() {
+    if page_rows.is_empty() {
         lines.push("  (no listings)".into());
     } else {
-        lines.extend(snap.market.iter().map(|listing| {
-            let mine = if listing.mine { " [yours]" } else { "" };
-            format!(
-                "  #{} {}×{} — {}c ({}){mine}",
-                listing.id, listing.count, listing.item_id, listing.price, listing.seller
-            )
-        }));
+        lines.extend(page_rows.iter().copied().map(listing_line));
     }
     match first_listable_bag_stack(snap) {
         Some((_, _, item_id, price)) => {
-            lines.push(format!("[L] List 1×{item_id} for {price}c (+5c fee)"));
+            let name = item(&item_id)
+                .map(|d| d.name.to_string())
+                .unwrap_or(item_id);
+            let fee = match ui.market_duration_hours {
+                24 => 10,
+                48 => 20,
+                _ => 5,
+            };
+            let start_bid = (price / 2).max(1);
+            lines.push(format!(
+                "[L] List 1×{name} bid {start_bid}c buyout {price}c (+{fee}c {}h fee)",
+                ui.market_duration_hours
+            ));
         }
-        None => lines.push("[L] List first junk/consumable (none)".into()),
+        None => lines.push("[L] List first non-quest bag stack (none)".into()),
     }
-    lines.push("[O] Buy first affordable listing (not yours)".into());
-    lines.push("[X] Cancel your first listing".into());
+    lines.push("[O] Buyout first affordable   [B] Bid first filtered".into());
+    lines.push("[X] Cancel   [,][.] duration   [[][]] page".into());
     lines.join("\n")
 }
 
@@ -613,6 +736,86 @@ fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
     lines.join("\n")
 }
 
+pub(crate) fn party_frames_text(snap: &TickSnapshot) -> String {
+    let mut lines = Vec::new();
+    if !snap.pending_invite_from.is_empty() {
+        lines.push(format!(
+            "{} invited you. O accept / P decline",
+            snap.pending_invite_from
+        ));
+    }
+    if let Some(rc) = &snap.ready_check {
+        if !rc.you_responded {
+            lines.push(format!(
+                "Ready check {}/{}. O ready / P not ready",
+                rc.ready_count, rc.total
+            ));
+        }
+    }
+    for m in &snap.party_members {
+        if m.id == snap.player_id {
+            continue;
+        }
+        let afk = if m.online { "" } else { " AFK" };
+        let group = if snap.party_kind == "raid" {
+            format!("G{} ", m.raid_group + 1)
+        } else {
+            String::new()
+        };
+        lines.push(format!(
+            "{}{} {} {:.0}/{:.0}{}",
+            group, m.class_id, m.name, m.hp, m.hp_max, afk
+        ));
+    }
+    lines.join("\n")
+}
+
+pub(crate) fn party_panel_text(snap: &TickSnapshot) -> String {
+    let mut lines = vec!["Party".into()];
+    for m in &snap.party_members {
+        let star = if Some(m.id) == snap.party_leader_id {
+            "*"
+        } else {
+            " "
+        };
+        let afk = if m.online { "" } else { " AFK" };
+        lines.push(format!("{star} {} {}{afk}", m.name, m.class_id));
+    }
+    lines.push("[X] Leave  [Y] Promote  [-] Kick  [R] Ready  [Backspace] Disband  [=] Raid".into());
+    lines.join("\n")
+}
+
+fn listing_line(listing: &woc_protocol::MarketListingSnapshot) -> String {
+    let mine = if listing.mine { " [yours]" } else { "" };
+    let name = item(&listing.item_id)
+        .map(|d| d.name.to_string())
+        .unwrap_or_else(|| listing.item_id.clone());
+    let mut extra = String::new();
+    if let Some(def) = item(&listing.item_id) {
+        if def.max_durability > 0 {
+            let dur = listing.durability.unwrap_or(def.max_durability);
+            extra.push_str(&format!(" {dur}/{}", def.max_durability));
+        }
+    }
+    if let Some(eid) = listing.enchant_id.as_deref() {
+        if let Some(edef) = enchant(eid) {
+            extra.push_str(&format!(" [{}]", edef.name));
+        }
+    }
+    let bid_bit = if listing.start_bid == 0 && listing.current_bid == 0 {
+        String::new()
+    } else if listing.current_bid > 0 {
+        let who = listing.bidder.as_deref().unwrap_or("?");
+        format!(" bid {}c ({who})", listing.current_bid)
+    } else {
+        format!(" start {}c", listing.start_bid)
+    };
+    format!(
+        "  #{} {}×{name}{extra} — buyout {}c{} ({}){mine}",
+        listing.id, listing.count, listing.price, bid_bit, listing.seller
+    )
+}
+
 pub(crate) fn update_chrome_panels(
     host: Res<GameHost>,
     ui: Res<UiFlags>,
@@ -638,7 +841,7 @@ pub(crate) fn update_chrome_panels(
             ChromePanelKind::Talents => talent_panel_text(&host.snapshot),
             ChromePanelKind::Bank => bank_panel_text(&host.snapshot),
             ChromePanelKind::Mail => mail_panel_text(&host.snapshot),
-            ChromePanelKind::Market => market_panel_text(&host.snapshot),
+            ChromePanelKind::Market => market_panel_text(&host.snapshot, &ui),
             ChromePanelKind::Guild => guild_panel_text(&host.snapshot, &ui.guild_compose),
         };
     }
@@ -1014,6 +1217,29 @@ pub(crate) fn update_hud(
     }
 }
 
+pub(crate) fn update_party_hud(
+    host: Res<GameHost>,
+    ui: Res<UiFlags>,
+    mut frames: Query<&mut Text, With<HudPartyFrames>>,
+    mut panel_text: Query<&mut Text, (With<HudPartyText>, Without<HudPartyFrames>)>,
+    mut panel: Query<&mut Visibility, With<HudPartyPanel>>,
+) {
+    let snap = &host.snapshot;
+    if let Ok(mut t) = frames.single_mut() {
+        **t = party_frames_text(snap);
+    }
+    if let Ok(mut vis) = panel.single_mut() {
+        *vis = if ui.show_party {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    if let Ok(mut t) = panel_text.single_mut() {
+        **t = party_panel_text(snap);
+    }
+}
+
 fn format_action_bar(snap: &TickSnapshot) -> String {
     if snap.ability_bar.is_empty() {
         let name = if snap.ability_name.is_empty() {
@@ -1325,6 +1551,7 @@ mod tests {
             durability: None,
             enchant_id: None,
             quality: None,
+            bound: false,
         });
         snap.bank.push(InvSlotSnapshot {
             slot: 0,
@@ -1333,6 +1560,7 @@ mod tests {
             durability: None,
             enchant_id: None,
             quality: None,
+            bound: false,
         });
         snap.mail.push(MailSnapshot {
             id: 7,
@@ -1341,6 +1569,10 @@ mod tests {
             copper: 9,
             item_id: Some("baked_bread".into()),
             item_count: 2,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
         });
         snap.market.push(MarketListingSnapshot {
             id: 11,
@@ -1349,6 +1581,14 @@ mod tests {
             count: 5,
             price: 30,
             mine: false,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            expires_tick: 0,
+            start_bid: 0,
+            current_bid: 0,
+            bidder: None,
+            bound: false,
         });
         snap
     }
@@ -1391,13 +1631,129 @@ mod tests {
 
     #[test]
     fn market_panel_formats_listings_wallet_and_buy_help() {
-        let text = market_panel_text(&chrome_snapshot());
+        let text = market_panel_text(&chrome_snapshot(), &UiFlags::default());
 
         assert!(text.contains("Copper: 75"));
-        assert!(text.contains("#11 5×peacebloom — 30c (Grace)"));
-        assert!(text.contains("[O] Buy first affordable listing"));
+        assert!(text.contains("#11 5×Peacebloom — buyout 30c (Grace)"));
+        assert!(text.contains("[O] Buyout first affordable"));
         assert!(text.contains("[L] List"));
         assert!(text.contains("[X] Cancel"));
+        assert!(text.contains("[B] Bid"));
+        assert!(text.contains("duration 12h"));
+    }
+
+    #[test]
+    fn first_listable_bag_stack_skips_quest_and_allows_weapons() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
+            item_id: "boar_tusk".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "worn_sword".into(),
+            count: 1,
+            durability: Some(7),
+            enchant_id: Some("coarse_sharpening".into()),
+            quality: None,
+            bound: false,
+        });
+        let listed = first_listable_bag_stack(&snap).unwrap();
+        assert_eq!(listed.0, 1);
+        assert_eq!(listed.2, "worn_sword");
+    }
+
+    #[test]
+    fn first_listable_bag_stack_skips_bound() {
+        let mut snap = TickSnapshot::default();
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 0,
+            item_id: "silverleaf".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: true,
+        });
+        snap.inventory.push(InvSlotSnapshot {
+            slot: 1,
+            item_id: "wolf_fang".into(),
+            count: 1,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            bound: false,
+        });
+        let listed = first_listable_bag_stack(&snap).unwrap();
+        assert_eq!(listed.2, "wolf_fang");
+    }
+
+    #[test]
+    fn filtered_market_pages_by_name() {
+        let mut snap = chrome_snapshot();
+        snap.market.push(MarketListingSnapshot {
+            id: 12,
+            seller: "Ada".into(),
+            item_id: "silverleaf".into(),
+            count: 1,
+            price: 8,
+            mine: false,
+            durability: None,
+            enchant_id: None,
+            quality: None,
+            expires_tick: 0,
+            start_bid: 4,
+            current_bid: 0,
+            bidder: None,
+            bound: false,
+        });
+        let hits = filtered_market(&snap, "peace");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].item_id, "peacebloom");
+        assert_eq!(listing_min_bid(&snap.market[1]), Some(4));
+        assert_eq!(cycle_duration_hours(12, true), 24);
+        assert_eq!(cycle_duration_hours(48, true), 12);
+    }
+
+    #[test]
+    fn market_panel_shows_wear_and_enchant() {
+        let mut snap = chrome_snapshot();
+        snap.market[0].item_id = "worn_sword".into();
+        snap.market[0].count = 1;
+        snap.market[0].durability = Some(7);
+        snap.market[0].enchant_id = Some("coarse_sharpening".into());
+        let text = market_panel_text(&snap, &UiFlags::default());
+        assert!(text.contains("Worn Sword"));
+        assert!(text.contains("7/40"));
+        assert!(text.contains("Coarse Sharpening"));
+    }
+
+    #[test]
+    fn npc_session_help_mentions_auction_when_can_auction() {
+        let mut snap = TickSnapshot::default();
+        snap.open_npc = Some(NpcSessionSnapshot {
+            npc_id: 9,
+            npc_name: "Auctioneer Lise".into(),
+            greeting: String::new(),
+            services: vec!["auctioneer".into()],
+            stock: vec![],
+            train_professions: vec![],
+            can_repair: false,
+            repair_cost: 0,
+            can_bind: false,
+            buyback: vec![],
+            can_auction: true,
+            can_bank: false,
+            can_mail: false,
+            discount_pct: 0,
+        });
+        let text = npc_session_help(&snap);
+        assert!(text.contains("[U] Auction"));
     }
 
     #[test]
@@ -1414,6 +1770,9 @@ mod tests {
             repair_cost: 12,
             can_bind: false,
             buyback: vec![],
+            can_auction: false,
+            can_bank: false,
+            can_mail: false,
             discount_pct: 0,
         });
 
@@ -1532,6 +1891,14 @@ mod tests {
     fn warrior_and_druid_action_bar_hint_f_key() {
         let mut snap = chrome_snapshot();
         snap.progress.class_id = "warrior".into();
+        snap.ability_bar = vec![woc_protocol::AbilityBarSlot {
+            slot: 1,
+            ability_id: "heroic_strike".into(),
+            name: "Heroic Strike".into(),
+            known: true,
+            ready: true,
+            cooldown: 0.0,
+        }];
         assert!(format_action_bar(&snap).contains("[F] Stance"));
         snap.progress.class_id = "druid".into();
         assert!(format_action_bar(&snap).contains("[F] Form"));
@@ -1544,6 +1911,63 @@ mod tests {
     }
 
     #[test]
+    fn party_frames_format_other_members() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.party_kind = "party".into();
+        snap.party_leader_id = Some(1);
+        snap.party_members = vec![
+            woc_protocol::PartyMemberSnapshot {
+                id: 1,
+                name: "Alice".into(),
+                class_id: "warrior".into(),
+                hp: 100.0,
+                hp_max: 100.0,
+                online: true,
+                raid_group: 0,
+            },
+            woc_protocol::PartyMemberSnapshot {
+                id: 2,
+                name: "Bob".into(),
+                class_id: "mage".into(),
+                hp: 40.0,
+                hp_max: 80.0,
+                online: false,
+                raid_group: 0,
+            },
+        ];
+        let text = party_frames_text(&snap);
+        assert!(text.contains("Bob"));
+        assert!(text.contains("40/80"));
+        assert!(text.contains("AFK"));
+        assert!(!text.contains("Alice"));
+        let panel = party_panel_text(&snap);
+        assert!(panel.contains("*"));
+        assert!(panel.contains("[X] Leave"));
+    }
+
+    #[test]
+    fn raid_frames_group_two_on_second_column() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.party_kind = "raid".into();
+        snap.party_members = (1..=6)
+            .map(|id| woc_protocol::PartyMemberSnapshot {
+                id,
+                name: format!("P{id}"),
+                class_id: "warrior".into(),
+                hp: 10.0,
+                hp_max: 10.0,
+                online: true,
+                raid_group: if id <= 5 { 0 } else { 1 },
+            })
+            .collect();
+        let text = party_frames_text(&snap);
+        assert!(text.contains("G2"));
+        assert!(text.contains("P6"));
+    }
+
+    #[test]
     fn jewelry_equipment_label_uses_quality_and_name() {
         assert_eq!(
             equipment_label(Some("fang_pendant"), None, None),
@@ -1551,11 +1975,11 @@ mod tests {
         );
         assert_eq!(
             weapon_label(Some("worn_sword"), None, None, Some("coarse_sharpening"),),
-            "Worn Sword [Coarse Sharpening]"
+            "Worn Sword 40/40 [Coarse Sharpening]"
         );
         assert_eq!(
             equipment_label(Some("wool_cloak"), None, None),
-            "Uncommon Wool Cloak"
+            "Uncommon Wool Cloak 30/30"
         );
     }
 }

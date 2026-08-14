@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::ecs::components::{Bags, ClassKit, Durable, Identity, Progress};
+use crate::ecs::components::{Bags, ClassKit, Durable, Identity, InvStack, Progress};
 use crate::ecs::World;
-use crate::inventory::{grant_into, remove_item};
+use crate::inventory::{grant_stack, take_from_slot};
+use woc_content::ItemQuality;
 use woc_protocol::{EntityId, MailSnapshot, SimEvent};
 
 /// Durable mailbox entry (survives reconnect / restart when persisted).
@@ -18,6 +19,10 @@ pub struct MailItem {
     pub copper: u32,
     pub item_id: Option<String>,
     pub item_count: u32,
+    pub durability: Option<u32>,
+    pub enchant_id: Option<String>,
+    pub quality: Option<ItemQuality>,
+    pub bound: bool,
 }
 
 #[derive(Debug, Default)]
@@ -86,6 +91,10 @@ impl Mailbox {
                         copper: m.copper,
                         item_id: m.item_id.clone(),
                         item_count: m.item_count,
+                        durability: m.durability,
+                        enchant_id: m.enchant_id.clone(),
+                        quality: m.quality.map(|q| q.as_str().to_string()),
+                        bound: m.bound,
                     })
                     .collect()
             })
@@ -142,27 +151,37 @@ impl Mailbox {
 
         let mut item_id = None;
         let mut item_count = 0u32;
+        let mut durability = None;
+        let mut enchant_id = None;
+        let mut quality = None;
+        let mut bound = false;
         if let Some(slot) = bag_slot {
             let stack = world
                 .get::<Bags>(from)
                 .and_then(|b| b.inventory.get(slot as usize))
                 .and_then(|s| s.clone());
-            let Some(stack) = stack else {
+            if stack.as_ref().is_some_and(|s| s.bound) {
+                events.push(SimEvent::Toast {
+                    message: "That item is soulbound.".into(),
+                });
+                return false;
+            }
+            let Some(taken) = (if let Some(bags) = world.get_mut::<Bags>(from) {
+                take_from_slot(&mut bags.inventory, slot, count)
+            } else {
+                None
+            }) else {
                 events.push(SimEvent::Toast {
                     message: "Empty bag slot.".into(),
                 });
                 return false;
             };
-            let take = count.min(stack.count).max(1);
-            if let Some(bags) = world.get_mut::<Bags>(from) {
-                if !remove_item(&mut bags.inventory, &stack.item_id, take) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-            item_id = Some(stack.item_id);
-            item_count = take;
+            item_id = Some(taken.item_id);
+            item_count = taken.count;
+            durability = taken.durability;
+            enchant_id = taken.enchant_id;
+            quality = taken.quality;
+            bound = taken.bound;
         }
 
         if let Some(progress) = world.get_mut::<Progress>(from) {
@@ -185,6 +204,10 @@ impl Mailbox {
                 copper,
                 item_id,
                 item_count,
+                durability,
+                enchant_id,
+                quality,
+                bound,
             });
         events.push(SimEvent::MailSent {
             from,
@@ -201,11 +224,21 @@ impl Mailbox {
         from: &str,
         subject: &str,
         copper: u32,
-        item_id: Option<String>,
-        item_count: u32,
+        attachment: Option<InvStack>,
     ) -> u32 {
         let mail_id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
+        let (item_id, item_count, durability, enchant_id, quality, bound) = match attachment {
+            Some(stack) => (
+                Some(stack.item_id),
+                stack.count,
+                stack.durability,
+                stack.enchant_id,
+                stack.quality,
+                stack.bound,
+            ),
+            None => (None, 0, None, None, None, false),
+        };
         self.inbox
             .entry(to_durable.to_string())
             .or_default()
@@ -217,6 +250,10 @@ impl Mailbox {
                 copper,
                 item_id,
                 item_count,
+                durability,
+                enchant_id,
+                quality,
+                bound,
             });
         mail_id
     }
@@ -240,8 +277,15 @@ impl Mailbox {
         };
         let mail = mails.remove(idx);
         if let Some(ref item_id) = mail.item_id {
+            let mut stack = InvStack::new(item_id, mail.item_count.max(1));
+            if mail.durability.is_some() {
+                stack.durability = mail.durability;
+            }
+            stack.enchant_id = mail.enchant_id.clone();
+            stack.quality = mail.quality;
+            stack.bound = mail.bound;
             let granted = if let Some(bags) = world.get_mut::<Bags>(player) {
-                grant_into(&mut bags.inventory, item_id, mail.item_count.max(1))
+                grant_stack(&mut bags.inventory, stack)
             } else {
                 false
             };
@@ -319,7 +363,7 @@ mod tests {
     #[test]
     fn load_mails_roundtrip() {
         let mut box_ = Mailbox::new();
-        box_.deliver_system("ada", "AH", "Sold", 40, None, 0);
+        box_.deliver_system("ada", "AH", "Sold", 40, None);
         let all = box_.all_mails();
         let next = box_.next_id();
         let mut box2 = Mailbox::new();
@@ -330,5 +374,113 @@ mod tests {
             d.durable_id = Some("ada".into());
         }
         assert_eq!(box2.snapshot_for_entity(1, &world).len(), 1);
+    }
+
+    #[test]
+    fn collect_restores_listed_wear() {
+        let mut box_ = Mailbox::new();
+        box_.deliver_system(
+            "ada",
+            "Auction House",
+            "Listing expired",
+            0,
+            Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(7),
+                enchant_id: Some("coarse_sharpening".into()),
+                quality: Some(ItemQuality::Uncommon),
+                bound: false,
+            }),
+        );
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(d) = world.get_mut::<Durable>(1) {
+            d.durable_id = Some("ada".into());
+        }
+        let mut events = Vec::new();
+        assert!(box_.collect(&mut world, 1, 1, &mut events));
+        let sword = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "worn_sword")
+            .unwrap();
+        assert_eq!(sword.durability, Some(7));
+        assert_eq!(sword.enchant_id.as_deref(), Some("coarse_sharpening"));
+        assert_eq!(sword.quality, Some(ItemQuality::Uncommon));
+    }
+
+    #[test]
+    fn send_refuses_soulbound_items() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
+        if let Some(p) = world.get_mut::<Progress>(1) {
+            p.copper = 50;
+        }
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.inventory[0] = Some(InvStack {
+                item_id: "silverleaf".into(),
+                count: 1,
+                durability: None,
+                enchant_id: None,
+                quality: None,
+                bound: true,
+            });
+        }
+        let mut box_ = Mailbox::new();
+        let mut events = Vec::new();
+        assert!(!box_.send(&mut world, 1, "Bob", 0, Some(0), 1, &mut events));
+        assert!(box_.all_mails().is_empty());
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "That item is soulbound."
+        )));
+    }
+
+    #[test]
+    fn interact_mail_requires_mailbox_session() {
+        use crate::ecs::components::{Identity, Transform};
+        use woc_protocol::{InteractAction, WorldHost};
+        let mut sim = crate::sim::Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let pid = sim.player_id;
+        WorldHost::interact(&mut sim, pid, 0, InteractAction::MailCollect { mail_id: 1 });
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Talk to a mailbox first."
+        )));
+
+        let post = sim
+            .world
+            .ids::<Identity>()
+            .into_iter()
+            .find(|&id| {
+                sim.world
+                    .get::<Identity>(id)
+                    .and_then(|i| i.template_id.as_deref())
+                    == Some("mailbox_post")
+            })
+            .expect("mailbox_post");
+        if let Some(nt) = sim.world.get::<Transform>(post).cloned() {
+            if let Some(p) = sim.world.get_mut::<Transform>(pid) {
+                p.x = nt.x;
+                p.z = nt.z;
+            }
+        }
+        WorldHost::interact(&mut sim, pid, post, InteractAction::Talk);
+        sim.events.clear();
+        WorldHost::interact(
+            &mut sim,
+            pid,
+            post,
+            InteractAction::MailCollect { mail_id: 1 },
+        );
+        assert!(!sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Talk to a mailbox first."
+        )));
     }
 }

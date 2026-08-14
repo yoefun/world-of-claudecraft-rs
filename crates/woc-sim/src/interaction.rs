@@ -257,6 +257,9 @@ fn stack_with_durability(
     }
     stack.enchant_id = enchant_id;
     stack.quality = quality;
+    if item(item_id).is_some_and(|d| d.bind != woc_content::ItemBind::None) {
+        stack.bound = true;
+    }
     stack
 }
 
@@ -1146,6 +1149,9 @@ fn opens_npc_session(def: &NpcDef) -> bool {
         || def.is_profession_trainer()
         || def.is_class_trainer()
         || def.is_innkeeper()
+        || def.is_auctioneer()
+        || def.is_banker()
+        || def.is_mailbox()
 }
 
 fn service_name(service: NpcService) -> &'static str {
@@ -1156,6 +1162,9 @@ fn service_name(service: NpcService) -> &'static str {
         NpcService::ClassTrainer => "class_trainer",
         NpcService::Innkeeper => "innkeeper",
         NpcService::QuestGiver => "quest_giver",
+        NpcService::Auctioneer => "auctioneer",
+        NpcService::Banker => "banker",
+        NpcService::Mailbox => "mailbox",
     }
 }
 
@@ -1229,6 +1238,9 @@ pub fn npc_session_snapshot(world: &World, player_id: EntityId) -> Option<NpcSes
         repair_cost: repair_cost(world, player_id),
         can_bind: def.is_innkeeper(),
         buyback,
+        can_auction: def.is_auctioneer(),
+        can_bank: def.is_banker(),
+        can_mail: def.is_mailbox(),
         discount_pct: crate::reputation::vendor_discount(crate::reputation::npc_standing(
             world, player_id, def,
         )),
@@ -1313,6 +1325,15 @@ mod tests {
         );
         unequip_to_bag(&mut world, 1, EquipSlot::Head, &mut events);
         assert!(world.get::<Bags>(1).unwrap().equipment.head.is_none());
+        let cap_stack = world
+            .get::<Bags>(1)
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .find(|s| s.item_id == "recruit_cap")
+            .unwrap();
+        assert!(cap_stack.bound);
     }
 
     #[test]
