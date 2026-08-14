@@ -29,6 +29,7 @@
 | **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
 | **1.20.0** (shipped) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
 | **1.21.0** (shipped) | `mounts` | Riding ranks, learnable mounts, **V** toggle, Expert flying |
+| **1.22.0** (shipped) | `kill-loop` | Per-template respawn, leash reset, loot count/TTL, pet credit, mob abilities |
 
 ## Completion program (closed)
 
@@ -71,6 +72,13 @@ Equipment stays on `Bags`. `can_equip` is the single class/armor/level gate. Two
 **Implementation:** [`docs/superpowers/plans/2026-08-13-gear-slots.md`](superpowers/plans/2026-08-13-gear-slots.md)
 
 Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then Finger2. Catalog `ItemQuality` multiplies gear stats. Vendor oils apply a main-hand enchant. Protocol rev stays **8**.
+
+## Kill loop (shipped as `1.22.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-kill-loop-design.md`](superpowers/specs/2026-08-13-kill-loop-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-kill-loop.md`](superpowers/plans/2026-08-13-kill-loop.md)
+
+Close spawn → fight → loot → respawn: per-template respawn (instance trash never), leash HP reset, `MobSpot` packs, loot `count` + 120 s TTL, pet last-hit credits the owner, three mob abilities, 1.1× threat switch. Planned as `1.14.0`; renumbered to `1.22.0` after develop shipped `1.14.0`–`1.21.0` in parallel. Protocol rev stays **10**. No new tick phase.
 
 ## Gear more (shipped as `1.15.0`)
 

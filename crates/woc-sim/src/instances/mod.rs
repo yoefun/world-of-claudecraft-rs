@@ -235,6 +235,9 @@ fn spawn_boss_shell(world: &mut World, id: EntityId, def: &DungeonDef, instance_
         },
     );
     world.insert(id, Respawn::default());
+    if let Some(r) = world.get_mut::<Respawn>(id) {
+        r.delay_sec = 0.0;
+    }
     world.insert(
         id,
         InstanceAt {
@@ -280,6 +283,9 @@ fn spawn_trash_spot(world: &mut World, spot: &DungeonTrashSpot, instance_key: &s
         if let Some(inst) = world.get_mut::<InstanceAt>(spawned) {
             inst.instance_id = Some(instance_key.to_string());
         }
+        if let Some(r) = world.get_mut::<Respawn>(spawned) {
+            r.delay_sec = 0.0;
+        }
     }
 }
 
@@ -301,7 +307,55 @@ pub fn same_instance_space(world: &World, a: EntityId, b: EntityId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mob::tick_mob_respawns;
     use woc_content::{PlayerClass, EASTBROOK, MIREFEN};
+    use woc_protocol::DT;
+
+    #[test]
+    fn crypt_trash_does_not_respawn_inside_instance() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "Tank",
+            woc_content::PlayerClass::Warrior,
+            0.0,
+            0.0,
+        );
+        let parties = PartyRoster::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut Vec::new()
+        ));
+        let trash: Vec<_> = world
+            .ids::<LootTable>()
+            .into_iter()
+            .filter(|&id| {
+                world.get::<Respawn>(id).is_some()
+                    && world
+                        .get::<Identity>(id)
+                        .and_then(|i| i.template_id.as_deref())
+                        == Some("young_wolf")
+            })
+            .collect();
+        assert!(!trash.is_empty());
+        for id in &trash {
+            assert_eq!(world.get::<Respawn>(*id).unwrap().delay_sec, 0.0);
+            if let Some(h) = world.get_mut::<Health>(*id) {
+                h.alive = false;
+                h.hp = 0.0;
+            }
+        }
+        for _ in 0..700 {
+            tick_mob_respawns(&mut world, DT);
+        }
+        for id in trash {
+            assert!(!world.get::<Health>(id).unwrap().alive);
+        }
+    }
 
     #[test]
     fn enter_dungeon_dismounts_active_mount() {

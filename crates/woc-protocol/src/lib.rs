@@ -941,6 +941,8 @@ pub enum SimEvent {
         player: EntityId,
         copper: u32,
         item: Option<String>,
+        #[serde(default)]
+        count: u32,
     },
     LevelUp {
         player: EntityId,

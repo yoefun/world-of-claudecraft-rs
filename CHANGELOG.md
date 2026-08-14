@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.22.0 — 2026-08-14
+
+### Added
+
+- **1.22.0 `kill-loop`:** Per-template `Respawn.delay_sec` (wolves 30 s; `mire_terror` 300 s); instance/delve trash and bosses never revive (`delay_sec = 0`).
+- Leash reset restores full HP and clears auras/threat when mobs return home.
+- `MobSpot` `count` + `radius` packs; Wolf Run spawns ≥5 young wolves.
+- Loot honors `LootEntry.count`; piles expire after 2_400 ticks (120 s); `create_loot_ex` stamps the correct zone.
+- Quest `ItemKind::Quest` piles skip Need/Greed rolls (FFA pickup).
+- Pet last-hit credits the `Owner` for XP/quest/party share via `collect_pending_mob_kills`.
+- Mob abilities: `wolf_bite`, `warden_smash`, `terror_slam`; threat switches at 1.1× ratio.
+- Protocol rev stays **10** (additive `SimEvent::Loot.count`).
+
+### Notes
+
+- Planned as `1.14.0` while develop shipped `1.14.0` … `1.21.0` in parallel; the theme lands as `1.22.0`.
+
 ## 1.21.0 — 2026-08-14
 
 ### Added

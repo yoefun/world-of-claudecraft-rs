@@ -809,8 +809,21 @@ mod tests {
     }
 
     #[test]
+    fn mob_abilities_exist() {
+        assert!(ability("wolf_bite").is_some());
+        assert!(ability("warden_smash").is_some());
+        assert!(ability("terror_slam").is_some());
+        assert_eq!(mob("scarred_wolf").unwrap().ability_id, Some("wolf_bite"));
+        assert_eq!(
+            mob("crypt_warden").unwrap().ability_id,
+            Some("warden_smash")
+        );
+        assert_eq!(mob("mire_terror").unwrap().ability_id, Some("terror_slam"));
+    }
+
+    #[test]
     fn every_ability_declares_an_effect() {
-        assert_eq!(ABILITIES.len(), 51);
+        assert_eq!(ABILITIES.len(), 54);
         for def in ABILITIES {
             let _ = def.effect;
             if let Some(aura_id) = def.aura {
@@ -1269,6 +1282,34 @@ mod tests {
                 "{} buy/sell ratio",
                 def.id
             );
+        }
+    }
+
+    #[test]
+    fn overworld_wolves_respawn_in_thirty_seconds() {
+        let w = mob("young_wolf").expect("young_wolf");
+        assert!((w.respawn_seconds - 30.0).abs() < f32::EPSILON);
+        assert!(w.ability_id.is_none());
+    }
+
+    #[test]
+    fn world_boss_respawns_in_five_minutes() {
+        let t = mob("mire_terror").expect("mire_terror");
+        assert!((t.respawn_seconds - 300.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn eastbrook_wolf_run_is_a_pack() {
+        let wolves: u32 = EASTBROOK
+            .mobs
+            .iter()
+            .filter(|s| s.mob_id == "young_wolf")
+            .map(|s| s.count)
+            .sum();
+        assert!(wolves >= 5, "wolf run count={wolves}");
+        for spot in EASTBROOK.mobs {
+            assert!(spot.count >= 1);
+            assert!(spot.radius > 0.0);
         }
     }
 
