@@ -10,8 +10,10 @@ use crate::instances::same_instance_space;
 use crate::rng::Rng;
 use crate::stats::recalc_player_stats;
 use crate::types::{
-    CRIT_CHANCE, CRIT_MULT, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
-    RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT, THREAT_SWITCH_RATIO,
+    CRIT_CHANCE, CRIT_MULT, ENERGY_REGEN_PER_SEC, MANA_REGEN_COMBAT_PER_SEC,
+    MANA_REGEN_OOC_PER_SEC, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
+    RAGE_DECAY_OOC_PER_SEC, RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT,
+    THREAT_SWITCH_RATIO,
 };
 use woc_content::{
     ability, aura_for_ability, class_ability_for_slot, item, mob, AbilityDef, AbilityEffect,
@@ -1836,8 +1838,28 @@ pub fn update_player_combat(
         return;
     };
 
-    if let Some(ResourceType::Mana | ResourceType::Energy) = kit.resource_type {
-        gain_resource(&mut kit, 1.5 * DT);
+    let in_combat = combat.auto_attack
+        || combat.target.is_some_and(|tid| {
+            tid != player_id
+                && world.get::<Health>(tid).is_some_and(|h| h.alive)
+                && (world.get::<LootTable>(tid).is_some() || world.get::<ClassKit>(tid).is_some())
+        });
+    match kit.resource_type {
+        Some(ResourceType::Energy) => {
+            gain_resource(&mut kit, ENERGY_REGEN_PER_SEC * DT);
+        }
+        Some(ResourceType::Mana) => {
+            let rate = if in_combat {
+                MANA_REGEN_COMBAT_PER_SEC
+            } else {
+                MANA_REGEN_OOC_PER_SEC
+            };
+            gain_resource(&mut kit, rate * DT);
+        }
+        Some(ResourceType::Rage) if !in_combat => {
+            kit.resource = (kit.resource - RAGE_DECAY_OOC_PER_SEC * DT).max(0.0);
+        }
+        _ => {}
     }
 
     tick_ability_cds(&mut kit, &mut combat);
@@ -3491,6 +3513,105 @@ mod tests {
         assert!(
             after < before,
             "arcane shot should spend hunter mana ({after} vs {before})"
+        );
+    }
+
+    #[test]
+    fn energy_regens_ten_per_second() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+            c.auto_attack = false;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        let mut events = Vec::new();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let energy = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (energy - 10.0).abs() < 0.15,
+            "rogue energy should gain 10/s OOC, got {energy}"
+        );
+    }
+
+    #[test]
+    fn mana_regens_slower_in_combat() {
+        let mut world = class_and_mob(PlayerClass::Mage, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+            c.auto_attack = false;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        let mut events = Vec::new();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ooc = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (ooc - 8.0).abs() < 0.15,
+            "mage mana should gain 8/s OOC, got {ooc}"
+        );
+
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.auto_attack = true;
+            c.swing_timer = 99.0;
+        }
+        events.clear();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ic = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (ic - 2.0).abs() < 0.15,
+            "mage mana should gain 2/s in combat, got {ic}"
+        );
+    }
+
+    #[test]
+    fn rage_decays_out_of_combat() {
+        let mut world = class_and_mob(PlayerClass::Warrior, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+            c.auto_attack = false;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 30.0;
+        }
+        let mut events = Vec::new();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ooc = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (ooc - 27.0).abs() < 0.15,
+            "warrior rage should decay 3/s OOC, got {ooc}"
+        );
+
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 30.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.auto_attack = true;
+            c.swing_timer = 99.0;
+        }
+        events.clear();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ic = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            ic >= 29.9,
+            "warrior rage must not decay in combat, got {ic}"
         );
     }
 
