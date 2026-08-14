@@ -32,10 +32,20 @@ pub fn take_from_slot(inv: &mut [Option<InvStack>], slot: u8, count: u32) -> Opt
 
 /// Insert a concrete stack. Merge only with matching instance state
 /// when the catalog stack size allows. Weapons/armor stay unstacked.
+/// All-or-nothing: on failure the inventory is left unchanged.
 pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
     if incoming.count == 0 {
         return true;
     }
+    let mut tmp = inv.to_vec();
+    if !grant_stack_mut(&mut tmp, incoming) {
+        return false;
+    }
+    inv.clone_from_slice(&tmp);
+    true
+}
+
+fn grant_stack_mut(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
     let stack_size = woc_content::item(&incoming.item_id)
         .map(|d| d.stack_size.max(1))
         .unwrap_or(20);
@@ -82,8 +92,9 @@ pub fn grant_stack(inv: &mut [Option<InvStack>], incoming: InvStack) -> bool {
 }
 
 /// Insert into backpack with stacking. Returns false if full.
+/// Partial fills are kept (loot / craft / quest grants).
 pub fn grant_into(inv: &mut [Option<InvStack>], item_id: &str, count: u32) -> bool {
-    grant_stack(inv, InvStack::new(item_id, count))
+    grant_stack_mut(inv, InvStack::new(item_id, count))
 }
 
 pub fn count_item(inv: &[Option<InvStack>], item_id: &str) -> u32 {
@@ -259,5 +270,16 @@ mod tests {
             .find(|s| s.item_id == "silverleaf")
             .unwrap();
         assert!(!leaf.bound);
+    }
+
+    #[test]
+    fn grant_stack_is_all_or_nothing() {
+        let mut inv = vec![None; 1];
+        inv[0] = Some(InvStack::new("silverleaf", 19));
+        let before = inv.clone();
+        assert!(!grant_stack(&mut inv, InvStack::new("wolf_fang", 1)));
+        assert_eq!(inv, before);
+        assert!(!grant_stack(&mut inv, InvStack::new("silverleaf", 5)));
+        assert_eq!(inv[0].as_ref().unwrap().count, 19);
     }
 }

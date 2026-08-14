@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.20.0 — 2026-08-14
+
+### Added
+
+- **1.20.0 `parcel-bank`:** Offline parcels via `CharacterDirectory`, client compose/send/numbered collect/return, postage 1c, inbox cap 20, 24h tick expiry with return, and `RepairAll` includes banked gear.
+- Client **K** **G** banks any non-quest stack; **I** **S**/**Y** send item or wallet copper, **1–9** numbered collect, **X** return; compose field for recipient names.
+- Banker Holme and Eastbrook Post still gate **K** / **I** actions (from `1.16.0`). Additive on protocol rev **10** (`mail_postage`, `MailReturn`, mail `expires_tick`).
+
 ## 1.19.0 — 2026-08-14
 
 ### Added

@@ -13,8 +13,9 @@ use woc_sim::quests::npc_quest_offers;
 use woc_sim::targeting::tab_target_pose;
 
 use crate::hud::{
-    cycle_duration_hours, filtered_market, first_consumable_bag_stack, first_equippable_bag_stack,
-    first_junk_bag_stack, first_listable_bag_stack, listing_min_bid, UiFlags, MARKET_PAGE_SIZE,
+    cycle_duration_hours, filtered_market, first_bankable_bag_stack, first_consumable_bag_stack,
+    first_equippable_bag_stack, first_junk_bag_stack, first_listable_bag_stack, listing_min_bid,
+    UiFlags, MARKET_PAGE_SIZE,
 };
 use crate::GameHost;
 
@@ -109,8 +110,8 @@ pub(crate) fn collect_intent(
         clear_target,
         ..default()
     };
-    // The guild compose line and the market search field own the keyboard.
-    let typing = ui.show_guild || ui.market_searching;
+    // Compose/search fields own the keyboard.
+    let typing = ui.mail_compose || ui.show_guild || ui.market_searching;
     let mut mx = 0.0;
     let mut mz = 0.0;
     if !typing {
@@ -146,6 +147,7 @@ pub(crate) fn collect_intent(
         .is_some();
     if !ui.show_talents
         && !ui.show_bank
+        && !ui.show_mail
         && !ui.show_guild
         && !loot_rolling
         && !ui.show_bags
@@ -365,6 +367,14 @@ pub(crate) fn quest_interact_actions(
     out
 }
 
+fn mail_target_player_name(snap: &TickSnapshot) -> Option<String> {
+    let tid = snap.target_id?;
+    snap.entities
+        .iter()
+        .find(|e| e.id == tid && e.kind == EntityKind::Player)
+        .map(|e| e.name.clone())
+}
+
 fn market_search_keys() -> impl Iterator<Item = (KeyCode, char)> {
     [
         (KeyCode::KeyA, 'a'),
@@ -404,6 +414,17 @@ pub(crate) fn handle_interact_keys(
     mut host: ResMut<GameHost>,
     mut ui: ResMut<UiFlags>,
 ) {
+    if ui.mail_compose && keys.just_pressed(KeyCode::Escape) {
+        ui.mail_compose = false;
+        return;
+    }
+    if ui.show_mail && keys.just_pressed(KeyCode::Enter) {
+        ui.mail_compose = !ui.mail_compose;
+        return;
+    }
+    if ui.mail_compose {
+        return;
+    }
     if keys.just_pressed(KeyCode::KeyB) && !ui.show_market && !ui.show_guild {
         ui.show_bags = !ui.show_bags;
     }
@@ -417,6 +438,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_talents = false;
             ui.show_bank = false;
             ui.show_mail = false;
+            ui.mail_compose = false;
             ui.show_market = false;
             ui.show_map = false;
             ui.show_guild = false;
@@ -434,6 +456,8 @@ pub(crate) fn handle_interact_keys(
         if ui.show_bank {
             ui.show_character = false;
             ui.show_map = false;
+            ui.show_mail = false;
+            ui.mail_compose = false;
             ui.show_guild = false;
         }
     }
@@ -442,6 +466,12 @@ pub(crate) fn handle_interact_keys(
         if ui.show_mail {
             ui.show_character = false;
             ui.show_map = false;
+            ui.show_bank = false;
+            if let Some(name) = mail_target_player_name(&host.snapshot) {
+                ui.mail_to = name;
+            }
+        } else {
+            ui.mail_compose = false;
         }
     }
     if keys.just_pressed(KeyCode::KeyM) && !ui.show_guild {
@@ -451,6 +481,7 @@ pub(crate) fn handle_interact_keys(
             ui.show_talents = false;
             ui.show_bank = false;
             ui.show_mail = false;
+            ui.mail_compose = false;
             ui.show_market = false;
             ui.show_guild = false;
         }
@@ -461,6 +492,7 @@ pub(crate) fn handle_interact_keys(
         ui.show_map = false;
         ui.show_bank = false;
         ui.show_mail = false;
+        ui.mail_compose = false;
         ui.show_market = false;
         return;
     }
@@ -662,13 +694,13 @@ pub(crate) fn handle_interact_keys(
         }
     }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyG) {
-        if let Some((bag_slot, count, item_id)) = first_junk_bag_stack(&host.snapshot) {
+        if let Some((bag_slot, count, item_id)) = first_bankable_bag_stack(&host.snapshot) {
             host.interact(player_id, InteractAction::BankDeposit { bag_slot, count });
             host.recent_toasts
                 .push((format!("Depositing {count}×{item_id}."), 2.0));
         } else {
             host.recent_toasts
-                .push(("No junk stack in bags.".into(), 2.0));
+                .push(("No bankable stack in bags.".into(), 2.0));
         }
     }
     if ui.show_bank && keys.just_pressed(KeyCode::KeyH) {
@@ -743,7 +775,7 @@ pub(crate) fn handle_interact_keys(
         host.recent_toasts
             .push((format!("Withdrawing {amount}c from vault."), 2.0));
     }
-    if ui.show_mail && !ui.show_guild && keys.just_pressed(KeyCode::KeyP) {
+    if ui.show_mail && !ui.mail_compose && keys.just_pressed(KeyCode::KeyP) {
         if let Some(mail) = host.snapshot.mail.first() {
             let mail_id = mail.id;
             host.interact(player_id, InteractAction::MailCollect { mail_id });
@@ -751,6 +783,99 @@ pub(crate) fn handle_interact_keys(
                 .push((format!("Collecting mail #{mail_id}."), 2.0));
         } else {
             host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
+        }
+    }
+    if ui.show_mail && !ui.mail_compose {
+        let mail_idx = if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1)
+        {
+            Some(0usize)
+        } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+            Some(1)
+        } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+            Some(2)
+        } else if keys.just_pressed(KeyCode::Digit4) || keys.just_pressed(KeyCode::Numpad4) {
+            Some(3)
+        } else if keys.just_pressed(KeyCode::Digit5) || keys.just_pressed(KeyCode::Numpad5) {
+            Some(4)
+        } else if keys.just_pressed(KeyCode::Digit6) || keys.just_pressed(KeyCode::Numpad6) {
+            Some(5)
+        } else if keys.just_pressed(KeyCode::Digit7) || keys.just_pressed(KeyCode::Numpad7) {
+            Some(6)
+        } else if keys.just_pressed(KeyCode::Digit8) || keys.just_pressed(KeyCode::Numpad8) {
+            Some(7)
+        } else if keys.just_pressed(KeyCode::Digit9) || keys.just_pressed(KeyCode::Numpad9) {
+            Some(8)
+        } else {
+            None
+        };
+        if let Some(idx) = mail_idx {
+            if let Some(mail) = host.snapshot.mail.get(idx) {
+                let mail_id = mail.id;
+                host.interact(player_id, InteractAction::MailCollect { mail_id });
+                host.recent_toasts
+                    .push((format!("Collecting mail #{mail_id}."), 2.0));
+            }
+        }
+    }
+    if ui.show_mail && !ui.mail_compose && keys.just_pressed(KeyCode::KeyX) {
+        if let Some(mail) = host.snapshot.mail.first() {
+            let mail_id = mail.id;
+            host.interact(player_id, InteractAction::MailReturn { mail_id });
+            host.recent_toasts
+                .push((format!("Returning mail #{mail_id}."), 2.0));
+        } else {
+            host.recent_toasts.push(("Inbox is empty.".into(), 2.0));
+        }
+    }
+    if ui.show_mail && !ui.mail_compose && keys.just_pressed(KeyCode::KeyS) {
+        let to_name = if !ui.mail_to.trim().is_empty() {
+            ui.mail_to.trim().to_string()
+        } else {
+            mail_target_player_name(&host.snapshot).unwrap_or_default()
+        };
+        if to_name.is_empty() {
+            host.recent_toasts.push(("No recipient.".into(), 2.0));
+        } else if let Some((bag_slot, count, _)) = first_bankable_bag_stack(&host.snapshot) {
+            host.interact(
+                player_id,
+                InteractAction::MailSend {
+                    to_name,
+                    copper: 0,
+                    bag_slot: Some(bag_slot),
+                    count,
+                },
+            );
+            host.recent_toasts.push(("Sending parcel…".into(), 2.0));
+        } else {
+            host.recent_toasts.push(("Nothing to send.".into(), 2.0));
+        }
+    }
+    if ui.show_mail && !ui.mail_compose && !ui.show_bank && keys.just_pressed(KeyCode::KeyY) {
+        let to_name = if !ui.mail_to.trim().is_empty() {
+            ui.mail_to.trim().to_string()
+        } else {
+            mail_target_player_name(&host.snapshot).unwrap_or_default()
+        };
+        let copper = host
+            .snapshot
+            .progress
+            .copper
+            .saturating_sub(host.snapshot.mail_postage);
+        if to_name.is_empty() {
+            host.recent_toasts.push(("No recipient.".into(), 2.0));
+        } else if copper == 0 {
+            host.recent_toasts.push(("Mail is empty.".into(), 2.0));
+        } else {
+            host.interact(
+                player_id,
+                InteractAction::MailSend {
+                    to_name,
+                    copper,
+                    bag_slot: None,
+                    count: 0,
+                },
+            );
+            host.recent_toasts.push(("Sending parcel…".into(), 2.0));
         }
     }
     if ui.show_market && ui.market_searching {
@@ -1192,6 +1317,38 @@ pub(crate) fn handle_interact_keys(
         for action in quest_interact_actions(template_id, &host.snapshot.quest_log) {
             host.interact(nid, action);
         }
+    }
+}
+
+/// Types into the mail recipient buffer while compose is focused. Enter
+/// toggles focus and Esc blurs it in `handle_interact_keys`; this system only
+/// appends/deletes characters (ascii, max 24 — same length rule as
+/// `validate_character_name`).
+pub(crate) fn mail_compose_text(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut ui: ResMut<UiFlags>,
+    mut events: EventReader<bevy::input::keyboard::KeyboardInput>,
+) {
+    if !ui.mail_compose {
+        events.clear();
+        return;
+    }
+    use bevy::input::ButtonState;
+    for ev in events.read() {
+        if ev.state != ButtonState::Pressed {
+            continue;
+        }
+        let Some(text) = &ev.text else {
+            continue;
+        };
+        for ch in text.chars() {
+            if ch.is_ascii_alphanumeric() && ui.mail_to.len() < 24 {
+                ui.mail_to.push(ch);
+            }
+        }
+    }
+    if keys.just_pressed(KeyCode::Backspace) {
+        ui.mail_to.pop();
     }
 }
 

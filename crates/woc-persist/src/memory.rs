@@ -224,6 +224,14 @@ impl MemoryStore {
             .find(|c| c.name.eq_ignore_ascii_case(name))
             .cloned())
     }
+
+    pub async fn list_mailbox_directory(&self) -> PersistResult<Vec<(String, Uuid)>> {
+        let g = self.inner.lock().expect("memory store lock");
+        Ok(g.characters
+            .values()
+            .map(|c| (c.name.clone(), c.id))
+            .collect())
+    }
 }
 
 fn mint_token(inner: &mut Inner, account_id: Uuid) -> String {
@@ -312,6 +320,18 @@ mod tests {
         let entered = store.enter_character(aid, c.id).await.unwrap();
         assert_eq!(entered.xp, 450);
         assert_eq!(store.list_characters(aid).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn list_mailbox_directory_returns_created_names() {
+        let store = MemoryStore::new();
+        let (aid, _) = store.register("hero_one", "secret1").await.unwrap();
+        let c = store
+            .create_character(aid, "Aldric", "warrior")
+            .await
+            .unwrap();
+        let dir = store.list_mailbox_directory().await.unwrap();
+        assert!(dir.iter().any(|(n, id)| n == "Aldric" && *id == c.id));
     }
 
     #[tokio::test]

@@ -19,6 +19,10 @@ pub struct MailDto {
     pub quality: Option<String>,
     #[serde(default)]
     pub bound: bool,
+    #[serde(default)]
+    pub expires_tick: u64,
+    #[serde(default)]
+    pub return_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -100,6 +104,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mail_dto_omitted_keys_default() {
+        let m: MailDto = serde_json::from_str(
+            r#"{"id":1,"from":"AH","to_durable":"ada","subject":"Sold","copper":40,"item_count":0}"#,
+        )
+        .unwrap();
+        assert!(m.durability.is_none());
+        assert!(m.enchant_id.is_none());
+        assert_eq!(m.expires_tick, 0);
+        assert!(m.return_to.is_none());
+        assert!(m.quality.is_none());
+        assert!(!m.bound);
+    }
+
+    #[test]
     fn guilds_default_when_omitted() {
         let eco: RealmEconomy = serde_json::from_str(r#"{"mail":[],"market":[]}"#).unwrap();
         assert!(eco.guilds.is_empty());
@@ -117,10 +135,7 @@ mod tests {
                 copper: 40,
                 item_id: None,
                 item_count: 0,
-                durability: None,
-                enchant_id: None,
-                quality: None,
-                bound: false,
+                ..Default::default()
             }],
             market: vec![MarketListingDto {
                 id: 2,
@@ -130,14 +145,7 @@ mod tests {
                 count: 1,
                 price: 12,
                 expires_tick: 100,
-                durability: None,
-                enchant_id: None,
-                quality: None,
-                bound: false,
-                start_bid: 0,
-                current_bid: 0,
-                bidder_durable: None,
-                bidder_name: None,
+                ..Default::default()
             }],
             next_mail_id: 3,
             next_listing_id: 4,

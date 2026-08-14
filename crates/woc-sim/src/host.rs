@@ -185,6 +185,8 @@ impl WorldHost for Sim {
                         copper,
                         bag_slot,
                         count,
+                        self.tick,
+                        &self.directory,
                         &mut self.events,
                     );
                 }
@@ -194,6 +196,16 @@ impl WorldHost for Sim {
                     let _ =
                         self.mail
                             .collect(&mut self.world, player_id, mail_id, &mut self.events);
+                }
+            }
+            InteractAction::MailReturn { mail_id } => {
+                if require_mailbox(&self.world, player_id, &mut self.events) {
+                    let _ = self.mail.return_mail(
+                        &mut self.world,
+                        player_id,
+                        mail_id,
+                        &mut self.events,
+                    );
                 }
             }
             InteractAction::MarketList {

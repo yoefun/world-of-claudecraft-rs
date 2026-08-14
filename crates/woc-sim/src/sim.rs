@@ -147,6 +147,8 @@ pub struct Sim {
     /// Persistent guild roster for this realm.
     pub guilds: GuildRoster,
     pub mail: crate::mail::Mailbox,
+    /// Realm character name → durable mailbox key, for offline `MailSend`.
+    pub directory: crate::mail::CharacterDirectory,
     pub market: crate::market::AuctionHouse,
     pub loot_rules: crate::social::LootRules,
     pub pvp: crate::pvp::PvpState,
@@ -177,6 +179,7 @@ impl Sim {
             parties: PartyRoster::new(),
             guilds: GuildRoster::new(),
             mail: crate::mail::Mailbox::new(),
+            directory: crate::mail::CharacterDirectory::default(),
             market: crate::market::AuctionHouse::new(),
             loot_rules: crate::social::LootRules::default(),
             pvp: crate::pvp::PvpState::default(),
@@ -216,6 +219,8 @@ impl Sim {
         if self.player_id == 0 {
             self.player_id = id;
         }
+        let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
+        self.directory.register(name, key);
         Some(id)
     }
 
@@ -278,6 +283,8 @@ impl Sim {
         if self.player_id == 0 {
             self.player_id = id;
         }
+        let key = crate::mail::Mailbox::mailbox_key(&self.world, id);
+        self.directory.register(name, key);
         Some(id)
     }
 
@@ -888,6 +895,7 @@ impl Sim {
         crate::pvp::tick_pvp(&mut self.pvp, &mut self.world, &mut self.events);
         self.market
             .tick_expire(self.tick, &mut self.world, &mut self.mail);
+        self.mail.tick_expire(self.tick, &mut self.events);
 
         // Phase 8: loot_pickup
         for &pid in &player_ids {
@@ -1165,6 +1173,11 @@ impl Sim {
                 .get::<Combat>(player_id)
                 .map(|c| c.spell_power)
                 .unwrap_or(0.0),
+            mail_postage: if world.get::<ClassKit>(player_id).is_some() {
+                crate::mail::MAIL_POSTAGE
+            } else {
+                0
+            },
             guild: self.guilds.snapshot_for(player_id, world),
             guild_invite: self.guilds.invite_snapshot_for(player_id, world),
             reputation: crate::reputation::snapshot(world, player_id),
@@ -1501,8 +1514,8 @@ mod tests {
     use super::*;
     use crate::context::{tick_phase_fingerprint, TICK_PHASES};
     use crate::ecs::components::{
-        Bags, Bank, ClassKit, Health, LootPile, Owner, Progress, QuestLog, QuestState, Reputation,
-        Threat, Transform,
+        Bags, Bank, ClassKit, EquipmentWear, Health, InvStack, LootPile, Owner, Progress, QuestLog,
+        QuestState, Reputation, Threat, Transform,
     };
     use crate::ecs::spawn;
     use woc_protocol::{AbilitySlot, InteractAction, WorldHost};
@@ -1521,6 +1534,15 @@ mod tests {
                 .and_then(|i| i.template_id.as_deref())
                 == Some(template)
         })
+    }
+
+    fn talk_to_mailbox(sim: &mut Sim) {
+        let post = find_template(sim, "mailbox_post").expect("mailbox_post");
+        if let Some(nt) = sim.world.get::<Transform>(post).cloned() {
+            place_player_at(sim, nt.x, nt.z);
+        }
+        sim.interact(post, InteractAction::Talk);
+        sim.events.clear();
     }
 
     fn place_player_at(sim: &mut Sim, x: f32, z: f32) {
@@ -1591,6 +1613,74 @@ mod tests {
         assert_eq!(TICK_PHASES[8], "profession_casts");
         assert_eq!(TICK_PHASES[9], "build_snapshot");
         assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+    }
+
+    #[test]
+    fn mail_expiry_runs_inside_pvp_and_market_without_fingerprint_change() {
+        use crate::mail::{MAIL_POSTAGE, MAIL_TTL_TICKS};
+
+        assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+        let mut sim = Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(p) = sim.world.get_mut::<Progress>(sim.player_id) {
+            p.copper = 5;
+        }
+        talk_to_mailbox(&mut sim);
+        sim.interact(
+            0,
+            InteractAction::MailSend {
+                to_name: "Bob".into(),
+                copper: 2,
+                bag_slot: None,
+                count: 0,
+            },
+        );
+        assert_eq!(sim.snapshot_for(bob).mail.len(), 1);
+        sim.tick = MAIL_TTL_TICKS;
+        sim.tick_all();
+        assert!(sim.snapshot_for(bob).mail.is_empty());
+        assert_eq!(
+            sim.snapshot_for(sim.player_id).mail[0].subject,
+            "Returned: Parcel"
+        );
+        assert_eq!(sim.snapshot_for(sim.player_id).mail_postage, MAIL_POSTAGE);
+    }
+
+    #[test]
+    fn mail_refuses_quest_item() {
+        let mut sim = Sim::new_eastbrook("Ada", PlayerClass::Warrior);
+        let _bob = sim.spawn_player("Bob", PlayerClass::Mage).unwrap();
+        if let Some(bags) = sim.world.get_mut::<Bags>(sim.player_id) {
+            assert!(crate::inventory::grant_into(
+                &mut bags.inventory,
+                "boar_tusk",
+                1
+            ));
+        }
+        let slot = sim
+            .world
+            .get::<Bags>(sim.player_id)
+            .unwrap()
+            .inventory
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|st| st.item_id == "boar_tusk"))
+            .unwrap() as u8;
+        talk_to_mailbox(&mut sim);
+        sim.interact(
+            0,
+            InteractAction::MailSend {
+                to_name: "Bob".into(),
+                copper: 0,
+                bag_slot: Some(slot),
+                count: 1,
+            },
+        );
+        assert!(sim.events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "This item is needed for a quest."
+        )));
+        assert!(sim.snapshot_for(sim.player_id).mail.is_empty());
+        assert!(sim.snapshot_for(_bob).mail.is_empty());
     }
 
     #[test]
@@ -1973,6 +2063,34 @@ mod tests {
         let wear = &sim.world.get::<Bags>(sim.player_id).unwrap().equipment_wear;
         assert_eq!(wear.main_hand, Some(40));
         assert_eq!(wear.chest, Some(30));
+    }
+
+    #[test]
+    fn repair_cost_includes_banked_gear() {
+        let mut world = World::new();
+        spawn::create_player(&mut world, 1, "Ada", PlayerClass::Warrior, 0.0, 0.0);
+        if let Some(bags) = world.get_mut::<Bags>(1) {
+            bags.equipment_wear = EquipmentWear::full_for_equipment(&bags.equipment);
+            for stack in bags.inventory.iter_mut().flatten() {
+                if let Some(def) = woc_content::item(&stack.item_id) {
+                    if def.max_durability > 0 {
+                        stack.durability = Some(def.max_durability);
+                    }
+                }
+            }
+        }
+        if let Some(bank) = world.get_mut::<Bank>(1) {
+            let empty = bank.bank.iter().position(|s| s.is_none()).unwrap();
+            bank.bank[empty] = Some(InvStack {
+                item_id: "worn_sword".into(),
+                count: 1,
+                durability: Some(0),
+                enchant_id: None,
+                quality: None,
+                bound: false,
+            });
+        }
+        assert_eq!(crate::interaction::repair_cost(&world, 1), 40);
     }
 
     #[test]

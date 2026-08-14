@@ -5,11 +5,11 @@ This repository is a **Rust rewrite** of
 
 | Field | Value |
 | --- | --- |
-| Rewrite version | `1.19.0` |
+| Rewrite version | `1.20.0` |
 | Upstream repo | https://github.com/levy-street/world-of-claudecraft |
 | Upstream version | `0.31.0` |
 | Upstream commit | `a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9` |
-| Parity target | `guilds` |
+| Parity target | `parcel-bank` |
 
 Machine-readable source of truth: [`VERSION.toml`](VERSION.toml).
 

@@ -26,7 +26,8 @@
 | **1.16.0** (shipped) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
 | **1.17.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
 | **1.18.0** (shipped) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
-| **1.19.0** (this branch) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
+| **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
+| **1.20.0** (this branch) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
 
 ## Completion program (closed)
 
@@ -82,6 +83,13 @@ Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Inst
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-economy-depth-design.md`](superpowers/specs/2026-08-13-economy-depth-design.md)
 
 Auctioneer Lise, instance listings, 5% cut, mail-always proceeds, then bids, 12/24/48 h, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
+
+## Parcel and bank (shipped as `1.20.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-parcel-bank-design.md`](superpowers/specs/2026-08-13-parcel-bank-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-parcel-bank.md`](superpowers/plans/2026-08-13-parcel-bank.md)
+
+Offline delivery uses a realm `CharacterDirectory` loaded at boot from persist. The client sends parcels (**S** in the mail panel) and collects by row; bank **G** deposits the first non-quest bag stack. Postage, inbox cap, tick-based expiry, and **MailReturn** are in. Repair includes banked gear. Banker/mailbox NPC gates from `1.16.0` stay. Additive on protocol rev **10**.
 
 
 ## Party depth (shipped as `1.17.0`) + raid (shipped as `1.18.0`)

@@ -129,6 +129,8 @@ pub fn apply_economy_to_sim(sim: &mut Sim, economy: &RealmEconomy) {
             enchant_id: m.enchant_id.clone(),
             quality: quality_from_dto(&m.quality),
             bound: m.bound,
+            expires_tick: m.expires_tick,
+            return_to: m.return_to.clone(),
         })
         .collect();
     sim.mail.load_mails(mails, economy.next_mail_id);
@@ -179,6 +181,8 @@ pub fn export_economy_from_sim(sim: &Sim) -> RealmEconomy {
                 enchant_id: m.enchant_id,
                 quality: quality_to_dto(m.quality),
                 bound: m.bound,
+                expires_tick: m.expires_tick,
+                return_to: m.return_to,
             })
             .collect(),
         market: sim
@@ -439,9 +443,25 @@ fn quests_to_dto(quests: &[QuestProgress]) -> Vec<QuestProgressDto> {
         .collect()
 }
 
+pub fn apply_mailbox_directory(sim: &mut Sim, names: &[(String, uuid::Uuid)]) {
+    for (name, id) in names {
+        sim.directory.register(name, id.to_string());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn directory_lookup_after_apply() {
+        let mut sim = Sim::new_empty_eastbrook();
+        let id = Uuid::nil();
+        apply_mailbox_directory(&mut sim, &[("Ada".into(), id)]);
+        let key = id.to_string();
+        assert_eq!(sim.directory.lookup("ada"), Some(key.as_str()));
+    }
 
     fn two_member_economy() -> RealmEconomy {
         RealmEconomy {

@@ -62,6 +62,7 @@ fn main() {
                 input::camera_look,
                 input::collect_intent,
                 input::handle_interact_keys,
+                input::mail_compose_text,
                 world_setup::sim_fixed_step,
                 world_setup::sync_visuals,
                 hud::update_hud,

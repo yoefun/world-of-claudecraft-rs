@@ -1,18 +1,18 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.19.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.20.0-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.19.0`** is pinned to upstream **`0.31.0`**
-(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`guilds`**.
+**Rewrite `1.20.0`** is pinned to upstream **`0.31.0`**
+(`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`parcel-bank`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.19.0 (guilds)
+## What works in 1.20.0 (parcel-bank)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
@@ -20,14 +20,14 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), vendor buyback, repair, trainers, hearth, combat, party/raid/chat (**G** invite · **P** party · **=** convert 5→raid · **G1/G2** frames · ready check · park-safe roster · classic XP split), Need/Greed loot (1/2/3 rolls; [ ] loot mode)
 - Guilds: **J** panel types the guild name / chat / `/motd` / `/o` / `/invite Name`; verbs also via Ctrl+key; **Esc** closes; persist across relog
 - Hub reputation (Watch / Circle / Ferry / Highwatch); Friendly vendor discounts and gated Watch Signet; **C** sheet lists standing
-- Bank (Banker Holme), mail (Eastbrook Post), auction house (Auctioneer Lise; bids; 12/24/48 h; soulbound; instance listings; 5% cut; mail proceeds); herbalism → alchemy; mining → blacksmithing
+- Bank (Banker Holme; **G** any non-quest stack), mail (Eastbrook Post; offline send **S**/**Y**, numbered collect **1–9**, return **X**), auction house (Auctioneer Lise; bids; 12/24/48 h; soulbound; instance listings; 5% cut; mail proceeds); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
 - Client panels: talents / bank / mail / market / bags (equip·use·sell); **character sheet** (C: extra slots, quality, MH/OH enchant, AP/armor/SP); **minimap** + **world map** (M)
 - Class armor caps, two-hand occupancy, warrior/rogue/hunter dual-wield, two rings, two trinkets, catalog + instance loot quality, MH/OH oils; stamina → HP, spell power on heals/spells; independent loot piles
 - Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
 - Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
 - Jump (Space), lake swim, travel flight (V; Space/Ctrl vertical)
-- Version footer: `WoC-rs 1.19.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.20.0 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -102,7 +102,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.19.0` / `guilds` (after `1.18.0` / `raid`). Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.20.0` / `parcel-bank` (after `1.19.0` / `guilds`). Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 
