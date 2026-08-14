@@ -19,7 +19,7 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Walk Eastbrook Vale, Eastfen, Mirefen, and Thornpeak; Eastbrook Crypt + Mirefen Barrow + 3-room delve
 - Talk to NPCs (E), quests (abandon **L+X**, share **L+Y**, daily/explore/escort, choice rewards **1/2/3**), vendor buyback, repair, trainers, hearth, combat, party/raid/chat (**G** invite · **P** party · **=** convert 5→raid · **G1/G2** frames · ready check · park-safe roster · classic XP split), Need/Greed loot (1/2/3 rolls; [ ] loot mode)
 - Guilds: **J** panel types the guild name / chat / `/motd` / `/o` / `/invite Name`; verbs also via Ctrl+key; **Esc** closes; persist across relog
-- Friends: **O** panel `/add` `/w` `/ignore` `/unignore`; online `*`; ignore blocks whisper; persist across relog; party accept and AH buyout still use **O** first
+- Friends: **O** panel `/add` `/w` `/ignore` `/unignore` `/invite`; online `*`; `/invite Name` sends a party invite; ignore blocks whisper; persist across relog; party accept and AH buyout still use **O** first
 - Hub reputation (Watch / Circle / Ferry / Highwatch); Friendly vendor discounts and gated Watch Signet; **C** sheet lists standing
 - Bank (Banker Holme; **G** any non-quest stack), mail (Eastbrook Post; offline send **S**/**Y**, numbered collect **1–9**, return **X**), auction house (Auctioneer Lise; bids; 12/24/48 h; soulbound; instance listings; 5% cut; mail proceeds); herbalism → alchemy; mining → blacksmithing
 - Duels, PvP flag, honor; Mire Terror deed (one-shot)
