@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.18.0 — 2026-08-14
+
+### Added
+
+- **1.18.0 `raid`:** Convert a full 5-man party into a 10-player raid of two groups.
+- Leader **Equals** converts party → raid (`Converted to a raid.`); convert back when size ≤ 5 (`Too many members to convert to a party.` at 6+).
+- `MAX_RAID_SIZE` **10**; `MAX_REALM_PLAYERS` **10**.
+- `raid` chat channel (error `You are not in a raid.` when not in a raid).
+- Client frames prefix other members with **G1** / **G2** (`raid_group + 1`). Local player still omitted.
+
+## 1.17.0 — 2026-08-14
+
+### Added
+
+- **1.17.0 `party-depth`:** Playable 5-man parties in the Bevy client.
+- Client **G** invite (player target), **O** accept / **P** decline, **P** party panel, snapshot frames with HP.
+- Leader kick / promote / disband (panel **Y** / **-** / **Backspace**); **X** leave; **R** ready check.
+- Invite TTL **600** ticks (pending dropped silently).
+- Snapshot roster frames (`party_members`) even when a mate is outside AOI; disconnect shows **AFK**.
+- Park-safe membership: `park_player` keeps the roster; resume restores the same party.
+- Classic-era `group_xp` split (2-man = 75% each).
+- Ready check (300 ticks; parked members do not block early complete).
+- Protocol rev **9** (roster snapshot fields + kick/promote/disband/ready/raid-convert verbs).
+
 ## 1.16.0 — 2026-08-13
 
 ### Added

@@ -1,8 +1,8 @@
-//! Say and party chat routing.
+//! Say, party, and raid chat routing.
 
 use crate::ecs::components::{ClassKit, Identity};
 use crate::ecs::World;
-use crate::social::party::PartyRoster;
+use crate::social::party::{GroupKind, PartyRoster};
 use woc_protocol::EntityId;
 
 /// Chat delivery payload (host maps to `WsServerMsg::Chat`).
@@ -60,6 +60,18 @@ pub fn handle_chat(
                 text: trimmed.to_string(),
             }]
         }
+        "raid" => {
+            match roster.kind_of(speaker) {
+                Some(GroupKind::Raid) => vec![ChatEffect::Message {
+                    channel: "raid".into(),
+                    from,
+                    text: trimmed.to_string(),
+                }],
+                _ => vec![ChatEffect::Error {
+                    message: "You are not in a raid.".into(),
+                }],
+            }
+        }
         other => vec![ChatEffect::Error {
             message: format!("Unknown chat channel '{other}'."),
         }],
@@ -77,7 +89,7 @@ mod tests {
         crate::ecs::spawn::create_player(&mut world, 1, "Alice", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "Bob", PlayerClass::Mage, 1.0, 0.0);
         let mut roster = PartyRoster::new();
-        let _ = roster.invite(1, "Bob", &world);
+        let _ = roster.invite(1, "Bob", &world, 0);
         let _ = roster.accept(2, &world);
         (roster, world)
     }
@@ -124,5 +136,12 @@ mod tests {
         let (roster, world) = duo();
         let effects = handle_chat(&roster, &world, 1, "say", "   ");
         assert!(matches!(effects.as_slice(), [ChatEffect::Error { .. }]));
+    }
+
+    #[test]
+    fn raid_channel_requires_raid() {
+        let (roster, world) = duo();
+        let effects = handle_chat(&roster, &world, 1, "raid", "hi");
+        assert!(matches!(effects.as_slice(), [ChatEffect::Error { message }] if message == "You are not in a raid."));
     }
 }

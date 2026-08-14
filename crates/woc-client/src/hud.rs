@@ -23,6 +23,15 @@ pub(crate) struct HudXpText;
 pub(crate) struct HudTargetText;
 
 #[derive(Component)]
+pub(crate) struct HudPartyFrames;
+
+#[derive(Component)]
+pub(crate) struct HudPartyPanel;
+
+#[derive(Component)]
+pub(crate) struct HudPartyText;
+
+#[derive(Component)]
 pub(crate) struct HudToastText;
 
 #[derive(Component)]
@@ -92,6 +101,7 @@ pub(crate) struct UiFlags {
     pub(crate) show_mail: bool,
     pub(crate) show_market: bool,
     pub(crate) show_map: bool,
+    pub(crate) show_party: bool,
     pub(crate) market_filter: String,
     pub(crate) market_page: usize,
     pub(crate) market_duration_hours: u32,
@@ -109,6 +119,7 @@ impl Default for UiFlags {
             show_mail: false,
             show_market: false,
             show_map: false,
+            show_party: false,
             market_filter: String::new(),
             market_page: 0,
             market_duration_hours: 12,
@@ -689,6 +700,55 @@ fn market_panel_text(snap: &TickSnapshot, ui: &UiFlags) -> String {
     lines.join("\n")
 }
 
+pub(crate) fn party_frames_text(snap: &TickSnapshot) -> String {
+    let mut lines = Vec::new();
+    if !snap.pending_invite_from.is_empty() {
+        lines.push(format!(
+            "{} invited you. O accept / P decline",
+            snap.pending_invite_from
+        ));
+    }
+    if let Some(rc) = &snap.ready_check {
+        if !rc.you_responded {
+            lines.push(format!(
+                "Ready check {}/{}. O ready / P not ready",
+                rc.ready_count, rc.total
+            ));
+        }
+    }
+    for m in &snap.party_members {
+        if m.id == snap.player_id {
+            continue;
+        }
+        let afk = if m.online { "" } else { " AFK" };
+        let group = if snap.party_kind == "raid" {
+            format!("G{} ", m.raid_group + 1)
+        } else {
+            String::new()
+        };
+        lines.push(format!(
+            "{}{} {} {:.0}/{:.0}{}",
+            group, m.class_id, m.name, m.hp, m.hp_max, afk
+        ));
+    }
+    lines.join("\n")
+}
+
+pub(crate) fn party_panel_text(snap: &TickSnapshot) -> String {
+    let mut lines = vec!["Party".into()];
+    for m in &snap.party_members {
+        let star = if Some(m.id) == snap.party_leader_id {
+            "*"
+        } else {
+            " "
+        };
+        let afk = if m.online { "" } else { " AFK" };
+        lines.push(format!("{star} {} {}{afk}", m.name, m.class_id));
+    }
+    lines.push("[X] Leave  [Y] Promote  [-] Kick  [R] Ready  [Backspace] Disband  [=] Raid".into());
+    lines.join("\n")
+}
+
 fn listing_line(listing: &woc_protocol::MarketListingSnapshot) -> String {
     let mine = if listing.mine { " [yours]" } else { "" };
     let name = item(&listing.item_id)
@@ -1116,6 +1176,29 @@ pub(crate) fn update_hud(
     // Action bar: class kit slots 1–5 from snapshot (fallback to primary name).
     if let Ok(mut t) = action.single_mut() {
         **t = format_action_bar(snap);
+    }
+}
+
+pub(crate) fn update_party_hud(
+    host: Res<GameHost>,
+    ui: Res<UiFlags>,
+    mut frames: Query<&mut Text, With<HudPartyFrames>>,
+    mut panel_text: Query<&mut Text, (With<HudPartyText>, Without<HudPartyFrames>)>,
+    mut panel: Query<&mut Visibility, With<HudPartyPanel>>,
+) {
+    let snap = &host.snapshot;
+    if let Ok(mut t) = frames.single_mut() {
+        **t = party_frames_text(snap);
+    }
+    if let Ok(mut vis) = panel.single_mut() {
+        *vis = if ui.show_party {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    if let Ok(mut t) = panel_text.single_mut() {
+        **t = party_panel_text(snap);
     }
 }
 
@@ -1787,6 +1870,63 @@ mod tests {
         let mage = format_action_bar(&snap);
         assert!(!mage.contains("[F] Stance"));
         assert!(!mage.contains("[F] Form"));
+    }
+
+    #[test]
+    fn party_frames_format_other_members() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.party_kind = "party".into();
+        snap.party_leader_id = Some(1);
+        snap.party_members = vec![
+            woc_protocol::PartyMemberSnapshot {
+                id: 1,
+                name: "Alice".into(),
+                class_id: "warrior".into(),
+                hp: 100.0,
+                hp_max: 100.0,
+                online: true,
+                raid_group: 0,
+            },
+            woc_protocol::PartyMemberSnapshot {
+                id: 2,
+                name: "Bob".into(),
+                class_id: "mage".into(),
+                hp: 40.0,
+                hp_max: 80.0,
+                online: false,
+                raid_group: 0,
+            },
+        ];
+        let text = party_frames_text(&snap);
+        assert!(text.contains("Bob"));
+        assert!(text.contains("40/80"));
+        assert!(text.contains("AFK"));
+        assert!(!text.contains("Alice"));
+        let panel = party_panel_text(&snap);
+        assert!(panel.contains("*"));
+        assert!(panel.contains("[X] Leave"));
+    }
+
+    #[test]
+    fn raid_frames_group_two_on_second_column() {
+        let mut snap = TickSnapshot::default();
+        snap.player_id = 1;
+        snap.party_kind = "raid".into();
+        snap.party_members = (1..=6)
+            .map(|id| woc_protocol::PartyMemberSnapshot {
+                id,
+                name: format!("P{id}"),
+                class_id: "warrior".into(),
+                hp: 10.0,
+                hp_max: 10.0,
+                online: true,
+                raid_group: if id <= 5 { 0 } else { 1 },
+            })
+            .collect();
+        let text = party_frames_text(&snap);
+        assert!(text.contains("G2"));
+        assert!(text.contains("P6"));
     }
 
     #[test]

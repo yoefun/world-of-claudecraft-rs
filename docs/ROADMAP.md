@@ -23,7 +23,10 @@
 | **1.13.0** (shipped) | `gear-slots` | Dual-wield, Finger2, catalog quality, main-hand enchants |
 | **1.14.0** (shipped) | `reputation` | Hub factions, standing ladder, vendor discount/gates |
 | **1.15.0** (shipped) | `gear-more` | Extra slots, Hunter DW, OH enchant, instance loot quality |
-| **1.16.0** (this branch) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
+| **1.16.0** (shipped) | `economy-depth` | Auctioneer, bids, 12/24/48 h, soulbound, banker + mailbox NPCs |
+| **1.17.0** (shipped) | `party-depth` | Party verbs, frames, XP split, park-safe roster, ready check |
+| **1.18.0** (this branch) | `raid` | Convert 5→10, two groups, raid chat, realm cap 10 |
+
 ## Completion program (closed)
 
 **Definition of done:** [`docs/superpowers/specs/2026-07-28-rust-rewrite-completion-design.md`](superpowers/specs/2026-07-28-rust-rewrite-completion-design.md)  
@@ -71,6 +74,14 @@ Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Inst
 **Definition of done:** [`docs/superpowers/specs/2026-08-13-economy-depth-design.md`](superpowers/specs/2026-08-13-economy-depth-design.md)
 
 Auctioneer Lise, instance listings, 5% cut, mail-always proceeds, then bids, 12/24/48 h, client filter/pages, OnEquip/OnPickup binds, and Eastbrook Banker Holme plus Eastbrook Post. Protocol rev stays **8**.
+
+
+## Party depth (shipped as `1.17.0`) + raid (shipped as `1.18.0`)
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-13-party-raid-design.md`](superpowers/specs/2026-08-13-party-raid-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-13-party-raid.md`](superpowers/plans/2026-08-13-party-raid.md)
+
+`1.17.0` makes 5-man parties playable (invite/decline/kick/promote/disband, snapshot frames, classic XP split, park-safe membership, ready check). `1.18.0` converts a full party into a 10-player raid of two groups and raises `MAX_REALM_PLAYERS` to 10. Protocol rev **9**. Guilds and Dungeon Finder stay out of scope.
 
 ## Client version gate (current)
 
