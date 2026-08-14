@@ -782,7 +782,10 @@ mod tests {
         let def = woc_content::dungeon("eastbrook_crypt").unwrap();
         assert_eq!(t.x, def.entrance_x);
         assert_eq!(t.z, def.entrance_z);
-        assert_ne!((t.x, t.z), (EASTBROOK.player_spawn_x, EASTBROOK.player_spawn_z));
+        assert_ne!(
+            (t.x, t.z),
+            (EASTBROOK.player_spawn_x, EASTBROOK.player_spawn_z)
+        );
         assert!(!world.ids::<Identity>().into_iter().any(|id| {
             world
                 .get::<Identity>(id)
