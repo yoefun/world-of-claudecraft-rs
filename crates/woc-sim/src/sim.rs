@@ -27,7 +27,7 @@ use crate::ecs::components::{
 };
 use crate::ecs::World;
 use crate::interaction::{npc_session_snapshot, vendor_snapshot};
-use crate::mob::{tick_mob_respawns, update_mob_ai};
+use crate::mob::{at_home, tick_mob_respawns, update_mob_ai};
 use crate::pet::{dismiss_pet, tick_pets};
 use crate::player_motion::step_player_motion;
 use crate::quests::{
@@ -507,7 +507,13 @@ impl Sim {
                 .world
                 .get::<Combat>(*mid)
                 .and_then(|c| c.target)
-                .or_else(|| nearest_alive_player(&self.world, *mid, 40.0));
+                .or_else(|| {
+                    if at_home(&self.world, *mid) {
+                        nearest_alive_player(&self.world, *mid, 40.0)
+                    } else {
+                        None
+                    }
+                });
             if let Some(pid) = focus {
                 update_mob_combat(*mid, pid, &mut self.world, &mut self.rng, &mut self.events);
             }
@@ -1255,6 +1261,43 @@ mod tests {
         assert_eq!(TICK_PHASES[8], "profession_casts");
         assert_eq!(TICK_PHASES[9], "build_snapshot");
         assert_eq!(tick_phase_fingerprint(), 3214741777866168171u64);
+    }
+
+    #[test]
+    fn tick_returning_mob_does_not_reaggro_until_home() {
+        let mut sim = Sim::new_eastbrook("Evader", PlayerClass::Warrior);
+        let mob_id = sim.world.next_id();
+        spawn::create_mob_from_template(&mut sim.world, mob_id, "young_wolf", 0.0, 0.0)
+            .expect("young_wolf");
+        if let Some(t) = sim.world.get_mut::<Transform>(mob_id) {
+            t.x = 10.0;
+            t.z = 0.0;
+            t.y = spawn::ground_at(t.x, t.z);
+        }
+        if let Some(c) = sim.world.get_mut::<Combat>(mob_id) {
+            c.target = None;
+        }
+        place_player_at(&mut sim, 2.5, 0.0);
+
+        let _ = sim.tick(PlayerIntent::default());
+
+        assert!(
+            sim.world.get::<Combat>(mob_id).unwrap().target.is_none(),
+            "tick must not reacquire aggro while the wolf returns Home"
+        );
+
+        if let Some(t) = sim.world.get_mut::<Transform>(mob_id) {
+            t.x = 0.0;
+            t.z = 0.0;
+            t.y = spawn::ground_at(t.x, t.z);
+        }
+
+        let _ = sim.tick(PlayerIntent::default());
+
+        assert_eq!(
+            sim.world.get::<Combat>(mob_id).unwrap().target,
+            Some(sim.player_id)
+        );
     }
 
     #[test]
@@ -2586,6 +2629,7 @@ mod tests {
             h.hp_max = 1.0;
         }
         let piles_before = sim.world.ids::<LootPile>().len();
+        let xp_before = sim.world.get::<Progress>(sim.player_id).expect("progress").xp;
         crate::combat::deal_damage(
             &mut sim.world,
             pet,
@@ -2602,10 +2646,9 @@ mod tests {
             piles_after > piles_before,
             "pet last-hit must still spawn corpse loot when the owner entity is missing"
         );
-        assert!(
-            sim.world
-                .get::<crate::ecs::components::Progress>(sim.player_id)
-                .is_some(),
+        assert_eq!(
+            sim.world.get::<Progress>(sim.player_id).expect("progress").xp,
+            xp_before,
             "living hunter is not the credited killer; XP path stays skipped"
         );
     }

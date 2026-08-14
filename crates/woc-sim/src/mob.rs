@@ -138,7 +138,7 @@ fn dist_xz(ax: f32, az: f32, bx: f32, bz: f32) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
-fn at_home(world: &World, id: EntityId) -> bool {
+pub(crate) fn at_home(world: &World, id: EntityId) -> bool {
     let Some(t) = world.get::<Transform>(id) else {
         return false;
     };

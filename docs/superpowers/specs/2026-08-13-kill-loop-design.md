@@ -157,7 +157,7 @@ Skinning stays on the first kill pile (`maybe_mark_skinnable`). 120 s TTL is the
 credit_actor(world, id) = world.get::<Owner>(id).owner_id  else id
 ```
 
-XP, quest `on_mob_killed`, deeds, loot instance key, and Need/Greed eligibility all use the credited player. `SimEvent::Kill` still records the actual source (pet or player) for combat log truth; rewards use the credited actor. If the owner is missing or dead, skip XP (existing player check) but still spawn loot at the corpse.
+XP, quest `on_mob_killed`, deeds, loot instance key, and Need/Greed eligibility all use the credited player. `SimEvent::Kill` still records the actual source (pet or player) for combat log truth; rewards use the credited actor. If the owner is missing, credit stays with the pet, so the existing player-kind check skips XP but loot still spawns at the corpse. A dead-but-present owner remains the credited player and receives XP through that player-kind check.
 
 ### 5.5 Mob abilities and threat
 
