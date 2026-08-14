@@ -20,7 +20,8 @@ pub type EntityId = u32;
 /// Rev 9: party roster snapshot + kick/promote/disband/ready/raid convert verbs (1.17.0–1.18.0).
 /// Rev 10: guild snapshot / invite + guild client verbs (1.19.0); mail postage / MailReturn (1.20.0).
 /// Riding snapshot + TrainRiding + mounted fields (1.21.0) are additive on rev 10.
-pub const PROTOCOL_REV: u32 = 10;
+/// Rev 11: friend / ignore snapshots, friend WS verbs, Chat.target for whisper (1.22.0).
+pub const PROTOCOL_REV: u32 = 11;
 
 /// Fixed sim rate matching upstream World of ClaudeCraft.
 pub const TICK_RATE: u32 = 20;
@@ -706,9 +707,30 @@ pub struct TickSnapshot {
     /// Pending guild invite for the viewing player, if any.
     #[serde(default)]
     pub guild_invite: Option<GuildInviteSnapshot>,
+    /// Friends list for the viewing player (online first, then name).
+    #[serde(default)]
+    pub friends: Vec<FriendSnapshot>,
+    /// Ignore list for the viewing player (sorted by name).
+    #[serde(default)]
+    pub ignored: Vec<IgnoredSnapshot>,
     /// Per-faction standing for the local player (all known factions).
     #[serde(default)]
     pub reputation: Vec<ReputationSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct FriendSnapshot {
+    pub name: String,
+    pub class_id: String,
+    pub level: u32,
+    pub online: bool,
+    #[serde(default)]
+    pub zone_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct IgnoredSnapshot {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -918,6 +940,8 @@ impl Default for TickSnapshot {
             mail_postage: 0,
             guild: None,
             guild_invite: None,
+            friends: Vec::new(),
+            ignored: Vec::new(),
             reputation: Vec::new(),
         }
     }
@@ -1191,9 +1215,23 @@ pub enum WsClientMsg {
     GuildSetMotd {
         text: String,
     },
+    FriendAdd {
+        name: String,
+    },
+    FriendRemove {
+        name: String,
+    },
+    FriendIgnore {
+        name: String,
+    },
+    FriendUnignore {
+        name: String,
+    },
     Chat {
         channel: String,
         text: String,
+        #[serde(default)]
+        target: String,
     },
 }
 
@@ -1481,6 +1519,8 @@ mod tests {
             mail_postage: 0,
             guild: None,
             guild_invite: None,
+            friends: Vec::new(),
+            ignored: Vec::new(),
             reputation: Vec::new(),
         };
         let s = serde_json::to_string(&snap).unwrap();
@@ -1522,7 +1562,7 @@ mod tests {
         assert!(snap.party_kind.is_empty());
         assert!(snap.party_leader_id.is_none());
         assert!(snap.ready_check.is_none());
-        assert_eq!(PROTOCOL_REV, 10);
+        assert_eq!(PROTOCOL_REV, 11);
     }
 
     #[test]
@@ -1629,6 +1669,7 @@ mod tests {
             WsClientMsg::Chat {
                 channel: "say".into(),
                 text: "hello".into(),
+                target: String::new(),
             },
         ];
         for msg in client_msgs {
@@ -1831,7 +1872,7 @@ mod tests {
         assert!(slot.enchant_id.is_none());
         assert!(!slot.bound);
         assert!(slot.quality.is_none());
-        assert_eq!(PROTOCOL_REV, 10);
+        assert_eq!(PROTOCOL_REV, 11);
     }
 
     #[test]
@@ -1863,7 +1904,7 @@ mod tests {
         assert!(!session.can_auction);
         assert!(!session.can_bank);
         assert!(!session.can_mail);
-        assert_eq!(PROTOCOL_REV, 10);
+        assert_eq!(PROTOCOL_REV, 11);
 
         let list: InteractAction =
             serde_json::from_str(r#"{"type":"market_list","bag_slot":0,"count":1,"price":12}"#)
@@ -1881,8 +1922,8 @@ mod tests {
     }
 
     #[test]
-    fn protocol_rev_is_ten() {
-        assert_eq!(PROTOCOL_REV, 10);
+    fn protocol_rev_is_eleven() {
+        assert_eq!(PROTOCOL_REV, 11);
     }
 
     #[test]
@@ -1893,6 +1934,56 @@ mod tests {
         .unwrap();
         assert!(snap.guild.is_none());
         assert!(snap.guild_invite.is_none());
+        assert!(snap.friends.is_empty());
+        assert!(snap.ignored.is_empty());
+    }
+
+    #[test]
+    fn chat_target_defaults_empty_when_omitted() {
+        let msg: WsClientMsg =
+            serde_json::from_str(r#"{"type":"chat","channel":"say","text":"hello"}"#).unwrap();
+        match msg {
+            WsClientMsg::Chat {
+                channel,
+                text,
+                target,
+            } => {
+                assert_eq!(channel, "say");
+                assert_eq!(text, "hello");
+                assert_eq!(target, "");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn friend_ws_msgs_roundtrip() {
+        let msgs = vec![
+            WsClientMsg::FriendAdd { name: "Bob".into() },
+            WsClientMsg::FriendRemove { name: "Bob".into() },
+            WsClientMsg::FriendIgnore { name: "Bob".into() },
+            WsClientMsg::FriendUnignore { name: "Bob".into() },
+            WsClientMsg::Chat {
+                channel: "whisper".into(),
+                text: "pull west".into(),
+                target: "Bob".into(),
+            },
+        ];
+        for msg in msgs {
+            let s = serde_json::to_string(&msg).unwrap();
+            let back: WsClientMsg = serde_json::from_str(&s).unwrap();
+            assert_eq!(format!("{back:?}"), format!("{msg:?}"));
+        }
+    }
+
+    #[test]
+    fn friend_snapshot_defaults_when_omitted() {
+        let snap: TickSnapshot = serde_json::from_str(
+            r#"{"tick":0,"player_id":1,"entities":[],"progress":{"xp":0,"xp_to_level":0,"level":1,"copper":0}}"#,
+        )
+        .unwrap();
+        assert!(snap.friends.is_empty());
+        assert!(snap.ignored.is_empty());
     }
 
     #[test]
@@ -1962,7 +2053,7 @@ mod tests {
         assert_eq!(snap.spell_power, 0.0);
         assert!(snap.reputation.is_empty());
         assert_eq!(snap.protocol_rev, PROTOCOL_REV);
-        assert_eq!(PROTOCOL_REV, 10);
+        assert_eq!(PROTOCOL_REV, 11);
     }
 
     #[test]
@@ -2029,6 +2120,6 @@ mod tests {
     fn tick_snapshot_mail_postage_defaults_zero() {
         let snap: TickSnapshot = serde_json::from_str(minimal_tick_json()).unwrap();
         assert_eq!(snap.mail_postage, 0);
-        assert_eq!(PROTOCOL_REV, 10);
+        assert_eq!(PROTOCOL_REV, 11);
     }
 }

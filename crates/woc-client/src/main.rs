@@ -22,7 +22,7 @@ use uuid::Uuid;
 use woc_protocol::{
     EntityId, EntitySnapshot, InteractAction, PlayerIntent, TickSnapshot, WsClientMsg, WsServerMsg,
 };
-use woc_sim::{GuildDelivery, Sim};
+use woc_sim::{GuildDelivery, Sim, SocialDelivery};
 use woc_version::{footer, VersionInfo};
 
 fn main() {
@@ -316,7 +316,7 @@ impl GameHost {
                         }
                         WsClientMsg::GuildDisband => sim.guild_disband(pid),
                         WsClientMsg::GuildSetMotd { text } => sim.guild_set_motd(pid, text),
-                        WsClientMsg::Chat { channel, text } => {
+                        WsClientMsg::Chat { channel, text, .. } => {
                             if channel == "guild" || channel == "officer" {
                                 sim.guild_chat(pid, channel, text)
                             } else {
@@ -334,6 +334,46 @@ impl GameHost {
                             from,
                             text,
                         } = chat
+                        {
+                            self.recent_toasts
+                                .push((format!("[{channel}] {from}: {text}"), 4.0));
+                        }
+                    }
+                    self.snapshot = sim.snapshot_for_player(pid);
+                }
+            }
+            PlayMode::Online => {
+                if let Some(tx) = &self.to_net {
+                    let _ = tx.send(msg);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn social_msg(&mut self, msg: WsClientMsg) {
+        match self.play_mode {
+            PlayMode::Offline => {
+                if let Some(sim) = self.sim.as_mut() {
+                    let pid = self.snapshot.player_id;
+                    let outs = match &msg {
+                        WsClientMsg::FriendAdd { name } => sim.friend_add(pid, name),
+                        WsClientMsg::FriendRemove { name } => sim.friend_remove(pid, name),
+                        WsClientMsg::FriendIgnore { name } => sim.friend_ignore(pid, name),
+                        WsClientMsg::FriendUnignore { name } => sim.friend_unignore(pid, name),
+                        WsClientMsg::Chat {
+                            channel,
+                            text,
+                            target,
+                        } if channel == "whisper" => sim.whisper(pid, target, text),
+                        _ => Vec::new(),
+                    };
+                    for d in outs {
+                        let SocialDelivery::To { msg, .. } = d;
+                        if let WsServerMsg::Chat {
+                            channel,
+                            from,
+                            text,
+                        } = msg
                         {
                             self.recent_toasts
                                 .push((format!("[{channel}] {from}: {text}"), 4.0));

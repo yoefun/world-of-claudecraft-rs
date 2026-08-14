@@ -11,7 +11,7 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 use uuid::Uuid;
 use woc_content::PlayerClass;
 use woc_protocol::{EntityId, WorldHost, WsClientMsg, WsServerMsg, PROTOCOL_REV, TICK_RATE};
-use woc_sim::{GuildDelivery, Sim};
+use woc_sim::{GuildDelivery, Sim, SocialDelivery};
 use woc_version::{
     check_compat, min_client_version_from_env, ClientIdentity, RealmIdentity, REWRITE_VERSION,
 };
@@ -131,6 +131,43 @@ async fn run_guild_op(shared: &Arc<Shared>, op: impl FnOnce(&mut Sim) -> Vec<Gui
     send_to_players(shared, recips).await;
 }
 
+async fn run_social_op(
+    shared: &Arc<Shared>,
+    dirty: bool,
+    op: impl FnOnce(&mut Sim) -> Vec<SocialDelivery>,
+) {
+    let recips = {
+        let mut realm = shared.realm.lock().await;
+        let outs = op(&mut realm.sim);
+        let recips: Vec<(Vec<EntityId>, String)> = outs
+            .into_iter()
+            .map(|SocialDelivery::To { player, msg }| {
+                (
+                    vec![player],
+                    serde_json::to_string(&msg).unwrap_or_default(),
+                )
+            })
+            .collect();
+        if dirty {
+            realm.economy_dirty = true;
+        }
+        drop(realm);
+        recips
+    };
+    send_to_players(shared, recips).await;
+}
+
+fn remove_social_from_economy(economy: &mut woc_persist::RealmEconomy, durable_id: &str) {
+    economy.social.retain(|b| b.owner_durable != durable_id);
+    for book in &mut economy.social {
+        book.friends.retain(|e| e.durable_id != durable_id);
+        book.ignored.retain(|e| e.durable_id != durable_id);
+    }
+    economy
+        .social
+        .retain(|b| !b.friends.is_empty() || !b.ignored.is_empty());
+}
+
 fn remove_member_from_economy(economy: &mut woc_persist::RealmEconomy, durable_id: &str) {
     economy.guilds.retain_mut(|guild| {
         guild.members.retain(|m| m.durable_id != durable_id);
@@ -151,6 +188,7 @@ pub async fn on_character_deleted(id: Uuid, persist: &woc_persist::Persist) {
         let economy = {
             let mut realm = shared.realm.lock().await;
             realm.sim.guilds.remove_member(&durable);
+            realm.sim.friends.remove_character(&durable);
             realm.economy_dirty = true;
             export_economy_from_sim(&realm.sim)
         };
@@ -161,6 +199,7 @@ pub async fn on_character_deleted(id: Uuid, persist: &woc_persist::Persist) {
         match persist.load_economy().await {
             Ok(mut economy) => {
                 remove_member_from_economy(&mut economy, &durable);
+                remove_social_from_economy(&mut economy, &durable);
                 if let Err(e) = persist.save_economy(economy).await {
                     tracing::warn!("failed to save economy after character delete: {e}");
                 }
@@ -293,6 +332,7 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     protocol_rev: PROTOCOL_REV,
                 };
                 let snap = WorldHost::snapshot_for(&realm.sim, pid);
+                let social = realm.sim.take_social();
                 drop(realm);
 
                 shared.player_tx.lock().await.insert(pid, out_tx.clone());
@@ -306,6 +346,16 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     serde_json::to_string(&WsServerMsg::Snapshot(Box::new(snap)))
                         .unwrap_or_default(),
                 );
+                let recips: Vec<(Vec<EntityId>, String)> = social
+                    .into_iter()
+                    .map(|SocialDelivery::To { player, msg }| {
+                        (
+                            vec![player],
+                            serde_json::to_string(&msg).unwrap_or_default(),
+                        )
+                    })
+                    .collect();
+                send_to_players(&shared, recips).await;
             }
             WsClientMsg::Intent(intent) => {
                 if let Some(b) = &binding {
@@ -504,23 +554,55 @@ async fn handle_socket(socket: WebSocket, shared: Arc<Shared>) {
                     run_guild_op(&shared, |sim| sim.guild_set_motd(b.player_id, &text)).await;
                 }
             }
-            WsClientMsg::Chat { channel, text } => {
+            WsClientMsg::FriendAdd { name } => {
                 if let Some(b) = &binding {
-                    let mut realm = shared.realm.lock().await;
-                    if channel.eq_ignore_ascii_case("guild")
-                        || channel.eq_ignore_ascii_case("officer")
-                    {
-                        let outs = realm.sim.guild_chat(b.player_id, &channel, &text);
-                        let recips = expand_deliveries(&realm.sim, outs);
-                        drop(realm);
-                        send_to_players(&shared, recips).await;
+                    run_social_op(&shared, true, |sim| sim.friend_add(b.player_id, &name)).await;
+                }
+            }
+            WsClientMsg::FriendRemove { name } => {
+                if let Some(b) = &binding {
+                    run_social_op(&shared, true, |sim| sim.friend_remove(b.player_id, &name)).await;
+                }
+            }
+            WsClientMsg::FriendIgnore { name } => {
+                if let Some(b) = &binding {
+                    run_social_op(&shared, true, |sim| sim.friend_ignore(b.player_id, &name)).await;
+                }
+            }
+            WsClientMsg::FriendUnignore { name } => {
+                if let Some(b) = &binding {
+                    run_social_op(&shared, true, |sim| sim.friend_unignore(b.player_id, &name))
+                        .await;
+                }
+            }
+            WsClientMsg::Chat {
+                channel,
+                text,
+                target,
+            } => {
+                if let Some(b) = &binding {
+                    if channel.eq_ignore_ascii_case("whisper") {
+                        run_social_op(&shared, false, |sim| {
+                            sim.whisper(b.player_id, &target, &text)
+                        })
+                        .await;
                     } else {
-                        let outs = realm.sim.chat(b.player_id, &channel, &text);
-                        drop(realm);
-                        for msg in outs {
-                            let _ = shared
-                                .notices
-                                .send(serde_json::to_string(&msg).unwrap_or_default());
+                        let mut realm = shared.realm.lock().await;
+                        if channel.eq_ignore_ascii_case("guild")
+                            || channel.eq_ignore_ascii_case("officer")
+                        {
+                            let outs = realm.sim.guild_chat(b.player_id, &channel, &text);
+                            let recips = expand_deliveries(&realm.sim, outs);
+                            drop(realm);
+                            send_to_players(&shared, recips).await;
+                        } else {
+                            let outs = realm.sim.chat(b.player_id, &channel, &text);
+                            drop(realm);
+                            for msg in outs {
+                                let _ = shared
+                                    .notices
+                                    .send(serde_json::to_string(&msg).unwrap_or_default());
+                            }
                         }
                     }
                 }
@@ -543,7 +625,7 @@ fn err_json(message: &str) -> String {
 }
 
 async fn save_and_park(shared: &Shared, binding: &SessionBinding) {
-    let (save, economy) = {
+    let (save, economy, social) = {
         let mut realm = shared.realm.lock().await;
         let save = realm
             .sim
@@ -552,8 +634,19 @@ async fn save_and_park(shared: &Shared, binding: &SessionBinding) {
         let economy = export_economy_from_sim(&realm.sim);
         realm.sim.park_player(binding.player_id);
         realm.economy_dirty = true;
-        (save, economy)
+        let social = realm.sim.take_social();
+        (save, economy, social)
     };
+    let recips: Vec<(Vec<EntityId>, String)> = social
+        .into_iter()
+        .map(|SocialDelivery::To { player, msg }| {
+            (
+                vec![player],
+                serde_json::to_string(&msg).unwrap_or_default(),
+            )
+        })
+        .collect();
+    send_to_players(shared, recips).await;
     if let Some(save) = save {
         if let Err(e) = shared
             .persist
@@ -830,6 +923,41 @@ mod tests {
         assert_eq!(economy.guilds[0].members[0].rank, "leader");
         remove_member_from_economy(&mut economy, "char-bob");
         assert!(economy.guilds.is_empty(), "empty guild is dropped");
+    }
+
+    #[test]
+    fn remove_social_from_economy_sweeps_books() {
+        let mut economy = woc_persist::RealmEconomy {
+            social: vec![
+                woc_persist::SocialBookDto {
+                    owner_durable: "char-alice".into(),
+                    friends: vec![woc_persist::SocialEntryDto {
+                        durable_id: "char-bob".into(),
+                        name: "Bob".into(),
+                        class_id: "mage".into(),
+                        level: 1,
+                    }],
+                    ignored: vec![],
+                },
+                woc_persist::SocialBookDto {
+                    owner_durable: "char-bob".into(),
+                    friends: vec![woc_persist::SocialEntryDto {
+                        durable_id: "char-alice".into(),
+                        name: "Alice".into(),
+                        class_id: "warrior".into(),
+                        level: 1,
+                    }],
+                    ignored: vec![],
+                },
+            ],
+            ..Default::default()
+        };
+        remove_social_from_economy(&mut economy, "char-bob");
+        assert!(economy.social.iter().all(|b| b.owner_durable != "char-bob"));
+        assert!(economy.social.iter().all(|b| {
+            b.friends.iter().all(|e| e.durable_id != "char-bob")
+                && b.ignored.iter().all(|e| e.durable_id != "char-bob")
+        }));
     }
 
     #[test]

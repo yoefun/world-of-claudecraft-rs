@@ -31,7 +31,7 @@ pub(crate) fn grab_cursor(
     };
     if keys.just_pressed(KeyCode::Escape) {
         // Close map / guild first; otherwise clear combat target / stop AA and release cursor.
-        if ui.show_map || ui.show_guild {
+        if ui.show_map || ui.show_guild || ui.show_friends {
             // panel close handled in handle_interact_keys
         } else {
             host.pending_intent.clear_target = true;
@@ -111,7 +111,7 @@ pub(crate) fn collect_intent(
         ..default()
     };
     // Compose/search fields own the keyboard.
-    let typing = ui.mail_compose || ui.show_guild || ui.market_searching;
+    let typing = ui.mail_compose || ui.show_guild || ui.show_friends || ui.market_searching;
     let mut mx = 0.0;
     let mut mz = 0.0;
     if !typing {
@@ -149,6 +149,7 @@ pub(crate) fn collect_intent(
         && !ui.show_bank
         && !ui.show_mail
         && !ui.show_guild
+        && !ui.show_friends
         && !loot_rolling
         && !ui.show_bags
         && !ui.show_character
@@ -488,6 +489,8 @@ pub(crate) fn handle_interact_keys(
     }
     if !ui.show_bank && !ui.show_guild && keys.just_pressed(KeyCode::KeyJ) {
         ui.show_guild = true;
+        ui.show_friends = false;
+        ui.friend_compose.clear();
         ui.show_character = false;
         ui.show_map = false;
         ui.show_bank = false;
@@ -514,6 +517,10 @@ pub(crate) fn handle_interact_keys(
             ui.market_page = 0;
         }
     }
+    if keys.just_pressed(KeyCode::Escape) && ui.show_friends {
+        ui.show_friends = false;
+        ui.friend_compose.clear();
+    }
     if keys.just_pressed(KeyCode::Escape) && ui.show_guild {
         ui.show_guild = false;
         ui.guild_compose.clear();
@@ -524,6 +531,10 @@ pub(crate) fn handle_interact_keys(
 
     // Compose owns the keyboard while the guild panel is open: no gameplay,
     // no other panel's hotkeys.
+    if ui.show_friends {
+        handle_friends_panel_keys(&keys, &mut host, &mut ui);
+        return;
+    }
     if ui.show_guild {
         handle_guild_panel_keys(&keys, &mut host, &mut ui);
         return;
@@ -536,10 +547,26 @@ pub(crate) fn handle_interact_keys(
         .as_ref()
         .is_some_and(|r| !r.you_responded);
 
-    if pending && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+    if pending && !ui.show_market && !ui.show_friends && keys.just_pressed(KeyCode::KeyO) {
         host.send_party(WsClientMsg::PartyAccept);
-    } else if ready_prompt && !ui.show_market && keys.just_pressed(KeyCode::KeyO) {
+    } else if ready_prompt
+        && !ui.show_market
+        && !ui.show_friends
+        && keys.just_pressed(KeyCode::KeyO)
+    {
         host.send_party(WsClientMsg::PartyReadyRespond { ready: true });
+    } else if !pending
+        && !ready_prompt
+        && !ui.show_market
+        && !ui.show_friends
+        && keys.just_pressed(KeyCode::KeyO)
+    {
+        ui.show_friends = true;
+        ui.show_guild = false;
+        ui.guild_compose.clear();
+        ui.show_character = false;
+        ui.show_map = false;
+        ui.show_market = false;
     }
 
     if pending && !ui.show_mail && keys.just_pressed(KeyCode::KeyP) {
@@ -1370,6 +1397,7 @@ fn guild_enter_msg(compose: &str, snap: &TickSnapshot) -> WsClientMsg {
         return WsClientMsg::Chat {
             channel: "officer".into(),
             text: rest.to_string(),
+            target: String::new(),
         };
     }
     if let Some(rest) = compose.strip_prefix("/invite ") {
@@ -1402,6 +1430,7 @@ fn guild_enter_msg(compose: &str, snap: &TickSnapshot) -> WsClientMsg {
     WsClientMsg::Chat {
         channel: "guild".into(),
         text: compose.to_string(),
+        target: String::new(),
     }
 }
 
@@ -1480,6 +1509,96 @@ fn handle_guild_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui:
             }
         }
     }
+}
+
+fn handle_friends_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, ui: &mut UiFlags) {
+    if keys.just_pressed(KeyCode::Enter) {
+        let compose = ui.friend_compose.clone();
+        let target = targeted_player_name(&host.snapshot);
+        if let Some(msg) = friend_enter_msg(&compose, target.as_deref()) {
+            host.social_msg(msg);
+        }
+        ui.friend_compose.clear();
+        return;
+    }
+    if keys.just_pressed(KeyCode::Backspace) {
+        ui.friend_compose.pop();
+    }
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    for key in GUILD_COMPOSE_KEYS {
+        if keys.just_pressed(key) {
+            if let Some(ch) = guild_compose_char_from_key(key, shift) {
+                ui.friend_compose.push(ch);
+            }
+        }
+    }
+}
+
+fn friend_enter_msg(compose: &str, target_name: Option<&str>) -> Option<WsClientMsg> {
+    let compose = compose.trim();
+    if compose.is_empty() {
+        return None;
+    }
+    let lower = compose.to_ascii_lowercase();
+    if lower == "/add" {
+        return target_name.map(|name| WsClientMsg::FriendAdd {
+            name: name.to_string(),
+        });
+    }
+    if lower == "/ignore" {
+        return target_name.map(|name| WsClientMsg::FriendIgnore {
+            name: name.to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/add ") {
+        return Some(WsClientMsg::FriendAdd {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/remove ") {
+        return Some(WsClientMsg::FriendRemove {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/ignore ") {
+        return Some(WsClientMsg::FriendIgnore {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/unignore ") {
+        return Some(WsClientMsg::FriendUnignore {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/whisper ") {
+        return whisper_from_rest(rest);
+    }
+    if let Some(rest) = strip_cmd(compose, "/w ") {
+        return whisper_from_rest(rest);
+    }
+    None
+}
+
+fn strip_cmd<'a>(compose: &'a str, prefix: &str) -> Option<&'a str> {
+    if compose.len() >= prefix.len() && compose[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        Some(&compose[prefix.len()..])
+    } else {
+        None
+    }
+}
+
+fn whisper_from_rest(rest: &str) -> Option<WsClientMsg> {
+    let rest = rest.trim();
+    let (name, text) = rest.split_once(char::is_whitespace)?;
+    let text = text.trim();
+    if name.is_empty() || text.is_empty() {
+        return None;
+    }
+    Some(WsClientMsg::Chat {
+        channel: "whisper".into(),
+        target: name.to_string(),
+        text: text.to_string(),
+    })
 }
 
 const GUILD_COMPOSE_KEYS: [KeyCode; 40] = [
@@ -1885,7 +2004,7 @@ mod tests {
         ));
         assert!(matches!(
             guild_enter_msg("hello", &snap),
-            WsClientMsg::Chat { channel, text } if channel == "guild" && text == "hello"
+            WsClientMsg::Chat { channel, text, .. } if channel == "guild" && text == "hello"
         ));
     }
 
@@ -1896,6 +2015,22 @@ mod tests {
             guild_enter_msg("  Vale Watch  ", &snap),
             WsClientMsg::GuildCreate { name } if name == "Vale Watch"
         ));
+    }
+
+    #[test]
+    fn friend_enter_parses_add_and_whisper() {
+        let add = friend_enter_msg("/add Bob", None).unwrap();
+        assert!(matches!(add, WsClientMsg::FriendAdd { name } if name == "Bob"));
+        let w = friend_enter_msg("/w Bob pull west", None).unwrap();
+        assert!(matches!(
+            w,
+            WsClientMsg::Chat { channel, target, text }
+                if channel == "whisper" && target == "Bob" && text == "pull west"
+        ));
+        let add_tgt = friend_enter_msg("/add", Some("Carol")).unwrap();
+        assert!(matches!(add_tgt, WsClientMsg::FriendAdd { name } if name == "Carol"));
+        let ign = friend_enter_msg("/ignore", Some("Carol")).unwrap();
+        assert!(matches!(ign, WsClientMsg::FriendIgnore { name } if name == "Carol"));
     }
 
     #[test]
