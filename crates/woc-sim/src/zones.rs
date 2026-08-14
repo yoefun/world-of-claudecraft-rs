@@ -102,6 +102,7 @@ pub(crate) fn load_overworld_zone_at(
     if let Some(threat) = world.get_mut::<Threat>(player_id) {
         threat.threat.clear();
     }
+    crate::instances::follow_owner_into_instance(world, player_id);
     true
 }
 

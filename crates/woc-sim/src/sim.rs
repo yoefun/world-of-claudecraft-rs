@@ -3231,6 +3231,11 @@ mod tests {
         sim.tick_all();
         assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_some());
 
+        let def = woc_content::dungeon("eastbrook_crypt").unwrap();
+        if let Some(t) = sim.world.get_mut::<Transform>(pid) {
+            t.x = def.entrance_x;
+            t.z = def.entrance_z;
+        }
         let mut events = Vec::new();
         assert!(enter_dungeon(
             &mut sim.world,

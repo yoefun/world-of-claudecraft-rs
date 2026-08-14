@@ -8,13 +8,57 @@ use crate::ecs::components::{
 };
 use crate::ecs::World;
 use crate::social::party::PartyRoster;
-use crate::zones::load_overworld_zone;
 use woc_content::{dungeon, DungeonDef, DungeonTrashSpot};
 use woc_protocol::{EntityId, EntityKind, SimEvent};
+
+pub const INSTANCE_ENTER_RANGE: f32 = 5.0;
 
 /// Content dungeon id embedded in `instance_id` (`{dungeon}#{seq}`).
 pub fn dungeon_id_from_instance(instance_id: &str) -> &str {
     instance_id.split('#').next().unwrap_or(instance_id)
+}
+
+pub fn follow_owner_into_instance(world: &mut World, player_id: EntityId) {
+    let Some(pet) = crate::pet::find_pet(world, player_id) else {
+        return;
+    };
+    let inst = world
+        .get::<InstanceAt>(player_id)
+        .cloned()
+        .unwrap_or_default();
+    let zone = world
+        .get::<Identity>(player_id)
+        .map(|i| i.zone_id.clone())
+        .unwrap_or_default();
+    let (px, pz) = world
+        .get::<Transform>(player_id)
+        .map(|t| (t.x, t.z))
+        .unwrap_or((0.0, 0.0));
+    if world.get::<InstanceAt>(pet).is_none() {
+        world.insert(pet, InstanceAt::default());
+    }
+    if let Some(slot) = world.get_mut::<InstanceAt>(pet) {
+        *slot = inst;
+    }
+    if let Some(identity) = world.get_mut::<Identity>(pet) {
+        identity.zone_id = zone;
+    }
+    if let Some(t) = world.get_mut::<Transform>(pet) {
+        t.x = px + 1.5;
+        t.z = pz;
+        t.y = crate::ecs::spawn::ground_at(t.x, t.z);
+    }
+}
+
+fn xz_dist(world: &World, player_id: EntityId, x: f32, z: f32) -> f32 {
+    world
+        .get::<Transform>(player_id)
+        .map(|t| {
+            let dx = t.x - x;
+            let dz = t.z - z;
+            (dx * dx + dz * dz).sqrt()
+        })
+        .unwrap_or(f32::MAX)
 }
 
 /// Enter a content-defined dungeon and spawn its boss shell.
@@ -26,6 +70,9 @@ pub fn enter_dungeon(
     events: &mut Vec<SimEvent>,
 ) -> bool {
     let Some(def) = dungeon(dungeon_id) else {
+        events.push(SimEvent::Toast {
+            message: "There is no such instance.".into(),
+        });
         return false;
     };
     if world.get::<Identity>(player_id).map(|i| i.kind) != Some(EntityKind::Player) {
@@ -36,7 +83,22 @@ pub fn enter_dungeon(
         .get::<InstanceAt>(player_id)
         .and_then(|i| i.instance_id.as_ref())
         .is_some();
-    if level < def.min_level || in_instance {
+    if in_instance {
+        events.push(SimEvent::Toast {
+            message: "You are already in an instance.".into(),
+        });
+        return false;
+    }
+    if level < def.min_level {
+        events.push(SimEvent::Toast {
+            message: format!("You must be level {} to enter {}.", def.min_level, def.name),
+        });
+        return false;
+    }
+    if xz_dist(world, player_id, def.entrance_x, def.entrance_z) > INSTANCE_ENTER_RANGE {
+        events.push(SimEvent::Toast {
+            message: "You must be closer to the entrance.".into(),
+        });
         return false;
     }
 
@@ -80,6 +142,7 @@ pub fn enter_dungeon(
         inst.instance_id = Some(instance_key);
         inst.delve_room = None;
     }
+    follow_owner_into_instance(world, player_id);
     crate::mount::dismount(world, player_id, events);
     if let Some(combat) = world.get_mut::<Combat>(player_id) {
         combat.target = None;
@@ -97,6 +160,9 @@ pub fn enter_dungeon(
     events.push(SimEvent::InstanceEntered {
         player: player_id,
         dungeon_id: def.id.to_string(),
+    });
+    events.push(SimEvent::Toast {
+        message: format!("Entered {}.", def.name),
     });
     true
 }
@@ -137,7 +203,13 @@ pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<S
         return false;
     };
 
-    if !load_overworld_zone(world, player_id, def.zone_id) {
+    if !crate::zones::load_overworld_zone_at(
+        world,
+        player_id,
+        def.zone_id,
+        def.entrance_x,
+        def.entrance_z,
+    ) {
         return false;
     }
 
@@ -169,6 +241,9 @@ pub fn leave_instance(world: &mut World, player_id: EntityId, events: &mut Vec<S
     }
 
     events.push(SimEvent::InstanceLeft { player: player_id });
+    events.push(SimEvent::Toast {
+        message: "Left the instance.".into(),
+    });
     true
 }
 
@@ -301,12 +376,127 @@ pub fn same_instance_space(world: &World, a: EntityId, b: EntityId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use woc_content::{PlayerClass, EASTBROOK, MIREFEN};
+    use woc_content::PlayerClass;
+
+    fn place_at_dungeon(world: &mut World, player_id: EntityId, dungeon_id: &str) {
+        let def = woc_content::dungeon(dungeon_id).unwrap();
+        if let Some(t) = world.get_mut::<Transform>(player_id) {
+            t.x = def.entrance_x;
+            t.z = def.entrance_z;
+        }
+        if let Some(h) = world.get_mut::<Health>(player_id) {
+            h.level = def.min_level.max(h.level);
+        }
+    }
+
+    #[test]
+    fn enter_rejects_when_too_far() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Far", PlayerClass::Warrior, 2.0, 4.0);
+        let parties = PartyRoster::new();
+        let mut events = Vec::new();
+        assert!(!enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "You must be closer to the entrance."
+        )));
+        assert!(world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.as_ref())
+            .is_none());
+    }
+
+    #[test]
+    fn enter_rejects_low_level_at_barrow_entrance() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Low", PlayerClass::Warrior, 25.0, 430.0);
+        place_at_dungeon(&mut world, 1, "mirefen_barrow");
+        if let Some(h) = world.get_mut::<Health>(1) {
+            h.level = 1;
+        }
+        let parties = PartyRoster::new();
+        let mut events = Vec::new();
+        assert!(!enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "mirefen_barrow",
+            &mut events
+        ));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message }
+                if message == "You must be level 3 to enter Mirefen Barrow."
+        )));
+    }
+
+    #[test]
+    fn leave_lands_on_crypt_entrance_not_zone_spawn() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        let parties = PartyRoster::new();
+        let mut events = Vec::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        events.clear();
+        assert!(leave_instance(&mut world, 1, &mut events));
+        let t = world.get::<Transform>(1).unwrap();
+        let def = woc_content::dungeon("eastbrook_crypt").unwrap();
+        assert!((t.x - def.entrance_x).abs() < 1e-3);
+        assert!((t.z - def.entrance_z).abs() < 1e-3);
+        assert_eq!(world.get::<Identity>(1).unwrap().zone_id, "eastbrook");
+        assert!(events.iter().any(|e| matches!(
+            e,
+            SimEvent::Toast { message } if message == "Left the instance."
+        )));
+    }
+
+    #[test]
+    fn hunter_pet_follows_into_crypt() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hunt", PlayerClass::Hunter, 2.0, 4.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        let mut events = Vec::new();
+        assert!(crate::pet::summon_pet(&mut world, 1, &mut events));
+        let pet = crate::pet::find_pet(&world, 1).unwrap();
+        let parties = PartyRoster::new();
+        assert!(enter_dungeon(
+            &mut world,
+            &parties,
+            1,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        let key = world
+            .get::<InstanceAt>(1)
+            .and_then(|i| i.instance_id.clone())
+            .unwrap();
+        assert_eq!(
+            world
+                .get::<InstanceAt>(pet)
+                .and_then(|i| i.instance_id.clone())
+                .as_deref(),
+            Some(key.as_str())
+        );
+    }
 
     #[test]
     fn enter_dungeon_dismounts_active_mount() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Rider", PlayerClass::Warrior, 2.0, 4.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
         world
             .get_mut::<crate::ecs::components::Health>(1)
             .unwrap()
@@ -352,6 +542,7 @@ mod tests {
     fn enter_preserves_overworld_and_uses_unique_instance() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
         crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 4.0, 4.0)
             .expect("overworld mob");
         let parties = PartyRoster::new();
@@ -406,6 +597,8 @@ mod tests {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        place_at_dungeon(&mut world, 2, "eastbrook_crypt");
         let mut parties = PartyRoster::new();
         let _ = parties.invite(1, "B", &world, 0);
         let _ = parties.accept(2, &world);
@@ -453,6 +646,7 @@ mod tests {
     fn leave_returns_to_overworld_spawn_and_removes_boss() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 2.0, 4.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
         let parties = PartyRoster::new();
         let mut events = Vec::new();
         assert!(enter_dungeon(
@@ -472,8 +666,9 @@ mod tests {
             .is_none());
         assert_eq!(world.get::<Identity>(1).unwrap().zone_id, "eastbrook");
         let t = world.get::<Transform>(1).unwrap();
-        assert_eq!(t.x, EASTBROOK.player_spawn_x);
-        assert_eq!(t.z, EASTBROOK.player_spawn_z);
+        let def = woc_content::dungeon("eastbrook_crypt").unwrap();
+        assert_eq!(t.x, def.entrance_x);
+        assert_eq!(t.z, def.entrance_z);
         assert!(!world.ids::<Identity>().into_iter().any(|id| {
             world
                 .get::<Identity>(id)
@@ -512,6 +707,8 @@ mod tests {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Warrior, 0.0, 0.0);
         crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Mage, 1.0, 0.0);
+        place_at_dungeon(&mut world, 1, "eastbrook_crypt");
+        place_at_dungeon(&mut world, 2, "eastbrook_crypt");
         let mut parties = PartyRoster::new();
         let _ = parties.invite(1, "B", &world, 0);
         let _ = parties.accept(2, &world);
@@ -558,9 +755,7 @@ mod tests {
     fn enter_mirefen_barrow_and_leave_returns_to_mirefen() {
         let mut world = World::new();
         crate::ecs::spawn::create_player(&mut world, 1, "Delver", PlayerClass::Warrior, 3.0, 308.0);
-        if let Some(h) = world.get_mut::<Health>(1) {
-            h.level = 3;
-        }
+        place_at_dungeon(&mut world, 1, "mirefen_barrow");
         let parties = PartyRoster::new();
         let mut events = Vec::new();
         assert!(enter_dungeon(
@@ -593,8 +788,9 @@ mod tests {
             .is_none());
         assert_eq!(world.get::<Identity>(1).unwrap().zone_id, "mirefen");
         let t = world.get::<Transform>(1).unwrap();
-        assert_eq!(t.x, MIREFEN.player_spawn_x);
-        assert_eq!(t.z, MIREFEN.player_spawn_z);
+        let def = woc_content::dungeon("mirefen_barrow").unwrap();
+        assert_eq!(t.x, def.entrance_x);
+        assert_eq!(t.z, def.entrance_z);
         assert!(living_instance_loot(&world, &key, "barrow_hag").is_empty());
     }
 }
