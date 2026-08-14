@@ -29,7 +29,7 @@
 | **1.19.0** (shipped) | `guilds` | Create/invite/ranks, guild+officer chat, MOTD, persist |
 | **1.20.0** (shipped) | `parcel-bank` | Offline parcels, postage/cap/expiry/return, client compose, bank repair |
 | **1.21.0** (shipped) | `mounts` | Riding ranks, learnable mounts, **V** toggle, Expert flying |
-| **1.22.0** (planned) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
+| **1.22.0** (this branch) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
 
 ## Completion program (closed)
 
@@ -80,7 +80,7 @@ Warrior/Rogue dual-wield a second OneHand into OffHand. Rings fill Finger then F
 
 Extra armor + trinket slots. Hunter dual-wield. Off-hand oils on the sheet. Instance loot quality rolls after drop selection. Protocol rev stays **8**.
 
-## Friends (planned as `1.22.0`)
+## Friends (this branch as `1.22.0`)
 
 **Definition of done:** [`docs/superpowers/specs/2026-08-14-friends-design.md`](superpowers/specs/2026-08-14-friends-design.md)  
 **Implementation:** [`docs/superpowers/plans/2026-08-14-friends.md`](superpowers/plans/2026-08-14-friends.md)

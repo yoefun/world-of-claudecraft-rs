@@ -23,8 +23,9 @@ Manual. Requires a GPU client. CI does not run this.
 17. Hunter: replace the bow with a hatchet, equip a second hatchet into OffHand. Wear a Wool Cloak and two Lucky Pebbles. Use a second whetstone so Off shows `[Coarse Sharpening]`.
 18. Two clients: Alice **J** types `Vale Watch` (Shift for capitals) Enter — the opening **J** must not leave a stray `j`. `/invite Bob` Enter; Bob Enter. Billboard `/motd Kill wolves at dusk` Enter; guild chat by typing + Enter; `/o hello` for officer chat. Relog still in guild. `/transfer Bob` Enter, `/kick` or **Ctrl+Q** leave, **Ctrl+D** disband (every online member sees `<Vale Watch> has been disbanded.`). **Esc** closes the panel (J types `j` while it is open). While the panel is open no key moves, attacks, or hearths.
 19. Stable Master Ross: train Apprentice Riding (L2), buy Brown Pony, use it to learn, press **V** to mount/dismount; enter combat and confirm dismount; train Expert, buy Tawny Gryphon, **V** to fly (Space/Ctrl vertical); Eastbrook Crypt refuses mount entry.
+20. Two clients: Alice **O**, `/add Bob` Enter — toast `Bob has been added to your friends list.`; Bob shows `*`. `/w Bob pull west` Enter — Bob sees `[whisper] Alice: pull west`. Bob `/ignore Alice` — Alice's next whisper is `Bob is ignoring you.` Unignore, `/add Alice`, both Alt-F4 and log in: lists persist; online toast `{name} has come online.` Delete Bob's character: Alice's list no longer has Bob.
 
-Footer reads `WoC-rs 1.21.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
+Footer reads `WoC-rs 1.22.0 · upstream 0.31.0` (`VERSION.toml`). Nine-class signatures: stealth, shield, Charge, Blink, Aspect, Devotion/seal, Lightning Shield, Fear, Travel Form.
 
 Online path: title **2 Online** must show `Online: compatible` before Continue proceeds to Login.
 

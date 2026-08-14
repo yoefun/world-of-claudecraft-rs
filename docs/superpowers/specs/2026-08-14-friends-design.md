@@ -1,6 +1,6 @@
 # 好友系统完善设计 — `1.22.0` / `friends`
 
-**Status:** Approved. Implementation plan: [`../plans/2026-08-14-friends.md`](../plans/2026-08-14-friends.md).  
+**Status:** Shipped on this branch as rewrite `1.22.0` / `friends`. Implementation: [`../plans/2026-08-14-friends.md`](../plans/2026-08-14-friends.md).  
 **Baseline:** rewrite `1.21.0` / parity `mounts` on `develop` (ECS `World` actor store; protocol rev **10**).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `friends`.  
