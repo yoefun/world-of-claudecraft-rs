@@ -325,6 +325,20 @@ pub fn create_pet(
     );
     world.insert(id, Auras { auras: Vec::new() });
     world.insert(id, Owner { owner_id });
+    world.insert(id, InstanceAt::default());
+    if let Some(owner_inst) = world.get::<InstanceAt>(owner_id).cloned() {
+        if let Some(slot) = world.get_mut::<InstanceAt>(id) {
+            *slot = owner_inst;
+        }
+    }
+    if let Some(zone) = world
+        .get::<Identity>(owner_id)
+        .map(|i| i.zone_id.clone())
+    {
+        if let Some(identity) = world.get_mut::<Identity>(id) {
+            identity.zone_id = zone;
+        }
+    }
     id
 }
 

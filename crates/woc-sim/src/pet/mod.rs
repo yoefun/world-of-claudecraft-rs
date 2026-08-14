@@ -291,6 +291,16 @@ mod tests {
     }
 
     #[test]
+    fn summoned_pet_receives_instance_at_column() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Hunt", PlayerClass::Hunter, 2.0, 4.0);
+        let mut events = Vec::new();
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let pet = find_pet(&world, 1).unwrap();
+        assert!(world.get::<crate::ecs::components::InstanceAt>(pet).is_some());
+    }
+
+    #[test]
     fn summon_replaces_existing_pet() {
         let mut world = hunter_world();
         let mut events = Vec::new();

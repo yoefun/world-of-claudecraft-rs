@@ -1086,6 +1086,24 @@ impl Sim {
                 .get::<Identity>(player_id)
                 .map(|i| i.zone_id.clone())
                 .unwrap_or_else(|| "eastbrook".into()),
+            instance_id: world
+                .get::<InstanceAt>(player_id)
+                .and_then(|i| i.instance_id.clone())
+                .unwrap_or_default(),
+            instance_name: {
+                let key = world
+                    .get::<InstanceAt>(player_id)
+                    .and_then(|i| i.instance_id.clone())
+                    .unwrap_or_default();
+                let content_id = crate::instances::dungeon_id_from_instance(&key);
+                woc_content::dungeon(content_id)
+                    .map(|d| d.name.to_string())
+                    .or_else(|| woc_content::delve(content_id).map(|d| d.name.to_string()))
+                    .unwrap_or_default()
+            },
+            delve_room: world
+                .get::<InstanceAt>(player_id)
+                .and_then(|i| i.delve_room),
             hearth_ready_tick,
             hearth_zone_id,
             talent_points: world
@@ -1302,8 +1320,7 @@ fn snapshot_includes_entity(world: &World, viewer_instance: Option<&str>, id: En
     match (viewer_instance, entity_instance) {
         (None, None) => true,
         (Some(a), Some(b)) => a == b,
-        (Some(_), None) => identity.kind == EntityKind::Player,
-        (None, Some(_)) => identity.kind == EntityKind::Player,
+        _ => false,
     }
 }
 
@@ -3159,6 +3176,38 @@ mod tests {
         sim.push_intent(pid, PlayerIntent::default());
         sim.tick_all();
         assert!(sim.world.get::<Riding>(pid).unwrap().active_id.is_none());
+    }
+
+    #[test]
+    fn snapshot_hides_other_instance_players_and_mobs() {
+        let mut sim = Sim::new_eastbrook("A", PlayerClass::Warrior);
+        let b = sim.spawn_player("B", PlayerClass::Mage).unwrap();
+        let parties = crate::social::party::PartyRoster::new();
+        let mut events = Vec::new();
+        let crypt = woc_content::dungeon("eastbrook_crypt").unwrap();
+        if let Some(t) = sim.world.get_mut::<Transform>(sim.player_id) {
+            t.x = crypt.entrance_x;
+            t.z = crypt.entrance_z;
+        }
+        assert!(crate::instances::enter_dungeon(
+            &mut sim.world,
+            &parties,
+            sim.player_id,
+            "eastbrook_crypt",
+            &mut events
+        ));
+        let snap = sim.snapshot_for_player(b);
+        assert!(snap
+            .entities
+            .iter()
+            .all(|e| e.id != sim.player_id || e.kind != woc_protocol::EntityKind::Player
+                || {
+                    // B is overworld: must not see A's instanced body
+                    !snap.entities.iter().any(|e| e.id == sim.player_id)
+                }));
+        assert!(!snap.entities.iter().any(|e| {
+            e.template_id.as_deref() == Some("crypt_warden")
+        }));
     }
 
     #[test]
