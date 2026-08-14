@@ -1019,7 +1019,7 @@ git commit -m "feat(client): paint stance names and bind paladin F"
 - Consumes: Tasks 1–6 green
 - Produces: rewrite `1.25.0` / `class-depth`; STATUS class-depth table all `done` except trainer `n/a` / kept confirmation
 
-- [ ] **Step 1: Lock version strings**
+- [x] **Step 1: Lock version strings**
 
 `VERSION.toml`:
 
@@ -1030,7 +1030,7 @@ parity_target = "class-depth"
 
 Workspace `Cargo.toml` `version = "1.25.0"`. Search `1.24.0` in `crates/woc-version` and crate tests that assert the rewrite string; bump those that lock the *current* rewrite, not historical changelog examples.
 
-- [ ] **Step 2: STATUS / ROADMAP / DEMO / CHANGELOG**
+- [x] **Step 2: STATUS / ROADMAP / DEMO / CHANGELOG**
 
 ROADMAP: mark `1.25.0` shipped `class-depth` with one-line theme from the spec goal.
 
@@ -1058,13 +1058,13 @@ CHANGELOG `## 1.25.0` Added list matching STATUS.
 
 README “What works in 1.25.0” one paragraph. Footer badge `rewrite-1.25.0`.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run: `cargo test --workspace --exclude woc-client && cargo check -p woc-client && cargo test -p woc-sim --lib tick_phase_order_fingerprint_locked -q`
 
 Expected: PASS. Fingerprint `3214741777866168171u64`. `PROTOCOL_REV == 10`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add VERSION.toml Cargo.toml crates/woc-version UPSTREAM.md README.md CHANGELOG.md docs/ROADMAP.md docs/parity/STATUS.md docs/parity/DEMO.md

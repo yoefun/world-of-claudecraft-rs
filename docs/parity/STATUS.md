@@ -1,27 +1,27 @@
 # Parity status
 
-**Current rewrite:** `1.24.0` / `delve-depth` (PROTOCOL_REV=10).  
+**Current rewrite:** `1.25.0` / `class-depth` (PROTOCOL_REV=10).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; class-depth is planned as `1.25.0`. Quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill-loop shipped as `1.22.0`; dungeon-depth shipped as `1.23.0`; delve-depth shipped as `1.24.0`. Dungeon/delve were renumbered past kill-loop `1.22.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; class-depth is shipped as `1.25.0`. Quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill-loop shipped as `1.22.0`; dungeon-depth shipped as `1.23.0`; delve-depth shipped as `1.24.0`. Dungeon/delve were renumbered past kill-loop `1.22.0`.
 
-## Class depth (`class-depth`) — planned `1.25.0`
+## Class depth (`class-depth`) — done
 
 Design: [`../superpowers/specs/2026-08-14-class-depth-design.md`](../superpowers/specs/2026-08-14-class-depth-design.md)  
 Plan: [`../superpowers/plans/2026-08-14-class-depth.md`](../superpowers/plans/2026-08-14-class-depth.md)
 
-Playable scorecard **68 / 100** (2026-08-14). `1.6.0`–`1.8.0` identity DoD ~95%. This wave targets **98 / 100** (trainer confirmation stays 3/5 by design).
+Playable scorecard after this wave is **98 / 100** (trainer confirmation stays 3/5 by design). `1.6.0`–`1.8.0` identity DoD ~95%.
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Nine-class create / kits / gear gates | done | `1.6`–`1.15` |
-| `AbilityEffect` engine + signatures | done | `1.6`–`1.8`; HUD/`F` gaps remain |
-| Distinct resource regen | planned | Energy 10/s; mana 8 OOC / 2 combat; rage −3/s OOC |
-| Five live bar slots | planned | Rogue Sprint; hunter Multi-Shot; priest SW:P; mage Counterspell |
-| Paladin **F** aura cycle | planned | Devotion ↔ Retribution; spawn `stance_id=devotion` |
-| HUD stance / form name | planned | Paint `stance_id`; paladin **F** bound |
-| Pet Bite / Firebolt | planned | 6 s CD; imp 14 yd |
-| Ability ranks / trainer gate | n/a | `TrainClass` toast kept (`1.11.0`) |
-| Protocol | planned | Rev 10 unchanged |
+| Energy 10/s | done | in and out of combat |
+| Mana 8/s OOC, 2/s combat | done | |
+| Rage decay 3/s OOC | done | taken + swing gain kept |
+| Five-slot kits | done | rogue Sprint; hunter Multi-Shot; priest SW:P; mage Counterspell |
+| Paladin F auras | done | Devotion / Retribution; spawn `devotion` |
+| HUD stance/form | done | HP line + `[F]` label |
+| Pet Bite / Firebolt | done | 6 s CD; imp 14 yd |
+| Protocol | done | Rev 10 unchanged |
+| Ability ranks / trainer | n/a | Confirmation toast kept |
 
 ## Kill loop (`kill-loop`) — done
 
@@ -245,7 +245,7 @@ Plan: [`../superpowers/plans/2026-08-13-npc-services.md`](../superpowers/plans/2
 
 ## Class identity (`class-engine` → `class-forms`)
 
-Shipped. Remaining playable gaps are the planned `1.25.0` / `class-depth` wave (68% scorecard in the section above), not a hole in this DoD.
+Shipped. Remaining playable gaps are closed by shipped `1.25.0` / `class-depth` (98/100; trainer n/a), not a hole in this DoD.
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
@@ -332,7 +332,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.24.0` / delve-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.25.0` / class-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

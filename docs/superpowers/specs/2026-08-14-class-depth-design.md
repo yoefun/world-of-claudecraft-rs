@@ -1,6 +1,6 @@
 # 职业系统完善设计 — `1.25.0` / `class-depth`
 
-**Status:** Proposed (planning deliverable 2026-08-14).  
+**Status:** Implemented (2026-08-14).  
 **Baseline:** rewrite `1.24.0` / `delve-depth` on `develop` (ECS `World`; class-engine/identity/forms shipped as `1.6.0`–`1.8.0`).  
 **Upstream pin (unchanged):** World of ClaudeCraft `0.31.0` (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`).  
 **Goal label:** `class-depth`.  

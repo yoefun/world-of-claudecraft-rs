@@ -32,9 +32,9 @@
 | **1.22.0** (shipped) | `kill-loop` | Per-template respawn, leash reset, loot count/TTL, pet credit, mob abilities |
 | **1.23.0** (shipped) | `dungeon-depth` | Playable Crypt/Barrow enter/leave, isolation, parent GY |
 | **1.24.0** (shipped) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
-| **1.25.0** (planned) | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet Bite/Firebolt, HUD stance |
+| **1.25.0** (shipped) | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet Bite/Firebolt, HUD stance |
 
-## Class depth (planned as `1.25.0`)
+## Class depth (shipped as `1.25.0`)
 
 **Audit (2026-08-14):** playable class system **68%** vs this program’s scorecard. `1.6.0`–`1.8.0` identity DoD is ~95% shipped; remaining work is depth, not a second spellbook port.
 

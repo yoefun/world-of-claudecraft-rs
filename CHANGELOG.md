@@ -2,9 +2,16 @@
 
 ## Unreleased
 
-### Planned
+## 1.25.0 — 2026-08-14
 
-- **1.25.0 `class-depth`:** Distinct energy/mana/rage regen, five-slot kit restorations (Sprint / Multi-Shot / SW:P / Counterspell), paladin **F** Devotion/Retribution, hunter Bite + warlock Firebolt, HUD stance/form names. Design: [`docs/superpowers/specs/2026-08-14-class-depth-design.md`](docs/superpowers/specs/2026-08-14-class-depth-design.md). Plan: [`docs/superpowers/plans/2026-08-14-class-depth.md`](docs/superpowers/plans/2026-08-14-class-depth.md).
+### Added
+
+- **1.25.0 `class-depth`:** Distinct energy/mana/rage regen (energy 10/s; mana 8/s OOC / 2/s combat; rage −3/s OOC).
+- Five-slot kits restore rogue Sprint, hunter Multi-Shot, priest Shadow Word: Pain, mage Counterspell.
+- Paladin **F** cycles Devotion / Retribution auras; spawn `stance_id=devotion`.
+- Hunter pet Bite and warlock imp Firebolt (6 s CD; imp 14 yd).
+- HUD paints stance/form names and binds paladin **F**.
+- Protocol rev 10 unchanged. Ability ranks / class trainer stay a confirmation toast.
 
 ## 1.24.0 — 2026-08-14
 
