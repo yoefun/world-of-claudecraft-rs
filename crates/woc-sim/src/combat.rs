@@ -10,8 +10,10 @@ use crate::instances::same_instance_space;
 use crate::rng::Rng;
 use crate::stats::recalc_player_stats;
 use crate::types::{
-    CRIT_CHANCE, CRIT_MULT, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
-    RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT, THREAT_SWITCH_RATIO,
+    CRIT_CHANCE, CRIT_MULT, ENERGY_REGEN_PER_SEC, MANA_REGEN_COMBAT_PER_SEC,
+    MANA_REGEN_OOC_PER_SEC, MELEE_RANGE, MISS_CHANCE, MOB_SWING_SEC, PLAYER_SWING_SEC,
+    RAGE_DECAY_OOC_PER_SEC, RAGE_FROM_TAKEN, RANGED_FALLBACK, STEALTH_MOVE_MULT,
+    THREAT_SWITCH_RATIO,
 };
 use woc_content::{
     ability, aura_for_ability, class_ability_for_slot, item, mob, AbilityDef, AbilityEffect,
@@ -250,7 +252,14 @@ pub fn apply_spawn_identity(world: &mut World, player_id: EntityId) {
         .and_then(|k| k.stance_id.clone());
     match class {
         Some(woc_content::PlayerClass::Paladin) => {
-            apply_named_aura(world, player_id, player_id, "devotion_aura", &mut events);
+            if stance.as_deref() == Some("retribution") {
+                apply_named_aura(world, player_id, player_id, "retribution_aura", &mut events);
+            } else {
+                if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                    kit.stance_id = Some("devotion".into());
+                }
+                apply_named_aura(world, player_id, player_id, "devotion_aura", &mut events);
+            }
         }
         Some(woc_content::PlayerClass::Warrior) => {
             if stance.as_deref() == Some("defensive") {
@@ -274,35 +283,64 @@ pub fn apply_spawn_identity(world: &mut World, player_id: EntityId) {
 
 pub fn cycle_stance(world: &mut World, player_id: EntityId, events: &mut Vec<SimEvent>) {
     let class = world.get::<ClassKit>(player_id).and_then(|k| k.class_id);
-    if class != Some(woc_content::PlayerClass::Warrior) {
-        events.push(SimEvent::Toast {
-            message: "You cannot change stance.".into(),
-        });
-        return;
-    }
-    crate::mount::dismount(world, player_id, events);
-    let current = world
-        .get::<ClassKit>(player_id)
-        .and_then(|k| k.stance_id.clone());
-    let next = if current.as_deref() == Some("defensive") {
-        "battle"
-    } else {
-        "defensive"
-    };
-    if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
-        kit.stance_id = Some(next.into());
-    }
-    remove_named_auras(world, player_id, &["battle_shout", "defensive_stance"]);
-    if next == "battle" {
-        apply_named_aura(world, player_id, player_id, "battle_shout", events);
-        events.push(SimEvent::Toast {
-            message: "Battle Stance.".into(),
-        });
-    } else {
-        apply_named_aura(world, player_id, player_id, "defensive_stance", events);
-        events.push(SimEvent::Toast {
-            message: "Defensive Stance.".into(),
-        });
+    match class {
+        Some(woc_content::PlayerClass::Warrior) => {
+            crate::mount::dismount(world, player_id, events);
+            let current = world
+                .get::<ClassKit>(player_id)
+                .and_then(|k| k.stance_id.clone());
+            let next = if current.as_deref() == Some("defensive") {
+                "battle"
+            } else {
+                "defensive"
+            };
+            if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                kit.stance_id = Some(next.into());
+            }
+            remove_named_auras(world, player_id, &["battle_shout", "defensive_stance"]);
+            if next == "battle" {
+                apply_named_aura(world, player_id, player_id, "battle_shout", events);
+                events.push(SimEvent::Toast {
+                    message: "Battle Stance.".into(),
+                });
+            } else {
+                apply_named_aura(world, player_id, player_id, "defensive_stance", events);
+                events.push(SimEvent::Toast {
+                    message: "Defensive Stance.".into(),
+                });
+            }
+        }
+        Some(woc_content::PlayerClass::Paladin) => {
+            crate::mount::dismount(world, player_id, events);
+            let current = world
+                .get::<ClassKit>(player_id)
+                .and_then(|k| k.stance_id.clone());
+            let next = if current.as_deref() == Some("retribution") {
+                "devotion"
+            } else {
+                "retribution"
+            };
+            if let Some(kit) = world.get_mut::<ClassKit>(player_id) {
+                kit.stance_id = Some(next.into());
+            }
+            remove_named_auras(world, player_id, &["devotion_aura", "retribution_aura"]);
+            if next == "devotion" {
+                apply_named_aura(world, player_id, player_id, "devotion_aura", events);
+                events.push(SimEvent::Toast {
+                    message: "Devotion Aura.".into(),
+                });
+            } else {
+                apply_named_aura(world, player_id, player_id, "retribution_aura", events);
+                events.push(SimEvent::Toast {
+                    message: "Retribution Aura.".into(),
+                });
+            }
+        }
+        _ => {
+            events.push(SimEvent::Toast {
+                message: "You cannot change stance.".into(),
+            });
+        }
     }
 }
 
@@ -1836,8 +1874,28 @@ pub fn update_player_combat(
         return;
     };
 
-    if let Some(ResourceType::Mana | ResourceType::Energy) = kit.resource_type {
-        gain_resource(&mut kit, 1.5 * DT);
+    let in_combat = combat.auto_attack
+        || combat.target.is_some_and(|tid| {
+            tid != player_id
+                && world.get::<Health>(tid).is_some_and(|h| h.alive)
+                && (world.get::<LootTable>(tid).is_some() || world.get::<ClassKit>(tid).is_some())
+        });
+    match kit.resource_type {
+        Some(ResourceType::Energy) => {
+            gain_resource(&mut kit, ENERGY_REGEN_PER_SEC * DT);
+        }
+        Some(ResourceType::Mana) => {
+            let rate = if in_combat {
+                MANA_REGEN_COMBAT_PER_SEC
+            } else {
+                MANA_REGEN_OOC_PER_SEC
+            };
+            gain_resource(&mut kit, rate * DT);
+        }
+        Some(ResourceType::Rage) if !in_combat => {
+            kit.resource = (kit.resource - RAGE_DECAY_OOC_PER_SEC * DT).max(0.0);
+        }
+        _ => {}
     }
 
     tick_ability_cds(&mut kit, &mut combat);
@@ -3495,6 +3553,105 @@ mod tests {
     }
 
     #[test]
+    fn energy_regens_ten_per_second() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+            c.auto_attack = false;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        let mut events = Vec::new();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let energy = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (energy - 10.0).abs() < 0.15,
+            "rogue energy should gain 10/s OOC, got {energy}"
+        );
+    }
+
+    #[test]
+    fn mana_regens_slower_in_combat() {
+        let mut world = class_and_mob(PlayerClass::Mage, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+            c.auto_attack = false;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        let mut events = Vec::new();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ooc = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (ooc - 8.0).abs() < 0.15,
+            "mage mana should gain 8/s OOC, got {ooc}"
+        );
+
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 0.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.auto_attack = true;
+            c.swing_timer = 99.0;
+        }
+        events.clear();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ic = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (ic - 2.0).abs() < 0.15,
+            "mage mana should gain 2/s in combat, got {ic}"
+        );
+    }
+
+    #[test]
+    fn rage_decays_out_of_combat() {
+        let mut world = class_and_mob(PlayerClass::Warrior, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+            c.auto_attack = false;
+        }
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 30.0;
+        }
+        let mut events = Vec::new();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ooc = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            (ooc - 27.0).abs() < 0.15,
+            "warrior rage should decay 3/s OOC, got {ooc}"
+        );
+
+        if let Some(kit) = world.get_mut::<ClassKit>(1) {
+            kit.resource = 30.0;
+        }
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+            c.auto_attack = true;
+            c.swing_timer = 99.0;
+        }
+        events.clear();
+        for _ in 0..20 {
+            update_player_combat(1, &mut world, None, &mut hit_rng(), &mut events);
+        }
+        let ic = world.get::<ClassKit>(1).unwrap().resource;
+        assert!(
+            ic >= 29.9,
+            "warrior rage must not decay in combat, got {ic}"
+        );
+    }
+
+    #[test]
     fn hunter_aspect_buffs_outgoing_damage() {
         let mut world = class_and_mob(PlayerClass::Hunter, 1);
         if let Some(c) = world.get_mut::<Combat>(1) {
@@ -3730,6 +3887,61 @@ mod tests {
     }
 
     #[test]
+    fn paladin_cycle_stance_swaps_devotion_and_retribution() {
+        let mut world = class_and_mob(PlayerClass::Paladin, 1);
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("devotion")
+        );
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "devotion_aura"));
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("retribution")
+        );
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .any(|a| a.id == "retribution_aura"));
+        assert!(world
+            .get::<Auras>(1)
+            .unwrap()
+            .auras
+            .iter()
+            .all(|a| a.id != "devotion_aura"));
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        assert_eq!(
+            world.get::<ClassKit>(1).unwrap().stance_id.as_deref(),
+            Some("devotion")
+        );
+    }
+
+    #[test]
+    fn paladin_retribution_buffs_outgoing_damage() {
+        let mut world = class_and_mob(PlayerClass::Paladin, 1);
+        cycle_stance(&mut world, 1, &mut Vec::new());
+        let hp = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Primary);
+        let with_ret = hp - world.get::<Health>(2).unwrap().hp;
+
+        let mut world = class_and_mob(PlayerClass::Paladin, 1);
+        let hp = world.get::<Health>(2).unwrap().hp;
+        fire_slot(&mut world, AbilitySlot::Primary);
+        let with_dev = hp - world.get::<Health>(2).unwrap().hp;
+        assert!(
+            with_ret > with_dev + 0.5,
+            "retribution aura should raise crusader strike damage ({with_ret} vs {with_dev})"
+        );
+    }
+
+    #[test]
     fn toggle_form_speeds_druid() {
         let mut world = class_and_mob(PlayerClass::Druid, 1);
         toggle_form(&mut world, 1, &mut Vec::new());
@@ -3739,6 +3951,28 @@ mod tests {
         );
         toggle_form(&mut world, 1, &mut Vec::new());
         assert!((move_speed_mult(&world, 1) - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn rogue_sprint_buffs_move_speed() {
+        let mut world = class_and_mob(PlayerClass::Rogue, 1);
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = None;
+        }
+        fire_slot(&mut world, AbilitySlot::Slot5);
+        assert!(
+            world
+                .get::<Auras>(1)
+                .unwrap()
+                .auras
+                .iter()
+                .any(|a| a.id == "sprint"),
+            "rogue slot 5 should apply Sprint"
+        );
+        assert!(
+            (move_speed_mult(&world, 1) - 1.5).abs() < 1e-3,
+            "sprint should raise move speed"
+        );
     }
 
     #[test]

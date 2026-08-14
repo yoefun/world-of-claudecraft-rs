@@ -18,6 +18,14 @@ pub const MOB_SWING_SEC: f32 = 2.0;
 pub const MOB_SPEED: f32 = 5.5;
 /// Rage gained per point of HP damage taken (warrior).
 pub const RAGE_FROM_TAKEN: f32 = 0.05;
+/// Energy gained per second (in or out of combat).
+pub const ENERGY_REGEN_PER_SEC: f32 = 10.0;
+/// Mana gained per second while out of combat.
+pub const MANA_REGEN_OOC_PER_SEC: f32 = 8.0;
+/// Mana gained per second while in combat.
+pub const MANA_REGEN_COMBAT_PER_SEC: f32 = 2.0;
+/// Rage lost per second while out of combat.
+pub const RAGE_DECAY_OOC_PER_SEC: f32 = 3.0;
 /// Stealthed horizontal speed multiplier (stacked with chill via `min`).
 pub const STEALTH_MOVE_MULT: f32 = 0.7;
 /// Threat required on a challenger before a mob retargets away from its current focus.

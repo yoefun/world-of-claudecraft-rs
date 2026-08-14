@@ -1085,7 +1085,7 @@ pub(crate) fn update_hud(
     if let Some(player) = snap.entities.iter().find(|e| e.id == snap.player_id) {
         if let Ok(mut t) = hp.single_mut() {
             **t = format!(
-                "HP {:.0}/{:.0}   {} {:.0}/{:.0}{absorb}{stealth}{combo}",
+                "HP {:.0}/{:.0}   {} {:.0}/{:.0}{absorb}{stealth}{combo}{stance}",
                 player.hp,
                 player.hp_max,
                 snap.progress.resource_type,
@@ -1103,6 +1103,11 @@ pub(crate) fn update_hud(
                     format!("   {filled}{empty}")
                 } else {
                     String::new()
+                },
+                stance = if snap.stance_id.is_empty() {
+                    String::new()
+                } else {
+                    format!("   {}", stance_label(&snap.stance_id))
                 },
             );
         }
@@ -1424,18 +1429,37 @@ fn format_action_bar(snap: &TickSnapshot) -> String {
     )
 }
 
-fn class_interact_hint(snap: &TickSnapshot) -> &'static str {
+fn stance_label(stance_id: &str) -> &str {
+    match stance_id {
+        "battle" => "Battle",
+        "defensive" => "Defensive",
+        "devotion" => "Devotion",
+        "retribution" => "Retribution",
+        "ghost_wolf" => "Ghost Wolf",
+        "travel_form" => "Travel Form",
+        other => other,
+    }
+}
+
+fn class_interact_hint(snap: &TickSnapshot) -> String {
     match snap.progress.class_id.as_str() {
         "rogue" => {
             if snap.stealthed {
-                "   [Z] STEALTH"
+                "   [Z] STEALTH".into()
             } else {
-                "   [Z] Stealth"
+                "   [Z] Stealth".into()
             }
         }
-        "warrior" => "   [F] Stance",
-        "shaman" | "druid" => "   [F] Form",
-        _ => "",
+        "warrior" | "paladin" | "shaman" | "druid" => {
+            let label = match snap.stance_id.as_str() {
+                "" if snap.progress.class_id == "warrior" => "Stance",
+                "" if snap.progress.class_id == "paladin" => "Aura",
+                "" => "Form",
+                id => stance_label(id),
+            };
+            format!("   [F] {label}")
+        }
+        _ => String::new(),
     }
 }
 
@@ -2087,15 +2111,27 @@ mod tests {
             ready: true,
             cooldown: 0.0,
         }];
-        assert!(format_action_bar(&snap).contains("[F] Stance"));
+        snap.stance_id = "battle".into();
+        assert!(format_action_bar(&snap).contains("[F] Battle"));
+        snap.stance_id = "defensive".into();
+        assert!(format_action_bar(&snap).contains("[F] Defensive"));
+        snap.progress.class_id = "paladin".into();
+        snap.stance_id = "devotion".into();
+        assert!(format_action_bar(&snap).contains("[F] Devotion"));
+        snap.stance_id = "retribution".into();
+        assert!(format_action_bar(&snap).contains("[F] Retribution"));
         snap.progress.class_id = "druid".into();
+        snap.stance_id.clear();
         assert!(format_action_bar(&snap).contains("[F] Form"));
+        snap.stance_id = "travel_form".into();
+        assert!(format_action_bar(&snap).contains("[F] Travel Form"));
         snap.progress.class_id = "shaman".into();
-        assert!(format_action_bar(&snap).contains("[F] Form"));
+        snap.stance_id = "ghost_wolf".into();
+        assert!(format_action_bar(&snap).contains("[F] Ghost Wolf"));
         snap.progress.class_id = "mage".into();
+        snap.stance_id.clear();
         let mage = format_action_bar(&snap);
-        assert!(!mage.contains("[F] Stance"));
-        assert!(!mage.contains("[F] Form"));
+        assert!(!mage.contains("[F]"));
     }
 
     #[test]

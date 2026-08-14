@@ -170,7 +170,7 @@ pub(crate) fn collect_intent(
 
     let bags_consume_f = ui.show_bags;
     let class_id = host.snapshot.progress.class_id.as_str();
-    let form_f = matches!(class_id, "warrior" | "shaman" | "druid")
+    let form_f = matches!(class_id, "warrior" | "paladin" | "shaman" | "druid")
         && keys.just_pressed(KeyCode::KeyF)
         && !bags_consume_f;
     if !typing && mouse.just_pressed(MouseButton::Left) {
@@ -797,7 +797,7 @@ pub(crate) fn handle_interact_keys(
     {
         host.interact(player_id, InteractAction::ToggleStealth);
     }
-    // Warrior stance / shaman+druid form (F). Held F still attacks for other classes.
+    // Warrior/paladin stance-or-aura / shaman+druid form (F). Held F still attacks for other classes.
     if !ui.show_mail
         && !ui.show_bank
         && !ui.show_market
@@ -806,7 +806,7 @@ pub(crate) fn handle_interact_keys(
         && keys.just_pressed(KeyCode::KeyF)
     {
         match host.snapshot.progress.class_id.as_str() {
-            "warrior" => host.interact(player_id, InteractAction::CycleStance),
+            "warrior" | "paladin" => host.interact(player_id, InteractAction::CycleStance),
             "shaman" | "druid" => host.interact(player_id, InteractAction::ToggleForm),
             _ => {}
         }

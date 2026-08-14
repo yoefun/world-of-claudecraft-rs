@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.26.0 — 2026-08-14
+
+### Added
+
+- **1.26.0 `class-depth`:** Distinct energy/mana/rage regen (energy 10/s; mana 8/s OOC / 2/s combat; rage −3/s OOC).
+- Five-slot kits restore rogue Sprint, hunter Multi-Shot, priest Shadow Word: Pain, mage Counterspell.
+- Paladin **F** cycles Devotion / Retribution auras; spawn `stance_id=devotion`.
+- Hunter pet Bite and warlock imp Firebolt (6 s CD; imp 14 yd).
+- HUD paints stance/form names and binds paladin **F**.
+- Protocol rev **11** unchanged (friends). Ability ranks / class trainer stay a confirmation toast.
+
+### Notes
+
+- Planned as `1.25.0` while develop shipped friends as `1.25.0`; the theme lands as `1.26.0`.
+
 ## 1.25.0 — 2026-08-14
 
 ### Added

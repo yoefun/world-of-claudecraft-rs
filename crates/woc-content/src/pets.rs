@@ -11,6 +11,8 @@ pub struct PetDef {
     pub hp: f32,
     pub attack_damage: f32,
     pub level: u32,
+    /// Optional extra hit (`wolf_bite` / `imp_firebolt`); `None` = white swings only.
+    pub ability_id: Option<&'static str>,
 }
 
 pub static PETS: &[PetDef] = &[
@@ -21,6 +23,7 @@ pub static PETS: &[PetDef] = &[
         hp: 60.0,
         attack_damage: 8.0,
         level: 1,
+        ability_id: Some("wolf_bite"),
     },
     PetDef {
         id: "warlock_imp",
@@ -29,6 +32,7 @@ pub static PETS: &[PetDef] = &[
         hp: 40.0,
         attack_damage: 10.0,
         level: 1,
+        ability_id: Some("imp_firebolt"),
     },
 ];
 

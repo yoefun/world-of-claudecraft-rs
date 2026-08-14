@@ -186,9 +186,10 @@ mod tests {
     fn every_class_has_multi_ability_kit() {
         assert_eq!(CLASSES.len(), 9);
         for class in CLASSES {
-            assert!(
-                class.kit.len() >= 4,
-                "{} kit needs ≥4 abilities, got {}",
+            assert_eq!(
+                class.kit.len(),
+                5,
+                "{} kit needs 5 abilities, got {}",
                 class.name,
                 class.kit.len()
             );
@@ -238,6 +239,34 @@ mod tests {
                 class.name
             );
         }
+    }
+
+    #[test]
+    fn restored_class_depth_kit_slots() {
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Hunter, 3)
+                .expect("hunter 3")
+                .id,
+            "multi_shot"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Priest, 3)
+                .expect("priest 3")
+                .id,
+            "shadow_word_pain"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Mage, 3)
+                .expect("mage 3")
+                .id,
+            "counterspell"
+        );
+        assert_eq!(
+            class_ability_for_slot(PlayerClass::Rogue, 5)
+                .expect("rogue 5")
+                .id,
+            "sprint"
+        );
     }
 
     #[test]
@@ -823,7 +852,7 @@ mod tests {
 
     #[test]
     fn every_ability_declares_an_effect() {
-        assert_eq!(ABILITIES.len(), 54);
+        assert_eq!(ABILITIES.len(), 56);
         for def in ABILITIES {
             let _ = def.effect;
             if let Some(aura_id) = def.aura {

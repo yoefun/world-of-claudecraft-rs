@@ -1,8 +1,27 @@
 # Parity status
 
-**Current rewrite:** `1.25.0` / `friends` (PROTOCOL_REV=11).  
+**Current rewrite:** `1.26.0` / `class-depth` (PROTOCOL_REV=11).  
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
-**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill-loop shipped as `1.22.0`; dungeon-depth shipped as `1.23.0`; delve-depth shipped as `1.24.0`; friends shipped as `1.25.0`. Dungeon/delve were renumbered past kill-loop `1.22.0`.
+**Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; class-depth is shipped as `1.26.0`. Quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill-loop shipped as `1.22.0`; dungeon-depth shipped as `1.23.0`; delve-depth shipped as `1.24.0`; friends shipped as `1.25.0`. Dungeon/delve were renumbered past kill-loop `1.22.0`.
+
+## Class depth (`class-depth`) — done
+
+Design: [`../superpowers/specs/2026-08-14-class-depth-design.md`](../superpowers/specs/2026-08-14-class-depth-design.md)  
+Plan: [`../superpowers/plans/2026-08-14-class-depth.md`](../superpowers/plans/2026-08-14-class-depth.md)
+
+Playable scorecard after this wave is **98 / 100** (trainer confirmation stays 3/5 by design). `1.6.0`–`1.8.0` identity DoD ~95%. Planned as `1.25.0`; lands as `1.26.0` after friends took `1.25.0`.
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| Energy 10/s | done | in and out of combat |
+| Mana 8/s OOC, 2/s combat | done | |
+| Rage decay 3/s OOC | done | taken + swing gain kept |
+| Five-slot kits | done | rogue Sprint; hunter Multi-Shot; priest SW:P; mage Counterspell |
+| Paladin F auras | done | Devotion / Retribution; spawn `devotion` |
+| HUD stance/form | done | HP line + `[F]` label |
+| Pet Bite / Firebolt | done | 6 s CD; imp 14 yd |
+| Protocol | done | Rev 11 unchanged |
+| Ability ranks / trainer | n/a | Confirmation toast kept |
 
 ## Friends (`friends`) — done
 
@@ -17,7 +36,7 @@ Plan: [`../superpowers/plans/2026-08-14-friends.md`](../superpowers/plans/2026-0
 | presence | done | intents; `{name} has come/gone online.` |
 | persist | done | `RealmEconomy.social` |
 | client O panel | done | `/add` `/w` `/ignore` `/invite`; party/market O still win |
-| protocol | done | rev 11 |
+| protocol | done | rev 11
 
 ## Kill loop (`kill-loop`) — done
 
@@ -241,6 +260,8 @@ Plan: [`../superpowers/plans/2026-08-13-npc-services.md`](../superpowers/plans/2
 
 ## Class identity (`class-engine` → `class-forms`)
 
+Shipped. Remaining playable gaps are closed by shipped `1.26.0` / `class-depth` (98/100; trainer n/a), not a hole in this DoD.
+
 | Subsystem | Status | Notes |
 | --- | --- | --- |
 | Protocol rev 7 identity snapshot | done | `combo_points` / `stealthed` / `stance_id` / `absorb`; `ToggleStealth` / `CycleStance` / `ToggleForm`. |
@@ -326,7 +347,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.25.0` / friends (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.26.0` / class-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |

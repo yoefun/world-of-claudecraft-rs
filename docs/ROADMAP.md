@@ -33,6 +33,16 @@
 | **1.23.0** (shipped) | `dungeon-depth` | Playable Crypt/Barrow enter/leave, isolation, parent GY |
 | **1.24.0** (shipped) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
 | **1.25.0** (shipped) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
+| **1.26.0** (shipped) | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet Bite/Firebolt, HUD stance |
+
+## Class depth (shipped as `1.26.0`)
+
+**Audit (2026-08-14):** playable class system **68%** vs this program’s scorecard. `1.6.0`–`1.8.0` identity DoD is ~95% shipped; remaining work is depth, not a second spellbook port.
+
+**Definition of done:** [`docs/superpowers/specs/2026-08-14-class-depth-design.md`](superpowers/specs/2026-08-14-class-depth-design.md)  
+**Implementation:** [`docs/superpowers/plans/2026-08-14-class-depth.md`](superpowers/plans/2026-08-14-class-depth.md)
+
+Energy 10/s, mana 8/2 s, rage decay OOC; rogue Sprint + hunter Multi-Shot + priest SW:P + mage Counterspell on the 1–5 bar; paladin **F** Devotion/Retribution; HUD paints `stance_id`; hunter Bite / warlock Firebolt. Protocol rev stays **11**. Ability ranks, 3 talent specs, bear/cat, and pet bars stay out of scope. Planned as `1.25.0`; lands as `1.26.0` after friends took `1.25.0`.
 
 ## Completion program (closed)
 

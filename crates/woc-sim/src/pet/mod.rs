@@ -1,7 +1,7 @@
 //! Hunter / warlock pet summon, dismiss, and combat AI.
 
 use crate::combat::{deal_damage, dist2d_ids, face_toward_ids, is_stunned, move_speed_mult};
-use crate::ecs::components::{ClassKit, Combat, Health, LootTable, Owner, Transform};
+use crate::ecs::components::{ClassKit, Combat, Health, Identity, LootTable, Owner, Transform};
 use crate::ecs::World;
 use crate::entity_motion::step_toward;
 use crate::types::{MELEE_RANGE, MOB_SPEED, PLAYER_SWING_SEC};
@@ -139,12 +139,33 @@ fn tick_one_pet(pet_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>)
         c.target = attack_tid;
     }
 
+    let pet_ability = world
+        .get::<Identity>(pet_id)
+        .and_then(|i| i.template_id.clone())
+        .and_then(|id| woc_content::pet(&id).and_then(|d| d.ability_id))
+        .and_then(woc_content::ability);
+
+    if let Some(c) = world.get_mut::<Combat>(pet_id) {
+        if c.ability_cd > 0.0 {
+            c.ability_cd = (c.ability_cd - DT).max(0.0);
+        }
+    }
+
     if let Some(tid) = attack_tid {
         if is_stunned(world, pet_id) {
             return;
         }
+        let chase_range = pet_ability
+            .map(|d| {
+                if d.range > MELEE_RANGE {
+                    d.range
+                } else {
+                    MELEE_RANGE
+                }
+            })
+            .unwrap_or(MELEE_RANGE);
         let d = dist2d_ids(world, pet_id, tid);
-        if d > MELEE_RANGE * 0.85 {
+        if d > chase_range * 0.85 {
             let Some(tt) = world.get::<Transform>(tid).copied() else {
                 return;
             };
@@ -162,7 +183,32 @@ fn tick_one_pet(pet_id: EntityId, world: &mut World, events: &mut Vec<SimEvent>)
             }
         }
 
-        if dist2d_ids(world, pet_id, tid) <= MELEE_RANGE {
+        let dist = dist2d_ids(world, pet_id, tid);
+        if let Some(def) = pet_ability {
+            let range = if def.range > 0.0 {
+                def.range
+            } else {
+                MELEE_RANGE
+            };
+            let ready = world
+                .get::<Combat>(pet_id)
+                .map(|c| c.ability_cd <= 0.0)
+                .unwrap_or(false);
+            if dist <= range && ready {
+                let dmg = def.damage
+                    + world
+                        .get::<Combat>(pet_id)
+                        .map(|c| c.attack_damage)
+                        .unwrap_or(0.0)
+                        * 0.35;
+                if let Some(c) = world.get_mut::<Combat>(pet_id) {
+                    c.ability_cd = 6.0;
+                }
+                deal_damage(world, owner_id, tid, dmg, Some(def.name), true, events);
+            }
+        }
+
+        if dist <= MELEE_RANGE {
             let mut swing = false;
             let mut dmg = 0.0;
             if let Some(c) = world.get_mut::<Combat>(pet_id) {
@@ -198,7 +244,7 @@ pub fn can_summon(class: PlayerClass) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ecs::components::Identity;
+    use crate::ecs::components::{Identity, Transform};
     use woc_protocol::{EntityKind, DT};
 
     fn hunter_world() -> World {
@@ -288,6 +334,90 @@ mod tests {
             "damage credited to owner for kill rewards"
         );
         let _ = DT;
+    }
+
+    #[test]
+    fn hunter_pet_bites_on_cooldown() {
+        let mut world = hunter_world();
+        let mut events = Vec::new();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 10.0, -5.0)
+            .expect("wolf");
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 500.0;
+            h.hp_max = 500.0;
+        }
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let pet = find_pet(&world, 1).unwrap();
+        if let Some(t) = world.get_mut::<Transform>(pet) {
+            t.x = 10.0;
+            t.z = -5.0;
+        }
+        let hp = world.get::<Health>(2).unwrap().hp;
+        tick_pets(&mut world, &mut events);
+        let after = world.get::<Health>(2).unwrap().hp;
+        assert!(after < hp, "wolf pet should Bite in melee, {after} vs {hp}");
+        let bite_name = woc_content::ability("wolf_bite").unwrap().name;
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                SimEvent::Damage {
+                    ability: Some(name),
+                    ..
+                } if name == bite_name
+            )),
+            "Bite should name {bite_name}, got {events:?}"
+        );
+        let hp2 = after;
+        events.clear();
+        tick_pets(&mut world, &mut events);
+        assert_eq!(
+            world.get::<Health>(2).unwrap().hp,
+            hp2,
+            "Bite CD should skip the next tick"
+        );
+    }
+
+    #[test]
+    fn warlock_imp_firebolts_at_range() {
+        let mut world = World::new();
+        crate::ecs::spawn::create_player(&mut world, 1, "Lock", PlayerClass::Warlock, 0.0, 0.0);
+        let mut events = Vec::new();
+        crate::ecs::spawn::create_mob_from_template(&mut world, 2, "young_wolf", 12.0, 0.0)
+            .expect("wolf");
+        if let Some(c) = world.get_mut::<Combat>(1) {
+            c.target = Some(2);
+        }
+        if let Some(h) = world.get_mut::<Health>(2) {
+            h.hp = 500.0;
+            h.hp_max = 500.0;
+        }
+        assert!(summon_pet(&mut world, 1, &mut events));
+        let pet = find_pet(&world, 1).unwrap();
+        if let Some(t) = world.get_mut::<Transform>(pet) {
+            t.x = 0.0;
+            t.z = 0.0;
+        }
+        let hp = world.get::<Health>(2).unwrap().hp;
+        tick_pets(&mut world, &mut events);
+        let after = world.get::<Health>(2).unwrap().hp;
+        assert!(
+            after < hp,
+            "imp Firebolt should hit from 12 yd, {after} vs {hp}"
+        );
+        let bolt_name = woc_content::ability("imp_firebolt").unwrap().name;
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                SimEvent::Damage {
+                    ability: Some(name),
+                    ..
+                } if name == bolt_name
+            )),
+            "imp should name {bolt_name}, got {events:?}"
+        );
     }
 
     #[test]
