@@ -782,12 +782,19 @@ mod tests {
             .get::<InstanceAt>(1)
             .and_then(|i| i.instance_id.clone())
             .unwrap();
+        let loot_id = world.next_id();
+        crate::ecs::spawn::create_loot(&mut world, loot_id, 0.0, 0.0, 5, None);
+        world
+            .get_mut::<InstanceAt>(loot_id)
+            .unwrap()
+            .instance_id = Some(key.clone());
         let populated = instance_non_players(&world, &key);
         assert!(populated > 0);
 
         events.clear();
         assert!(crate::zones::use_hearthstone(&mut world, 1, 0, &mut events));
         assert_eq!(instance_non_players(&world, &key), populated);
+        assert!(world.contains(loot_id));
         assert!(!events.iter().any(|event| matches!(
             event,
             SimEvent::Toast { message } if message == "Left the instance."
@@ -796,6 +803,7 @@ mod tests {
         events.clear();
         assert!(crate::zones::use_hearthstone(&mut world, 2, 0, &mut events));
         assert_eq!(instance_non_players(&world, &key), 0);
+        assert!(!world.contains(loot_id));
         assert!(!events.iter().any(|event| matches!(
             event,
             SimEvent::Toast { message } if message == "Left the instance."

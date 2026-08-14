@@ -1971,40 +1971,89 @@ mod tests {
     #[test]
     fn final_review_cross_instance_damage_aoe_targeting_and_healing_are_blocked() {
         let mut world = World::new();
-        crate::ecs::spawn::create_player(&mut world, 1, "A", PlayerClass::Priest, 0.0, 0.0);
-        crate::ecs::spawn::create_player(&mut world, 2, "B", PlayerClass::Warrior, 0.0, 0.0);
-        crate::ecs::spawn::create_mob_from_template(&mut world, 3, "young_wolf", 0.0, 0.0).unwrap();
-        crate::ecs::spawn::create_mob_from_template(&mut world, 4, "young_wolf", 0.0, 0.0).unwrap();
-        for id in [1, 3] {
-            set_instance(&mut world, id, "eastbrook_hollow#a");
-        }
-        for id in [2, 4] {
-            set_instance(&mut world, id, "eastbrook_hollow#b");
+        let delve = woc_content::delve("eastbrook_hollow").unwrap();
+        crate::ecs::spawn::create_player(
+            &mut world,
+            1,
+            "A",
+            PlayerClass::Priest,
+            delve.entrance_x,
+            delve.entrance_z,
+        );
+        crate::ecs::spawn::create_player(
+            &mut world,
+            2,
+            "B",
+            PlayerClass::Warrior,
+            delve.entrance_x,
+            delve.entrance_z,
+        );
+        let mut events = Vec::new();
+        assert!(crate::delves::enter_delve(
+            &mut world,
+            1,
+            "eastbrook_hollow",
+            &mut events,
+        ));
+        assert!(crate::delves::enter_delve(
+            &mut world,
+            2,
+            "eastbrook_hollow",
+            &mut events,
+        ));
+        let a_key = world
+            .get::<InstanceAt>(1)
+            .and_then(|instance| instance.instance_id.clone())
+            .unwrap();
+        let b_key = world
+            .get::<InstanceAt>(2)
+            .and_then(|instance| instance.instance_id.clone())
+            .unwrap();
+        assert_ne!(a_key, b_key);
+        let mob_for = |key: &str| {
+            world
+                .ids::<LootTable>()
+                .into_iter()
+                .find(|&id| {
+                    world
+                        .get::<InstanceAt>(id)
+                        .and_then(|instance| instance.instance_id.as_deref())
+                        == Some(key)
+                })
+                .unwrap()
+        };
+        let a_mob = mob_for(&a_key);
+        let b_mob = mob_for(&b_key);
+        for id in [1, 2, a_mob, b_mob] {
+            if let Some(transform) = world.get_mut::<Transform>(id) {
+                transform.x = 0.0;
+                transform.z = 0.0;
+            }
         }
 
-        let b_mob_hp = world.get::<Health>(4).unwrap().hp;
+        let b_mob_hp = world.get::<Health>(b_mob).unwrap().hp;
         deal_damage(
             &mut world,
             1,
-            4,
+            b_mob,
             25.0,
             Some("Smite"),
             false,
             &mut Vec::new(),
         );
-        assert_eq!(world.get::<Health>(4).unwrap().hp, b_mob_hp);
+        assert_eq!(world.get::<Health>(b_mob).unwrap().hp, b_mob_hp);
 
-        if let Some(combat) = world.get_mut::<Combat>(4) {
+        if let Some(combat) = world.get_mut::<Combat>(b_mob) {
             combat.target = Some(1);
         }
-        if let Some(threat) = world.get_mut::<Threat>(4) {
+        if let Some(threat) = world.get_mut::<Threat>(b_mob) {
             threat.threat.insert(1, 100.0);
         }
-        assert_eq!(prefer_mob_target(&world, 4, 40.0), None);
+        assert_eq!(prefer_mob_target(&world, b_mob, 40.0), None);
 
-        let targets = aoe_targets(&world, 1, 3, 10.0, 10);
-        assert!(targets.contains(&3));
-        assert!(!targets.contains(&4));
+        let targets = aoe_targets(&world, 1, a_mob, 10.0, 10);
+        assert!(targets.contains(&a_mob));
+        assert!(!targets.contains(&b_mob));
 
         assert_eq!(heal_target(&world, 1, Some(2)), 1);
     }
