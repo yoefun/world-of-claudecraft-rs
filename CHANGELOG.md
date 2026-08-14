@@ -9,7 +9,7 @@
 - Whisper (`/w Name text`) fans out through `player_tx`, never realm `notices`. Ignore filters whisper only.
 - Online = intent slot (parked friends show offline). Presence toasts `{name} has come/gone online.`
 - Persist `RealmEconomy.social`. Character delete sweeps every book.
-- Bevy **O** panel: `/add` `/remove` `/ignore` `/unignore` `/w`; party accept and AH buyout still win **O**.
+- Bevy **O** panel: `/add` `/remove` `/ignore` `/unignore` `/w` `/invite`; party accept and AH buyout still win **O**. `/invite Name` (or `/invite` with a targeted player) sends the existing party invite.
 - Protocol rev **11** (`Chat.target`, friend WS verbs, snapshot `friends` / `ignored`).
 
 ## 1.21.0 — 2026-08-14

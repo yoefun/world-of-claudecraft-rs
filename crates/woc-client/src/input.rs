@@ -1533,7 +1533,10 @@ fn handle_friends_panel_keys(keys: &ButtonInput<KeyCode>, host: &mut GameHost, u
         let compose = ui.friend_compose.clone();
         let target = targeted_player_name(&host.snapshot);
         if let Some(msg) = friend_enter_msg(&compose, target.as_deref()) {
-            host.social_msg(msg);
+            match msg {
+                WsClientMsg::PartyInvite { .. } => host.send_party(msg),
+                other => host.social_msg(other),
+            }
         }
         ui.friend_compose.clear();
         return;
@@ -1567,6 +1570,11 @@ fn friend_enter_msg(compose: &str, target_name: Option<&str>) -> Option<WsClient
             name: name.to_string(),
         });
     }
+    if lower == "/invite" {
+        return target_name.map(|name| WsClientMsg::PartyInvite {
+            name: name.to_string(),
+        });
+    }
     if let Some(rest) = strip_cmd(compose, "/add ") {
         return Some(WsClientMsg::FriendAdd {
             name: rest.trim().to_string(),
@@ -1584,6 +1592,11 @@ fn friend_enter_msg(compose: &str, target_name: Option<&str>) -> Option<WsClient
     }
     if let Some(rest) = strip_cmd(compose, "/unignore ") {
         return Some(WsClientMsg::FriendUnignore {
+            name: rest.trim().to_string(),
+        });
+    }
+    if let Some(rest) = strip_cmd(compose, "/invite ") {
+        return Some(WsClientMsg::PartyInvite {
             name: rest.trim().to_string(),
         });
     }
@@ -2058,6 +2071,11 @@ mod tests {
         assert!(matches!(rem, WsClientMsg::FriendRemove { name } if name == "Bob"));
         let unign = friend_enter_msg("/unignore Bob", None).unwrap();
         assert!(matches!(unign, WsClientMsg::FriendUnignore { name } if name == "Bob"));
+        let invite = friend_enter_msg("/invite Bob", None).unwrap();
+        assert!(matches!(invite, WsClientMsg::PartyInvite { name } if name == "Bob"));
+        let invite_tgt = friend_enter_msg("/invite", Some("Carol")).unwrap();
+        assert!(matches!(invite_tgt, WsClientMsg::PartyInvite { name } if name == "Carol"));
+        assert!(friend_enter_msg("/invite", None).is_none());
     }
 
     #[test]

@@ -811,7 +811,7 @@ fn guild_panel_text(snap: &TickSnapshot, compose: &str) -> String {
 fn friends_panel_text(snap: &TickSnapshot, compose: &str) -> String {
     let mut lines = vec!["Friends  [O]".into()];
     if snap.friends.is_empty() && snap.ignored.is_empty() {
-        lines.push("No friends yet. /add Name".into());
+        lines.push("No friends yet. /add Name · /invite Name".into());
     } else {
         lines.push("Friends".into());
         for f in &snap.friends {
@@ -833,6 +833,7 @@ fn friends_panel_text(snap: &TickSnapshot, compose: &str) -> String {
             }
         }
     }
+    lines.push("/invite Name  party".into());
     lines.push(format!("> {compose}_"));
     lines.join("\n")
 }
@@ -2167,7 +2168,8 @@ mod tests {
     #[test]
     fn friends_panel_empty_shows_add_hint() {
         let text = friends_panel_text(&TickSnapshot::default(), "");
-        assert!(text.contains("No friends yet. /add Name"));
+        assert!(text.contains("No friends yet. /add Name · /invite Name"));
+        assert!(text.contains("/invite Name  party"));
         assert!(text.contains("> _"));
     }
 
@@ -2197,6 +2199,7 @@ mod tests {
         assert!(text.contains("Ignored"));
         assert!(text.contains(" Dave"));
         assert!(text.contains("> /w Bob hi_"));
+        assert!(text.contains("/invite Name  party"));
         assert!(!text.contains("No friends yet"));
     }
 }

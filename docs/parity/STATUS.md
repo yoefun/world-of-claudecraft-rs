@@ -16,7 +16,7 @@ Plan: [`../superpowers/plans/2026-08-14-friends.md`](../superpowers/plans/2026-0
 | whisper | done | targeted `player_tx`; parked = offline |
 | presence | done | intents; `{name} has come/gone online.` |
 | persist | done | `RealmEconomy.social` |
-| client O panel | done | `/add` `/w` `/ignore`; party/market O still win |
+| client O panel | done | `/add` `/w` `/ignore` `/invite`; party/market O still win |
 | protocol | done | rev 11 |
 
 ## Mounts / riding (`mounts`) — done
