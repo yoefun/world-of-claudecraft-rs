@@ -1,0 +1,25 @@
+# Runtime assets required by the Rust client visual catalog.
+# Paths are relative to the packaged assets/ directory.
+models/chars/enemies/skeleton_warrior.glb
+models/chars/players/barbarian.glb
+models/chars/players/druid.glb
+models/chars/players/knight.glb
+models/chars/players/mage_classic.glb
+models/chars/players/mage.glb
+models/chars/players/paladin.glb
+models/chars/players/ranger.glb
+models/chars/players/rogue.glb
+models/chars/players/rogue_hooded.glb
+models/creatures/bull.glb
+models/creatures/demon.glb
+models/creatures/dragonevolved.glb
+models/creatures/frog.glb
+models/creatures/ghost.glb
+models/creatures/goblin.glb
+models/creatures/golelingevolved.glb
+models/creatures/orc.glb
+models/creatures/spider.glb
+models/creatures/stag.glb
+models/creatures/tribal.glb
+models/creatures/wild_boar.glb
+models/creatures/wolf_basic.glb

@@ -24,6 +24,10 @@ pub(crate) struct VisualMotion {
     pub(crate) last_z: f32,
     pub(crate) seeded: bool,
     pub(crate) cycle: f32,
+    /// Last high-level locomotion pose selected by the snapshot sync.
+    pub(crate) last_pose: WalkPose,
+    /// Last authoritative movement speed used to scale a clip-driven gait.
+    pub(crate) last_speed: f32,
     /// Countdown while fading out after leaving the snapshot (`None` = live).
     pub(crate) remove_timer: Option<f32>,
 }
@@ -36,6 +40,8 @@ impl Default for VisualMotion {
             last_z: 0.0,
             seeded: false,
             cycle: 0.0,
+            last_pose: WalkPose::Idle,
+            last_speed: 0.0,
             remove_timer: None,
         }
     }

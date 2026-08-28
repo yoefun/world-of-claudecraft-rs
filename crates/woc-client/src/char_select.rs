@@ -799,7 +799,10 @@ fn rebuild_roster_if_needed(
 fn refresh_char_select_chrome(
     form: Res<CharSelectForm>,
     session: Res<AuthSession>,
-    mut status_q: Query<(&mut Text, &mut TextColor), With<SelectStatusLabel>>,
+    mut status_q: Query<
+        (&mut Text, &mut TextColor),
+        (With<SelectStatusLabel>, Without<menu_ui::ClassPickLabel>),
+    >,
     mut hint_q: Query<
         &mut Text,
         (
@@ -831,7 +834,10 @@ fn refresh_char_select_chrome(
     class_btns: Query<(&ClassPickButton, &mut BackgroundColor, &Children)>,
     texts: Query<&mut TextColor, With<menu_ui::ClassPickLabel>>,
     mut rows: Query<(&CharRowButton, &mut BackgroundColor, &Children), Without<ClassPickButton>>,
-    mut row_texts: Query<&mut TextColor, Without<menu_ui::ClassPickLabel>>,
+    mut row_texts: Query<
+        &mut TextColor,
+        (Without<menu_ui::ClassPickLabel>, Without<SelectStatusLabel>),
+    >,
 ) {
     if let Ok((mut text, mut color)) = status_q.single_mut() {
         **text = form.status.clone();

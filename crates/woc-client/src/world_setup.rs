@@ -1,6 +1,8 @@
 //! World spawn / visual entity setup and sync.
 
+use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
+use bevy::render::mesh::{Indices, PrimitiveTopology};
 use std::collections::HashSet;
 use woc_protocol::{
     EntityId, EntityKind, EntitySnapshot, PlayerIntent, SimEvent, TickSnapshot, WsClientMsg,
@@ -25,6 +27,7 @@ use crate::hud::{
 };
 use crate::map;
 use crate::online;
+use crate::part_tex::PartTextures;
 use crate::visuals::{
     self, apply_alive_tint, ensure_target_ring, spawn_entity_visual, spawn_scene_props,
     sync_zone_atmosphere, ActiveAtmosphere, SceneProp, SimVisual, TargetRing, VisualPartMesh,
@@ -37,6 +40,72 @@ struct TerrainMarker;
 
 #[derive(Component)]
 pub(crate) struct FollowCam;
+
+fn build_terrain_mesh(step: f32, x_min: f32, x_max: f32, z_min: f32, z_max: f32) -> Mesh {
+    let cols = ((x_max - x_min) / step).ceil().max(1.0) as usize;
+    let rows = ((z_max - z_min) / step).ceil().max(1.0) as usize;
+    let nx = cols + 1;
+    let nz = rows + 1;
+
+    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(nx * nz);
+    let mut normals: Vec<[f32; 3]> = Vec::with_capacity(nx * nz);
+    let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(nx * nz);
+    for iz in 0..nz {
+        for ix in 0..nx {
+            let x = x_min + ix as f32 * step;
+            let z = z_min + iz as f32 * step;
+            let y = terrain_height(x, z, WORLD_SEED);
+            positions.push([x, y, z]);
+            let eps = step * 0.5;
+            let y_dx =
+                terrain_height(x + eps, z, WORLD_SEED) - terrain_height(x - eps, z, WORLD_SEED);
+            let y_dz =
+                terrain_height(x, z + eps, WORLD_SEED) - terrain_height(x, z - eps, WORLD_SEED);
+            let n = Vec3::new(-y_dx / (2.0 * eps), 1.0, -y_dz / (2.0 * eps)).normalize_or_zero();
+            normals.push(n.to_array());
+            uvs.push([ix as f32 / cols as f32, iz as f32 / rows as f32]);
+        }
+    }
+
+    let mut indices: Vec<u32> = Vec::with_capacity(cols * rows * 6);
+    for iz in 0..rows {
+        for ix in 0..cols {
+            let i00 = (iz * nx + ix) as u32;
+            let i10 = i00 + 1;
+            let i01 = i00 + nx as u32;
+            let i11 = i01 + 1;
+            indices.extend_from_slice(&[i00, i01, i10, i10, i01, i11]);
+        }
+    }
+
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+fn spawn_terrain_band(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    material: Handle<StandardMaterial>,
+    step: f32,
+    x_min: f32,
+    x_max: f32,
+    z_min: f32,
+    z_max: f32,
+) {
+    let mesh = build_terrain_mesh(step, x_min, x_max, z_min, z_max);
+    commands.spawn((
+        TerrainMarker,
+        Mesh3d(meshes.add(mesh)),
+        MeshMaterial3d(material),
+        Transform::default(),
+    ));
+}
 
 pub(crate) fn plugin(app: &mut App) {
     app.init_resource::<ActiveAtmosphere>()
@@ -73,6 +142,8 @@ fn setup_world(
     class: Res<SelectedClass>,
     play_mode: Res<PlayMode>,
     session: Res<crate::AuthSession>,
+    textures: Res<PartTextures>,
+    asset_server: Res<AssetServer>,
 ) {
     let host = match *play_mode {
         PlayMode::Offline => {
@@ -157,35 +228,38 @@ fn setup_world(
         alpha_mode: AlphaMode::Blend,
         ..default()
     });
-    // Chunked height samples across the continuous strip (step ~8 yd).
+    // Continuous heightfield meshes per biome band (replaces discontinuous cuboid tiles).
     let step = 8.0;
-    let mut x = -WORLD_MAX_X;
-    while x < WORLD_MAX_X {
-        let mut z = WORLD_MIN_Z;
-        while z < WORLD_MAX_Z {
-            let y00 = terrain_height(x, z, WORLD_SEED);
-            let y10 = terrain_height(x + step, z, WORLD_SEED);
-            let y01 = terrain_height(x, z + step, WORLD_SEED);
-            let y11 = terrain_height(x + step, z + step, WORLD_SEED);
-            let y = (y00 + y10 + y01 + y11) * 0.25;
-            let mid_z = z + step * 0.5;
-            let terrain_mat = if mid_z < 180.0 {
-                terrain_vale.clone()
-            } else if mid_z < 540.0 {
-                terrain_marsh.clone()
-            } else {
-                terrain_peaks.clone()
-            };
-            commands.spawn((
-                TerrainMarker,
-                Mesh3d(meshes.add(Cuboid::new(step * 0.98, 0.45, step * 0.98))),
-                MeshMaterial3d(terrain_mat),
-                Transform::from_xyz(x + step * 0.5, y - 0.2, z + step * 0.5),
-            ));
-            z += step;
-        }
-        x += step;
-    }
+    spawn_terrain_band(
+        &mut commands,
+        &mut meshes,
+        terrain_vale,
+        step,
+        -WORLD_MAX_X,
+        WORLD_MAX_X,
+        WORLD_MIN_Z,
+        180.0,
+    );
+    spawn_terrain_band(
+        &mut commands,
+        &mut meshes,
+        terrain_marsh,
+        step,
+        -WORLD_MAX_X,
+        WORLD_MAX_X,
+        180.0,
+        540.0,
+    );
+    spawn_terrain_band(
+        &mut commands,
+        &mut meshes,
+        terrain_peaks,
+        step,
+        -WORLD_MAX_X,
+        WORLD_MAX_X,
+        540.0,
+        WORLD_MAX_Z,
+    );
     for (wx, wz, radius) in water_bodies() {
         let y = water_level();
         commands.spawn((
@@ -202,6 +276,8 @@ fn setup_world(
         &mut commands,
         &mut meshes,
         &mut materials,
+        &textures,
+        &asset_server,
         &host.snapshot.entities,
     );
 
@@ -617,13 +693,15 @@ fn spawn_visuals_from_entities(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    textures: &PartTextures,
+    asset_server: &AssetServer,
     entities: &[EntitySnapshot],
 ) {
     for e in entities {
         if !e.alive && e.kind != EntityKind::Mob && e.kind != EntityKind::Npc {
             continue;
         }
-        spawn_entity_visual(commands, meshes, materials, e);
+        spawn_entity_visual(commands, meshes, materials, textures, asset_server, e);
     }
 }
 
@@ -799,6 +877,8 @@ pub(crate) fn sim_fixed_step(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    textures: Res<PartTextures>,
+    asset_server: Res<AssetServer>,
     mut visuals: Query<(Entity, &SimVisual, &mut VisualMotion)>,
 ) {
     if host.is_online() {
@@ -850,7 +930,14 @@ pub(crate) fn sim_fixed_step(
             || matches!(e.kind, EntityKind::Mob | EntityKind::Npc)
             || (e.kind == EntityKind::Loot && e.alive);
         if should_spawn {
-            spawn_entity_visual(&mut commands, &mut meshes, &mut materials, e);
+            spawn_entity_visual(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &textures,
+                &asset_server,
+                e,
+            );
         }
     }
 
@@ -883,6 +970,8 @@ pub(crate) fn sync_visuals(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    textures: Res<PartTextures>,
+    asset_server: Res<AssetServer>,
     mut visuals: Query<(
         Entity,
         &mut SimVisual,
@@ -933,29 +1022,34 @@ pub(crate) fn sync_visuals(
         // Fade-out scale while pending removal (entity already gone from snapshot).
         if let Some(timer) = motion.remove_timer {
             let t = (timer / REMOVE_FADE_SEC).clamp(0.0, 1.0);
-            tf.scale = Vec3::splat(t);
+            tf.scale = Vec3::splat(vis.scale * t);
             *visibility = Visibility::Visible;
             continue;
         }
 
         if let Some(e) = host.snapshot.entities.iter().find(|ent| ent.id == vis.id) {
-            visuals::respawn_parts_if_needed(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                entity,
-                &mut vis,
-                e,
-                children,
-            );
+            {
+                visuals::respawn_parts_if_needed(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    &textures,
+                    &asset_server,
+                    entity,
+                    &mut vis,
+                    e,
+                    children,
+                );
+            }
 
             let spec = visual_spec(e.kind, e.template_id.as_deref());
-            let (pose, _speed) = if e.alive && e.on_ground && !e.flying && !e.swimming {
+            let (pose, speed) = if e.alive && e.on_ground && !e.flying && !e.swimming {
                 sample_gait(&mut motion, e.x, e.z, e.yaw, dt)
             } else {
                 (woc_sim::WalkPose::Idle, 0.0)
             };
-
+            motion.last_pose = pose;
+            motion.last_speed = speed;
             let bob = if vis.bob && e.alive {
                 (bob_t * 2.4 + e.id as f32 * 0.7).sin() * 0.12
             } else if e.alive && e.swimming {
@@ -979,7 +1073,7 @@ pub(crate) fn sync_visuals(
                 }
                 tf.translation = Vec3::new(e.x, e.y + bob, e.z);
                 tf.rotation = Quat::from_euler(EulerRot::YXZ, e.yaw, pitch, 0.0);
-                tf.scale = Vec3::ONE;
+                tf.scale = Vec3::splat(vis.scale);
                 *visibility = Visibility::Visible;
             } else if matches!(
                 e.kind,
@@ -988,14 +1082,14 @@ pub(crate) fn sync_visuals(
                 // Corpse pose: tip onto the side; keep clickable for loot.
                 tf.translation = Vec3::new(e.x, e.y + 0.15, e.z);
                 tf.rotation = death_root_rotation(e.yaw);
-                tf.scale = Vec3::ONE;
+                tf.scale = Vec3::splat(vis.scale);
                 *visibility = Visibility::Visible;
             } else {
                 *visibility = Visibility::Hidden;
                 tf.scale = Vec3::ZERO;
             }
 
-            if e.alive && family_uses_gait(spec.family) {
+            if e.alive && !vis.uses_glb && family_uses_gait(spec.family) {
                 if let Some(children) = children {
                     for child in children.iter() {
                         if let Ok((limb, mut limb_tf)) = limbs.get_mut(child) {
@@ -1022,18 +1116,17 @@ pub(crate) fn sync_visuals(
             }
 
             if matches!(e.kind, EntityKind::Mob | EntityKind::Npc | EntityKind::Loot) {
-                if let Some(children) = children {
-                    let handles = children
-                        .iter()
-                        .filter_map(|c| part_mats.get(c).ok().map(|m| m.0.clone()));
-                    apply_alive_tint(
-                        &mut materials,
-                        handles,
-                        e.kind,
-                        e.alive,
-                        e.template_id.as_deref(),
-                    );
-                }
+                let handles = children
+                    .into_iter()
+                    .flat_map(|children| children.iter())
+                    .filter_map(|child| part_mats.get(child).ok().map(|m| m.0.clone()));
+                apply_alive_tint(
+                    &mut materials,
+                    handles,
+                    e.kind,
+                    e.alive,
+                    e.template_id.as_deref(),
+                );
             }
         } else {
             tf.scale = Vec3::ZERO;
@@ -1061,9 +1154,9 @@ pub(crate) fn sync_visuals(
         let pitch = host.look_pitch;
         let dist = 10.0;
         let offset = Vec3::new(
-            yaw.sin() * pitch.cos() * dist,
+            -yaw.sin() * pitch.cos() * dist,
             (-pitch.sin()) * dist + 2.0,
-            yaw.cos() * pitch.cos() * dist,
+            -yaw.cos() * pitch.cos() * dist,
         );
         let target = Vec3::new(px, py + 1.2, pz);
         ctf.translation = target + offset;

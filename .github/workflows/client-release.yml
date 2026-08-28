@@ -29,6 +29,14 @@ jobs:
         run: |
           mkdir -p dist/layout dist/out dist/prev
           cp target/release/woc-client target/release/woc-updater dist/layout/
+          while IFS= read -r rel; do
+            case "$rel" in
+              ""|\#*) continue ;;
+            esac
+            test -f "assets/$rel"
+            mkdir -p "dist/layout/assets/$(dirname "$rel")"
+            cp "assets/$rel" "dist/layout/assets/$rel"
+          done < assets/runtime-manifest.txt
           python3 - <<'PY'
           import tomllib, json, pathlib
           v = tomllib.loads(pathlib.Path("VERSION.toml").read_text())["rewrite_version"]
@@ -72,7 +80,7 @@ jobs:
             --out dist/out \
             --version "$VER" \
             --target x86_64-unknown-linux-gnu \
-            --protocol-rev 6 \
+            --protocol-rev 11 \
             --key "$WOC_UPDATE_SIGNING_KEY" \
             "${PREV_ARGS[@]}"
       - name: Upload

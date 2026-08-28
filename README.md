@@ -31,8 +31,8 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Eastbrook Hollow delve: unique `{id}#{seq}` keys per player (no overworld wipe); walk southeast of spawn to `(8, -6)`, **E** to enter; room clears auto-advance on the kill tick; **E** at entrance inside aborts to portal (no reward); HUD shows delve room
 - Snapshot hides cross-instance players/mobs; hunter/warlock pets copy `InstanceAt` and follow into instances
 - Death release in a dungeon uses the parent-zone graveyard; persist ejects `instance:` saves to the parent entrance
-- Procedural class/creature silhouettes + scene props (buildings, portals, zone sky)
-- Entity walk presentation (locomotion hysteresis + limb gait) and soft visual remove / corpse tip
+- Upstream GLB kits under workspace `assets/` (KayKit / Quaternius), GLB idle/walk/run/death animation playback, and procedural mesh fallback; scene props; zone sky
+- Entity walk presentation (locomotion hysteresis + limb gait), mounted rider + mount composition, alive/dead tint, and soft visual remove / corpse tip
 - Jump (Space), lake swim; flying mounts use Space/Ctrl vertical
 - Distinct class regen: energy 10/s in and out of combat; mana 8/s OOC / 2/s combat; rage −3/s OOC (taken + swing gain kept)
 - Five-slot kits: rogue Sprint (**5**); hunter Multi-Shot; priest Shadow Word: Pain; mage Counterspell (**3**)

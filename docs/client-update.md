@@ -8,7 +8,8 @@ Packaged Bevy clients ship as a signed full archive plus an optional bsdiff delt
 2. Extract the archive into a directory of your choice.
 3. Run `./woc-updater` to launch `./woc-client` (no download when already current).
 
-The archive contains `woc-client`, `woc-updater`, and `install.json`.
+The archive contains `woc-client`, `woc-updater`, `install.json`, and the runtime
+asset closure under `assets/` listed in [`assets/runtime-manifest.txt`](../assets/runtime-manifest.txt).
 
 ## Subsequent updates
 
@@ -22,6 +23,7 @@ With no arguments, the updater uses the directory that contains the binary as `-
 
 - When your installed rewrite is **N−1** and a delta exists on the release, the updater downloads the smaller `.wocdelta` artifact.
 - When you skipped a version or no delta was published (first release tag), it downloads the full `.tar.zst` instead.
+- If the runtime asset closure changed, the release publishes a full archive without a binary delta; this keeps asset additions, removals, and replacements atomic.
 - If a delta fails hash or apply checks, the updater retries once with the full archive.
 
 After a successful apply, `woc-updater` execs `./woc-client`.

@@ -7,6 +7,7 @@ use crate::menu_ui::{
     self, button_bundle, class_detail_line, panel_node, spawn_class_grid, spawn_screen_root,
     ClassPickButton, MenuBtnKind, BODY, FIELD_FOCUS, GOLD, MUTED,
 };
+use crate::part_tex::PartTextures;
 use crate::visuals::spawn_class_preview;
 use crate::{cleanup_ui, AppState, PlayMode};
 
@@ -63,6 +64,8 @@ fn setup_char_create(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    textures: Res<PartTextures>,
+    asset_server: Res<AssetServer>,
     mut clear: ResMut<ClearColor>,
     mut preview_class: ResMut<PreviewClass>,
     name: Res<CharName>,
@@ -183,6 +186,8 @@ fn setup_char_create(
         &mut commands,
         &mut meshes,
         &mut materials,
+        &textures,
+        &asset_server,
         class.0.as_str(),
         Vec3::new(0.0, 0.0, 0.0),
     );
@@ -207,6 +212,8 @@ fn sync_class_preview(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    textures: Res<PartTextures>,
+    asset_server: Res<AssetServer>,
     class: Res<SelectedClass>,
     mut preview_class: ResMut<PreviewClass>,
     existing: Query<Entity, With<ClassPreviewRoot>>,
@@ -221,6 +228,8 @@ fn sync_class_preview(
         &mut commands,
         &mut meshes,
         &mut materials,
+        &textures,
+        &asset_server,
         class.0.as_str(),
         Vec3::new(0.0, 0.0, 0.0),
     );

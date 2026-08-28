@@ -1,20 +1,83 @@
 use crate::{sha256_hex, FileEntry, UpdateError};
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::Path;
+
+/// Return all regular files in a client layout as normalized archive paths.
+pub fn layout_files(layout_dir: &Path) -> Result<Vec<String>, UpdateError> {
+    let mut files = Vec::new();
+    collect_layout_files(layout_dir, layout_dir, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_layout_files(
+    root: &Path,
+    current: &Path,
+    files: &mut Vec<String>,
+) -> Result<(), UpdateError> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_layout_files(root, &path, files)?;
+        } else if file_type.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|_| UpdateError::Msg("layout path escaped root".into()))?
+                .to_string_lossy()
+                .replace('\\', "/");
+            files.push(relative);
+        } else {
+            return Err(UpdateError::Msg(format!(
+                "unsupported non-regular layout entry: {}",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Check whether all layout files except the supplied paths have identical bytes.
+pub fn layout_files_match_except(
+    old_dir: &Path,
+    new_dir: &Path,
+    excluded: &[&str],
+) -> Result<bool, UpdateError> {
+    let mut old_files = layout_files(old_dir)?;
+    let mut new_files = layout_files(new_dir)?;
+    old_files.retain(|path| !excluded.contains(&path.as_str()));
+    new_files.retain(|path| !excluded.contains(&path.as_str()));
+    if old_files != new_files {
+        return Ok(false);
+    }
+    for relative in old_files {
+        if fs::read(old_dir.join(&relative))? != fs::read(new_dir.join(&relative))? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
 
 pub fn pack_full(layout_dir: &Path) -> Result<Vec<u8>, UpdateError> {
     let mut tar_buf = Vec::new();
     {
         let mut ar = tar::Builder::new(&mut tar_buf);
-        for name in ["woc-client", "woc-updater", "install.json"] {
-            let path = layout_dir.join(name);
+        for relative in layout_files(layout_dir)? {
+            let path = layout_dir.join(&relative);
             let mut file = File::open(&path)?;
             let mut header = tar::Header::new_gnu();
             let meta = file.metadata()?;
             header.set_size(meta.len());
-            header.set_mode(if name == "install.json" { 0o644 } else { 0o755 });
+            header.set_mode(
+                if matches!(relative.as_str(), "woc-client" | "woc-updater") {
+                    0o755
+                } else {
+                    0o644
+                },
+            );
             header.set_cksum();
-            ar.append_data(&mut header, name, &mut file)?;
+            ar.append_data(&mut header, &relative, &mut file)?;
         }
         ar.finish()?;
     }
@@ -58,6 +121,8 @@ mod tests {
         fs::create_dir_all(&layout).unwrap();
         fs::write(layout.join("woc-client"), b"GAME").unwrap();
         fs::write(layout.join("woc-updater"), b"UP").unwrap();
+        fs::create_dir_all(layout.join("assets/models")).unwrap();
+        fs::write(layout.join("assets/models/test.glb"), b"GLB").unwrap();
         fs::write(
             layout.join("install.json"),
             b"{\"rewrite_version\":\"1.0.0\",\"target\":\"t\"}",
@@ -70,6 +135,10 @@ mod tests {
         unpack_full(&blob, &dest).expect("unpack");
         assert_eq!(fs::read(dest.join("woc-client")).unwrap(), b"GAME");
         assert_eq!(fs::read(dest.join("woc-updater")).unwrap(), b"UP");
+        assert_eq!(
+            fs::read(dest.join("assets/models/test.glb")).unwrap(),
+            b"GLB"
+        );
         let e = file_entry(&dest, "woc-client").unwrap();
         assert_eq!(e.sha256, sha256_hex(b"GAME"));
         assert_eq!(e.size, 4);

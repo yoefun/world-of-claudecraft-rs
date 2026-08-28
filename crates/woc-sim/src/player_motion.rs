@@ -140,10 +140,13 @@ fn apply_horizontal_wish(
     }
     let mx = move_x / wish_len;
     let mz = move_z / wish_len;
+    // Facing f → forward (sin f, cos f). Camera sits behind; screen-right is
+    // (-cos f, sin f). D / +move_x must follow screen-right (not character-right
+    // as seen on the mirrored back-view).
     let sin_y = facing.sin();
     let cos_y = facing.cos();
-    let wish_vx = (mx * cos_y + mz * sin_y) * speed;
-    let wish_vz = (-mx * sin_y + mz * cos_y) * speed;
+    let wish_vx = (mz * sin_y - mx * cos_y) * speed;
+    let wish_vz = (mz * cos_y + mx * sin_y) * speed;
 
     if grounded || m.flying || is_swimming_at(t.x, t.y, t.z) {
         m.vx = wish_vx;
@@ -469,8 +472,25 @@ mod tests {
     #[test]
     fn world_bounds_clamp_x() {
         let mut world = player_at(WORLD_MAX_X - 0.1, 0.0);
-        step_axes(&mut world, 1, 1.0, 0.0, 0.0);
+        // Facing +Z: screen-right is -X, so strafe-left (mx=-1) pushes toward +X edge.
+        step_axes(&mut world, 1, -1.0, 0.0, 0.0);
         assert!(world.get::<Transform>(1).unwrap().x <= WORLD_MAX_X - PLAYER_RADIUS + 1e-3);
+    }
+
+    #[test]
+    fn forward_at_yaw_zero_moves_plus_z() {
+        let mut world = player_at(0.0, 0.0);
+        let z0 = world.get::<Transform>(1).unwrap().z;
+        step_axes(&mut world, 1, 0.0, 1.0, 0.0);
+        assert!(world.get::<Transform>(1).unwrap().z > z0);
+    }
+
+    #[test]
+    fn strafe_right_at_yaw_zero_moves_minus_x() {
+        let mut world = player_at(0.0, 0.0);
+        let x0 = world.get::<Transform>(1).unwrap().x;
+        step_axes(&mut world, 1, 1.0, 0.0, 0.0);
+        assert!(world.get::<Transform>(1).unwrap().x < x0);
     }
 
     #[test]

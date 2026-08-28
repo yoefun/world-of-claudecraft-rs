@@ -122,10 +122,12 @@ pub(crate) fn collect_intent(
             mz -= 1.0;
         }
         if keys.pressed(KeyCode::KeyA) {
-            mx -= 1.0;
+            // Bevy behind-camera view mirrors upstream Three.js screen-right;
+            // invert strafe so A/D follow the monitor's left/right.
+            mx += 1.0;
         }
         if keys.pressed(KeyCode::KeyD) {
-            mx += 1.0;
+            mx -= 1.0;
         }
         if keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space) {
             // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).

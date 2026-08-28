@@ -4,10 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use woc_update::{
-    apply_update_with_full_fallback, fetch_url, plan_fetch, url_parent, verify_manifest,
-    verifying_key_from_hex, ArtifactStore, DirStore, HttpStore, InstallState, Manifest,
-    UpdateError,
+    apply_update_with_full_fallback, fetch_url, url_parent, verify_manifest,
+    verifying_key_from_hex, ArtifactStore, DirStore, HttpStore, Manifest, UpdateError,
 };
+#[cfg(unix)]
+use woc_update::{plan_fetch, InstallState};
 
 struct Args {
     prefix: PathBuf,
@@ -16,6 +17,7 @@ struct Args {
     once: bool,
     no_exec: bool,
     pubkey: Option<String>,
+    #[cfg(unix)]
     already_copied: bool,
     _apply_from: Option<PathBuf>,
 }
@@ -71,6 +73,7 @@ fn parse_args() -> Args {
         once: has_flag(&raw, "--once"),
         no_exec: has_flag(&raw, "--no-exec"),
         pubkey: arg_value(&raw, "--pubkey"),
+        #[cfg(unix)]
         already_copied: has_flag(&raw, "--already-copied") || apply_from.is_some(),
         _apply_from: apply_from,
     }
@@ -96,6 +99,7 @@ fn load_manifest(path_or_url: &str) -> Result<Manifest, UpdateError> {
     Ok(serde_json::from_slice(&bytes)?)
 }
 
+#[cfg(unix)]
 fn read_install_state(prefix: &Path) -> Result<InstallState, UpdateError> {
     let path = prefix.join("install.json");
     if !path.exists() {
@@ -108,6 +112,7 @@ fn read_install_state(prefix: &Path) -> Result<InstallState, UpdateError> {
     Ok(serde_json::from_str(&json)?)
 }
 
+#[cfg(unix)]
 fn exe_inside_prefix(exe: &Path, prefix: &Path) -> bool {
     let Ok(exe) = fs::canonicalize(exe) else {
         return false;

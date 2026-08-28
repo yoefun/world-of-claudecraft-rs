@@ -1,6 +1,6 @@
 use crate::{
-    file_entry, install_json_bytes, pack_delta, pack_full, sha256_hex, sign_manifest,
-    signing_key_from_hex, Artifact, Manifest, UpdateError,
+    file_entry, install_json_bytes, layout_files, layout_files_match_except, pack_delta, pack_full,
+    sha256_hex, sign_manifest, signing_key_from_hex, Artifact, Manifest, UpdateError,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -30,21 +30,24 @@ pub fn pack_release(opts: PackOpts<'_>) -> Result<Manifest, UpdateError> {
 
     let mut delta_from = BTreeMap::new();
     if let (Some(prev_layout), Some(prev_version)) = (opts.prev_layout, opts.prev_version) {
-        let delta_name = format!(
-            "woc-rs-{}-to-{}-{}.wocdelta",
-            prev_version, opts.version, opts.target
-        );
-        let delta_blob = pack_delta(prev_version, opts.version, prev_layout, opts.layout)?;
-        fs::write(opts.out.join(&delta_name), &delta_blob)?;
-        delta_from.insert(
-            prev_version.to_string(),
-            artifact_from_blob(delta_name, &delta_blob),
-        );
+        const DELTA_ROOT_FILES: [&str; 3] = ["woc-client", "woc-updater", "install.json"];
+        if layout_files_match_except(prev_layout, opts.layout, &DELTA_ROOT_FILES)? {
+            let delta_name = format!(
+                "woc-rs-{}-to-{}-{}.wocdelta",
+                prev_version, opts.version, opts.target
+            );
+            let delta_blob = pack_delta(prev_version, opts.version, prev_layout, opts.layout)?;
+            fs::write(opts.out.join(&delta_name), &delta_blob)?;
+            delta_from.insert(
+                prev_version.to_string(),
+                artifact_from_blob(delta_name, &delta_blob),
+            );
+        }
     }
 
-    let files = ["woc-client", "woc-updater", "install.json"]
+    let files = layout_files(opts.layout)?
         .into_iter()
-        .map(|p| file_entry(opts.layout, p))
+        .map(|p| file_entry(opts.layout, &p))
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut manifest = Manifest {
@@ -80,7 +83,7 @@ fn artifact_from_blob(name: String, blob: &[u8]) -> Artifact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{verify_manifest, InstallState};
+    use crate::{unpack_full, verify_manifest, InstallState};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_tmp(tag: &str) -> std::path::PathBuf {
@@ -208,5 +211,48 @@ mod tests {
             .unwrap();
         assert_eq!(install.sha256, crate::sha256_hex(&expected));
         assert_eq!(fs::read(layout.join("install.json")).unwrap(), expected);
+    }
+
+    #[test]
+    fn changed_runtime_asset_forces_full_only_release() {
+        let root = unique_tmp("asset-change");
+        let prev = root.join("prev");
+        let layout = root.join("layout");
+        let out = root.join("out");
+        write_layout(&prev, "1.4.0", b"OLD-CLIENT", b"OLD-UP");
+        write_layout(&layout, "1.5.0", b"NEW-CLIENT", b"NEW-UP");
+        fs::create_dir_all(prev.join("assets/models")).unwrap();
+        fs::create_dir_all(layout.join("assets/models")).unwrap();
+        fs::write(prev.join("assets/models/player.glb"), b"OLD-ASSET").unwrap();
+        fs::write(layout.join("assets/models/player.glb"), b"NEW-ASSET").unwrap();
+
+        let seed = "11".repeat(32);
+        let manifest = pack_release(PackOpts {
+            layout: &layout,
+            prev_layout: Some(&prev),
+            prev_version: Some("1.4.0"),
+            out: &out,
+            version: "1.5.0",
+            target: "x86_64-unknown-linux-gnu",
+            protocol_rev: 11,
+            signing_seed_hex: &seed,
+        })
+        .unwrap();
+
+        assert!(manifest.delta_from.is_empty());
+        assert_eq!(manifest.files.len(), 4);
+        assert!(manifest
+            .files
+            .iter()
+            .any(|f| f.path == "assets/models/player.glb"));
+        assert_eq!(fs::read_dir(&out).unwrap().count(), 2);
+
+        let full = fs::read(out.join(&manifest.full.name)).unwrap();
+        let unpacked = root.join("unpacked");
+        unpack_full(&full, &unpacked).unwrap();
+        assert_eq!(
+            fs::read(unpacked.join("assets/models/player.glb")).unwrap(),
+            b"NEW-ASSET"
+        );
     }
 }

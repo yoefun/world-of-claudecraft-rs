@@ -43,6 +43,9 @@ struct LoginConfirmRow;
 struct LoginStatusLabel;
 
 #[derive(Component)]
+struct LoginSubmitLabel;
+
+#[derive(Component)]
 struct LoginModeLoginBtn;
 
 #[derive(Component)]
@@ -253,6 +256,7 @@ fn setup_login(mut commands: Commands, mut form: ResMut<LoginForm>) {
                         row.spawn((b, k, n, bg, bd, LoginSubmitBtn))
                             .with_children(|btn| {
                                 btn.spawn((
+                                    LoginSubmitLabel,
                                     Text::new(submit_label(form.register_mode)),
                                     TextFont::from_font_size(16.0),
                                     TextColor(BODY),
@@ -531,65 +535,35 @@ fn poll_auth_result(
 
 fn refresh_login_chrome(
     form: Res<LoginForm>,
-    mut user_q: Query<&mut Text, With<LoginUserLabel>>,
-    mut pass_q: Query<&mut Text, (With<LoginPassLabel>, Without<LoginUserLabel>)>,
-    mut confirm_q: Query<
-        &mut Text,
-        (
-            With<LoginConfirmLabel>,
-            Without<LoginUserLabel>,
-            Without<LoginPassLabel>,
-        ),
-    >,
-    mut status_q: Query<
-        (&mut Text, &mut TextColor),
-        (
-            With<LoginStatusLabel>,
-            Without<LoginUserLabel>,
-            Without<LoginPassLabel>,
-            Without<LoginConfirmLabel>,
-        ),
-    >,
+    mut texts: ParamSet<(
+        Query<&mut Text, With<LoginUserLabel>>,
+        Query<&mut Text, With<LoginPassLabel>>,
+        Query<&mut Text, With<LoginConfirmLabel>>,
+        Query<(&mut Text, &mut TextColor), With<LoginStatusLabel>>,
+        Query<&mut Text, With<LoginSubmitLabel>>,
+    )>,
     mut confirm_row: Query<&mut Node, With<LoginConfirmRow>>,
-    mut field_user: Query<
-        &mut BackgroundColor,
-        (
-            With<LoginFieldUser>,
-            Without<LoginFieldPass>,
-            Without<LoginFieldConfirm>,
-        ),
-    >,
-    mut field_pass: Query<
-        &mut BackgroundColor,
-        (
-            With<LoginFieldPass>,
-            Without<LoginFieldUser>,
-            Without<LoginFieldConfirm>,
-        ),
-    >,
-    mut field_confirm: Query<
-        &mut BackgroundColor,
-        (
-            With<LoginFieldConfirm>,
-            Without<LoginFieldUser>,
-            Without<LoginFieldPass>,
-        ),
-    >,
-    submit_btn: Query<&Children, With<LoginSubmitBtn>>,
-    mut child_text: Query<&mut Text>,
+    mut fields: ParamSet<(
+        Query<&mut BackgroundColor, With<LoginFieldUser>>,
+        Query<&mut BackgroundColor, With<LoginFieldPass>>,
+        Query<&mut BackgroundColor, With<LoginFieldConfirm>>,
+    )>,
 ) {
-    if let Ok(mut text) = user_q.single_mut() {
+    if let Ok(mut text) = texts.p0().single_mut() {
         **text = user_line(&form);
     }
-    if let Ok(mut text) = pass_q.single_mut() {
+    if let Ok(mut text) = texts.p1().single_mut() {
         **text = pass_line(&form);
     }
-    if let Ok(mut text) = confirm_q.single_mut() {
+    if let Ok(mut text) = texts.p2().single_mut() {
         **text = confirm_line(&form);
     }
-    if let Ok((mut text, mut color)) = status_q.single_mut() {
+    if let Ok((mut text, mut color)) = texts.p3().single_mut() {
         **text = form.status.clone();
         *color = TextColor(status_color(form.busy, &form.status));
+    }
+    if let Ok(mut text) = texts.p4().single_mut() {
+        **text = submit_label(form.register_mode).into();
     }
     if let Ok(mut node) = confirm_row.single_mut() {
         node.display = if form.register_mode {
@@ -598,33 +572,25 @@ fn refresh_login_chrome(
             Display::None
         };
     }
-    if let Ok(mut bg) = field_user.single_mut() {
+    if let Ok(mut bg) = fields.p0().single_mut() {
         *bg = BackgroundColor(if form.focus == 0 {
             FIELD_FOCUS
         } else {
             FIELD_BG
         });
     }
-    if let Ok(mut bg) = field_pass.single_mut() {
+    if let Ok(mut bg) = fields.p1().single_mut() {
         *bg = BackgroundColor(if form.focus == 1 {
             FIELD_FOCUS
         } else {
             FIELD_BG
         });
     }
-    if let Ok(mut bg) = field_confirm.single_mut() {
+    if let Ok(mut bg) = fields.p2().single_mut() {
         *bg = BackgroundColor(if form.focus == 2 {
             FIELD_FOCUS
         } else {
             FIELD_BG
         });
-    }
-    // Update submit button label via its child text.
-    if let Ok(children) = submit_btn.single() {
-        for child in children.iter() {
-            if let Ok(mut text) = child_text.get_mut(child) {
-                **text = submit_label(form.register_mode).into();
-            }
-        }
     }
 }

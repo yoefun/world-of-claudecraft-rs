@@ -379,9 +379,9 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 | World boss + deeds | done | one-shot deed completion persisted |
 | Client economy/talent chrome | done | N/K/I/U panels; **M** world map + minimap |
 | Heightfield terrain | done | Continuous strip seed `20061`; golden ε≈1e-3 vs upstream pin; editor custom maps deferred |
-| Procedural character / scene visuals | done | Class/template mesh recipes; buildings, portals, zone atmosphere; create preview |
+| Procedural character / scene visuals | done | GLB-first class/template scenes with procedural fallback; buildings, portals, zone atmosphere; create preview |
 | In-world NPC/mob scene load | done | Nameplates, quest/vendor markers, target ring, gather herbs, spawn lifecycle |
-| Entity walk / remove presentation | done | Locomotion hysteresis, procedural gait limbs, corpse tip, soft despawn fade |
+| Entity walk / remove presentation | done | Snapshot-driven GLB idle/walk/run/death clips, procedural gait limbs, mounted rider + mount, alive/dead tint, corpse tip, soft despawn fade |
 | Jump / swim / travel flight | done | Coyote jump, gravity + fall damage, lake tread; mounts replace free V flight |
 | Sim typed ECS columns | done | Sparse `World` in `woc-sim`; Bevy stays presentation-only |
 | Byte-identical terrain/combat | n/a | Explicit non-goal |

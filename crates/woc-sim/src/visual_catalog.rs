@@ -326,12 +326,23 @@ const fn rgb(r: f32, g: f32, b: f32) -> [f32; 3] {
 }
 
 const fn body(offset_y: f32, radius: f32, half_h: f32, c: [f32; 3]) -> VisualPart {
+    // Cuboid torso reads as a humanoid chest; Capsule looked like a lone "pill".
     VisualPart {
-        shape: PartShape::Capsule,
+        shape: PartShape::Cuboid,
         offset: [0.0, offset_y, 0.0],
-        size: [radius, half_h, 0.0],
+        size: [radius * 1.7, half_h * 2.0, radius * 1.15],
         color: c,
         role: PartRole::Body,
+    }
+}
+
+const fn arm(offset: [f32; 3], c: [f32; 3]) -> VisualPart {
+    VisualPart {
+        shape: PartShape::Cuboid,
+        offset,
+        size: [0.12, 0.55, 0.12],
+        color: c,
+        role: PartRole::Prop,
     }
 }
 
@@ -365,9 +376,11 @@ const PLAYER_WARRIOR: VisualSpec = VisualSpec {
     parts: parts![
         body(0.95, 0.34, 0.55, rgb(0.55, 0.22, 0.18)),
         head(1.85, 0.22, rgb(0.85, 0.70, 0.55)),
+        arm([-0.40, 1.10, 0.0], rgb(0.55, 0.22, 0.18)),
+        arm([0.40, 1.10, 0.0], rgb(0.55, 0.22, 0.18)),
         VisualPart {
             shape: PartShape::Cuboid,
-            offset: [0.42, 1.15, 0.0],
+            offset: [0.55, 1.15, 0.05],
             size: [0.12, 0.85, 0.12],
             role: PartRole::Prop,
             color: rgb(0.65, 0.65, 0.70),
@@ -653,6 +666,8 @@ const NPC_QUEST: VisualSpec = VisualSpec {
     parts: parts![
         body(0.92, 0.32, 0.52, rgb(0.45, 0.55, 0.35)),
         head(1.78, 0.21, rgb(0.82, 0.68, 0.52)),
+        arm([-0.38, 1.05, 0.0], rgb(0.45, 0.55, 0.35)),
+        arm([0.38, 1.05, 0.0], rgb(0.45, 0.55, 0.35)),
         VisualPart {
             shape: PartShape::Cylinder,
             offset: [0.0, 2.10, 0.0],

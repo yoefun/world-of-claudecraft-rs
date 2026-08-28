@@ -5,8 +5,6 @@ use crate::{
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const LAYOUT_FILES: [&str; 3] = ["woc-client", "woc-updater", "install.json"];
-
 fn with_suffix(prefix: &Path, suffix: &str) -> PathBuf {
     let mut os = prefix.as_os_str().to_os_string();
     os.push(suffix);
@@ -68,10 +66,14 @@ pub fn apply_update(
         match &plan {
             FetchPlan::Full { .. } => unpack_full(&blob, &staging)?,
             FetchPlan::Delta { .. } => {
-                for name in LAYOUT_FILES {
-                    let src = prefix.join(name);
+                for file in &remote.files {
+                    let src = prefix.join(&file.path);
                     if src.exists() {
-                        fs::copy(&src, staging.join(name))?;
+                        let dst = staging.join(&file.path);
+                        if let Some(parent) = dst.parent() {
+                            fs::create_dir_all(parent)?;
+                        }
+                        fs::copy(src, dst)?;
                     }
                 }
                 apply_delta(&blob, &staging)?;
@@ -232,8 +234,12 @@ mod tests {
 
     fn copy_layout(src: &Path, dst: &Path) {
         fs::create_dir_all(dst).unwrap();
-        for name in LAYOUT_FILES {
-            fs::copy(src.join(name), dst.join(name)).unwrap();
+        for name in crate::layout_files(src).unwrap() {
+            let target = dst.join(&name);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::copy(src.join(&name), target).unwrap();
         }
     }
 

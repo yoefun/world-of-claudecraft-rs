@@ -2,6 +2,7 @@
 
 mod anim;
 mod api;
+mod asset_map;
 mod char_create;
 mod char_select;
 mod hud;
@@ -11,11 +12,13 @@ mod map;
 mod menu_ui;
 mod nameplates;
 mod online;
+mod part_tex;
 mod title;
 mod visuals;
 mod world_setup;
 
 use bevy::prelude::*;
+use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -25,20 +28,45 @@ use woc_protocol::{
 use woc_sim::{GuildDelivery, Sim, SocialDelivery};
 use woc_version::{footer, VersionInfo};
 
+/// Resolve the packaged asset directory first, then the workspace mirror for dev runs.
+fn asset_folder() -> String {
+    let packaged = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("assets")));
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let candidate = packaged
+        .filter(|path| path.is_dir())
+        .or_else(|| workspace.is_dir().then_some(workspace))
+        .unwrap_or_else(|| PathBuf::from("assets"));
+    candidate
+        .canonicalize()
+        .unwrap_or(candidate)
+        .to_string_lossy()
+        .into_owned()
+}
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: footer(),
-                resolution: (1280.0_f32, 720.0_f32).into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: footer(),
+                        resolution: (1280.0_f32, 720.0_f32).into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: asset_folder(),
+                    ..default()
+                }),
+        )
         .init_state::<AppState>()
         .init_resource::<PlayMode>()
         .init_resource::<AuthSession>()
         .init_resource::<RealmCompat>()
+        .init_resource::<visuals::GltfAnimationLibrary>()
         .insert_resource(ClearColor(Color::srgb(0.45, 0.62, 0.78)))
         .insert_resource(AmbientLight {
             color: Color::srgb(0.92, 0.94, 0.88),
@@ -46,6 +74,7 @@ fn main() {
             ..default()
         })
         .add_plugins((
+            part_tex::plugin,
             title::plugin,
             login::plugin,
             char_create::plugin,
@@ -63,8 +92,49 @@ fn main() {
                 input::collect_intent,
                 input::handle_interact_keys,
                 input::mail_compose_text,
-                world_setup::sim_fixed_step,
-                world_setup::sync_visuals,
+            )
+                .chain()
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            world_setup::sim_fixed_step
+                .after(input::mail_compose_text)
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            visuals::prepare_gltf_animations
+                .after(world_setup::sim_fixed_step)
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            visuals::capture_glb_materials
+                .after(visuals::prepare_gltf_animations)
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            world_setup::sync_visuals
+                .after(visuals::capture_glb_materials)
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            visuals::sync_glb_materials
+                .after(world_setup::sync_visuals)
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            visuals::drive_gltf_animations
+                .after(visuals::sync_glb_materials)
+                .run_if(in_state(AppState::InWorld)),
+        )
+        .add_systems(
+            Update,
+            (
                 hud::update_hud,
                 hud::update_party_hud,
                 hud::update_chrome_panels,
