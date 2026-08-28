@@ -34,6 +34,7 @@
 | **1.24.0** (shipped) | `delve-depth` | Isolated Hollow keys, auto-advance, entrance `(8, -6)` |
 | **1.25.0** (shipped) | `friends` | Friend book, ignore, whisper, persist, Bevy **O** panel |
 | **1.26.0** (shipped) | `class-depth` | Distinct regen, 5-slot kits, paladin aura cycle, pet Bite/Firebolt, HUD stance |
+| **1.26.1** (shipped) | `class-depth` maintenance | Bevy-compatible GLB runtime closure, WebP decoding, asset regression coverage |
 
 ## Class depth (shipped as `1.26.0`)
 
@@ -43,6 +44,8 @@
 **Implementation:** [`docs/superpowers/plans/2026-08-14-class-depth.md`](superpowers/plans/2026-08-14-class-depth.md)
 
 Energy 10/s, mana 8/2 s, rage decay OOC; rogue Sprint + hunter Multi-Shot + priest SW:P + mage Counterspell on the 1–5 bar; paladin **F** Devotion/Retribution; HUD paints `stance_id`; hunter Bite / warlock Firebolt. Protocol rev stays **11**. Ability ranks, 3 talent specs, bear/cat, and pet bars stay out of scope. Planned as `1.25.0`; lands as `1.26.0` after friends took `1.25.0`.
+
+The `1.26.1` maintenance release keeps gameplay, protocol, and the upstream pin unchanged while repacking all 23 mapped client GLBs for Bevy's supported glTF extensions and enabling WebP texture decoding.
 
 ## Completion program (closed)
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.26.1 — 2026-08-29
+
+### Fixed
+
+- Client runtime GLBs are repacked without Bevy 0.16-incompatible `EXT_meshopt_compression` and `KHR_mesh_quantization` declarations.
+- WebP-backed GLB textures use the standard glTF texture source path, with native WebP decoding enabled in the Bevy client.
+- The 23 mapped player, NPC, mob, pet, and mount scenes are covered by an asset compatibility regression test; the malformed wild-boar morph-weight channels are normalized during repacking.
+- Large release assets remain explicitly tracked with Git LFS for reproducible client packaging.
+
+### Notes
+
+- Protocol rev **11**, upstream **0.31.0**, and the `class-depth` parity target are unchanged from `1.26.0`.
+
 ## 1.26.0 — 2026-08-14
 
 ### Added

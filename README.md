@@ -1,18 +1,18 @@
 # World of ClaudeCraft (Rust)
 
 [![CI](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/yoefun/world-of-claudecraft-rs/actions/workflows/ci.yml)
-[![Rewrite](https://img.shields.io/badge/rewrite-1.26.0-blue)](VERSION.toml)
+[![Rewrite](https://img.shields.io/badge/rewrite-1.26.1-blue)](VERSION.toml)
 [![Upstream](https://img.shields.io/badge/upstream-0.31.0-informational)](UPSTREAM.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Rust rewrite of [World of ClaudeCraft](https://github.com/levy-street/world-of-claudecraft).
 
-**Rewrite `1.26.0`** is pinned to upstream **`0.31.0`**
+**Rewrite `1.26.1`** is pinned to upstream **`0.31.0`**
 (`a3e5e9596a8e9e7d37b5b23efbbb0f2cd846c0c9`). Parity target: **`class-depth`**.
 See [`UPSTREAM.md`](UPSTREAM.md) and [`docs/parity/STATUS.md`](docs/parity/STATUS.md).
 Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 
-## What works in 1.26.0 (class-depth)
+## What works in 1.26.1 (class-depth)
 
 - Native Bevy client embedding a shared deterministic sim (offline + online)
 - Create any of **9 classes**, multi-ability kits, talents, hunter/warlock pets
@@ -32,13 +32,14 @@ Packaged updates: [`docs/client-update.md`](docs/client-update.md).
 - Snapshot hides cross-instance players/mobs; hunter/warlock pets copy `InstanceAt` and follow into instances
 - Death release in a dungeon uses the parent-zone graveyard; persist ejects `instance:` saves to the parent entrance
 - Upstream GLB kits under workspace `assets/` (KayKit / Quaternius), GLB idle/walk/run/death animation playback, and procedural mesh fallback; scene props; zone sky
+- Runtime GLB closure repacked for Bevy-compatible glTF extensions; WebP-backed textures decode in the packaged client
 - Entity walk presentation (locomotion hysteresis + limb gait), mounted rider + mount composition, alive/dead tint, and soft visual remove / corpse tip
 - Jump (Space), lake swim; flying mounts use Space/Ctrl vertical
 - Distinct class regen: energy 10/s in and out of combat; mana 8/s OOC / 2/s combat; rage −3/s OOC (taken + swing gain kept)
 - Five-slot kits: rogue Sprint (**5**); hunter Multi-Shot; priest Shadow Word: Pain; mage Counterspell (**3**)
 - Paladin **F** cycles Devotion / Retribution auras (spawn `stance_id=devotion`); HUD paints stance/form names and binds paladin **F**
 - Hunter pet Bite and warlock imp Firebolt (6 s CD; imp 14 yd)
-- Version footer: `WoC-rs 1.26.0 · upstream 0.31.0`
+- Version footer: `WoC-rs 1.26.1 · upstream 0.31.0`
 - `woc-server` sticky multi-player realm over WebSocket (`/ws/game`) with authenticated Hello; disconnect parks the player for resume
 - Persist auth + character CRUD including talents/bank/honor/zone/deeds (memory default; `DATABASE_URL` Postgres is production)
 
@@ -113,7 +114,7 @@ One sim, multiple hosts:
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.24.0` / `delve-depth`, `1.25.0` / `friends`, and `1.26.0` / `class-depth`. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). **Shipped:** `1.24.0` / `delve-depth`, `1.25.0` / `friends`, `1.26.0` / `class-depth`, and `1.26.1` / client asset compatibility maintenance. Manual demo: [`docs/parity/DEMO.md`](docs/parity/DEMO.md).
 
 Online play persists characters (enter injects save; disconnect autosaves) and realm mail/auction. Post-completion program: [`docs/superpowers/specs/2026-08-13-post-completion-program-design.md`](docs/superpowers/specs/2026-08-13-post-completion-program-design.md).
 

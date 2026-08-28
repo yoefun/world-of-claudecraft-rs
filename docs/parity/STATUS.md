@@ -1,8 +1,19 @@
 # Parity status
 
-**Current rewrite:** `1.26.0` / `class-depth` (PROTOCOL_REV=11).  
+**Current rewrite:** `1.26.1` / `class-depth` (PROTOCOL_REV=11).
 **Post-completion program:** closed through `online-hard` — see [`docs/ROADMAP.md`](../ROADMAP.md).  
 **Runbook:** [`../client-update.md`](../client-update.md). Class identity is `1.6.0`–`1.8.0`; class-depth is shipped as `1.26.0`. Quest-loop/depth are `1.9.0`–`1.10.0`; NPC services is `1.11.0`; gear depth is `1.12.0`; gear slots shipped as `1.13.0`; reputation shipped as `1.14.0`; gear-more shipped as `1.15.0`; economy depth shipped as `1.16.0`; party-depth shipped as `1.17.0`; raid shipped as `1.18.0`; guilds shipped as `1.19.0`; parcel-bank shipped as `1.20.0`; mounts shipped as `1.21.0`; kill-loop shipped as `1.22.0`; dungeon-depth shipped as `1.23.0`; delve-depth shipped as `1.24.0`; friends shipped as `1.25.0`. Dungeon/delve were renumbered past kill-loop `1.22.0`.
+
+## Client asset compatibility (`1.26.1`) — done
+
+The patch release preserves gameplay and protocol behavior while making the packaged GLB runtime closure loadable by Bevy 0.16.
+
+| Subsystem | Status | Notes |
+| --- | --- | --- |
+| 23 mapped GLB scenes | done | Repacked without meshopt / mesh quantization declarations |
+| WebP textures | done | Standard glTF texture sources with Bevy WebP decoding |
+| Wild-boar animation data | done | Invalid morph-weight channels normalized during repacking |
+| Protocol / upstream pin | unchanged | Rev 11; upstream 0.31.0 at the existing pinned commit |
 
 ## Class depth (`class-depth`) — done
 
@@ -347,7 +358,7 @@ Sim ECS (internal, post-completion): [`../superpowers/specs/2026-08-13-sim-ecs-d
 
 | Subsystem | Status | Notes |
 | --- | --- | --- |
-| Version / upstream pin | done | `1.26.0` / class-depth (upstream still 0.31.0) |
+| Version / upstream pin | done | `1.26.1` / class-depth (upstream still 0.31.0) |
 | Quest accept / progress / turn-in loop | done | Giver/turn-in/requires gates; talk+collect tests; generic E; named log |
 | `woc-content` Eastbrook tables | done | |
 | Deterministic tick (20 Hz) | done | locked phase fingerprint |
