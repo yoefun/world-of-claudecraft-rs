@@ -102,4 +102,33 @@ mod tests {
             assert!(glb_scale_for_visual_key(key) > 0.0);
         }
     }
+
+    #[test]
+    fn every_mapped_glb_avoids_unsupported_bevy_extensions() {
+        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let unsupported = [
+            "EXT_meshopt_compression",
+            "EXT_texture_webp",
+            "KHR_mesh_quantization",
+        ];
+
+        for key in MAPPED_KEYS {
+            let path = glb_for_visual_key(key).expect("mapped key must resolve");
+            let asset = path.split_once('#').map_or(path, |(asset, _)| asset);
+            let bytes = std::fs::read(assets.join(asset)).expect("mapped GLB must be readable");
+            assert!(bytes.len() >= 20, "truncated GLB for {key}");
+            assert_eq!(&bytes[0..4], b"glTF", "invalid GLB magic for {key}");
+
+            let json_len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+            let json_end = 20 + json_len;
+            assert!(json_end <= bytes.len(), "truncated JSON chunk for {key}");
+            let json = std::str::from_utf8(&bytes[20..json_end]).expect("GLB JSON must be UTF-8");
+            for extension in unsupported {
+                assert!(
+                    !json.contains(extension),
+                    "{key} still declares unsupported extension {extension}"
+                );
+            }
+        }
+    }
 }
