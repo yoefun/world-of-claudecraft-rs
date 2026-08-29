@@ -1,8 +1,10 @@
 //! Bevy mesh builders for procedural character / creature / scene visuals.
 
-use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex};
+use bevy::animation::graph::{
+    AnimationGraph, AnimationGraphHandle, AnimationNodeIndex, AnimationNodeType,
+};
 use bevy::animation::transition::AnimationTransitions;
-use bevy::animation::{AnimationPlayer, RepeatAnimation};
+use bevy::animation::{AnimationClip, AnimationPlayer, RepeatAnimation};
 use bevy::asset::AssetId;
 use bevy::gltf::Gltf;
 use bevy::prelude::*;
@@ -62,8 +64,13 @@ pub(crate) struct ActiveAtmosphere {
 struct GltfAnimationSet {
     graph: Handle<AnimationGraph>,
     idle: AnimationNodeIndex,
+    idle_variants: Vec<AnimationNodeIndex>,
     walk: AnimationNodeIndex,
+    walk_variants: Vec<AnimationNodeIndex>,
+    walk_back: Option<AnimationNodeIndex>,
     run: AnimationNodeIndex,
+    run_variants: Vec<AnimationNodeIndex>,
+    run_is_distinct: bool,
     death: Option<AnimationNodeIndex>,
 }
 
@@ -78,6 +85,7 @@ pub(crate) struct GltfAnimationState {
     set: Option<GltfAnimationSet>,
     owner: Option<EntityId>,
     motion_source: Option<Entity>,
+    variant: usize,
     player: Option<Entity>,
     current: Option<GltfClip>,
 }
@@ -92,12 +100,18 @@ enum GltfClip {
 }
 
 impl GltfAnimationState {
-    fn new(gltf: Handle<Gltf>, owner: Option<EntityId>, motion_source: Option<Entity>) -> Self {
+    fn new(
+        gltf: Handle<Gltf>,
+        owner: Option<EntityId>,
+        motion_source: Option<Entity>,
+        variant: usize,
+    ) -> Self {
         Self {
             gltf,
             set: None,
             owner,
             motion_source,
+            variant,
             player: None,
             current: None,
         }
@@ -113,21 +127,59 @@ pub(crate) struct GlbMaterialBase {
     emissive: LinearRgba,
 }
 
-fn named_animation_node(
+fn named_animation_nodes(
     gltf: &Gltf,
     nodes: &[AnimationNodeIndex],
-    patterns: &[&str],
-) -> Option<AnimationNodeIndex> {
-    gltf.named_animations.iter().find_map(|(name, handle)| {
-        let lower = name.to_ascii_lowercase();
-        if !patterns.iter().any(|pattern| lower.contains(pattern)) {
-            return None;
-        }
-        gltf.animations
-            .iter()
-            .position(|clip| clip.id() == handle.id())
-            .and_then(|index| nodes.get(index).copied())
-    })
+    matches: impl Fn(&str) -> bool,
+) -> Vec<AnimationNodeIndex> {
+    // Iterate in source clip order, not HashMap order, so every client picks
+    // the same variant for the same entity.
+    gltf.animations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, clip)| {
+            let name = gltf
+                .named_animations
+                .iter()
+                .find(|(_, handle)| handle.id() == clip.id())
+                .map(|(name, _)| name.as_ref())?;
+            matches(name).then(|| nodes.get(index).copied()).flatten()
+        })
+        .collect()
+}
+
+fn is_idle_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    (lower.contains("idle") || lower.contains("breath") || lower == "stand")
+        && !lower.contains("hit")
+        && !lower.contains("jump")
+        && !lower.contains("sit")
+        && !lower.contains("lie")
+}
+
+fn is_forward_walk_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    (lower.contains("walk") || lower.contains("locomotion"))
+        && !lower.contains("back")
+        && !lower.contains("strafe")
+        && !lower.contains("jump")
+}
+
+fn is_backward_walk_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    (lower.contains("back") || lower.contains("reverse")) && lower.contains("walk")
+}
+
+fn is_run_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    (lower.contains("run") || lower.contains("sprint") || lower.contains("gallop"))
+        && !lower.contains("strafe")
+        && !lower.contains("jump")
+}
+
+fn is_death_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.contains("death") || lower == "die" || lower.contains("dead")
 }
 
 fn build_animation_set(
@@ -138,20 +190,44 @@ fn build_animation_set(
         return None;
     }
     let (graph, nodes) = AnimationGraph::from_clips(gltf.animations.iter().cloned());
-    let idle = named_animation_node(gltf, &nodes, &["idle", "stand", "breath"])
+    let mut idle_variants = named_animation_nodes(gltf, &nodes, is_idle_animation);
+    let idle = idle_variants
+        .first()
+        .copied()
         .or_else(|| nodes.first().copied())?;
-    let walk = named_animation_node(gltf, &nodes, &["walk", "locomotion"])
-        .or_else(|| nodes.get(1).copied())
-        .unwrap_or(idle);
-    let run = named_animation_node(gltf, &nodes, &["run", "sprint", "gallop"])
-        .or_else(|| nodes.get(2).copied())
-        .unwrap_or(walk);
-    let death = named_animation_node(gltf, &nodes, &["death", "die", "dead"]);
+    if idle_variants.is_empty() {
+        idle_variants.push(idle);
+    }
+
+    let mut walk_variants = named_animation_nodes(gltf, &nodes, is_forward_walk_animation);
+    let walk = walk_variants.first().copied().unwrap_or(idle);
+    if walk_variants.is_empty() {
+        walk_variants.push(walk);
+    }
+    let walk_back = named_animation_nodes(gltf, &nodes, is_backward_walk_animation)
+        .first()
+        .copied();
+
+    let run_variants = named_animation_nodes(gltf, &nodes, is_run_animation);
+    let run_is_distinct = !run_variants.is_empty();
+    let run = run_variants.first().copied().unwrap_or(walk);
+    let death = named_animation_nodes(gltf, &nodes, is_death_animation)
+        .first()
+        .copied();
     Some(GltfAnimationSet {
         graph: graphs.add(graph),
         idle,
+        idle_variants,
         walk,
+        walk_variants,
+        walk_back,
         run,
+        run_variants: if run_is_distinct {
+            run_variants
+        } else {
+            vec![run]
+        },
+        run_is_distinct,
         death,
     })
 }
@@ -193,9 +269,8 @@ pub(crate) fn prepare_gltf_animations(
             for child in children.iter_descendants(root) {
                 if let Ok(mut player) = players.get_mut(child) {
                     let mut transitions = AnimationTransitions::new();
-                    transitions
-                        .play(&mut player, set.idle, Duration::ZERO)
-                        .repeat();
+                    let idle = animation_node(&set, GltfClip::Idle, state.variant);
+                    transitions.play(&mut player, idle, Duration::ZERO).repeat();
                     commands
                         .entity(child)
                         .insert((AnimationGraphHandle(set.graph.clone()), transitions));
@@ -266,21 +341,74 @@ pub(crate) fn sync_glb_materials(
     }
 }
 
-fn animation_node(set: &GltfAnimationSet, clip: GltfClip) -> AnimationNodeIndex {
+fn variant_node(
+    variants: &[AnimationNodeIndex],
+    fallback: AnimationNodeIndex,
+    variant: usize,
+) -> AnimationNodeIndex {
+    variants
+        .get(variant % variants.len().max(1))
+        .copied()
+        .unwrap_or(fallback)
+}
+
+fn animation_node(set: &GltfAnimationSet, clip: GltfClip, variant: usize) -> AnimationNodeIndex {
     match clip {
-        GltfClip::Idle => set.idle,
-        GltfClip::Walk | GltfClip::WalkBack => set.walk,
-        GltfClip::Run => set.run,
+        GltfClip::Idle => variant_node(&set.idle_variants, set.idle, variant),
+        GltfClip::Walk => variant_node(&set.walk_variants, set.walk, variant),
+        GltfClip::WalkBack => set.walk_back.unwrap_or(set.walk),
+        GltfClip::Run => variant_node(&set.run_variants, set.run, variant),
         GltfClip::Death => set.death.unwrap_or(set.idle),
     }
 }
 
-fn animation_speed(clip: GltfClip, speed: f32) -> f32 {
+fn animation_speed(set: &GltfAnimationSet, clip: GltfClip, speed: f32) -> f32 {
     match clip {
         GltfClip::Walk => (speed / 2.2).clamp(0.6, 1.8),
-        GltfClip::WalkBack => -(speed / 2.2).clamp(0.6, 1.8),
-        GltfClip::Run => (speed / 7.0).clamp(0.6, 1.6),
+        GltfClip::WalkBack => {
+            let speed = (speed / 2.2).clamp(0.6, 1.8);
+            if set.walk_back.is_some() {
+                speed
+            } else {
+                -speed
+            }
+        }
+        GltfClip::Run => {
+            if set.run_is_distinct {
+                (speed / 7.0).clamp(0.6, 1.6)
+            } else {
+                (speed / 2.2).clamp(0.6, 1.8)
+            }
+        }
         GltfClip::Idle | GltfClip::Death => 1.0,
+    }
+}
+
+fn seed_animation_phase(
+    active: &mut bevy::animation::ActiveAnimation,
+    set: &GltfAnimationSet,
+    node: AnimationNodeIndex,
+    variant: usize,
+    clip: GltfClip,
+    graphs: &Assets<AnimationGraph>,
+    clips: &Assets<AnimationClip>,
+) {
+    if matches!(clip, GltfClip::Death) {
+        return;
+    }
+    let Some(graph) = graphs.get(&set.graph) else {
+        return;
+    };
+    let Some(AnimationNodeType::Clip(handle)) = graph.get(node).map(|node| &node.node_type) else {
+        return;
+    };
+    let Some(animation) = clips.get(handle) else {
+        return;
+    };
+    let duration = animation.duration();
+    if duration > 0.0 {
+        let phase = (variant % 11) as f32 / 11.0 * duration;
+        active.set_seek_time(phase);
     }
 }
 
@@ -289,6 +417,8 @@ pub(crate) fn drive_gltf_animations(
     host: Res<crate::GameHost>,
     mut roots: Query<&mut GltfAnimationState>,
     motions: Query<&VisualMotion>,
+    graphs: Res<Assets<AnimationGraph>>,
+    clips: Res<Assets<AnimationClip>>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     for mut state in &mut roots {
@@ -337,9 +467,11 @@ pub(crate) fn drive_gltf_animations(
         } else {
             requested
         };
-        let node = animation_node(&set, actual);
+        let node = animation_node(&set, actual, state.variant);
         let Ok((mut player, mut transitions)) = players.get_mut(player_entity) else {
-            state.player = None;
+            // Scene insertion and animation graph setup use deferred commands;
+            // keep the discovered player across this frame so the next update
+            // can use the newly-added components.
             state.current = None;
             continue;
         };
@@ -351,10 +483,11 @@ pub(crate) fn drive_gltf_animations(
             } else {
                 active.repeat();
             }
+            seed_animation_phase(active, &set, node, state.variant, actual, &graphs, &clips);
             state.current = Some(actual);
         }
         if let Some(active) = player.animation_mut(node) {
-            active.set_speed(animation_speed(actual, speed.abs()));
+            active.set_speed(animation_speed(&set, actual, speed.abs()));
         }
     }
 }
@@ -501,10 +634,16 @@ fn spawn_gltf_scene(
     let source_path = scene_path
         .split_once('#')
         .map_or(scene_path, |(source, _)| source);
+    let variant = animation_variant(owner, source_path);
     let scene = commands
         .spawn((
             SceneRoot(asset_server.load(scene_path)),
-            GltfAnimationState::new(asset_server.load::<Gltf>(source_path), owner, motion_source),
+            GltfAnimationState::new(
+                asset_server.load::<Gltf>(source_path),
+                owner,
+                motion_source,
+                variant,
+            ),
             Transform::from_translation(translation).with_scale(Vec3::splat(scale)),
             Visibility::default(),
             InheritedVisibility::default(),
@@ -513,6 +652,18 @@ fn spawn_gltf_scene(
         .id();
     commands.entity(parent).add_child(scene);
     scene
+}
+
+/// Stable per-entity seed so identical GLB instances do not all start the same
+/// idle variant or locomotion clip. It must not use process-randomized hashing:
+/// online clients should make the same visual choice for a given entity id.
+fn animation_variant(owner: Option<EntityId>, source_path: &str) -> usize {
+    let mut hash = owner.unwrap_or_default() as u64 ^ 0x9e37_79b9_7f4a_7c15;
+    for byte in source_path.bytes() {
+        hash = hash.rotate_left(7) ^ u64::from(byte);
+        hash = hash.wrapping_mul(0x1000_0000_01b3);
+    }
+    (hash ^ (hash >> 32)) as usize
 }
 
 fn spawn_parts(

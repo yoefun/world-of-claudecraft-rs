@@ -22,6 +22,11 @@ pub(crate) struct VisualMotion {
     pub(crate) loco: LocoTrack,
     pub(crate) last_x: f32,
     pub(crate) last_z: f32,
+    /// Seconds represented by the displacement since the last snapshot change.
+    /// Render frames can be much more frequent than network/sim snapshots, so
+    /// using only the current frame delta makes ordinary movement look like a
+    /// teleport at high refresh rates.
+    pub(crate) sample_elapsed: f32,
     pub(crate) seeded: bool,
     pub(crate) cycle: f32,
     /// Last high-level locomotion pose selected by the snapshot sync.
@@ -38,6 +43,7 @@ impl Default for VisualMotion {
             loco: LocoTrack::new(),
             last_x: 0.0,
             last_z: 0.0,
+            sample_elapsed: 0.0,
             seeded: false,
             cycle: 0.0,
             last_pose: WalkPose::Idle,
@@ -58,18 +64,35 @@ pub(crate) fn sample_gait(
     if !motion.seeded {
         motion.last_x = x;
         motion.last_z = z;
+        motion.sample_elapsed = 0.0;
         motion.seeded = true;
         return (WalkPose::Idle, 0.0);
     }
+    let frame_dt = dt.max(1e-4);
+    motion.sample_elapsed += frame_dt;
     let vx = x - motion.last_x;
     let vz = z - motion.last_z;
-    motion.last_x = x;
-    motion.last_z = z;
-    let state = update_locomotion(&mut motion.loco, vx, vz, yaw, dt.max(1e-4));
+    let moved = vx.abs() > 1e-5 || vz.abs() > 1e-5;
+    let sample_dt = if moved {
+        let elapsed = motion.sample_elapsed.max(frame_dt);
+        motion.last_x = x;
+        motion.last_z = z;
+        motion.sample_elapsed = 0.0;
+        elapsed
+    } else {
+        frame_dt
+    };
+    let state = update_locomotion(
+        &mut motion.loco,
+        if moved { vx } else { 0.0 },
+        if moved { vz } else { 0.0 },
+        yaw,
+        sample_dt,
+    );
     let pose = desired_walk_pose(&state);
     if let Some(scale) = locomotion_time_scale(pose, state.speed) {
         let rate = if pose == WalkPose::Run { 9.0 } else { 7.0 };
-        motion.cycle += dt * scale * rate;
+        motion.cycle += frame_dt * scale * rate;
     }
     (pose, state.speed)
 }
@@ -124,4 +147,25 @@ pub(crate) fn family_uses_gait(family: VisualFamily) -> bool {
         family,
         VisualFamily::Humanoid | VisualFamily::Wolf | VisualFamily::Boar | VisualFamily::Imp
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sparse_high_refresh_snapshots_keep_movement_animating() {
+        let mut motion = VisualMotion::default();
+        let frame = 1.0 / 144.0;
+        sample_gait(&mut motion, 0.0, 0.0, 0.0, frame);
+
+        // A 7 u/s actor advances once per 50 ms while the renderer runs at 144 Hz.
+        for _ in 0..7 {
+            sample_gait(&mut motion, 0.0, 0.0, 0.0, frame);
+        }
+        let (pose, speed) = sample_gait(&mut motion, 0.0, 0.35, 0.0, frame);
+
+        assert_ne!(pose, WalkPose::Idle);
+        assert!(speed > 0.4);
+    }
 }

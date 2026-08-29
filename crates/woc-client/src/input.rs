@@ -97,6 +97,30 @@ fn tab_cycle_from_snapshot(snap: &TickSnapshot, facing: f32) -> Option<EntityId>
     tab_target_pose(player.x, player.z, facing, snap.target_id, &candidates)
 }
 
+fn movement_axes(keys: &ButtonInput<KeyCode>, typing: bool) -> (f32, f32) {
+    if typing {
+        return (0.0, 0.0);
+    }
+    let mut mx = 0.0;
+    let mut mz = 0.0;
+    if keys.pressed(KeyCode::KeyW) {
+        mz += 1.0;
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        mz -= 1.0;
+    }
+    // The sim's +move_x is camera-right in its +Z-facing convention. The
+    // third-person camera looks toward +Z, so A must produce -move_x and D
+    // +move_x to match the monitor's left/right directions.
+    if keys.pressed(KeyCode::KeyA) {
+        mx -= 1.0;
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        mx += 1.0;
+    }
+    (mx, mz)
+}
+
 pub(crate) fn collect_intent(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -112,23 +136,8 @@ pub(crate) fn collect_intent(
     };
     // Compose/search fields own the keyboard.
     let typing = ui.mail_compose || ui.show_guild || ui.show_friends || ui.market_searching;
-    let mut mx = 0.0;
-    let mut mz = 0.0;
+    let (mx, mz) = movement_axes(&keys, typing);
     if !typing {
-        if keys.pressed(KeyCode::KeyW) {
-            mz += 1.0;
-        }
-        if keys.pressed(KeyCode::KeyS) {
-            mz -= 1.0;
-        }
-        if keys.pressed(KeyCode::KeyA) {
-            // Bevy behind-camera view mirrors upstream Three.js screen-right;
-            // invert strafe so A/D follow the monitor's left/right.
-            mx += 1.0;
-        }
-        if keys.pressed(KeyCode::KeyD) {
-            mx -= 1.0;
-        }
         if keys.just_pressed(KeyCode::Space) || keys.pressed(KeyCode::Space) {
             // Held Space: jump / swim hop / fly ascend (matches upstream MoveInput.jump).
             intent.jump = true;
@@ -1979,6 +1988,17 @@ mod tests {
         snap.target_id = Some(first);
         let second = tab_cycle_from_snapshot(&snap, 0.0).expect("second");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn strafe_keys_match_third_person_screen_direction() {
+        let mut keys = ButtonInput::default();
+        keys.press(KeyCode::KeyA);
+        assert_eq!(movement_axes(&keys, false), (-1.0, 0.0));
+
+        keys.release(KeyCode::KeyA);
+        keys.press(KeyCode::KeyD);
+        assert_eq!(movement_axes(&keys, false), (1.0, 0.0));
     }
 
     fn compose(keys: &[(KeyCode, bool)]) -> String {
