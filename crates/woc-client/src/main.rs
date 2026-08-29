@@ -301,6 +301,8 @@ pub(crate) struct GameHost {
     pub(crate) from_net: Option<Mutex<std::sync::mpsc::Receiver<woc_protocol::WsServerMsg>>>,
     /// Sticky attack for intent building when the snapshot has no auto_attack flag.
     pub(crate) local_auto_attack: bool,
+    /// Damage sources waiting for their visual attack presentation.
+    pub(crate) pending_attackers: Vec<EntityId>,
 }
 
 impl GameHost {

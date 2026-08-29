@@ -8,6 +8,12 @@ use woc_sim::{
 
 /// Seconds of fade before a visual is despawned after leaving the snapshot.
 pub(crate) const REMOVE_FADE_SEC: f32 = 0.35;
+/// How long an authoritative damage event keeps an attack clip selected.
+///
+/// Damage is emitted by the simulation at the impact point. Keeping the clip
+/// active for a short presentation window makes the impact visible without
+/// inventing client-side combat state.
+pub(crate) const ATTACK_PRESENTATION_SEC: f32 = 0.72;
 
 /// Rest pose + gait role for a limb mesh child.
 #[derive(Component, Clone, Copy)]
@@ -33,6 +39,10 @@ pub(crate) struct VisualMotion {
     pub(crate) last_pose: WalkPose,
     /// Last authoritative movement speed used to scale a clip-driven gait.
     pub(crate) last_speed: f32,
+    /// True while the authoritative snapshot says this actor is airborne.
+    pub(crate) jumping: bool,
+    /// Countdown started by an authoritative damage event from this actor.
+    pub(crate) attack_timer: f32,
     /// Countdown while fading out after leaving the snapshot (`None` = live).
     pub(crate) remove_timer: Option<f32>,
 }
@@ -48,6 +58,8 @@ impl Default for VisualMotion {
             cycle: 0.0,
             last_pose: WalkPose::Idle,
             last_speed: 0.0,
+            jumping: false,
+            attack_timer: 0.0,
             remove_timer: None,
         }
     }

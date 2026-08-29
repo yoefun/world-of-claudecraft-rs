@@ -71,6 +71,9 @@ struct GltfAnimationSet {
     run: AnimationNodeIndex,
     run_variants: Vec<AnimationNodeIndex>,
     run_is_distinct: bool,
+    attack: Option<AnimationNodeIndex>,
+    attack_variants: Vec<AnimationNodeIndex>,
+    jump: Option<AnimationNodeIndex>,
     death: Option<AnimationNodeIndex>,
 }
 
@@ -96,6 +99,8 @@ enum GltfClip {
     Walk,
     WalkBack,
     Run,
+    Attack,
+    Jump,
     Death,
 }
 
@@ -177,6 +182,28 @@ fn is_run_animation(name: &str) -> bool {
         && !lower.contains("jump")
 }
 
+fn is_attack_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    (lower.contains("attack")
+        || lower.contains("punch")
+        || lower.contains("bite")
+        || lower.contains("headbutt")
+        || lower.contains("chop")
+        || lower.contains("slice")
+        || lower.contains("shoot"))
+        && !lower.contains("hit")
+        && !lower.contains("death")
+        && !lower.contains("jump")
+}
+
+fn is_jump_animation(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.contains("jump")
+        && !lower.contains("land")
+        && !lower.contains("start")
+        && !lower.contains("toidle")
+}
+
 fn is_death_animation(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower.contains("death") || lower == "die" || lower.contains("dead")
@@ -211,6 +238,10 @@ fn build_animation_set(
     let run_variants = named_animation_nodes(gltf, &nodes, is_run_animation);
     let run_is_distinct = !run_variants.is_empty();
     let run = run_variants.first().copied().unwrap_or(walk);
+    let attack_variants = named_animation_nodes(gltf, &nodes, is_attack_animation);
+    let attack = attack_variants.first().copied();
+    let jump_variants = named_animation_nodes(gltf, &nodes, is_jump_animation);
+    let jump = jump_variants.first().copied();
     let death = named_animation_nodes(gltf, &nodes, is_death_animation)
         .first()
         .copied();
@@ -228,6 +259,9 @@ fn build_animation_set(
             vec![run]
         },
         run_is_distinct,
+        attack,
+        attack_variants,
+        jump,
         death,
     })
 }
@@ -358,6 +392,12 @@ fn animation_node(set: &GltfAnimationSet, clip: GltfClip, variant: usize) -> Ani
         GltfClip::Walk => variant_node(&set.walk_variants, set.walk, variant),
         GltfClip::WalkBack => set.walk_back.unwrap_or(set.walk),
         GltfClip::Run => variant_node(&set.run_variants, set.run, variant),
+        GltfClip::Attack => variant_node(
+            &set.attack_variants,
+            set.attack.unwrap_or(set.idle),
+            variant,
+        ),
+        GltfClip::Jump => set.jump.unwrap_or(set.idle),
         GltfClip::Death => set.death.unwrap_or(set.idle),
     }
 }
@@ -380,7 +420,7 @@ fn animation_speed(set: &GltfAnimationSet, clip: GltfClip, speed: f32) -> f32 {
                 (speed / 2.2).clamp(0.6, 1.8)
             }
         }
-        GltfClip::Idle | GltfClip::Death => 1.0,
+        GltfClip::Idle | GltfClip::Attack | GltfClip::Jump | GltfClip::Death => 1.0,
     }
 }
 
@@ -393,7 +433,7 @@ fn seed_animation_phase(
     graphs: &Assets<AnimationGraph>,
     clips: &Assets<AnimationClip>,
 ) {
-    if matches!(clip, GltfClip::Death) {
+    if matches!(clip, GltfClip::Death | GltfClip::Attack | GltfClip::Jump) {
         return;
     }
     let Some(graph) = graphs.get(&set.graph) else {
@@ -429,7 +469,7 @@ pub(crate) fn drive_gltf_animations(
             continue;
         };
 
-        let (alive, pose, speed) = if let Some(owner) = state.owner {
+        let (alive, pose, speed, jumping, attacking) = if let Some(owner) = state.owner {
             let Some(snapshot) = host
                 .snapshot
                 .entities
@@ -447,13 +487,21 @@ pub(crate) fn drive_gltf_animations(
                     .map(|motion| motion.last_pose)
                     .unwrap_or(woc_sim::WalkPose::Idle),
                 motion.map(|motion| motion.last_speed).unwrap_or(0.0),
+                motion.map(|motion| motion.jumping).unwrap_or(false),
+                motion
+                    .map(|motion| motion.attack_timer > 0.0)
+                    .unwrap_or(false),
             )
         } else {
-            (true, woc_sim::WalkPose::Idle, 0.0)
+            (true, woc_sim::WalkPose::Idle, 0.0, false, false)
         };
 
         let requested = if !alive {
             GltfClip::Death
+        } else if attacking && set.attack.is_some() {
+            GltfClip::Attack
+        } else if jumping && set.jump.is_some() {
+            GltfClip::Jump
         } else {
             match pose {
                 woc_sim::WalkPose::Idle => GltfClip::Idle,
@@ -478,7 +526,9 @@ pub(crate) fn drive_gltf_animations(
 
         if state.current != Some(actual) {
             let active = transitions.play(&mut player, node, Duration::from_millis(120));
-            if actual == GltfClip::Death && set.death.is_some() {
+            if matches!(actual, GltfClip::Death | GltfClip::Attack)
+                && (actual == GltfClip::Attack || set.death.is_some())
+            {
                 active.set_repeat(RepeatAnimation::Count(1));
             } else {
                 active.repeat();

@@ -16,7 +16,7 @@ use woc_version::{footer, Compat};
 
 use crate::anim::{
     apply_limb_gait, death_root_rotation, family_uses_gait, sample_gait, GaitLimb, VisualMotion,
-    REMOVE_FADE_SEC,
+    ATTACK_PRESENTATION_SEC, REMOVE_FADE_SEC,
 };
 use crate::char_create::{CharName, SelectedClass};
 use crate::hud::{
@@ -163,6 +163,7 @@ fn setup_world(
                 to_net: None,
                 from_net: None,
                 local_auto_attack: false,
+                pending_attackers: Vec::new(),
             }
         }
         PlayMode::Online => {
@@ -183,6 +184,7 @@ fn setup_world(
                 to_net: Some(to_net),
                 from_net: Some(std::sync::Mutex::new(from_net)),
                 local_auto_attack: false,
+                pending_attackers: Vec::new(),
             }
         }
     };
@@ -741,6 +743,10 @@ fn push_events_toasts(host: &mut GameHost, events: &[SimEvent]) {
                 amount,
                 ability,
             } => {
+                // The simulation decides when damage lands. Use that event as
+                // the presentation trigger for every visible attacker,
+                // including remote players, mobs, and pets.
+                host.pending_attackers.push(*source);
                 // Ability hits outgoing + any damage taken (skip spammy auto swings out).
                 if *target == pid {
                     let label = ability
@@ -941,6 +947,26 @@ pub(crate) fn sim_fixed_step(
         }
     }
 
+    // Apply attack presentations after snapshot visuals have been matched.
+    // Keep events whose visual is still being inserted by deferred Bevy
+    // commands so a newly spawned attacker does not lose its first swing.
+    let pending = std::mem::take(&mut host.pending_attackers);
+    let mut deferred_attackers = Vec::new();
+    for source in pending {
+        let mut applied = false;
+        for (_, visual, mut motion) in &mut visuals {
+            if visual.id == source {
+                motion.attack_timer = ATTACK_PRESENTATION_SEC;
+                applied = true;
+                break;
+            }
+        }
+        if !applied {
+            deferred_attackers.push(source);
+        }
+    }
+    host.pending_attackers = deferred_attackers;
+
     // Soft-remove visuals that left the snapshot (picked loot, dismissed pets, disconnects).
     let mut despawn = Vec::new();
     for (entity, vis, mut motion) in &mut visuals {
@@ -1043,6 +1069,12 @@ pub(crate) fn sync_visuals(
             }
 
             let spec = visual_spec(e.kind, e.template_id.as_deref());
+            motion.attack_timer = (motion.attack_timer - dt).max(0.0);
+            motion.jumping = e.alive && !e.on_ground && !e.flying && !e.swimming;
+            if !e.alive {
+                motion.attack_timer = 0.0;
+                motion.jumping = false;
+            }
             let (pose, speed) = if e.alive && e.on_ground && !e.flying && !e.swimming {
                 sample_gait(&mut motion, e.x, e.z, e.yaw, dt)
             } else {
