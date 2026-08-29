@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "cursor/**"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      # Optional Postgres for woc-persist integration tests (unit tests skip if unused).
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: woc
+          POSTGRES_PASSWORD: woc
+          POSTGRES_DB: woc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U woc -d woc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Integration tests in woc-persist run only when this is set; unit tests always pass without DB.
+      DATABASE_URL: postgres://woc:woc@localhost:5432/woc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+      - name: Install Linux deps for Bevy check
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy (no GPU client)
+        run: cargo clippy --workspace --exclude woc-client -- -D warnings
+      - name: test (no GPU client)
+        run: cargo test --workspace --exclude woc-client
+      - name: build server
+        run: cargo build -p woc-server
+      - name: check client compiles
+        run: cargo check -p woc-client

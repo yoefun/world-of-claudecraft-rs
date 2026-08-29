@@ -1,0 +1,6 @@
+[package]
+name = "woc-manufacturing"
+description = "Deterministic manufacturing / professions prototype (v1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true

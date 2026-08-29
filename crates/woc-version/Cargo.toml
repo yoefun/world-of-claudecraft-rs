@@ -1,0 +1,13 @@
+[package]
+name = "woc-version"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rewrite and upstream version pin constants for World of ClaudeCraft (Rust)"
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+toml = "0.8"
+serde_json = { workspace = true }

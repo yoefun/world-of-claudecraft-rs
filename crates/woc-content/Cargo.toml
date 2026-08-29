@@ -1,0 +1,9 @@
+[package]
+name = "woc-content"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Authoritative game content tables for World of ClaudeCraft (Rust)"
+
+[dependencies]
+serde = { workspace = true }

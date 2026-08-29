@@ -1,0 +1,32 @@
+[package]
+name = "woc-update"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pack, delta, and apply Bevy client updates for World of ClaudeCraft (Rust)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+ed25519-dalek = { version = "2", features = ["std"] }
+tar = "0.4"
+zstd = "0.13"
+qbsdiff = "1.4"
+ureq = { version = "2.12", default-features = false, features = ["json", "tls"] }
+
+[dev-dependencies]
+hex = "0.4"
+
+[[bin]]
+name = "woc-pack"
+path = "src/bin/woc-pack.rs"
+
+[[bin]]
+name = "woc-updater"
+path = "src/bin/woc-updater.rs"

@@ -1,0 +1,21 @@
+mod apply;
+mod delta;
+mod error;
+mod hash;
+mod manifest;
+mod pack;
+mod plan;
+mod release;
+mod sign;
+mod store;
+
+pub use apply::{apply_update, apply_update_with_full_fallback};
+pub use delta::{apply_delta, pack_delta, DeltaMeta, PatchEntry};
+pub use error::UpdateError;
+pub use hash::sha256_hex;
+pub use manifest::{install_json_bytes, Artifact, FileEntry, InstallState, Manifest};
+pub use pack::{file_entry, layout_files, layout_files_match_except, pack_full, unpack_full};
+pub use plan::{plan_fetch, FetchPlan};
+pub use release::{pack_release, PackOpts};
+pub use sign::{sign_manifest, signing_key_from_hex, verify_manifest, verifying_key_from_hex};
+pub use store::{fetch_url, url_parent, ArtifactStore, DirStore, HttpStore};

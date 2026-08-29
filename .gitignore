@@ -1,0 +1,8 @@
+/target
+**/*.rs.bk
+.DS_Store
+.env
+*.log
+Cargo.lock.bak
+.worktrees/
+.superpowers/
