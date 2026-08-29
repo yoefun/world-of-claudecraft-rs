@@ -953,6 +953,17 @@ pub(crate) fn sim_fixed_step(
     let pending = std::mem::take(&mut host.pending_attackers);
     let mut deferred_attackers = Vec::new();
     for source in pending {
+        // Online realms broadcast the event stream, while snapshots are AOI
+        // filtered. An attacker outside this client's snapshot has no visual
+        // to animate and must not leave a permanent pending entry behind.
+        if !host
+            .snapshot
+            .entities
+            .iter()
+            .any(|entity| entity.id == source)
+        {
+            continue;
+        }
         let mut applied = false;
         for (_, visual, mut motion) in &mut visuals {
             if visual.id == source {
